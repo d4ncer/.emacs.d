@@ -79,6 +79,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-modeline)
 (use-package rk-auto-save)
 (use-package rk-leader-keys)
+(use-package rk-evil)
 
 ;;; Print overall startup time.
 
