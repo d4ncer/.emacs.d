@@ -77,6 +77,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-emacs)
 (use-package rk-basic-settings)
 (use-package rk-auto-save)
+(use-package rk-leader-keys)
 
 ;;; Print overall startup time.
 
