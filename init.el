@@ -1,4 +1,3 @@
-
 ;;; init.el --- Startup file for Emacs.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Raghuvir Kasturi
@@ -77,6 +76,7 @@ If argument INTERACTIVE-P is set, log additional information."
 
 (use-package rk-emacs)
 (use-package rk-basic-settings)
+(use-package rk-auto-save)
 
 ;;; Print overall startup time.
 
