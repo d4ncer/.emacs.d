@@ -76,6 +76,7 @@ If argument INTERACTIVE-P is set, log additional information."
 ;; Load features.
 
 (use-package rk-emacs)
+(use-package rk-basic-settings)
 
 ;;; Print overall startup time.
 
