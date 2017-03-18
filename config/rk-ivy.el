@@ -62,13 +62,16 @@
     (setq ivy-extra-directories '("."))
     (advice-add #'counsel-find-file :around #'rk-ivy-with-empty-ivy-extra-directories)
 
-    (define-key ivy-minibuffer-map (kbd "<f1>") #'rk-ivy-help)
     (define-key ivy-occur-mode-map (kbd "C-x C-w") #'ivy-wgrep-change-to-wgrep-mode)
+
+    (define-key ivy-minibuffer-map (kbd "<f1>") #'rk-ivy-help)
     (define-key ivy-minibuffer-map (kbd "C-z") #'ivy-dispatching-done)
     (define-key ivy-minibuffer-map (kbd "<escape>") 'minibuffer-keyboard-quit)
     (define-key ivy-minibuffer-map (kbd "C-l") #'ivy-partial-or-done)
     (define-key ivy-minibuffer-map (kbd "C-c C-e") #'rk-ivy-occur-then-wgrep)
     (define-key ivy-minibuffer-map (kbd "C-<return>") #'ivy-immediate-done)
+    (define-key ivy-minibuffer-map (kbd "C-j") #'ivy-next-line)
+    (define-key ivy-minibuffer-map (kbd "C-k") #'ivy-previous-line)
 
     (ivy-mode))
 
