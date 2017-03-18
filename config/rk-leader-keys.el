@@ -74,6 +74,7 @@
       "SPC n"   "narrow"
       "SPC o"   "org"
       "SPC p"   "project"
+      "SPC q"   "quit"
       "SPC w"   "window"
       "SPC s"   "symbols"
       "SPC t"   "toggles"
