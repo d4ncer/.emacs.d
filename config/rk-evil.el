@@ -139,6 +139,13 @@
     (define-key evil-inner-text-objects-map "a" 'evil-inner-arg)
     (define-key evil-outer-text-objects-map "a" 'evil-outer-arg)))
 
+(use-package evil-escape
+  :after evil
+  :config
+  (progn
+    (setq-default evil-escape-key-sequence "jk")
+    (evil-escape-mode)))
+
 (use-package evil-indent-plus
   :after evil
   :commands (evil-indent-plus-default-bindings)
