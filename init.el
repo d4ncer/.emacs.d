@@ -84,6 +84,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-evil)
 (use-package rk-ivy)
 (use-package rk-darwin :if (equal system-type 'darwin))
+(use-package rk-ag)
 
 ;;; Print overall startup time.
 
