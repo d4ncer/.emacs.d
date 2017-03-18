@@ -7,5 +7,6 @@ ompiled
 # Internal
 elpa
 .cache
+auto-save-list
 /projectile-bookmarks.eld
 

@@ -133,6 +133,7 @@
       "h d c" #'describe-face
       "h d k" #'describe-key
       "h d m" #'describe-mode
+      "h d v" #'describe-variable
       "h f c" #'find-face-definition
       "h f f" #'find-function
       "h f l" #'find-library
@@ -148,7 +149,10 @@
       "n s" #'org-narrow-to-subtree
       "n w" #'widen
 
-      "q" #'delete-window
+      "q w" #'delete-window
+      "q q" #'kill-emacs
+
+      "t F" #'toggle-frame-fullscreen
 
       "w =" #'balance-windows
       "w w" #'evil-window-next

@@ -28,7 +28,7 @@
         :background ,default-background
         :foreground ,default-foreground
         :weight normal
-        :family "Droid Sans"
+        :family "Roboto Mono"
         :height 130)))
 
     (mode-line
@@ -325,43 +325,6 @@
     (outline-9
      ((t :inherit outline-1)))
 
-    ;; Ledger
-
-    (ledger-font-comment-face
-     ((t :weight light)))
-
-    (ledger-font-posting-date-face
-     ((t :inherit default)))
-
-    (ledger-font-posting-account-face
-     ((t :inherit default)))
-
-    (ledger-font-xact-highlight-face
-     ((t nil)))
-
-    (ledger-font-other-face
-     ((t :inherit default :weight demibold)))
-
-    (ledger-font-directive-face
-     ((t :inherit default)))
-
-    (ledger-font-posting-amount-face
-     ((t :inherit default)))
-
-    ;; Mu4e
-
-    (mu4e-title-face
-     ((t :weight demibold)))
-
-    (mu4e-header-key-face
-     ((t :weight demibold)))
-
-    (mu4e-highlight-face
-     ((t :foreground ,rk-theme-common-blue :weight demibold)))
-
-    (mu4e-header-highlight-face
-     ((t :inherit region)))
-
     ;; Message composition
 
     (message-header-name
@@ -409,49 +372,6 @@
 
     (rk-rust-faces-bool
      ((t :weight normal)))
-
-    ;; Term
-
-    (term-color-black
-     ((t :foreground ,default-foreground)))
-
-    (term-color-blue
-     ((t :foreground ,rk-theme-common-blue)))
-
-    (term-color-bold
-     ((t :weight demibold)))
-
-    (term-color-cyan
-     ((t :foreground ,rk-theme-common-cyan)))
-
-    (term-color-green
-     ((t :foreground ,rk-theme-common-green)))
-
-    (term-color-magenta
-     ((t :foreground ,rk-theme-common-magenta)))
-
-    (term-color-red
-     ((t :foreground ,rk-theme-common-red)))
-
-    (term-color-underline
-     ((t :underline t)))
-
-    (term-color-white
-     ((t :foreground ,default-foreground)))
-
-    (term-color-yellow
-     ((t :foreground ,rk-theme-common-yellow)))
-
-    ;; Scala
-
-    (scala-font-lock:var-keyword-face
-     ((((background light))
-       :foreground ,rk-theme-common-red :weight normal)
-      (((background dark))
-       :foreground ,rk-theme-common-pink :weight normal)))
-
-    (scala-font-lock:var-face
-     ((t :inherit font-lock-variable-name-face)))
 
     ;; Company
 
