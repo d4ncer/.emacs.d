@@ -91,6 +91,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-company)
 (use-package rk-undo-tree)
 (use-package rk-ws-butler)
+(use-package rk-parentheses)
 
 ;;; Print overall startup time.
 
