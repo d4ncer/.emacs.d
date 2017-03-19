@@ -89,6 +89,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-magit)
 (use-package rk-smartparens)
 (use-package rk-company)
+(use-package rk-undo-tree)
 
 ;;; Print overall startup time.
 
