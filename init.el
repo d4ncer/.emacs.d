@@ -94,6 +94,8 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-parentheses)
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
+(use-package rk-ibuffer)
+(use-package rk-coffeescript)
 
 ;;; Print overall startup time.
 
