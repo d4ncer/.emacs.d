@@ -93,6 +93,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-ws-butler)
 (use-package rk-parentheses)
 (use-package rk-aggressive-indent)
+(use-package rk-flycheck)
 
 ;;; Print overall startup time.
 
