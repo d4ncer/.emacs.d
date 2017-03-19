@@ -8,19 +8,18 @@
 
 ;;; Code:
 
-(defconst rk-theme-common-yellow "#b58900")
-(defconst rk-theme-common-orange "#cb4b16")
-(defconst rk-theme-common-red "red1")
-(defconst rk-theme-common-pink "pink")
-(defconst rk-theme-common-magenta "#d33682")
-(defconst rk-theme-common-violet "#6c71c4")
-(defconst rk-theme-common-blue "#268bd2")
-(defconst rk-theme-common-cyan "#2aa198")
-(defconst rk-theme-common-green "#859900")
+(defconst rk-theme-common-red "#ef5253")
+(defconst rk-theme-common-orange "#e66b2b")
+(defconst rk-theme-common-yellow "#e4b51c")
+(defconst rk-theme-common-green "#7cc844")
+(defconst rk-theme-common-cyan "#52cbb0")
+(defconst rk-theme-common-blue "#33b5e1")
+(defconst rk-theme-common-violet "#a363d5")
+(defconst rk-theme-common-magenta "#d73c9a")
 
-(defconst rk-theme-common-neutral-grey "grey60")
-(defconst rk-theme-common-dark-grey "grey40")
-(defconst rk-theme-common-light-grey "grey80")
+(defconst rk-theme-common-neutral-grey "#a09f93")
+(defconst rk-theme-common-dark-grey "#747369")
+(defconst rk-theme-common-light-grey "#e8e6df")
 
 (defun rk-theme-common-make-theme (default-foreground default-background)
   `((default
@@ -32,7 +31,7 @@
         :height 130)))
 
     (mode-line
-     ((t :foreground "gray40" :background "gray40" :height 20)))
+     ((t :foreground ,rk-theme-common-neutral-grey :background ,rk-theme-common-neutral-grey :height 20)))
 
     (link
      ((((background light))
@@ -262,7 +261,7 @@
      ((((background light))
        :foreground ,rk-theme-common-red :weight demibold)
       (((background dark))
-       :foreground ,rk-theme-common-pink :weight demibold)))
+       :foreground ,rk-theme-common-magenta :weight demibold)))
 
     (org-agenda-date-weekend
      ((t :inherit org-agenda-date)))
@@ -271,7 +270,7 @@
      ((((background light))
        :foreground ,rk-theme-common-red :weight normal)
       (((background dark))
-       :foreground ,rk-theme-common-pink :weight normal)))
+       :foreground ,rk-theme-common-magenta :weight normal)))
 
     (org-upcoming-deadline
      ((((background light))
@@ -283,7 +282,7 @@
      ((((background light))
        :foreground ,rk-theme-common-red :weight normal)
       (((background dark))
-       :foreground ,rk-theme-common-pink :weight normal)))
+       :foreground ,rk-theme-common-magenta :weight normal)))
 
     (org-formula
      ((t :weight light)))
@@ -393,7 +392,7 @@
      ((((background light))
        :foreground ,rk-theme-common-red :weight bold)
       (((background dark))
-       :foreground ,rk-theme-common-pink :weight bold)))
+       :foreground ,rk-theme-common-magenta :weight bold)))
 
     (parenthesis
      ((t :weight light)))
