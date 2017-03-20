@@ -51,35 +51,41 @@
 (flycheck-def-args-var flycheck-javascript-flow-args javascript-flow)
 (customize-set-variable 'flycheck-javascript-flow-args '())
 
+(defun rk-web--buffer-uses-flow-p ()
+  (save-excursion
+    (goto-char (point-min))
+    (not (null (search-forward "@flow" nil t)))))
+
 (defun flycheck-flow--predicate ()
   (and
    buffer-file-name
    (file-exists-p buffer-file-name)
-   (locate-dominating-file buffer-file-name ".flowconfig")))
+   (locate-dominating-file buffer-file-name ".flowconfig")
+   (rk-web--buffer-uses-flow-p)))
 
 (flycheck-define-checker javascript-flow
-    "A JavaScript syntax and style checker using Flow.
+  "A JavaScript syntax and style checker using Flow.
 
 See URL `http://flowtype.org/'."
-    :command (
-              "flow"
-              "check-contents"
-              (eval flycheck-javascript-flow-args)
-              "--quiet"
-              "--from" "emacs"
-              "--color=never"
-              source-original)
-    :standard-input t
-    :predicate flycheck-flow--predicate
-    :error-patterns
-    ((error line-start
-            (file-name)
-            ":"
-            line
-            "\n"
-            (message (minimal-match (and (one-or-more anything) "\n")))
-            line-end))
-    :modes (js-mode js2-mode js3-mode))
+  :command (
+            "flow"
+            "check-contents"
+            (eval flycheck-javascript-flow-args)
+            "--quiet"
+            "--from" "emacs"
+            "--color=never"
+            source-original)
+  :standard-input t
+  :predicate flycheck-flow--predicate
+  :error-patterns
+  ((error line-start
+          (file-name)
+          ":"
+          line
+          "\n"
+          (message (minimal-match (and (one-or-more anything) "\n")))
+          line-end))
+  :modes (js-mode js2-mode js3-mode))
 
 (flycheck-define-checker javascript-flow-coverage
   "A coverage checker for Flow.
