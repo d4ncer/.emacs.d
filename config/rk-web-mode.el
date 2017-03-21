@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
+(require 'dash)
 (autoload 'evil-define-key "evil-core")
 (autoload 'projectile-project-p "projectile")
 (autoload 'f-join "f")
@@ -80,7 +81,6 @@
   :commands (flycheck-select-checker)
   :functions (flycheck-add-next-checker flycheck-add-mode)
   :preface
-
   (defun rk-web--add-node-modules-bin-to-path ()
     "Use binaries from node_modules, where available."
     (when-let (root (projectile-project-p))
@@ -91,8 +91,10 @@
   (progn
     (add-to-list 'flycheck-disabled-checkers 'javascript-jshint)
     (add-to-list 'flycheck-disabled-checkers 'json-jsonlint)
+    (add-to-list 'flycheck-disabled-checkers 'css-csslint)
 
     (add-hook 'rk-web-typescript-mode-hook #'rk-web--add-node-modules-bin-to-path)
+    (add-hook 'rk-web-css-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)))
 
 (use-package emmet-mode
@@ -133,6 +135,20 @@
   (progn
     (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
     (flycheck-add-next-checker 'javascript-flow 'javascript-eslint)))
+
+(use-package rk-flycheck-stylelint
+  :after flycheck
+  :preface
+  (defun rk-web--set-stylelintrc ()
+    "Set either local or root stylelintrc"
+    (-if-let* ((root (projectile-project-p))
+               (root-rc (f-join root ".stylelintrc.json")))
+        (setq-local flycheck-stylelintrc root-rc))
+    (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
+  :config
+  (progn
+    (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
+    (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
 (use-package rk-flow
   :after rk-web-modes
