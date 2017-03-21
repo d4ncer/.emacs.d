@@ -155,9 +155,13 @@
   :commands (rk-flow-insert-flow-annotation
              rk-flow-type-at)
   :init
-  (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-    "fi" #'rk-flow-insert-flow-annotation
-    "ft" #'rk-flow-type-at))
+  (progn
+    (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
+    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
+      "fi" #'rk-flow-insert-flow-annotation
+      "ft" #'rk-flow-type-at)
+    )
+  )
 
 (use-package tern
   :defer t
