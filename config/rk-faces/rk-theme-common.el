@@ -43,7 +43,7 @@
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-common-blue :foreground "white" :weight bold)))
+     ((t :background ,rk-theme-common-violet :foreground "white" :weight bold)))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))

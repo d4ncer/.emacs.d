@@ -26,6 +26,12 @@
   "Face for non-emphasised elements in the header line."
   :group 'rk-header-line-format)
 
+(defface rk-header-line-format-accent-element
+  '((t
+     (:inhert header-line :foreground "#e4b51c")))
+  "Face for accented elements in the header line."
+  :group 'rk-header-line-format)
+
 (defface rk-header-line-format-project-name
   '((t
      (:inherit header-line)))
@@ -132,7 +138,7 @@
               (if (and (buffer-file-name) (file-remote-p (buffer-file-name))) "@" "")
               (if buffer-read-only "%" "")
               (if (buffer-modified-p) "*" ""))))
-    (propertize (s-pad-right 2 " " str) 'face 'rk-header-line-format-nonemphased-element)))
+    (propertize (s-pad-right 2 " " str) 'face 'rk-header-line-format-accent-element)))
 
 (defun rk-header-line-format--narrowing-info ()
   (if (buffer-narrowed-p)
@@ -184,7 +190,7 @@
     (propertize (buffer-name) 'face 'rk-header-line-format-nonemphased-element)))
 
 (defun rk-header-line-format--line-info ()
-  (let ((str "Line %2l"))
+  (let ((str "L %2l"))
     (if (rk-header-line-format--window-selected?)
         str
       (propertize str 'face 'rk-header-line-format-nonemphased-element))))
