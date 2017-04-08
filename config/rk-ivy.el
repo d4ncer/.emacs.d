@@ -19,6 +19,8 @@
              ivy-help
              ivy-immediate-done
              ivy-mode
+             ivy-previous-line
+             ivy-next-line
              ivy-partial-or-done
              ivy-resume
              ivy-switch-buffer
@@ -131,3 +133,5 @@
   (evil-global-set-key 'normal "/" #'swiper))
 
 (provide 'rk-ivy)
+
+;;; rk-ivy ends here
