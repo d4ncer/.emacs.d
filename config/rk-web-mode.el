@@ -159,9 +159,16 @@
     (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fi" #'rk-flow-insert-flow-annotation
-      "ft" #'rk-flow-type-at)
-    )
-  )
+      "ft" #'rk-flow-type-at)))
+
+(use-package company-flow
+  :after rk-web-modes
+  :config
+  (progn
+    (setq company-flow-modes '(rk-web-js-mode))
+
+    (with-eval-after-load 'company
+      (add-to-list 'company-backends 'company-flow))))
 
 (use-package tern
   :defer t
