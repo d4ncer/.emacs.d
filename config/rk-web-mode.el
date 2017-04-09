@@ -150,16 +150,39 @@
     (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
     (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
-(use-package rk-flow
+(use-package flow-minor-mode
   :after rk-web-modes
-  :commands (rk-flow-insert-flow-annotation
-             rk-flow-type-at)
+  :commands (flow-minor-type-at-pos
+             flow-minor-status
+             flow-minor-suggest
+             flow-minor-coverage
+             flow-minor-jump-to-definition)
+  :preface
+  (progn
+    (defun rk-flow-insert-flow-annotation ()
+      "Insert a flow annotation at the start of this file."
+      (interactive)
+      (save-excursion
+        (goto-char (point-min))
+        (if (s-matches? (rx (or (and "//" (* space) "@flow")
+                                (and "/*" (* space) "@flow" (* space) "*/")))
+                        (buffer-substring (line-beginning-position) (line-end-position)))
+            (user-error "Buffer already contains an @flow annotation")
+          (insert "// @flow\n")
+          (message "Inserted @flow annotation.")))))
+  :config
+  (progn
+    (add-hook 'rk-web-js-mode 'flow-minor-enable-automatically))
   :init
   (progn
     (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fi" #'rk-flow-insert-flow-annotation
-      "ft" #'rk-flow-type-at)))
+      "ft" #'flow-minor-type-at-pos
+      "fs" #'flow-minor-suggest
+      "fS" #'flow-minor-status
+      "fc" #'flow-coverage
+      "fd" #'flow-minor-jump-to-definition)))
 
 (use-package company-flow
   :after rk-web-modes
