@@ -159,9 +159,16 @@
     (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fi" #'rk-flow-insert-flow-annotation
-      "ft" #'rk-flow-type-at)
-    )
-  )
+      "ft" #'rk-flow-type-at)))
+
+(use-package company-flow
+  :after rk-web-modes
+  :config
+  (progn
+    (setq company-flow-modes '(rk-web-js-mode))
+
+    (with-eval-after-load 'company
+      (add-to-list 'company-backends 'company-flow))))
 
 (use-package tern
   :defer t
@@ -174,7 +181,11 @@
     (setq tern-command (add-to-list 'tern-command "--no-port-file" t))
 
     (unless (getenv "NODE_PATH")
-      (setenv "NODE_PATH" "/usr/local/lib/node_modules"))
+      (let* ((node-version
+              (replace-regexp-in-string "\n\\'" ""
+                                        (shell-command-to-string "node --version")))
+             (node-path (format "~/.nvm/versions/node/%s/lib/node_modules" node-version)))
+        (setenv "NODE_PATH" node-path)))
 
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fT" #'tern-find-definition
