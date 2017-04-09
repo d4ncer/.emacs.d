@@ -50,7 +50,7 @@
     (define-key ibuffer-mode-map (kbd "j") #'ibuffer-forward-line)
     (define-key ibuffer-mode-map (kbd "k") #'ibuffer-backward-line)))
 
-(use-package rk-ibuffer-action-transient-state
+(use-package rk-ibuffer-transient-state
   :after ibuffer
   :commands (rk-ibuffer-main-transient-state/body)
   :init
