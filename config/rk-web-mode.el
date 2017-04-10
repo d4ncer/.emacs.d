@@ -184,6 +184,24 @@
       "fc" #'flow-coverage
       "fd" #'flow-minor-jump-to-definition)))
 
+(use-package prettier-js
+  :after rk-web-modes
+  :commands (prettier
+             prettier-before-save)
+  :config
+  (progn
+    (setq prettier-args '("--single-quote" "--trailing-comma=es5"))
+    (add-hook 'before-save-hook
+              (lambda ()
+                (if
+                    (member (car (last (split-string buffer-file-name "\\."))) '("js"))
+                    (prettier)
+                  ()))))
+  :init
+  (progn
+    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
+      "." #'prettier)))
+
 (use-package company-flow
   :after rk-web-modes
   :config

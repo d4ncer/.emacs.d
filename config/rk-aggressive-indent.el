@@ -20,6 +20,7 @@
     (add-to-list 'aggressive-indent-excluded-modes 'toml-mode)
     (add-to-list 'aggressive-indent-excluded-modes 'sql-mode)
     (add-to-list 'aggressive-indent-excluded-modes 'restclient-mode)
+    (add-to-list 'aggressive-indent-excluded-modes 'rk-web-js-mode)
 
     (global-aggressive-indent-mode +1)))
 
