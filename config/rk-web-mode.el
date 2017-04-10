@@ -191,12 +191,8 @@
   :config
   (progn
     (setq prettier-args '("--single-quote" "--trailing-comma=es5"))
-    (add-hook 'before-save-hook
-              (lambda ()
-                (if
-                    (member (car (last (split-string buffer-file-name "\\."))) '("js"))
-                    (prettier)
-                  ()))))
+    (setq prettier-target-mode "rk-web-js-mode")
+    (add-hook 'before-save-hook #'prettier-before-save))
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
