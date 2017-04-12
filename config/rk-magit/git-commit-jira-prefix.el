@@ -1,8 +1,8 @@
 ;;; git-commit-jira-prefix.el --- Prefix commit messages with JIRA ticket numbers.  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2016  Chris Barrett
+;; Copyright (C) 2017 Raghuvir Kasturi
 
-;; Author: Chris Barrett <chris+emacs@walrus.cool>
+;; Author: Raghuvir Kasturi <raghuvir.kasturi@gmail.com>
 ;; Package-Requires: ((s "1.10.0") (dash "2.12.1") (magit "20160320.152"))
 
 ;; This program is free software; you can redistribute it and/or modify

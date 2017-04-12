@@ -1,8 +1,8 @@
 ;;; rk-neotree.el --- Configuration for neotree.  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2016  Chris Barrett
+;; Copyright (C) 2017 Raghuvir Kasturi
 
-;; Author: Chris Barrett <chris+emacs@walrus.cool>
+;; Author: Raghuvir Kasturi <raghuvir.kasturi@gmail.com>
 
 ;;; Commentary:
 
