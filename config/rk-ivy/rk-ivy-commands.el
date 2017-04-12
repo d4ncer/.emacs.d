@@ -10,9 +10,9 @@
 
 (require 'counsel)
 (require 'swiper)
-(require 'dash)
+(require 'subr-x)
 
-(autoload 'projectile "projectile-project-root")
+(autoload 'projectile-project-root "projectile")
 
 (defun rk-swiper-region-or-symbol ()
   "Run `swiper' with the selected region or the symbol around point as the initial input."

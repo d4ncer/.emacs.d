@@ -29,8 +29,8 @@
   :preface
   (progn
 
-    (autoload 'wgrep "wgrep-finish-edit")
-    (autoload 'wgrep "wgrep-abort-changes")
+    (autoload 'wgrep-finish-edit "wgrep")
+    (autoload 'wgrep-abort-changes "wgrep")
 
     ;; KLUDGE: Declare dynamic var.
     (defvar org-startup-folded)
@@ -140,6 +140,9 @@
 
 (use-package rk-ivy-commands
   :after swiper
+  :commands (rk-swiper-region-or-symbol
+             rk-counsel-project-region-or-symbol
+             rk-counsel-region-or-symbol)
   :init
   (spacemacs-keys-set-leader-keys
     "sS" #'rk-swiper-region-or-symbol
