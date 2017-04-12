@@ -28,7 +28,9 @@
 
   :preface
   (progn
-    (autoload 'rk-ivy-occur-then-wgrep "rk-ivy-occur-then-wgrep")
+
+    (autoload 'wgrep "wgrep-finish-edit")
+    (autoload 'wgrep "wgrep-abort-changes")
 
     ;; KLUDGE: Declare dynamic var.
     (defvar org-startup-folded)
@@ -66,11 +68,15 @@
 
     (define-key ivy-occur-mode-map (kbd "C-x C-w") #'ivy-wgrep-change-to-wgrep-mode)
 
+    (spacemacs-keys-set-leader-keys-for-major-mode 'ivy-occur-grep-mode
+      "w" #'ivy-wgrep-change-to-wgrep-mode
+      "c" #'wgrep-finish-edit
+      "k" #'wgrep-abort-changes)
+
     (define-key ivy-minibuffer-map (kbd "<f1>") #'rk-ivy-help)
     (define-key ivy-minibuffer-map (kbd "C-z") #'ivy-dispatching-done)
     (define-key ivy-minibuffer-map (kbd "<escape>") 'minibuffer-keyboard-quit)
     (define-key ivy-minibuffer-map (kbd "C-l") #'ivy-partial-or-done)
-    (define-key ivy-minibuffer-map (kbd "C-c C-e") #'rk-ivy-occur-then-wgrep)
     (define-key ivy-minibuffer-map (kbd "C-<return>") #'ivy-immediate-done)
     (define-key ivy-minibuffer-map (kbd "C-j") #'ivy-next-line)
     (define-key ivy-minibuffer-map (kbd "C-k") #'ivy-previous-line)
@@ -88,7 +94,8 @@
              counsel-find-file
              counsel-imenu
              counsel-recentf
-             counsel-yank-pop)
+             counsel-yank-pop
+             counsel-up-directory)
   :preface
   (progn
     (autoload 'ivy-immediate-done "ivy")
@@ -119,18 +126,25 @@
 
   :config
   (progn
+    (define-key counsel-find-file-map (kbd "C-h") 'counsel-up-directory)
     (define-key counsel-find-file-map (kbd "C-M-j") #'ivy-immediate-done)
     (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
-
-    ;; Prefill counsel-ag with the symbol at point.
-    (advice-add 'counsel-ag :around #'rk-ivy--ag-populate-with-symbol-at-point)
 
     (counsel-mode +1)))
 
 (use-package swiper
-  :bind (("C-s" . swiper))
+  :commands (swiper)
   :init
-  (evil-global-set-key 'normal "/" #'swiper))
+  (progn
+    (evil-global-set-key 'normal "/" #'swiper)))
+
+(use-package rk-ivy-commands
+  :after swiper
+  :init
+  (spacemacs-keys-set-leader-keys
+    "sS" #'rk-swiper-region-or-symbol
+    "sP" #'rk-counsel-project-region-or-symbol
+    "sF" #'rk-counsel-region-or-symbol))
 
 (provide 'rk-ivy)
 
