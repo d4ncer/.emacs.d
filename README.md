@@ -1,7 +1,5 @@
 # My Emacs config
 
----
-
 ## Installation
 
 Coming soon. It *should* work out of the box.
