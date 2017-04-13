@@ -90,7 +90,19 @@
     (autoload 'evil-window-split "evil-commands")
     (autoload 'evil-window-vsplit "evil-commands")
 
-    (defun rk-leader-keys/reload-file ()
+    (defun rk-copy-whole-buffer-to-clipboard ()
+      "Copy entire buffer to clipboard"
+      (interactive)
+      (clipboard-kill-ring-save (point-min) (point-max)))
+
+    (defun rk-copy-clipboard-to-whole-buffer ()
+      "Copy clipboard and replace buffer"
+      (interactive)
+      (delete-region (point-min) (point-max))
+      (clipboard-yank)
+      (deactivate-mark))
+
+    (defun rk-reload-file ()
       "Revisit the current file."
       (interactive)
       (when-let (path (buffer-file-name))
@@ -110,7 +122,8 @@
 
       "b d" #'kill-this-buffer
       "b b" #'bury-buffer
-      "b v" #'rk-leader-keys/reload-file
+      "b Y" #'rk-copy-whole-buffer-to-clipboard
+      "b P" #'rk-copy-clipboard-to-whole-buffer
 
       "C" #'compile
 
@@ -124,7 +137,7 @@
       "f s" #'save-buffer
       "f S" #'save-some-buffers
       "f W" #'write-file
-      "f v" #'rk-leader-keys/reload-file
+      "f v" #'rk-reload-file
       "f y" #'rk/copy-buffer-path
 
       "g i" #'rk-goto-init-file
