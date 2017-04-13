@@ -29,6 +29,10 @@
     (setq evil-want-visual-char-semi-exclusive t)
     (setq evil-want-Y-yank-to-eol t)
 
+    ;;; Rebind C-u to scroll up
+
+    (define-key evil-normal-state-map (kbd "C-u") #'evil-scroll-up)
+
     ;; Configure cursors.
 
     (setq evil-motion-state-cursor '("plum3" box))
