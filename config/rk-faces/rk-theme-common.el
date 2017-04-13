@@ -28,7 +28,7 @@
         :foreground ,default-foreground
         :weight normal
         :family "Roboto Mono"
-        :height 130)))
+        :height 140)))
 
     (mode-line
      ((t :foreground ,rk-theme-common-neutral-grey :background ,rk-theme-common-neutral-grey :height 20)))
