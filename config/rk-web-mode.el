@@ -13,9 +13,6 @@
 
 (require 'spacemacs-keys)
 (require 'dash)
-(autoload 'evil-define-key "evil-core")
-(autoload 'projectile-project-p "projectile")
-(autoload 'f-join "f")
 (autoload 'f-split "f")
 
 (use-package web-mode
@@ -81,11 +78,14 @@
   :commands (flycheck-select-checker)
   :functions (flycheck-add-next-checker flycheck-add-mode)
   :preface
-  (defun rk-web--add-node-modules-bin-to-path ()
-    "Use binaries from node_modules, where available."
-    (when-let (root (projectile-project-p))
-      (make-local-variable 'exec-path)
-      (add-to-list 'exec-path (f-join root "node_modules" ".bin"))))
+  (progn
+    (autoload 'projectile-project-p "projectile")
+    (autoload 'f-join "f")
+    (defun rk-web--add-node-modules-bin-to-path ()
+      "Use binaries from node_modules, where available."
+      (when-let (root (projectile-project-p))
+        (make-local-variable 'exec-path)
+        (add-to-list 'exec-path (f-join root "node_modules" ".bin")))))
 
   :config
   (progn
@@ -139,12 +139,15 @@
 (use-package rk-flycheck-stylelint
   :after flycheck
   :preface
-  (defun rk-web--set-stylelintrc ()
-    "Set either local or root stylelintrc"
-    (-if-let* ((root (projectile-project-p))
-               (root-rc (f-join root ".stylelintrc.json")))
-        (setq-local flycheck-stylelintrc root-rc))
-    (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
+  (progn
+    (autoload 'projectile-project-p "projectile")
+    (autoload 'f-join "f")
+    (defun rk-web--set-stylelintrc ()
+      "Set either local or root stylelintrc"
+      (-if-let* ((root (projectile-project-p))
+                 (root-rc (f-join root ".stylelintrc.json")))
+          (setq-local flycheck-stylelintrc root-rc))
+      (f-join user-emacs-directory "lisp" ".stylelintrc.json")))
   :config
   (progn
     (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
@@ -159,6 +162,7 @@
              flow-minor-jump-to-definition)
   :preface
   (progn
+    (autoload 's-matches? "s")
     (defun rk-flow-insert-flow-annotation ()
       "Insert a flow annotation at the start of this file."
       (interactive)
@@ -181,7 +185,7 @@
       "ft" #'flow-minor-type-at-pos
       "fs" #'flow-minor-suggest
       "fS" #'flow-minor-status
-      "fc" #'flow-coverage
+      "fc" #'flow-minor-coverage
       "fd" #'flow-minor-jump-to-definition)))
 
 (use-package prettier-js
@@ -210,7 +214,10 @@
 (use-package tern
   :defer t
   :functions (tern-mode)
-  :commands (tern-find-definition tern-pop-find-definition)
+  :commands (tern-find-definition
+             tern-pop-find-definition
+             tern-get-type
+             tern-get-docs)
   :init
   (add-hook 'rk-web-js-mode-hook #'tern-mode)
   :config
@@ -224,9 +231,12 @@
              (node-path (format "~/.nvm/versions/node/%s/lib/node_modules" node-version)))
         (setenv "NODE_PATH" node-path)))
 
+    (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m t" "tern")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "fT" #'tern-find-definition
-      "fD" #'tern-pop-find-definition)))
+      "tD" #'tern-find-definition
+      "tp" #'tern-pop-find-definition
+      "tt" #'tern-get-type
+      "td" #'tern-get-docs)))
 
 (use-package company-tern
   :after rk-web-modes
