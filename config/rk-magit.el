@@ -16,6 +16,13 @@
 
 (autoload 'evil-define-key "evil-core")
 
+(use-package with-editor
+  :init
+  (progn
+    (spacemacs-keys-set-leader-keys-for-minor-mode 'with-editor-mode
+      "c" #'with-editor-finish
+      "k" #'with-editor-cancel)))
+
 (use-package magit
   :defer t
   :commands (magit-status magit-blame magit-branch-and-checkout)
@@ -37,10 +44,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
   (progn
     (spacemacs-keys-set-leader-keys
       "gs" #'magit-status
-      "gb" #'git-blame-transient-state/body)
-    (spacemacs-keys-set-leader-keys-for-minor-mode 'git-commit-mode
-      "c" #'with-editor-finish
-      "k" #'with-editor-cancel))
+      "gb" #'git-blame-transient-state/body))
   :config
   (progn
     (evil-define-key 'normal magit-refs-mode-map (kbd ".") #'magit-branch-and-checkout)
