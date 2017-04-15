@@ -88,6 +88,7 @@
 (use-package counsel
   :commands (counsel-M-x
              counsel-descbinds
+             counsel-describe-face
              counsel-describe-function
              counsel-describe-variable
              counsel-expression-history
@@ -100,12 +101,7 @@
   (progn
     (autoload 'ivy-immediate-done "ivy")
     (autoload 'counsel-up-directory "counsel")
-    (autoload 'counsel-mode "counsel")
-
-    (defun rk-ivy--ag-populate-with-symbol-at-point (f &rest args)
-      (if-let ((sym (symbol-at-point)))
-          (apply f (symbol-name sym) (cdr args))
-        (apply f args))))
+    (autoload 'counsel-mode "counsel"))
 
   :init
   (progn
@@ -117,7 +113,8 @@
       "k r" #'counsel-yank-pop
       "i"   #'counsel-imenu
       "h d f" #'counsel-describe-function
-      "h d v" #'counsel-describe-variable)
+      "h d v" #'counsel-describe-variable
+      "h d c" #'counsel-describe-face)
 
     (bind-key "M-x" #'counsel-M-x)
     (bind-key "C-x C-f" #'counsel-find-file)
