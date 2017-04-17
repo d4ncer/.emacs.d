@@ -12,7 +12,7 @@
 
 (require 'rk-theme-base)
 
-(apply #'custom-theme-set-faces 'rk-light (rk-theme-base-make-theme "#333" "#fdfdfd"))
+(apply #'custom-theme-set-faces 'rk-light (rk-theme-base-make-theme rk-theme-base-offblack rk-theme-base-offwhite))
 
 (provide-theme 'rk-light)
 

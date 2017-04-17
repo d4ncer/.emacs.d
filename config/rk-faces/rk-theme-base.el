@@ -8,18 +8,28 @@
 
 ;;; Code:
 
-(defconst rk-theme-base-yellow "#fec055")
-(defconst rk-theme-base-red "#ef5253")
-(defconst rk-theme-base-orange "#e66b2b")
-(defconst rk-theme-base-green "#7cc844")
-(defconst rk-theme-base-cyan "#52cbb0")
-(defconst rk-theme-base-blue "#33b5e1")
-(defconst rk-theme-base-violet "#a363d5")
-(defconst rk-theme-base-magenta "#d73c9a")
+;; Solarized light for text
+(defconst rk-theme-base-yellow "#b58900")
+(defconst rk-theme-base-orange "#cb4b16")
+(defconst rk-theme-base-red "#dc322f")
+(defconst rk-theme-base-magenta "#d33682")
+(defconst rk-theme-base-violet "#6c71c4")
+(defconst rk-theme-base-blue "#268bd2")
+(defconst rk-theme-base-cyan "#2aa198")
+(defconst rk-theme-base-green "#859900")
 
+;; Pop (base16) for bgs
+(defconst rk-theme-bg-yellow "#fec055")
+
+;; Offwhites for highlights
 (defconst rk-theme-light-red "#ffe0e0")
 (defconst rk-theme-light-blue "#eeffff")
 
+;; Default fg/bg
+(defconst rk-theme-base-offblack "#333")
+(defconst rk-theme-base-offwhite "#fdfdfd")
+
+;; Greys
 (defconst rk-theme-base-neutral-grey "#a09f93")
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
@@ -43,7 +53,7 @@
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-base-yellow :foreground "black" :weight bold)))
+     ((t :background ,rk-theme-bg-yellow :foreground ,rk-theme-base-offblack :weight bold)))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
@@ -225,6 +235,18 @@
 
     (magit-popup-option-value
      ((t :weight normal)))
+
+    (magit-branch-local
+     ((t :foreground ,rk-theme-base-blue)))
+
+    (magit-branch-remote
+     ((t :foreground ,rk-theme-base-green)))
+
+    (magit-branch-current
+     ((t :foreground ,rk-theme-base-blue :box 1)))
+
+    (magit-tag
+     ((t :foreground ,rk-theme-base-yellow)))
 
     ;; Outline, Org
 
