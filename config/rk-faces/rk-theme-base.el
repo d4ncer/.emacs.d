@@ -237,16 +237,16 @@
      ((t :weight normal)))
 
     (magit-branch-local
-     ((t :foreground ,rk-theme-base-blue)))
+     ((t :foreground ,rk-theme-base-blue :weight demibold)))
 
     (magit-branch-remote
-     ((t :foreground ,rk-theme-base-green)))
+     ((t :foreground ,rk-theme-base-green :weight demibold)))
 
     (magit-branch-current
-     ((t :foreground ,rk-theme-base-blue :box 1)))
+     ((t :foreground ,rk-theme-base-blue :box 1 :weight demibold)))
 
     (magit-tag
-     ((t :foreground ,rk-theme-base-yellow)))
+     ((t :foreground ,rk-theme-base-yellow :weight demibold)))
 
     ;; Outline, Org
 
