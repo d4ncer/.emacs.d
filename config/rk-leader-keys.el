@@ -90,6 +90,13 @@
     (autoload 'evil-window-split "evil-commands")
     (autoload 'evil-window-vsplit "evil-commands")
 
+    (defun rk-get-face-at-point  (pos)
+      "Get the font face at POS."
+      (interactive "d")
+      (let ((face (or (get-char-property (point) 'read-face-name)
+                      (get-char-property (point) 'face))))
+        (if face (message "Face: %s" face) (message "No face at %d" pos))))
+
     (defun rk-copy-whole-buffer-to-clipboard ()
       "Copy entire buffer to clipboard"
       (interactive)
@@ -144,6 +151,7 @@
       "g m" #'rk-goto-messages
       "g p" #'rk-goto-personal-config
 
+      "h d C" #'rk-get-face-at-point
       "h d c" #'describe-face
       "h d k" #'describe-key
       "h d m" #'describe-mode
