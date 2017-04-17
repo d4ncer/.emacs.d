@@ -10,9 +10,9 @@
 
 (deftheme rk-light)
 
-(require 'rk-theme-common)
+(require 'rk-theme-base)
 
-(apply #'custom-theme-set-faces 'rk-light (rk-theme-common-make-theme "black" "white"))
+(apply #'custom-theme-set-faces 'rk-light (rk-theme-base-make-theme "#333" "#fdfdfd"))
 
 (provide-theme 'rk-light)
 

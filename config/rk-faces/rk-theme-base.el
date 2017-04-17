@@ -1,4 +1,4 @@
-;;; rk-theme-common.el --- Common configuration for light and dark themes.  -*- lexical-binding: t; -*-
+;;; rk-theme-base.el --- Common configuration for light and dark themes.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Raghuvir Kasturi
 
@@ -8,20 +8,23 @@
 
 ;;; Code:
 
-(defconst rk-theme-common-red "#ef5253")
-(defconst rk-theme-common-orange "#e66b2b")
-(defconst rk-theme-common-yellow "#e4b51c")
-(defconst rk-theme-common-green "#7cc844")
-(defconst rk-theme-common-cyan "#52cbb0")
-(defconst rk-theme-common-blue "#33b5e1")
-(defconst rk-theme-common-violet "#a363d5")
-(defconst rk-theme-common-magenta "#d73c9a")
+(defconst rk-theme-base-yellow "#fec055")
+(defconst rk-theme-base-red "#ef5253")
+(defconst rk-theme-base-orange "#e66b2b")
+(defconst rk-theme-base-green "#7cc844")
+(defconst rk-theme-base-cyan "#52cbb0")
+(defconst rk-theme-base-blue "#33b5e1")
+(defconst rk-theme-base-violet "#a363d5")
+(defconst rk-theme-base-magenta "#d73c9a")
 
-(defconst rk-theme-common-neutral-grey "#a09f93")
-(defconst rk-theme-common-dark-grey "#747369")
-(defconst rk-theme-common-light-grey "#e8e6df")
+(defconst rk-theme-light-red "#ffe0e0")
+(defconst rk-theme-light-blue "#eeffff")
 
-(defun rk-theme-common-make-theme (default-foreground default-background)
+(defconst rk-theme-base-neutral-grey "#a09f93")
+(defconst rk-theme-base-dark-grey "#747369")
+(defconst rk-theme-base-light-grey "#e8e6df")
+
+(defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
       ((t
         :background ,default-background
@@ -31,19 +34,16 @@
         :height 140)))
 
     (mode-line
-     ((t :foreground ,rk-theme-common-neutral-grey :background ,rk-theme-common-neutral-grey :height 20)))
+     ((t :foreground ,rk-theme-base-neutral-grey :background ,rk-theme-base-neutral-grey :height 20)))
 
     (link
-     ((((background light))
-       :weight light :underline ,rk-theme-common-light-grey)
-      (((background dark))
-       :weight light :underline ,rk-theme-common-dark-grey)))
+     ((t :weight light :underline ,rk-theme-base-light-grey)))
 
     (fringe
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-common-violet :foreground "white" :weight bold)))
+     ((t :background ,rk-theme-base-yellow :foreground "black" :weight bold)))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
@@ -95,25 +95,25 @@
      ((t :weight demibold)))
 
     (info-function-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-macro-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-command-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-special-form-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-syntax-class-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-user-option-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     (info-variable-ref-item
-     ((t :weight demibold :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
 
     ;; Dired
 
@@ -124,16 +124,16 @@
      ((t :inherit dired-header)))
 
     (diredp-dir-name
-     ((t :inherit default :foreground ,rk-theme-common-blue)))
+     ((t :inherit default :foreground ,rk-theme-base-blue)))
 
     (diredp-file-name
      ((t :inherit default)))
 
     (diredp-ignored-file-name
-     ((t :inherit diredp-file-name :foreground ,rk-theme-common-neutral-grey)))
+     ((t :inherit diredp-file-name :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-file-suffix
-     ((t :foreground ,rk-theme-common-neutral-grey)))
+     ((t :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-compressed-file-suffix
      ((t :inherit diredp-file-suffix)))
@@ -142,25 +142,25 @@
      ((t :weight light)))
 
     (diredp-date-time
-     ((t :foreground ,rk-theme-common-neutral-grey :weight light)))
+     ((t :foreground ,rk-theme-base-neutral-grey :weight light)))
 
     (diredp-dir-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-no-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-rare-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-exec-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-read-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (diredp-write-priv
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     ;; Info
 
@@ -180,36 +180,31 @@
     (show-paren-match
      ((t
        :weight bold
-       :foreground ,rk-theme-common-cyan
-       :underline ,rk-theme-common-cyan)))
+       :foreground ,rk-theme-base-cyan
+       :underline ,rk-theme-base-cyan)))
 
     (show-paren-mismatch
      ((t
        :weight bold
-       :foreground ,rk-theme-common-red
-       :underline ,rk-theme-common-red)))
+       :foreground ,rk-theme-base-red
+       :underline ,rk-theme-base-red)))
 
     ;; Highlights
 
+    (region
+     ((t :background ,rk-theme-light-blue)))
+
     (highlight
-     ((((background light)) :background "#e0e0e0")
-      (((background dark))  :background "#303030")))
+     ((t :background "#e0e0e0")))
 
     (iedit-occurrence
-     ((((background light))
-       :weight normal
-       :background "#FFe0e0"
-       :foreground ,default-foreground)
-      (((background dark))
-       :weight normal
-       :background "#703030"
-       :foreground ,default-foreground)))
+     ((t :weight normal :background ,rk-theme-light-red :foreground ,default-foreground)))
 
     (evil-search-highlight-persist-highlight-face
      ((t :inherit highlight :background nil)))
 
     (highlight-thing
-     ((t :weight demibold :foreground ,rk-theme-common-blue)))
+     ((t :weight demibold :foreground ,rk-theme-base-blue)))
 
     (ahs-face
      ((t :inherit highlight)))
@@ -226,7 +221,7 @@
      ((t :weight demibold)))
 
     (magit-popup-disabled-argument
-     ((t :foreground ,rk-theme-common-neutral-grey)))
+     ((t :foreground ,rk-theme-base-neutral-grey)))
 
     (magit-popup-option-value
      ((t :weight normal)))
@@ -240,7 +235,7 @@
      ((t
        :inherit default
        :weight bold
-       :foreground ,rk-theme-common-neutral-grey)))
+       :foreground ,rk-theme-base-neutral-grey)))
 
     (org-document-info-keyword
      ((t :weight light)))
@@ -258,31 +253,19 @@
      ((t :underline t)))
 
     (org-agenda-date-today
-     ((((background light))
-       :foreground ,rk-theme-common-red :weight demibold)
-      (((background dark))
-       :foreground ,rk-theme-common-magenta :weight demibold)))
+     ((t :foreground ,rk-theme-base-red :weight demibold)))
 
     (org-agenda-date-weekend
      ((t :inherit org-agenda-date)))
 
     (org-warning
-     ((((background light))
-       :foreground ,rk-theme-common-red :weight normal)
-      (((background dark))
-       :foreground ,rk-theme-common-magenta :weight normal)))
+     ((t :foreground ,rk-theme-base-red :weight normal)))
 
     (org-upcoming-deadline
-     ((((background light))
-       :foreground ,rk-theme-common-yellow :weight normal)
-      (((background dark))
-       :foreground ,rk-theme-common-yellow :weight normal)))
+     ((t :foreground ,rk-theme-base-yellow :weight normal)))
 
     (org-scheduled-previously
-     ((((background light))
-       :foreground ,rk-theme-common-red :weight normal)
-      (((background dark))
-       :foreground ,rk-theme-common-magenta :weight normal)))
+     ((t :foreground ,rk-theme-base-red :weight normal)))
 
     (org-formula
      ((t :weight light)))
@@ -333,7 +316,7 @@
      ((t :weight normal)))
 
     (message-cited-text
-     ((t :weight light :foreground ,rk-theme-common-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
 
     (message-header-subject
      ((t :weight normal)))
@@ -389,10 +372,7 @@
      ((t :inherit font-lock-string-face)))
 
     (hl-todo
-     ((((background light))
-       :foreground ,rk-theme-common-red :weight bold)
-      (((background dark))
-       :foreground ,rk-theme-common-magenta :weight bold)))
+     ((t :foreground ,rk-theme-base-red :weight bold)))
 
     (parenthesis
      ((t :weight light)))
@@ -400,6 +380,6 @@
     (link
      ((t :inherit default :underline t)))))
 
-(provide 'rk-theme-common)
+(provide 'rk-theme-base)
 
-;;; rk-theme-common.el ends here
+;;; rk-theme-base.el ends here
