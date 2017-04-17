@@ -28,7 +28,8 @@
 
     (spacemacs-keys-set-leader-keys-for-major-mode 'emacs-lisp-mode
       "eb" #'eval-buffer
-      "ee" #'eval-expression))
+      "ee" #'eval-expression
+      "es" #'eval-last-sexp))
 
   :config
   (advice-add #'eval-buffer :after #'rk-elisp--message-on-eval-buffer))
