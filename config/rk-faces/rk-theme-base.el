@@ -248,6 +248,12 @@
     (magit-tag
      ((t :foreground ,rk-theme-base-yellow :weight demibold)))
 
+    (magit-process-ng
+     ((t :foreground ,rk-theme-base-red)))
+
+    (magit-process-ok
+     ((t :foreground ,rk-theme-base-green)))
+
     ;; Outline, Org
 
     (org-link
