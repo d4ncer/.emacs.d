@@ -55,7 +55,7 @@
     (setq neo-theme 'ascii)
     (setq neo-dont-be-alone t)
     (setq neo-persist-show nil)
-    (setq neo-show-hidden-files nil)
+    (setq neo-show-hidden-files t)
     (setq neo-vc-integration nil)
 
     (add-to-list 'neo-hidden-regexp-list "target$")
