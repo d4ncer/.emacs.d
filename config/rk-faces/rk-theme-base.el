@@ -19,17 +19,24 @@
 (defconst rk-theme-base-green "#859900")
 
 ;; Pop (base16) for bgs
-(defconst rk-theme-bg-yellow "#fec055")
+(defconst rk-theme-base-bg-yellow "#fec055")
 
 ;; Offwhites for highlights
-(defconst rk-theme-light-red "#ffe0e0")
-(defconst rk-theme-light-blue "#eeffff")
+(defconst rk-theme-base-light-red "#ffe0e0")
 
 ;; Default fg/bg
 (defconst rk-theme-base-offblack "#333")
 (defconst rk-theme-base-offwhite "#fdfdfd")
 
 ;; Greys
+(defconst rk-theme-base-solarized-b03 "#002b36")
+(defconst rk-theme-base-solarized-b02 "#073642")
+(defconst rk-theme-base-solarized-b01 "#586e75")
+(defconst rk-theme-base-solarized-b00 "#657b83")
+(defconst rk-theme-base-solarized-b0 "#839496")
+(defconst rk-theme-base-solarized-b1 "#93a1a1")
+(defconst rk-theme-base-solarized-b2 "#eee8d5")
+(defconst rk-theme-base-solarized-b3 "#fdf6e3")
 (defconst rk-theme-base-neutral-grey "#a09f93")
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
@@ -53,7 +60,7 @@
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-bg-yellow :foreground ,rk-theme-base-offblack :weight bold)))
+     ((t :background ,rk-theme-base-bg-yellow :foreground ,rk-theme-base-offblack :weight bold)))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
@@ -202,13 +209,13 @@
     ;; Highlights
 
     (region
-     ((t :background ,rk-theme-light-blue)))
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     (highlight
-     ((t :background "#e0e0e0")))
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     (iedit-occurrence
-     ((t :weight normal :background ,rk-theme-light-red :foreground ,default-foreground)))
+     ((t :weight normal :background ,rk-theme-base-light-red :foreground ,default-foreground)))
 
     (evil-search-highlight-persist-highlight-face
      ((t :inherit highlight :background nil)))
@@ -253,6 +260,15 @@
 
     (magit-process-ok
      ((t :foreground ,rk-theme-base-green)))
+
+    (magit-section-highlight
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (magit-diff-hunk-heading-highlight
+     ((t :background ,rk-theme-base-solarized-b1)))
+
+    (magit-diff-context-highlight
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     ;; Outline, Org
 
