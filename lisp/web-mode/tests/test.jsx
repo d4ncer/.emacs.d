@@ -1,3 +1,33 @@
+return (
+  <ModalTrigger modal={<InviteForm auth={this.props.auth} />} />
+);
+
+return (
+  <li>
+    <ModalTrigger modal={ <InviteForm auth={this.props.auth} /> }>
+      <a href="#">Invite Representative</a>
+    </ModalTrigger>
+  </li>
+);
+
+return (
+  <div>
+    <div>xs</div>
+    <OtherComponent/>
+    <OtherComponent class="toto"
+                    {...props}
+                    id="fr" />
+  </div>;
+);
+
+import React from 'react';
+
+const Front = props => {
+  return <div>
+    <span>hello</span>
+  </div>;
+};
+
 /** @jsx React.DOM **/
 var React = require('react/addons');
 var Component = require('./component');
@@ -19,6 +49,19 @@ export default class Header extends Component {
   }
 }
 
+import * as React from 'react';
+
+interface Props {
+  name: string
+}
+
+class MyThing extends React.Component<Props, {}> {
+  render() {
+    return <span>hi</span>;
+  }
+}
+
+export default MyThing as React.ComponentClass<Props>;
 
 export default React.createClass({
   getInitialState() {
@@ -39,15 +82,38 @@ export default React.createClass({
 
 function foo() {
   return <label>
-      First Name:
-      <Input name="name"
-             type="text"
-             validators={[
-               required('You must supply a first name!'),
-               (value) => value > 15 ? 'too long!': null
-             ]} />
+    First Name:
+    <Input name="name"
+           type="text"
+           validators={[
+             required('You must supply a first name!'),
+             (value) => value > 15 ? 'too long!': null
+           ]} />
   </label>;
 }
+
+
+// #870
+import React, {Component} from 'react';
+class Confirm extends Component {
+  render() {
+    const project = this.props.project;
+    return (
+      <form onSubmit="">
+        <fieldset>
+          {project.foo && (
+             <div>Foo</div>
+           )}
+          {project.bar && (
+             <p>Bar</p>
+           )}
+        </fieldset>
+      </form>
+    );
+  }
+}
+export default Confirm;
+
 
 var React = require('react')
 
