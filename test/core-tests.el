@@ -1,6 +1,6 @@
 ;;; core-tests.el --- company-mode tests  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2015, 2016  Free Software Foundation, Inc.
+;; Copyright (C) 2015, 2016, 2017  Free Software Foundation, Inc.
 
 ;; Author: Dmitry Gutov
 
@@ -332,6 +332,31 @@
       (let ((last-command-event ? ))
         (company-call 'self-insert-command 1))
       (should (string= "abcd " (buffer-string))))))
+
+(ert-deftest company-auto-complete-with-electric-pair ()
+  (with-temp-buffer
+    (insert "foo(ab)")
+    (forward-char -1)
+    (company-mode)
+    (let (company-frontends
+          (company-auto-complete t)
+          (company-auto-complete-chars '(? ?\)))
+          (company-backends
+           (list (lambda (command &optional _)
+                   (cl-case command
+                     (prefix (buffer-substring 5 (point)))
+                     (candidates '("abcd" "abef"))))))
+          (electric-pair electric-pair-mode))
+      (unwind-protect
+          (progn
+            (electric-pair-mode)
+            (let (this-command)
+              (company-complete))
+            (let ((last-command-event ?\)))
+              (company-call 'self-insert-command 1)))
+        (unless electric-pair
+          (electric-pair-mode -1)))
+      (should (string= "foo(abcd)" (buffer-string))))))
 
 (ert-deftest company-no-auto-complete-when-idle ()
   (with-temp-buffer
