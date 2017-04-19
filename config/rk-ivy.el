@@ -85,6 +85,9 @@
 
   :defines (ivy-use-virtual-buffers ivy-count-format))
 
+(use-package ivy-hydra
+  :after ivy)
+
 (use-package counsel
   :commands (counsel-M-x
              counsel-descbinds
@@ -94,6 +97,11 @@
              counsel-expression-history
              counsel-find-file
              counsel-imenu
+             counsel-faces
+             counsel-colors-emacs
+             counsel-colors-web
+             counsel-command-history
+             counsel-file-jump
              counsel-recentf
              counsel-yank-pop
              counsel-up-directory)
@@ -109,9 +117,14 @@
       "SPC" #'counsel-M-x
       "?"   #'counsel-descbinds
       "f f" #'counsel-find-file
+      "f j" #'counsel-file-jump
       "f r" #'counsel-recentf
       "k r" #'counsel-yank-pop
-      "i"   #'counsel-imenu
+      "i i" #'counsel-imenu
+      "i f" #'counsel-faces
+      "i e" #'counsel-colors-emacs
+      "i w" #'counsel-colors-web
+      "i c" #'counsel-command-history
       "h d f" #'counsel-describe-function
       "h d v" #'counsel-describe-variable
       "h d c" #'counsel-describe-face)
@@ -126,6 +139,8 @@
     (define-key counsel-find-file-map (kbd "C-h") 'counsel-up-directory)
     (define-key counsel-find-file-map (kbd "C-M-j") #'ivy-immediate-done)
     (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
+
+    (setq counsel-yank-pop-separator (concat "\n" (make-string 70 ?-) "\n"))
 
     (counsel-mode +1)))
 

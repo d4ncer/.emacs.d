@@ -89,6 +89,7 @@
     (autoload 'evil-window-next "evil-commands")
     (autoload 'evil-window-split "evil-commands")
     (autoload 'evil-window-vsplit "evil-commands")
+    (autoload 'counsel-git-log "counsel")
 
     (defun rk-get-face-at-point  (pos)
       "Get the font face at POS."
@@ -150,6 +151,7 @@
       "g i" #'rk-goto-init-file
       "g m" #'rk-goto-messages
       "g p" #'rk-goto-personal-config
+      "g l" #'counsel-git-log
 
       "h d C" #'rk-get-face-at-point
       "h d c" #'describe-face
