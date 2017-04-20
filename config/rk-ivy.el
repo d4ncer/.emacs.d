@@ -139,6 +139,7 @@
     (define-key counsel-find-file-map (kbd "C-h") 'counsel-up-directory)
     (define-key counsel-find-file-map (kbd "C-M-j") #'ivy-immediate-done)
     (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
+    (define-key ivy-minibuffer-map (kbd "C-h") #'counsel-up-directory)
 
     (setq counsel-yank-pop-separator (concat "\n" (make-string 70 ?-) "\n"))
 
