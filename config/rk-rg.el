@@ -1,4 +1,4 @@
-;;; rk-ag.el --- Configuration for ag and related utils.  -*- lexical-binding: t; -*-
+;;; rk-rg.el --- Configuration for rg and related utils.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Raghuvir Kasturi
 
@@ -11,8 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(use-package ag
-  :commands ag)
+;; TODO: Add rg frontend (if needed outside ivy/counsel)
 
 (use-package wgrep
   :defer t
@@ -20,7 +19,7 @@
   (progn
     (autoload 'wgrep-finish-edit "wgrep")
 
-    (defun rk-ag-wgrep-finish-edit-kill-buffer ()
+    (defun rk-rg-wgrep-finish-edit-kill-buffer ()
       "Finish the current wgrep edit and kill the wgrep buffer."
       (interactive)
       (let ((buf (current-buffer)))
@@ -30,11 +29,8 @@
   :config
   (progn
     (setq wgrep-auto-save-buffer t)
-    (define-key wgrep-mode-map [remap wgrep-finish-edit] #'rk-ag-wgrep-finish-edit-kill-buffer)))
+    (define-key wgrep-mode-map [remap wgrep-finish-edit] #'rk-rg-wgrep-finish-edit-kill-buffer)))
 
-(use-package wgrep-ag
-  :after ag)
+(provide 'rk-rg)
 
-(provide 'rk-ag)
-
-;;; rk-ag.el ends here
+;;; rk-rg.el ends here

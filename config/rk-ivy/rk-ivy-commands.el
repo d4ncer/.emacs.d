@@ -27,16 +27,16 @@
   "Search project for region or symbol at point."
   (interactive)
   (if-let ((sym (symbol-at-point)))
-      (counsel-ag (symbol-name sym) (projectile-project-root))
-    (counsel-ag nil (projectile-project-root))))
+      (counsel-rg (symbol-name sym) (projectile-project-root))
+    (counsel-rg nil (projectile-project-root))))
 
 (defun rk-counsel-region-or-symbol ()
   "Search initial directory for region or symbol at point."
   (interactive)
   (let ((init-dir (read-directory-name "Start from directory: ")))
     (if-let ((sym (symbol-at-point)))
-        (counsel-ag (symbol-name sym) init-dir)
-      (counsel-ag nil init-dir))))
+        (counsel-rg (symbol-name sym) init-dir)
+      (counsel-rg nil init-dir))))
 
 (provide 'rk-ivy-commands)
 
