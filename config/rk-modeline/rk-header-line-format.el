@@ -11,6 +11,7 @@
 (require 'dash)
 (require 's)
 (require 'subr-x)
+(require 'rk-theme-base)
 
 (autoload 'magit-get-current-branch "magit-git")
 (autoload 'projectile-project-p "projectile")
@@ -27,8 +28,8 @@
   :group 'rk-header-line-format)
 
 (defface rk-header-line-format-accent-element
-  '((t
-     (:inhert header-line :foreground "#e4b51c")))
+  `((t
+     (:inhert header-line :foreground ,rk-theme-base-yellow)))
   "Face for accented elements in the header line."
   :group 'rk-header-line-format)
 

@@ -18,9 +18,6 @@
 (defconst rk-theme-base-cyan "#2aa198")
 (defconst rk-theme-base-green "#859900")
 
-;; Pop (base16) for bgs
-(defconst rk-theme-base-bg-yellow "#fec055")
-
 ;; Offwhites for highlights
 (defconst rk-theme-base-light-red "#ffe0e0")
 
@@ -37,7 +34,7 @@
 (defconst rk-theme-base-solarized-b1 "#93a1a1")
 (defconst rk-theme-base-solarized-b2 "#eee8d5")
 (defconst rk-theme-base-solarized-b3 "#fdf6e3")
-(defconst rk-theme-base-neutral-grey "#a09f93")
+(defconst rk-theme-base-solarized-b01 "#a09f93")
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
@@ -51,7 +48,7 @@
         :height 140)))
 
     (mode-line
-     ((t :foreground ,rk-theme-base-neutral-grey :background ,rk-theme-base-neutral-grey :height 20)))
+     ((t :foreground ,rk-theme-base-solarized-b01 :background ,rk-theme-base-solarized-b01 :height 20)))
 
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
@@ -60,7 +57,7 @@
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-base-bg-yellow :foreground ,rk-theme-base-offblack :weight bold)))
+     ((t :background ,rk-theme-base-violet :foreground ,rk-theme-base-solarized-b3 :weight bold)))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
@@ -112,25 +109,25 @@
      ((t :weight demibold)))
 
     (info-function-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-macro-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-command-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-special-form-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-syntax-class-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-user-option-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     (info-variable-ref-item
-     ((t :weight demibold :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight demibold :foreground ,rk-theme-base-solarized-b01)))
 
     ;; Dired
 
@@ -147,10 +144,10 @@
      ((t :inherit default)))
 
     (diredp-ignored-file-name
-     ((t :inherit diredp-file-name :foreground ,rk-theme-base-neutral-grey)))
+     ((t :inherit diredp-file-name :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-file-suffix
-     ((t :foreground ,rk-theme-base-neutral-grey)))
+     ((t :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-compressed-file-suffix
      ((t :inherit diredp-file-suffix)))
@@ -159,25 +156,25 @@
      ((t :weight light)))
 
     (diredp-date-time
-     ((t :foreground ,rk-theme-base-neutral-grey :weight light)))
+     ((t :foreground ,rk-theme-base-solarized-b01 :weight light)))
 
     (diredp-dir-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-no-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-rare-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-exec-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-read-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (diredp-write-priv
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     ;; Info
 
@@ -238,7 +235,7 @@
      ((t :weight demibold)))
 
     (magit-popup-disabled-argument
-     ((t :foreground ,rk-theme-base-neutral-grey)))
+     ((t :foreground ,rk-theme-base-solarized-b01)))
 
     (magit-popup-option-value
      ((t :weight normal)))
@@ -279,7 +276,7 @@
      ((t
        :inherit default
        :weight bold
-       :foreground ,rk-theme-base-neutral-grey)))
+       :foreground ,rk-theme-base-solarized-b01)))
 
     (org-document-info-keyword
      ((t :weight light)))
@@ -360,7 +357,7 @@
      ((t :weight normal)))
 
     (message-cited-text
-     ((t :weight light :foreground ,rk-theme-base-neutral-grey)))
+     ((t :weight light :foreground ,rk-theme-base-solarized-b01)))
 
     (message-header-subject
      ((t :weight normal)))
