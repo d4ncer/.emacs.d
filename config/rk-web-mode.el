@@ -263,6 +263,13 @@
     (with-eval-after-load 'company
       (add-to-list 'company-backends 'company-tern))))
 
+(use-package add-node-modules-path
+  :after rk-web-modes
+  :commands (add-node-modules-path)
+  :config
+  (progn
+    (add-hook 'rk-web-js-mode-hook #'add-node-modules-path)))
+
 (use-package aggressive-indent
   :defer t
   :preface
