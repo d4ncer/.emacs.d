@@ -197,11 +197,21 @@
   :after rk-web-modes
   :commands (prettier
              prettier-before-save)
+  :preface
+  (progn
+    (autoload 'f-exists? "f")
+    (defun rk-web--should-enable-prettier ()
+      "Enable prettier if no .prettierignore is found in project root."
+      (-when-let* ((root (projectile-project-p))
+                   (root-prettier-ignore (f-join root ".prettierignore"))
+                   (enable-prettier? (not (f-exists? root-prettier-ignore))))
+        t)))
   :config
   (progn
     (setq prettier-args '("--single-quote" "--trailing-comma=es5"))
     (setq prettier-target-mode "rk-web-js-mode")
-    (add-hook 'before-save-hook #'prettier-before-save))
+    (if (rk-web--should-enable-prettier)
+        (add-hook 'before-save-hook #'prettier-before-save)))
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
