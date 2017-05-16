@@ -103,6 +103,12 @@
   :commands (emmet-mode emmet-expand-line)
   :preface
   (progn
+    (defun buffer-contains-react ()
+      (save-excursion
+        (save-match-data
+          (goto-char (point-min))
+          (search-forward "React" nil t))))
+
     (defun rk-web--set-jsx-classname-on ()
       (setq-local emmet-expand-jsx-className? t))
 
@@ -112,8 +118,7 @@
         (emmet-mode +1))
 
        ((and (derived-mode-p 'rk-web-js-mode)
-             (buffer-file-name)
-             (memq "components" (f-split (buffer-file-name))))
+             (buffer-contains-react))
         (emmet-mode +1)))))
 
   :init
