@@ -210,8 +210,9 @@
   (progn
     (setq prettier-args '("--single-quote" "--trailing-comma=es5"))
     (setq prettier-target-mode "rk-web-js-mode")
-    (if (rk-web--should-enable-prettier)
-        (add-hook 'before-save-hook #'prettier-before-save)))
+    (add-hook 'rk-web-js-mode-hook
+              (lambda () (if (rk-web--should-enable-prettier)
+                             (add-hook 'before-save-hook #'prettier-before-save nil t)))))
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
