@@ -90,9 +90,10 @@
                     (?b . ("(" . ")"))
                     (?B . ("{" . "}"))
                     (?> . ("<" . ">"))
-                    (?t . surround-read-tag)
-                    (?< . surround-read-tag)
-                    (?f . surround-function)))
+                    (?$ . ("${" . "}"))
+                    (?t . evil-surround-read-tag)
+                    (?< . evil-surround-read-tag)
+                    (?f . evil-surround-function)))
 
     (global-evil-surround-mode)
     (evil-define-key 'visual evil-surround-mode-map "s" #'evil-surround-region)
