@@ -14,7 +14,6 @@
 (require 'spacemacs-keys)
 
 (use-package evil
-  :commands (evil-scroll-up)
   :preface
   (defun rk-evil--sp-delete-and-join-compat (fn &rest args)
     (if (bound-and-true-p smartparens-strict-mode)
@@ -71,9 +70,7 @@
 (use-package evil-surround
   :after evil
   :commands (global-evil-surround-mode
-             evil-surround-region
-             evil-surround-read-tag
-             evil-surround-function)
+             evil-surround-region)
 
   :preface
   (autoload 'evil-substitute "evil-commands")
@@ -115,10 +112,7 @@
     (setq iedit-toggle-key-default nil)
 
     ;; Enable leader key in iedit and iedit-insert states
-    (define-key evil-iedit-state-map (kbd "SPC") spacemacs-keys-default-map))
-
-  :defines (iedit-current-symbol-default
-            iedit-only-at-symbol-boundaries))
+    (define-key evil-iedit-state-map (kbd "SPC") spacemacs-keys-default-map)))
 
 (use-package evil-ex
   :defer t
@@ -152,7 +146,6 @@
 
 (use-package evil-escape
   :after evil
-  :commands (evil-escape-mode)
   :config
   (progn
     (setq-default evil-escape-key-sequence "jk")
