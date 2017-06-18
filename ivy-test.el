@@ -19,6 +19,12 @@
 ;; For a full copy of the GNU General Public License
 ;; see <http://www.gnu.org/licenses/>.
 
+;;; Commentary:
+;;
+;; This packages provides the tests for `ert'.  They can be executed
+;; from the command line as well by calling "make test".
+
+;;; Code:
 (require 'ert)
 
 ;; useful for #'ivy-read-remap. It must arrive before (require 'ivy)
@@ -47,6 +53,16 @@
      (vconcat (kbd "C-c e")
               (kbd keys)))
     ivy-result))
+
+(ert-deftest ivy-partial ()
+  (should (equal
+           (ivy-with '(ivy-read "test: " '("case" "Case"))
+                     "ca TAB C-m")
+           "case"))
+  (should (equal
+           (ivy-with '(ivy-read "test: " '("case" "Case"))
+                     "Ca TAB C-m")
+           "Case")))
 
 (ert-deftest ivy-read ()
   (should (equal
@@ -426,4 +442,82 @@
             "RET")
            "default")))
 
+(ert-deftest ivy-read-prompt ()
+  (let ((prompt "pattern: ")
+        (collection '("blue" "yellow")))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-m")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-p C-m")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-j")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-p C-j")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-M-j")
+             "bl"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt nil))
+                 (ivy-read prompt collection))
+              "bl C-p C-M-j")
+             "bl"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-m")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-p C-m")
+             "bl"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-j")
+             "blue"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-p C-j")
+             "bl"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-M-j")
+             "bl"))
+    (should (equal
+             (ivy-with
+              '(let ((ivy-use-selectable-prompt t))
+                 (ivy-read prompt collection))
+              "bl C-p C-M-j")
+             "bl"))))
+
 (provide 'ivy-test)
+
+;;; ivy-test.el ends here
