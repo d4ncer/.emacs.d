@@ -5,6 +5,7 @@
 ;; Author: jaypei <jaypei97159@gmail.com>
 ;; URL: https://github.com/jaypei/emacs-neotree
 ;; Version: 0.5
+;; Package-Requires: ((cl-lib "0.5"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -34,6 +35,8 @@
 ;;
 
 ;;; Code:
+
+(require 'cl-lib)
 
 ;;
 ;; Constants
@@ -72,7 +75,7 @@ buffer-local wherever it is set."
             (list 'make-variable-buffer-local (list 'quote var))))))
 
 ;; Add autoload function for vc (#153).
-(autoload 'vc-responsible-backend "vc.el")
+(autoload 'vc-responsible-backend "vc.elc")
 
 ;;
 ;; Macros
@@ -232,6 +235,11 @@ the mode-line format."
   :type 'boolean
   :group 'neotree)
 
+(defcustom neo-autorefresh t
+  "*If non-nil, the neotree buffer will auto refresh."
+  :type 'boolean
+  :group 'neotree)
+
 (defcustom neo-window-width 25
   "*Specifies the width of the NeoTree window."
   :type 'integer
@@ -366,6 +374,13 @@ This variable is used in `neo-vc-for-node' when
 (defcustom neo-force-change-root nil
   "If not nil, do not prompt when switching root."
   :type 'boolean
+  :group 'neotree)
+
+(defcustom neo-filepath-sort-function 'string<
+  "Function to be called when sorting neotree nodes."
+  :type '(symbol (const :tag "Normal" string<)
+                 (const :tag "Sort Hidden at Bottom" neo-sort-hidden-last)
+                 (function :tag "Other"))
   :group 'neotree)
 
 ;;
@@ -515,6 +530,8 @@ Used only when \(vc-state node\) returns nil."
 
 (defvar neo-global--window nil)
 
+(defvar neo-global--autorefresh-timer nil)
+
 (defvar neo-mode-line-format
   (list
    '(:eval
@@ -626,7 +643,6 @@ The car of the pair will store fullpath, and cdr will store line number.")
       (define-key map (kbd "+") 'neotree-create-node)
       (define-key map (kbd "d") 'neotree-delete-node)
       (define-key map (kbd "r") 'neotree-rename-node)
-      (define-key map (kbd "p") 'neotree-create-node)
       (define-key map (kbd "e") 'neotree-enter)))
     map)
   "Keymap for `neotree-mode'.")
@@ -729,6 +745,12 @@ If INIT-P is non-nil and global NeoTree buffer not exists, then create it."
             2)
          (member neo-global--window windows))))
 
+(defun neo-global--do-autorefresh ()
+  "Do auto refresh."
+  (interactive)
+  (when (and neo-autorefresh (neo-global--window-exists-p))
+    (neotree-refresh t)))
+
 (defun neo-global--open ()
   "Show the NeoTree window."
   (let ((valid-start-node-p nil))
@@ -797,6 +819,8 @@ The description of ARG is in `neotree-enter'."
 
 (defun neo-global--detach ()
   "Detach the global neotree buffer."
+  (when neo-global--autorefresh-timer
+    (cancel-timer neo-global--autorefresh-timer))
   (neo-global--with-buffer
     (neo-buffer--unlock-width))
   (setq neo-global--buffer nil)
@@ -804,6 +828,11 @@ The description of ARG is in `neotree-enter'."
 
 (defun neo-global--attach ()
   "Attach the global neotree buffer"
+  (when neo-global--autorefresh-timer
+    (cancel-timer neo-global--autorefresh-timer))
+  (when neo-autorefresh
+    (setq neo-global--autorefresh-timer
+          (run-with-idle-timer 2 10 'neo-global--do-autorefresh)))
   (setq neo-global--buffer (get-buffer neo-buffer-name))
   (setq neo-global--window (get-buffer-window
                             neo-global--buffer))
@@ -1124,6 +1153,41 @@ Return nil if DIR is not an existing directory."
   "Returns true regardless of message value in the argument."
   t)
 
+(defun neo-sort-hidden-last (x y)
+  "Sort normally but with hidden files last."
+  (let ((x-hidden (neo-filepath-hidden-p x))
+        (y-hidden (neo-filepath-hidden-p y)))
+    (cond
+     ((and x-hidden (not y-hidden))
+      nil)
+     ((and (not x-hidden) y-hidden)
+      t)
+     (t
+      (string< x y)))))
+
+(defun neo-filepath-hidden-p (node)
+  "Return whether or not node is a hidden path."
+  (let ((shortname (neo-path--file-short-name node)))
+    (neo-util--filter
+     (lambda (x) (not (null (string-match-p x shortname))))
+     neo-hidden-regexp-list)))
+
+(defun neo-get-unsaved-buffers-from-projectile ()
+  "Return list of unsaved buffers from projectile buffers."
+  (interactive)
+  (let ((rlist '())
+        (rtag t))
+    (condition-case nil
+        (projectile-project-buffers)
+      (error (setq rtag nil)))
+    (when (and rtag (fboundp 'projectile-project-buffers))
+      (dolist (buf (projectile-project-buffers))
+        (with-current-buffer buf
+          (if (and (buffer-modified-p) buffer-file-name)
+              (setq rlist (cons (buffer-file-name) rlist))
+            ))))
+    rlist))
+
 ;;
 ;; Buffer methods
 ;;
@@ -1352,8 +1416,7 @@ PATH is value."
 
 (defun neo-buffer--get-nodes (path)
   (let* ((nodes (neo-util--walk-dir path))
-         (comp  #'(lambda (x y)
-                    (string< x y)))
+         (comp neo-filepath-sort-function)
          (nodes (neo-util--filter 'neo-util--hidden-path-filter nodes)))
     (cons (sort (neo-util--filter 'file-directory-p nodes) comp)
           (sort (neo-util--filter #'(lambda (f) (not (file-directory-p f))) nodes) comp))))
@@ -1415,7 +1478,6 @@ If SAVE-POS-P is non-nil, it will be auto save current line number."
   (let ((start-node neo-buffer--start-node))
     (unless start-node
       (setq start-node default-directory))
-
     (neo-buffer--with-editing-buffer
      ;; save context
      (when save-pos-p
@@ -1533,9 +1595,12 @@ If RECURSIVE-P is non nil, find files will recursively."
         (when (neo-path--file-equal-p iter-curr-dir neo-buffer--start-node)
           (setq file-node-find-p t)
           (throw 'return nil))
-        (when (neo-path--file-equal-p iter-curr-dir "/")
-          (setq file-node-find-p nil)
-          (throw 'return nil))))
+        (let ((niter-curr-dir (file-remote-p iter-curr-dir 'localname)))
+          (unless niter-curr-dir
+            (setq niter-curr-dir iter-curr-dir))
+          (when (neo-path--file-equal-p niter-curr-dir "/")
+            (setq file-node-find-p nil)
+            (throw 'return nil)))))
     (when file-node-find-p
       (dolist (p file-node-list)
         (neo-buffer--set-expand p t))
@@ -1671,7 +1736,6 @@ NeoTree buffer is BUFFER."
 (defun neo-window--minimize-p ()
   "Return non-nil when the NeoTree window is minimize."
   (<= (window-width) neo-window-width))
-
 
 ;;
 ;; Interactive functions
@@ -1862,7 +1926,7 @@ If the current node is the first node then the last node is selected."
                  (funcall neo-confirm-create-file (format "Do you want to create file %S ?"
                                                           filename)))
         ;; ensure parent directory exist before saving
-        (mkdir (substring filename 0 (+ 1 (position ?/ filename :from-end t))) t)
+        (mkdir (substring filename 0 (+ 1 (cl-position ?/ filename :from-end t))) t)
         ;; NOTE: create a empty file
         (write-region "" nil filename)
         (neo-buffer--save-cursor-pos filename)
@@ -1934,7 +1998,7 @@ If the current node is the first node then the last node is selected."
   "Used to bind the empty function to the shortcut."
   (interactive))
 
-(defun neotree-refresh ()
+(defun neotree-refresh (&optional is-auto-refresh)
   "Refresh the NeoTree buffer."
   (interactive)
   (if (eq (current-buffer) (neo-global--get-buffer))
@@ -1942,7 +2006,7 @@ If the current node is the first node then the last node is selected."
     (save-excursion
       (let ((cw (selected-window)))  ;; save current window
         (neo-buffer--refresh t t)
-        (when neo-toggle-window-keep-p
+        (when (or is-auto-refresh neo-toggle-window-keep-p)
           (select-window cw))))))
 
 (defun neotree-stretch-toggle ()
