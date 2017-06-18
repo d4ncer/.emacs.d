@@ -180,6 +180,38 @@ be."
     ;; @}
     )))
 
+(sp-test-command sp-forward-parallel-sexp
+  ((nil
+    ("|foo" "foo|")
+    ("foo|" "foo|")
+    ("|foo bar" "foo| bar" "foo bar|")
+    ("(|foo bar)" "(foo| bar)" "(foo bar|)" "(foo| bar)")
+    ("(foo| bar baz)" "(foo bar| baz)" "(foo bar baz|)" "(foo| bar baz)" )
+    ("(|foo)" "(foo|)" "(foo|)")
+    )
+   (((current-prefix-arg 2))
+    ("|foo bar" "foo bar|")
+    ("|(foo bar) baz" "(foo bar) baz|")
+    ("(foo| bar) baz" "(foo| bar) baz")
+    )
+   ))
+
+(sp-test-command sp-backward-parallel-sexp
+  ((nil
+    ("foo|" "|foo")
+    ("|foo" "|foo")
+    ("foo bar|" "foo |bar" "|foo bar")
+    ("(foo bar|)" "(foo |bar)" "(|foo bar)" "(foo |bar)")
+    ("(foo| bar baz)" "(|foo bar baz)" "(foo bar |baz)" "(foo |bar baz)" )
+    ("(foo|)" "(|foo)" "(|foo)")
+    )
+   (((current-prefix-arg 2))
+    ("foo bar|" "|foo bar")
+    ("(foo bar) baz|" "|(foo bar) baz")
+    ("(foo |bar) baz" "(foo |bar) baz")
+    )
+   ))
+
 (sp-test-command sp-forward-slurp-sexp
   ((nil
     ;; beware, this also tests the reindenting/cleanup!!!
@@ -569,8 +601,41 @@ be."
     ("(progn\n | (some\nlong\nsexp))" "(progn\n  |)")
     ("(progn\n  (so|me\nlong\nsexp))" "(progn\n  |)"))))
 
+(sp-test-command sp-transpose-sexp
+  ((nil
+    ;; Preserve whitespace
+    ("foo |  bar" "bar   foo|")
+    ("(foo bar)|:symbol" ":symbol(foo bar)|")
+
+    ;; Preserve prefix
+    ("'foo |  bar" "bar   'foo|")
+    (",@(foo bar)| :symbol" ":symbol ,@(foo bar)|")
+    )
+   (((mode 'python))
+    ;; Do not drag suffix
+    ("def foo(first, |second):" "def foo(second, first|):"))))
+
+
+(sp-test-command sp-transpose-hybrid-sexp
+  ((nil
+    ;; Preserve whitespace
+    ("foo   bar|\nbaz" "baz\nfoo   bar|")
+    ("foo (bas\n     bar)|\n(next list)" "(next list)\nfoo (bas\n     bar)|"))
+
+   ;; Do not drag suffix
+   (((mode 'c))
+    ("void f() {\n  int a[] = {\n    foo(1,2),|\n    bar(3,4)\n  };   \n}"
+     "void f() {\n  int a[] = {\n    bar(3,4),\n    foo(1,2)\n  |};   \n}"))))
+
 (defun sp--test-sp-rewrap-sexp (initial pair expected &optional keep)
   (sp-test-with-temp-elisp-buffer initial
+    (sp-rewrap-sexp pair keep)
+    (insert "|")
+    (should (equal (buffer-string) expected))))
+
+(defun sp--test-sp-rewrap-sexp-python (initial pair expected &optional keep)
+  (sp-test-with-temp-buffer initial
+      (python-mode)
     (sp-rewrap-sexp pair keep)
     (insert "|")
     (should (equal (buffer-string) expected))))
@@ -587,6 +652,15 @@ be."
   (sp--test-sp-rewrap-sexp "(f|oo)" '("[" . "]") "[(f|oo)]" :keep)
   (sp--test-sp-rewrap-sexp "\\{f|oo\\}" '("[" . "]") "[\\{f|oo\\}]" :keep)
   (sp--test-sp-rewrap-sexp "[f|oo]" '("\\{" . "\\}") "\\{[f|oo]\\}" :keep))
+
+(ert-deftest sp-test-command-sp-rewrap-sexp-escape-after-rewrap ()
+  ;; #667
+  (sp--test-sp-rewrap-sexp "\"foo (b|ar) baz\"" '("\"" . "\"") "\"foo \\\"b|ar\\\" baz\"")
+  (sp--test-sp-rewrap-sexp "\"foo \\\"b|ar\\\" baz\"" '("(" . ")") "\"foo (b|ar) baz\"")
+
+  (sp--test-sp-rewrap-sexp-python "\"foo 'b|ar' baz\"" '("\"" . "\"") "\"foo \\\"b|ar\\\" baz\"")
+  (sp--test-sp-rewrap-sexp-python "\"foo 'bar' b|az\"" '("'" . "'") "'foo \\'bar\\' b|az'")
+  (sp--test-sp-rewrap-sexp-python "'foo \\'b|ar\\' baz'" '("\"" . "\"") "'foo \"b|ar\" baz'"))
 
 (ert-deftest sp-test-command-sp-rewrap-sexp-invalid-pair ()
   (should-error
@@ -666,7 +740,8 @@ be."
 
 ;; test for #452
 (ert-deftest sp-test-sp-kill-hybrid-sexp-excessive-whitespace-nil nil
-  (let ((sp-hybrid-kill-excessive-whitespace nil))
+  (let ((sp-hybrid-kill-excessive-whitespace nil)
+        (kill-ring kill-ring))
     (sp-test-with-temp-elisp-buffer "|(baz)\n\n\n\n(bar)"
       (call-interactively 'sp-kill-hybrid-sexp)
       (sp-buffer-equals "|\n\n\n\n(bar)")
@@ -675,7 +750,8 @@ be."
 
 ;; test for #452
 (ert-deftest sp-test-sp-kill-hybrid-sexp-excessive-whitespace-t nil
-  (let ((sp-hybrid-kill-excessive-whitespace t))
+  (let ((sp-hybrid-kill-excessive-whitespace t)
+        (kill-ring kill-ring))
     (sp-test-with-temp-elisp-buffer "|(baz)\n\n\n\n(bar)"
       (call-interactively 'sp-kill-hybrid-sexp)
       (sp-buffer-equals "|(bar)")
@@ -684,9 +760,57 @@ be."
 
 ;; test for #452
 (ert-deftest sp-test-sp-kill-hybrid-sexp-excessive-whitespace-kill nil
-  (let ((sp-hybrid-kill-excessive-whitespace 'kill))
+  (let ((sp-hybrid-kill-excessive-whitespace 'kill)
+        (kill-ring kill-ring))
     (sp-test-with-temp-elisp-buffer "|(baz)\n\n\n\n(bar)"
       (call-interactively 'sp-kill-hybrid-sexp)
       (sp-buffer-equals "|(bar)")
       (insert (current-kill 0))
       (sp-buffer-equals "(baz)\n\n\n\n|(bar)"))))
+
+(ert-deftest sp-test-sp-kill-sexp-cleanup-always-preserve nil
+  (let ((sp-successive-kill-preserve-whitespace 0)
+        (smartparens-mode-map smartparens-mode-map)
+        (kill-ring nil))
+    (sp-test-with-temp-elisp-buffer "(foo) |(bar)   (baz)  "
+      (define-key smartparens-mode-map "d" 'sp-kill-sexp)
+      (execute-kbd-macro "dd")
+      (shut-up (call-interactively 'yank))
+      (sp-buffer-equals "(foo) (bar)   (baz)  |"))))
+
+(ert-deftest sp-test-sp-kill-sexp-cleanup-preserve-last nil
+  (let ((sp-successive-kill-preserve-whitespace 1)
+        (smartparens-mode-map smartparens-mode-map)
+        (kill-ring kill-ring))
+    (sp-test-with-temp-elisp-buffer "(foo) |(bar)   (baz)  "
+      (define-key smartparens-mode-map "d" 'sp-kill-sexp)
+      (execute-kbd-macro "dd")
+      (shut-up (call-interactively 'yank))
+      (sp-buffer-equals "(foo) (bar)   (baz)|"))))
+
+(ert-deftest sp-test-sp-kill-sexp-cleanup-never-preserve nil
+  (let ((sp-successive-kill-preserve-whitespace 2)
+        (smartparens-mode-map smartparens-mode-map)
+        (kill-ring kill-ring))
+    (sp-test-with-temp-elisp-buffer "(foo) |(bar)   (baz)  "
+      (define-key smartparens-mode-map "d" 'sp-kill-sexp)
+      (execute-kbd-macro "dd")
+      (shut-up (call-interactively 'yank))
+      (sp-buffer-equals "(foo) (bar) (baz)|"))))
+
+(ert-deftest sp-test-sp-prefix-save-excursion-keep-indentation nil
+  (sp-test-with-temp-elisp-buffer "(progn
+  |(foo)
+  (bar))"
+    ;; TODO: turn this into some helper
+    (let ((overlay (make-overlay (point-min) (point-max) nil t t)))
+      (overlay-put overlay
+                   'keymap
+                   (let ((map (make-sparse-keymap)))
+                     (define-key map "x" 'sp-extract-before-sexp)
+                     (define-key map "e" 'sp-prefix-save-excursion)
+                     map))
+      (execute-kbd-macro "ex")
+      (sp-buffer-equals "(foo)
+(progn
+  |(bar))"))))

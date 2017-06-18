@@ -1,13 +1,10 @@
-;;; smartparens-ml.el --- Additional configuration for ML languages
+;;; smartparens-javascript.el --- Additional configuration for JavaScript based modes.
 
-;; Copyright (C) 2016-2017 Ta Quang Trung
-;; Copyright (C) 2017 Matus Goljer
-
-;; Author: Ta Quang Trung <taquangtrungvn@gmail.com>
-;;         Matus Goljer <matus.goljer@gmail.com>
-;; Maintainer: Matus Goljer <matus.goljer@gmail.com>
-;; Created: 14 July 2016
-;; Keywords: smartparens, ML, ocaml, reason
+;; Copyright (c) 2017 Marinin Tim
+;; Author: Tim Marinin <mt@marinin.xyz>
+;; Maintainer: Tim Marinin <mt@marinin.xyz>
+;; Created: 2017-03-03
+;; Keywords: abbrev convenience editing javascript
 ;; URL: https://github.com/Fuco1/smartparens
 
 ;; This file is not part of GNU Emacs.
@@ -31,10 +28,10 @@
 
 ;;; Commentary:
 
-;; This file provides some additional configuration for ML languages.
-;; To use it, simply add:
+;; This file provides some additional configuration for JavaScript based
+;; modes.  To use it, simply add:
 ;;
-;; (require 'smartparens-ml)
+;; (require 'smartparens-javascript)
 ;;
 ;; into your configuration.  You can use this in conjunction with the
 ;; default config or your own configuration.
@@ -49,9 +46,10 @@
 
 (require 'smartparens)
 
-;;; Local pairs for ML-family languages
-(sp-with-modes '(tuareg-mode fsharp-mode) (sp-local-pair "(*" "*)" ))
-(sp-with-modes '(reason-mode) (sp-local-pair "/*" "*/" ))
+;; (|sys).path.append---the dot should not travel with the closing
+;; paren
+(--each '(js-mode javascript-mode js2-mode typescript-mode)
+  (add-to-list 'sp-sexp-suffix (list it 'regexp "")))
 
-(provide 'smartparens-ml)
-;;; smartparens-ml.el ends here
+(provide 'smartparens-javascript)
+;;; smartparens-javasript.el ends here

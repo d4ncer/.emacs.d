@@ -1,13 +1,11 @@
-;;; smartparens-ml.el --- Additional configuration for ML languages
+;;; smartparens-markdown.el --- Additional configuration for Markdown based modes.
 
-;; Copyright (C) 2016-2017 Ta Quang Trung
 ;; Copyright (C) 2017 Matus Goljer
 
-;; Author: Ta Quang Trung <taquangtrungvn@gmail.com>
-;;         Matus Goljer <matus.goljer@gmail.com>
+;; Author: Matus Goljer <matus.goljer@gmail.com>
 ;; Maintainer: Matus Goljer <matus.goljer@gmail.com>
-;; Created: 14 July 2016
-;; Keywords: smartparens, ML, ocaml, reason
+;; Created: 11th May 2017
+;; Keywords: abbrev convenience editing
 ;; URL: https://github.com/Fuco1/smartparens
 
 ;; This file is not part of GNU Emacs.
@@ -31,10 +29,10 @@
 
 ;;; Commentary:
 
-;; This file provides some additional configuration for ML languages.
-;; To use it, simply add:
+;; This file provides some additional configuration for Markdown based
+;; modes.  To use it, simply add:
 ;;
-;; (require 'smartparens-ml)
+;; (require 'smartparens-markdown)
 ;;
 ;; into your configuration.  You can use this in conjunction with the
 ;; default config or your own configuration.
@@ -48,10 +46,21 @@
 ;;; Code:
 
 (require 'smartparens)
+(require 'markdown-mode)
 
-;;; Local pairs for ML-family languages
-(sp-with-modes '(tuareg-mode fsharp-mode) (sp-local-pair "(*" "*)" ))
-(sp-with-modes '(reason-mode) (sp-local-pair "/*" "*/" ))
 
-(provide 'smartparens-ml)
-;;; smartparens-ml.el ends here
+(defun sp-gfm-electric-backquote-p (_id action _context)
+  "Do not insert ```...``` pair if that would be handled by `markdown-electric-backquote'."
+  (and (eq action 'insert)
+       markdown-gfm-use-electric-backquote
+       (sp--looking-back-p "^```")))
+
+(sp-with-modes 'markdown-mode
+  (sp-local-pair "```" "```"))
+
+(sp-with-modes 'gfm-mode
+  (sp-local-pair "`" "`" :unless '(:add sp-gfm-electric-backquote-p))
+  (sp-local-pair "```" "```" :unless '(:add sp-gfm-electric-backquote-p)))
+
+(provide 'smartparens-markdown)
+;;; smartparens-markdown.el ends here
