@@ -70,7 +70,7 @@ Inside Emacs, `M-x sp-cheat-sheet` will show you all the commands
 available, with examples.
 
 There's also a
-[great article demonstrating movement and editing in smartparens](https://ebzzry.github.io/emacs-pairs.html)
+[great article demonstrating movement and editing in smartparens](http://ebzzry.io/en/emacs-pairs/)
 and [extensive documentation in the wiki](https://github.com/Fuco1/smartparens/wiki).
 
 ## Contributing
@@ -85,8 +85,6 @@ $ cask exec ert-runner
 
 Alternatively, you can open the individual files in Emacs, then
 `M-x eval-buffer` `M-x ert`.
-
-There are also some ecukes tests, but these are deprecated.
 
 You can learn more about how we test on the [testing](https://github.com/Fuco1/smartparens/wiki/Testing) wiki page.
 
