@@ -266,5 +266,175 @@ This is a tab:\t.
    (string-match-p (org-src-coderef-regexp "; ref:%s" "label2")
 		   "#+BEGIN_SRC emacs-lisp\n0; ref:label\n#+END_SRC")))
 
+(ert-deftest test-org-src/indented-blocks ()
+  "Test editing indented blocks."
+  ;; Editing a block should preserve its global indentation, unless
+  ;; `org-src-preserve-indentation' is non-nil.
+  (should
+   (equal
+    "- Item\n  #+BEGIN_SRC emacs-lisp\n    Foo\n  #+END_SRC"
+    (org-test-with-temp-text
+	"- Item\n<point>  #+BEGIN_SRC emacs-lisp\n    (+ 1 1)\n  #+END_SRC"
+      (let ((org-edit-src-content-indentation 2)
+	    (org-src-preserve-indentation nil))
+	(org-edit-special)
+	(erase-buffer)
+	(insert "Foo")
+	(org-edit-src-exit)
+	(buffer-string)))))
+  (should
+   (equal
+    "- Item\n  #+BEGIN_SRC emacs-lisp\n Foo\n  #+END_SRC"
+    (org-test-with-temp-text
+	"- Item\n<point>  #+BEGIN_SRC emacs-lisp\n    (+ 1 1)\n  #+END_SRC"
+      (let ((org-src-preserve-indentation t))
+	(org-edit-special)
+	(erase-buffer)
+	(insert " Foo")
+	(org-edit-src-exit)
+	(buffer-string)))))
+  ;; Global indentation obeys `indent-tabs-mode' from the original
+  ;; buffer.
+  (should
+   (string-match-p
+    "^\t+\s*argument2"
+    (org-test-with-temp-text
+	"
+- Item
+  #+BEGIN_SRC emacs-lisp<point>
+  (progn
+    (function argument1
+              argument2))
+  #+END_SRC"
+      (setq-local indent-tabs-mode t)
+      (let ((org-edit-src-content-indentation 2)
+	    (org-src-preserve-indentation nil))
+	(org-edit-special)
+	(org-edit-src-exit)
+	(buffer-string)))))
+  (should
+   (string-match-p
+    "^\s+argument2"
+    (org-test-with-temp-text
+	"
+- Item
+  #+BEGIN_SRC emacs-lisp<point>
+    (progn\n      (function argument1\n\t\targument2))
+  #+END_SRC"
+      (setq-local indent-tabs-mode nil)
+      (let ((org-edit-src-content-indentation 2)
+	    (org-src-preserve-indentation nil))
+	(org-edit-special)
+	(org-edit-src-exit)
+	(buffer-string)))))
+  ;; Global indentation also obeys `tab-width' from original buffer.
+  (should
+   (string-match-p
+    "^\t\\{3\\}\s\\{2\\}argument2"
+    (org-test-with-temp-text
+	"
+- Item
+  #+BEGIN_SRC emacs-lisp<point>
+  (progn
+    (function argument1
+              argument2))
+  #+END_SRC"
+      (setq-local indent-tabs-mode t)
+      (setq-local tab-width 4)
+      (let ((org-edit-src-content-indentation 0)
+	    (org-src-preserve-indentation nil))
+	(org-edit-special)
+	(org-edit-src-exit)
+	(buffer-string)))))
+  (should
+   (string-match-p
+    "^\t\s\\{6\\}argument2"
+    (org-test-with-temp-text
+	"
+- Item
+  #+BEGIN_SRC emacs-lisp<point>
+  (progn
+    (function argument1
+              argument2))
+  #+END_SRC"
+      (setq-local indent-tabs-mode t)
+      (setq-local tab-width 8)
+      (let ((org-edit-src-content-indentation 0)
+	    (org-src-preserve-indentation nil))
+	(org-edit-special)
+	(org-edit-src-exit)
+	(buffer-string))))))
+
+(ert-deftest test-org-src/footnote-references ()
+  "Test editing footnote references."
+  ;; Error when there is no definition to edit.
+  (should-error
+   (org-test-with-temp-text "A footnote<point>[fn:1]"
+     (org-edit-special)))
+  ;; Error when trying to edit an anonymous footnote.
+  (should-error
+   (org-test-with-temp-text "A footnote[fn::<point>edit me!]"
+     (org-edit-special)))
+  ;; Edit a regular definition.
+  (should
+   (equal "[fn:1] Definition"
+	  (org-test-with-temp-text "A footnote<point>[fn:1]\n[fn:1] Definition"
+	    (org-edit-special)
+	    (prog1 (buffer-string) (org-edit-src-exit)))))
+  ;; Label should be protected against editing.
+  (should
+   (org-test-with-temp-text "A footnote<point>[fn:1]\n[fn:1] Definition"
+     (org-edit-special)
+     (prog1 (get-text-property 0 'read-only (buffer-string))
+       (org-edit-src-exit))))
+  (should
+   (org-test-with-temp-text "A footnote<point>[fn:1]\n[fn:1] Definition"
+     (org-edit-special)
+     (prog1 (get-text-property 5 'read-only (buffer-string))
+       (org-edit-src-exit))))
+  ;; Edit a regular definition.
+  (should
+   (equal
+    "A footnote[fn:1][fn:2]\n[fn:1] D1\n\n[fn:2] D2"
+    (org-test-with-temp-text
+	"A footnote<point>[fn:1][fn:2]\n[fn:1] D1\n\n[fn:2] D2"
+      (org-edit-special)
+      (org-edit-src-exit)
+      (buffer-string))))
+  ;; Edit an inline definition.
+  (should
+   (equal
+    "[fn:1:definition]"
+    (org-test-with-temp-text
+	"An inline<point>[fn:1] footnote[fn:1:definition]"
+      (org-edit-special)
+      (prog1 (buffer-string) (org-edit-src-exit)))))
+  ;; Label and closing square bracket should be protected against
+  ;; editing.
+  (should
+   (org-test-with-temp-text "An inline<point>[fn:1] footnote[fn:1:definition]"
+     (org-edit-special)
+     (prog1 (get-text-property 0 'read-only (buffer-string))
+       (org-edit-src-exit))))
+  (should
+   (org-test-with-temp-text "An inline<point>[fn:1] footnote[fn:1:definition]"
+     (org-edit-special)
+     (prog1 (get-text-property 5 'read-only (buffer-string))
+       (org-edit-src-exit))))
+  (should
+   (org-test-with-temp-text "An inline<point>[fn:1] footnote[fn:1:definition]"
+     (org-edit-special)
+     (prog1 (get-text-property 16 'read-only (buffer-string))
+       (org-edit-src-exit))))
+  ;; Do not include trailing white spaces when displaying the inline
+  ;; footnote definition.
+  (should
+   (equal
+    "[fn:1:definition]"
+    (org-test-with-temp-text
+	"An inline<point>[fn:1] footnote[fn:1:definition]    and some text"
+      (org-edit-special)
+      (prog1 (buffer-string) (org-edit-src-exit))))))
+
 (provide 'test-org-src)
 ;;; test-org-src.el ends here

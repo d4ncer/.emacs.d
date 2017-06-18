@@ -321,7 +321,8 @@ For more information, see `org-clocktable-write-default'."
     ("es" "Archivo"  "N"  "Fecha y hora" "Tarea" "Tiempo" "TODO" "Tiempo total" "Tiempo archivo" "Clock summary at")
     ("fr" "Fichier"  "N"  "Horodatage" "En-tête"  "Durée" "TOUT"  "Durée totale" "Durée fichier" "Horodatage sommaire à")
     ("nl" "Bestand"  "N"  "Tijdstip"   "Hoofding" "Duur"  "ALLES" "Totale duur"  "Bestandstijd" "Clock summary at")
-    ("de" "Datei"    "N"  "Timestamp" "Tätigkeit" "Dauer" "ALLES" "Gesamtdauer"  "Datei Zeit" "Erstellt am"))
+    ("de" "Datei"    "E"  "Zeitstempel" "Kopfzeile" "Dauer" "GESAMT"
+     "Gesamtdauer"  "Dateizeit" "Erstellt am"))
   "Terms used in clocktable, translated to different languages."
   :group 'org-clocktable
   :version "24.1"
@@ -1681,7 +1682,7 @@ UPDOWN tells whether to change `up' or `down'.
 Optional argument N tells to change by that many units."
   (let ((tschange (if (eq updown 'up) 'org-timestamp-up
 		    'org-timestamp-down))
-	(timestamp? (org-at-timestamp-p t))
+	(timestamp? (org-at-timestamp-p 'lax))
 	ts1 begts1 ts2 begts2 updatets1 tdiff)
     (when timestamp?
       (save-excursion
@@ -1967,7 +1968,8 @@ will be easy to remove."
 			 (make-string
 			  (max 0 (- (- 60 (current-column))
 				    (- (match-end 4) (match-beginning 4))
-				    (length (org-get-at-bol 'line-prefix)))) ?·)
+				    (length (org-get-at-bol 'line-prefix))))
+			  ?\·)
 			 '(face shadow))
 		     (org-add-props
 			 (format " %9s " (org-duration-from-minutes time))
@@ -2416,26 +2418,27 @@ the currently selected interval size."
 				 (org-clock-get-table-data file params)))))
 			 files)
 	       ;; Get the right restriction for the scope.
-	       (cond
-		((not scope))	     ;use the restriction as it is now
-		((eq scope 'file) (widen))
-		((eq scope 'subtree) (org-narrow-to-subtree))
-		((eq scope 'tree)
-		 (while (org-up-heading-safe))
-		 (org-narrow-to-subtree))
-		((and (symbolp scope)
-		      (string-match "\\`tree\\([0-9]+\\)\\'"
-				    (symbol-name scope)))
-		 (let ((level (string-to-number
-			       (match-string 1 (symbol-name scope)))))
-		   (catch 'exit
-		     (while (org-up-heading-safe)
-		       (looking-at org-outline-regexp)
-		       (when (<= (org-reduced-level (funcall outline-level))
-				 level)
-			 (throw 'exit nil))))
-		   (org-narrow-to-subtree))))
-	       (list (org-clock-get-table-data nil params))))
+	       (save-restriction
+		 (cond
+		  ((not scope))	     ;use the restriction as it is now
+		  ((eq scope 'file) (widen))
+		  ((eq scope 'subtree) (org-narrow-to-subtree))
+		  ((eq scope 'tree)
+		   (while (org-up-heading-safe))
+		   (org-narrow-to-subtree))
+		  ((and (symbolp scope)
+			(string-match "\\`tree\\([0-9]+\\)\\'"
+				      (symbol-name scope)))
+		   (let ((level (string-to-number
+				 (match-string 1 (symbol-name scope)))))
+		     (catch 'exit
+		       (while (org-up-heading-safe)
+			 (looking-at org-outline-regexp)
+			 (when (<= (org-reduced-level (funcall outline-level))
+				   level)
+			   (throw 'exit nil))))
+		     (org-narrow-to-subtree))))
+		 (list (org-clock-get-table-data nil params)))))
 	    (multifile
 	     ;; Even though `file-with-archives' can consist of
 	     ;; multiple files, we consider this is one extended file
@@ -2471,8 +2474,20 @@ from the dynamic block definition."
 	 (level? (and (not compact?) (plist-get params :level)))
 	 (timestamp (plist-get params :timestamp))
 	 (properties (plist-get params :properties))
-	 (time-columns (if compact? 1
-			 (min maxlevel (or (plist-get params :tcolumns) 100))))
+	 (time-columns
+	  (if (or compact? (< maxlevel 2)) 1
+	    ;; Deepest headline level is a hard limit for the number
+	    ;; of time columns.
+	    (let ((levels
+		   (cl-mapcan
+		    (lambda (table)
+		      (pcase table
+			(`(,_ ,(and (pred wholenump) (pred (/= 0))) ,entries)
+			 (mapcar #'car entries))))
+		    tables)))
+	      (min maxlevel
+		   (or (plist-get params :tcolumns) 100)
+		   (if (null levels) 1 (apply #'max levels))))))
 	 (indent (or compact? (plist-get params :indent)))
 	 (formula (plist-get params :formula))
 	 (case-fold-search t)
@@ -2624,6 +2639,7 @@ from the dynamic block definition."
 		 ;; Empty fields for higher levels.
 		 (make-string (max 0 (1- (min time-columns level))) ?|)
 		 (format-field (org-duration-from-minutes time))
+		 (make-string (max 0 (- time-columns level)) ?|)
 		 (if (eq formula '%)
 		     (format "%.1f |" (* 100 (/ time (float total-time))))
 		   "")
@@ -2734,19 +2750,22 @@ file time (in minutes) as 1st and 2nd elements.  The third element
 of this list will be a list of headline entries.  Each entry has the
 following structure:
 
-  (LEVEL HEADLINE TIMESTAMP TIME)
+  (LEVEL HEADLINE TIMESTAMP TIME PROPERTIES)
 
-LEVEL:     The level of the headline, as an integer.  This will be
-           the reduced level, so 1,2,3,... even if only odd levels
-           are being used.
-HEADLINE:  The text of the headline.  Depending on PARAMS, this may
-           already be formatted like a link.
-TIMESTAMP: If PARAMS require it, this will be a time stamp found in the
-           entry, any of SCHEDULED, DEADLINE, NORMAL, or first inactive,
-           in this sequence.
-TIME:      The sum of all time spend in this tree, in minutes.  This time
-           will of cause be restricted to the time block and tags match
-           specified in PARAMS."
+LEVEL:      The level of the headline, as an integer.  This will be
+            the reduced level, so 1,2,3,... even if only odd levels
+            are being used.
+HEADLINE:   The text of the headline.  Depending on PARAMS, this may
+            already be formatted like a link.
+TIMESTAMP:  If PARAMS require it, this will be a time stamp found in the
+            entry, any of SCHEDULED, DEADLINE, NORMAL, or first inactive,
+            in this sequence.
+TIME:       The sum of all time spend in this tree, in minutes.  This time
+            will of cause be restricted to the time block and tags match
+            specified in PARAMS.
+PROPERTIES: The list properties specified in the `:properties' parameter
+            along with their value, as an alist following the pattern
+            (NAME . VALUE)."
   (let* ((maxlevel (or (plist-get params :maxlevel) 3))
 	 (timestamp (plist-get params :timestamp))
 	 (ts (plist-get params :tstart))
@@ -2759,7 +2778,7 @@ TIME:      The sum of all time spend in this tree, in minutes.  This time
 	 (properties (plist-get params :properties))
 	 (inherit-property-p (plist-get params :inherit-props))
 	 (matcher (and tags (cdr (org-make-tags-matcher tags))))
-	 cc st p time level hdl props tsp tbl)
+	 cc st p tbl)
 
     (setq org-clock-file-total-minutes nil)
     (when block
@@ -2791,42 +2810,42 @@ TIME:      The sum of all time spend in this tree, in minutes.  This time
 		 (setq p (next-single-property-change
 			  (point) :org-clock-minutes)))
 	(goto-char p)
-	(when (setq time (get-text-property p :org-clock-minutes))
-	  (save-excursion
-	    (beginning-of-line 1)
-	    (when (and (looking-at "\\(\\*+\\)[ \t]+\\(.*?\\)\\([ \t]+:[[:alnum:]_@#%:]+:\\)?[ \t]*$")
-		       (setq level (org-reduced-level
-				    (- (match-end 1) (match-beginning 1))))
-		       (<= level maxlevel))
-	      (setq hdl (if (not link)
-			    (match-string 2)
-			  (org-make-link-string
-			   (format "file:%s::%s"
-				   (buffer-file-name)
-				   (save-match-data
-				     (match-string 2)))
-			   (org-make-org-heading-search-string
-			    (replace-regexp-in-string
-			     org-bracket-link-regexp
-			     (lambda (m) (or (match-string 3 m)
-					(match-string 1 m)))
-			     (match-string 2)))))
-		    tsp (when timestamp
-			  (setq props (org-entry-properties (point)))
-			  (or (cdr (assoc "SCHEDULED" props))
-			      (cdr (assoc "DEADLINE" props))
-			      (cdr (assoc "TIMESTAMP" props))
-			      (cdr (assoc "TIMESTAMP_IA" props))))
-		    props (when properties
-			    (remove nil
-				    (mapcar
-				     (lambda (p)
-				       (when (org-entry-get (point) p inherit-property-p)
-					 (cons p (org-entry-get (point) p inherit-property-p))))
-				     properties))))
-	      (when (> time 0) (push (list level hdl tsp time props) tbl))))))
-      (setq tbl (nreverse tbl))
-      (list file org-clock-file-total-minutes tbl))))
+	(let ((time (get-text-property p :org-clock-minutes)))
+	  (when (and time (> time 0) (org-at-heading-p))
+	    (let ((level (org-reduced-level (org-current-level))))
+	      (when (<= level maxlevel)
+		(let* ((headline (org-get-heading t t t t))
+		       (hdl
+			(if (not link) headline
+			  (let ((search
+				 (org-make-org-heading-search-string headline)))
+			    (org-make-link-string
+			     (if (not (buffer-file-name)) search
+			       (format "file:%s::%s" (buffer-file-name) search))
+			     ;; Prune statistics cookies.  Replace
+			     ;; links with their description, or
+			     ;; a plain link if there is none.
+			     (org-trim
+			      (org-link-display-format
+			       (replace-regexp-in-string
+				"\\[[0-9]+%\\]\\|\\[[0-9]+/[0-9]+\\]" ""
+				headline)))))))
+		       (tsp
+			(and timestamp
+			     (cl-some (lambda (p) (org-entry-get (point) p))
+				      '("SCHEDULED" "DEADLINE" "TIMESTAMP"
+					"TIMESTAMP_IA"))))
+		       (props
+			(and properties
+			     (delq nil
+				   (mapcar
+				    (lambda (p)
+				      (let ((v (org-entry-get
+						(point) p inherit-property-p)))
+					(and v (cons p v))))
+				    properties)))))
+		  (push (list level hdl tsp time props) tbl)))))))
+      (list file org-clock-file-total-minutes (nreverse tbl)))))
 
 ;; Saving and loading the clock
 
@@ -2943,7 +2962,7 @@ The details of what will be saved are regulated by the variable
 	     (let ((org-clock-in-resume 'auto-restart)
 		   (org-clock-auto-clock-resolution nil))
 	       (org-clock-in)
-	       (when (outline-invisible-p) (org-show-context))))))
+	       (when (org-invisible-p) (org-show-context))))))
 	(_ nil)))))
 
 ;; Suggested bindings

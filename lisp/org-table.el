@@ -294,13 +294,25 @@ relies on the variables to be present in the list."
 The default value is `hours', and will output the results as a
 number of hours.  Other allowed values are `seconds', `minutes' and
 `days', and the output will be a fraction of seconds, minutes or
-days."
+days. `hh:mm' selects to use hours and minutes, ignoring seconds.
+The `U' flag in a table formula will select this specific format for
+a single formula."
   :group 'org-table-calculation
   :version "24.1"
   :type '(choice (symbol :tag "Seconds" 'seconds)
 		 (symbol :tag "Minutes" 'minutes)
 		 (symbol :tag "Hours  " 'hours)
-		 (symbol :tag "Days   " 'days)))
+		 (symbol :tag "Days   " 'days)
+		 (symbol :tag "HH:MM  " 'hh:mm)))
+
+(defcustom org-table-duration-hour-zero-padding t
+  "Non-nil means hours in table duration computations should be zero-padded.
+So this is about 08:32:34 versus 8:33:34."
+  :group 'org-table-calculation
+  :version "26.1"
+  :package-version '(Org . "9.1")
+  :type 'boolean
+  :safe #'booleanp)
 
 (defcustom org-table-formula-field-format "%s"
   "Format for fields which contain the result of a formula.
@@ -1122,28 +1134,28 @@ to a number.  In the case of a timestamp, increment by days."
 	 txt txt-up inc)
     (org-table-check-inside-data-field)
     (if (not non-empty)
-      (save-excursion
-	(setq txt
-	      (catch 'exit
-		(while (progn (beginning-of-line 1)
-			      (re-search-backward org-table-dataline-regexp
-						  beg t))
-		  (org-table-goto-column colpos t)
-		  (if (and (looking-at
-			    "|[ \t]*\\([^| \t][^|]*?\\)[ \t]*|")
-			   (<= (setq n (1- n)) 0))
-		      (throw 'exit (match-string 1))))))
-	(setq field-up
-	      (catch 'exit
-		(while (progn (beginning-of-line 1)
-			      (re-search-backward org-table-dataline-regexp
-						  beg t))
-		  (org-table-goto-column colpos t)
-		  (if (and (looking-at
-			    "|[ \t]*\\([^| \t][^|]*?\\)[ \t]*|")
-			   (<= (setq n (1- n)) 0))
-		      (throw 'exit (match-string 1))))))
-	(setq non-empty-up (and field-up (string-match "[^ \t]" field-up))))
+	(save-excursion
+	  (setq txt
+		(catch 'exit
+		  (while (progn (beginning-of-line 1)
+				(re-search-backward org-table-dataline-regexp
+						    beg t))
+		    (org-table-goto-column colpos t)
+		    (if (and (looking-at
+			      "|[ \t]*\\([^| \t][^|]*?\\)[ \t]*|")
+			     (<= (setq n (1- n)) 0))
+			(throw 'exit (match-string 1))))))
+	  (setq field-up
+		(catch 'exit
+		  (while (progn (beginning-of-line 1)
+				(re-search-backward org-table-dataline-regexp
+						    beg t))
+		    (org-table-goto-column colpos t)
+		    (if (and (looking-at
+			      "|[ \t]*\\([^| \t][^|]*?\\)[ \t]*|")
+			     (<= (setq n (1- n)) 0))
+			(throw 'exit (match-string 1))))))
+	  (setq non-empty-up (and field-up (string-match "[^ \t]" field-up))))
       ;; Above field was not empty, go down to the next row
       (setq txt (org-trim field))
       (org-table-next-row)
@@ -1170,7 +1182,7 @@ to a number.  In the case of a timestamp, increment by days."
 	  (setq txt (calc-eval (concat txt "+" (number-to-string inc)))))
       (insert txt)
       (org-move-to-column col)
-      (if (and org-table-copy-increment (org-at-timestamp-p t))
+      (if (and org-table-copy-increment (org-at-timestamp-p))
 	  (org-timestamp-up-day inc)
 	(org-table-maybe-recalculate-line))
       (org-table-align)
@@ -1639,7 +1651,8 @@ In particular, this does handle wide and invisible characters."
 			      dline -1 dline))))
 
 ;;;###autoload
-(defun org-table-sort-lines (with-case &optional sorting-type getkey-func compare-func)
+(defun org-table-sort-lines
+    (&optional with-case sorting-type getkey-func compare-func interactive?)
   "Sort table lines according to the column at point.
 
 The position of point indicates the column to be used for
@@ -1663,12 +1676,13 @@ any of (?a ?A ?n ?N ?t ?T ?f ?F) where the capital letters indicate that
 sorting should be done in reverse order.
 
 If the SORTING-TYPE is ?f or ?F, then GETKEY-FUNC specifies
-a function to be called to extract the key.  It must return either
-a string or a number that should serve as the sorting key for that
-row.  It will then use COMPARE-FUNC to compare entries.  If GETKEY-FUNC
-is specified interactively, the comparison will be either a string or
-numeric compare based on the type of the first key in the table."
-  (interactive "P")
+a function to be called to extract the key.  It must return a value
+that is compatible with COMPARE-FUNC, the function used to compare
+entries.
+
+A non-nil value for INTERACTIVE? is used to signal that this
+function is being called interactively."
+  (interactive (list current-prefix-arg nil nil nil t))
   (when (org-region-active-p) (goto-char (region-beginning)))
   ;; Point must be either within a field or before a data line.
   (save-excursion
@@ -1678,7 +1692,7 @@ numeric compare based on the type of the first key in the table."
   ;; Set appropriate case sensitivity and column used for sorting.
   (let ((column (let ((c (org-table-current-column)))
 		  (cond ((> c 0) c)
-			((called-interactively-p 'any)
+			(interactive?
 			 (read-number "Use column N for sorting: "))
 			(t 1))))
 	(sorting-type
@@ -1726,17 +1740,21 @@ numeric compare based on the type of the first key in the table."
 			 (t 0))))
 		((?f ?F)
 		 (or getkey-func
-		     (and (called-interactively-p 'any)
-			  (intern
-			   (completing-read "Sort using function: "
-					    obarray #'fboundp t)))
+		     (and interactive?
+			  (org-read-function "Function for extracting keys: "))
 		     (error "Missing key extractor to sort rows")))
 		(t (user-error "Invalid sorting type `%c'" sorting-type))))
 	     (predicate
 	      (cl-case sorting-type
 		((?n ?N ?t ?T) #'<)
 		((?a ?A) #'string<)
-		((?f ?F) compare-func))))
+		((?f ?F)
+		 (or compare-func
+		     (and interactive?
+			  (org-read-function
+			   (concat "Fuction for comparing keys "
+				   "(empty for default `sort-subr' predicate): ")
+			   'allow-empty)))))))
 	(goto-char (point-min))
 	(sort-subr (memq sorting-type '(?A ?N ?T ?F))
 		   (lambda ()
@@ -2717,15 +2735,14 @@ location of point."
 					     (?s . sci) (?e . eng))))
 			     n))))
 	      (setq fmt (replace-match "" t t fmt)))
-	    (if (string-match "T" fmt)
-		(setq duration t numbers t
-		      duration-output-format nil
-		      fmt (replace-match "" t t fmt)))
-	    (if (string-match "t" fmt)
-		(setq duration t
-		      duration-output-format org-table-duration-custom-format
-		      numbers t
-		      fmt (replace-match "" t t fmt)))
+	    (if (string-match "[tTU]" fmt)
+		(let ((ff (match-string 0 fmt)))
+		  (setq duration t numbers t
+			duration-output-format
+			(cond ((equal ff "T") nil)
+			      ((equal ff "t") org-table-duration-custom-format)
+			      ((equal ff "U") 'hh:mm))
+			fmt (replace-match "" t t fmt))))
 	    (if (string-match "N" fmt)
 		(setq numbers t
 		      fmt (replace-match "" t t fmt)))
@@ -3753,7 +3770,17 @@ minutes or seconds."
 		 (format "%.1f" (/ (float secs0) 60)))
 		((eq output-format 'seconds)
 		 (format "%d" secs0))
-		(t (format-seconds "%.2h:%.2m:%.2s" secs0)))))
+		((eq output-format 'hh:mm)
+		 ;; Ignore seconds
+		 (substring (format-seconds
+			     (if org-table-duration-hour-zero-padding
+				 "%.2h:%.2m:%.2s" "%h:%.2m:%.2s")
+			     secs0)
+			    0 -3))
+		(t (format-seconds
+		    (if org-table-duration-hour-zero-padding
+			"%.2h:%.2m:%.2s" "%h:%.2m:%.2s")
+		    secs0)))))
     (if (< secs 0) (concat "-" res) res)))
 
 (defun org-table-fedit-convert-buffer (function)
@@ -4485,7 +4512,7 @@ to execute outside of tables."
 	"--"
 	("Radio tables"
 	 ["Insert table template" orgtbl-insert-radio-table
-	  (assq major-mode orgtbl-radio-table-templates)]
+	  (cl-assoc-if #'derived-mode-p orgtbl-radio-table-templates)]
 	 ["Comment/uncomment table" orgtbl-toggle-comment t])
 	"--"
 	["Set Column Formula" org-table-eval-formula :active (org-at-table-p) :keys "C-c ="]
@@ -4734,7 +4761,7 @@ First element has index 0, or I0 if given."
 (defun orgtbl-insert-radio-table ()
   "Insert a radio table template appropriate for this major mode."
   (interactive)
-  (let* ((e (assq major-mode orgtbl-radio-table-templates))
+  (let* ((e (cl-assoc-if #'derived-mode-p orgtbl-radio-table-templates))
 	 (txt (nth 1 e))
 	 name pos)
     (unless e (user-error "No radio table setup defined for %s" major-mode))

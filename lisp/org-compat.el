@@ -104,7 +104,7 @@ output directories whose names match REGEXP."
       (nconc result (nreverse files)))))
 
 
-;;; Obsolete aliases (remove them once the next major release is released).
+;;; Obsolete aliases (remove them after the next major release).
 
 ;;;; XEmacs compatibility, now removed.
 (define-obsolete-function-alias 'org-activate-mark 'activate-mark)
@@ -204,6 +204,10 @@ Counting starts at 1."
   'org-columns-insert-dblock "Org 9.0")
 (define-obsolete-variable-alias 'org-export-babel-evaluate
   'org-export-use-babel "Org 9.1")
+(define-obsolete-function-alias 'org-activate-bracket-links
+  'org-activate-links "Org 9.0")
+(define-obsolete-function-alias 'org-activate-plain-links 'ignore "Org 9.0")
+(define-obsolete-function-alias 'org-activate-angle-links 'ignore "Org 9.0")
 
 (defun org-in-fixed-width-region-p ()
   "Non-nil if point in a fixed-width region."
@@ -361,6 +365,15 @@ use of this function is for the stuck project list."
 
 (make-obsolete-variable 'org-time-clocksum-use-effort-durations
   "set `org-duration-units' instead." "Org 9.1")
+
+(define-obsolete-function-alias 'org-babel-number-p
+  'org-babel--string-to-number "Org 9.0")
+
+(define-obsolete-variable-alias 'org-usenet-links-prefer-google
+  'org-gnus-prefer-web-links "Org 9.1")
+
+(define-obsolete-variable-alias 'org-texinfo-def-table-markup
+  'org-texinfo-table-default-markup "Org 9.1")
 
 
 ;;;; Obsolete link types

@@ -104,9 +104,10 @@
        (lambda () (get-char-property (point) 'org-columns-value))))))
   (should
    (equal
-    '("H1" "H2" "H3" "H4")
-    (org-test-with-temp-text "Top\n* H1\n** <point>H2\n*** H3\n* H4"
-      (let ((org-columns-default-format "%ITEM")) (org-columns t))
+    '("1" "1")
+    (org-test-with-temp-text
+	"Top\n* H1\n** <point>H2\n:PROPERTIES:\n:A: 1\n:END:"
+      (let ((org-columns-default-format "%A{+}")) (org-columns t))
       (org-map-entries
        (lambda () (get-char-property (point) 'org-columns-value)))))))
 
@@ -211,6 +212,17 @@
 :A: 2.10
 :END:"
       (let ((org-columns-default-format "%A{$}")) (org-columns))
+      (get-char-property (point) 'org-columns-value-modified))))
+  ;; Obey to format string even in leaf values.
+  (should
+   (equal
+    "1.0"
+    (org-test-with-temp-text
+	"* H
+:PROPERTIES:
+:A: 1
+:END:"
+      (let ((org-columns-default-format "%A{+;%.1f}")) (org-columns))
       (get-char-property (point) 'org-columns-value-modified))))
   ;; {:} sums times.  Plain numbers are hours.
   (should
@@ -319,6 +331,88 @@
 :END:"
       (let ((org-columns-default-format "%A{X%}")) (org-columns))
       (get-char-property (point) 'org-columns-value-modified))))
+  ;; {X/} handles recursive summaries.
+  (should
+   (equal
+    "[1/2]"
+    (org-test-with-temp-text
+	"* H
+** S1
+:PROPERTIES:
+:A: [ ]
+:END:
+** S2
+*** S21
+:PROPERTIES:
+:A: [X]
+:END:
+*** S22
+:PROPERTIES:
+:A: [X]
+:END:"
+      (let ((org-columns-default-format "%A{X/}")) (org-columns))
+      (get-char-property (point) 'org-columns-value-modified))))
+  (should
+   (equal
+    "[1/2]"
+    (org-test-with-temp-text
+	"* H
+** S1
+:PROPERTIES:
+:A: [X]
+:END:
+** S2
+*** S21
+:PROPERTIES:
+:A: [ ]
+:END:
+*** S22
+:PROPERTIES:
+:A: [ ]
+:END:"
+      (let ((org-columns-default-format "%A{X/}")) (org-columns))
+      (get-char-property (point) 'org-columns-value-modified))))
+  ;; {X%} handles recursive summaries.
+  (should
+   (equal
+    "[50%]"
+    (org-test-with-temp-text
+	"* H
+** S1
+:PROPERTIES:
+:A: [ ]
+:END:
+** S2
+*** S21
+:PROPERTIES:
+:A: [X]
+:END:
+*** S22
+:PROPERTIES:
+:A: [X]
+:END:"
+      (let ((org-columns-default-format "%A{X%}")) (org-columns))
+      (get-char-property (point) 'org-columns-value-modified))))
+  (should
+   (equal
+    "[50%]"
+    (org-test-with-temp-text
+	"* H
+** S1
+:PROPERTIES:
+:A: [X]
+:END:
+** S2
+*** S21
+:PROPERTIES:
+:A: [ ]
+:END:
+*** S22
+:PROPERTIES:
+:A: [ ]
+:END:"
+      (let ((org-columns-default-format "%A{X%}")) (org-columns))
+      (get-char-property (point) 'org-columns-value-modified))))
   ;; {min} is the smallest number in column, {max} the largest one.
   ;; {mean} is the arithmetic mean of numbers in column.
   (should
@@ -419,7 +513,7 @@
     (cl-letf (((symbol-function 'current-time)
 	       (lambda ()
 		 (apply #'encode-time
-			(org-parse-time-string "<2014-03-04 Tue>")))))
+			(org-parse-time-string "<2014-03-04 Tue>" nil t)))))
       (org-test-with-temp-text
 	  "* H
 ** S1
@@ -434,11 +528,11 @@
 	(get-char-property (point) 'org-columns-value-modified)))))
   (should
    (equal
-    "705d 1h"
+    "705d"
     (cl-letf (((symbol-function 'current-time)
 	       (lambda ()
 		 (apply #'encode-time
-			(org-parse-time-string "<2014-03-04 Tue>")))))
+			(org-parse-time-string "<2014-03-04 Tue>" nil t)))))
       (org-test-with-temp-text
 	  "* H
 ** S1
@@ -453,11 +547,11 @@
 	(get-char-property (point) 'org-columns-value-modified)))))
   (should
    (equal
-    "352d 12h 30min"
+    "352d 12h"
     (cl-letf (((symbol-function 'current-time)
 	       (lambda ()
 		 (apply #'encode-time
-			(org-parse-time-string "<2014-03-04 Tue>")))))
+			(org-parse-time-string "<2014-03-04 Tue>" nil t)))))
       (org-test-with-temp-text
 	  "* H
 ** S1
