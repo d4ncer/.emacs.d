@@ -100,6 +100,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-coffeescript)
 (use-package rk-elisp)
 (use-package rk-web-mode)
+(use-package rk-go)
 (use-package rk-markdown)
 
 ;;; Print overall startup time.
