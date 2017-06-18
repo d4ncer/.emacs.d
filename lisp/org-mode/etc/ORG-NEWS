@@ -21,6 +21,12 @@ them, consider modifying ~org-duration-format~ instead.
 Variable ~org-time-clocksum-use-effort-durations~ is also obsolete.
 Consider setting ~org-duration-units~ instead.
 
+*** ~org-at-timestamp-p~ optional argument accepts different values
+
+See docustrings for the allowed values.  For backward compatibility,
+~(org-at-timestamp-p t)~ is still supported, but should be updated
+accordingly.
+
 *** ~org-capture-templates~ no longer accepts S-expressions as file names
 
 Since functions are allowed there, a straightforward way to migrate
@@ -162,6 +168,22 @@ Select * From Users
 Where clue > 0
 ,#+END_SRC
 #+end_example
+
+**** SQL: new engine added =vertica=
+
+A new engine was added to support vsql command line utility for use
+against HP Vertica.
+
+More information on =vsql= can be found here: [[https://my.vertica.com/docs/7.2.x/HTML/index.htm#Authoring/ConnectingToHPVertica/vsql/UsingVsql.htm][my.vertica.com]]
+
+To use =vertica= in an sql =SRC_BLK= set the =:engine= like this:
+
+#+BEGIN_EXAMPLE
+  ,#+BEGIN_SRC sql :engine vertica :dbhost my_host :dbuser dbadmin :dbpassword pw :database vmart
+  SELECT * FROM nodes;
+  ,#+END_SRC
+#+END_EXAMPLE
+
 *** New ~function~ scope argument for the Clock Table
 Added a nullary function that returns a list of files as a possible
 argument for the scope of the clock table.
@@ -175,15 +197,24 @@ contents, are now supported.
 This new function is meant to be used in back-ends supporting images
 as descriptions of links, a.k.a. image links.  See its docstring for
 details.
+**** New macro : ~{{{n}}}~
+This macro creates and increment multiple counters in a document.  See
+manual for details.
 **** Add global macros through ~org-export-global-macros~
 With this variable, one can define macros available for all documents.
 **** New keyword ~#+EXPORT_FILE_NAME~
-Simiralry to ~:EXPORT_FILE_NAME:~ property, this keyword allows the
+Similarly to ~:EXPORT_FILE_NAME:~ property, this keyword allows the
 user to specify the name of the output file upon exporting the
 document.  This also has an effect on publishing.
 **** Horizontal rules are no longer ignored in LaTeX table math mode
 **** Use ~compilation-mode~ for compilation output
+**** Plain lists accept a new ~:separator~ attribute in Texinfo
 
+The new ~:separator~ attribute splits a tag from a description list
+item into multiple parts.  This allows to have two-column tables with
+multiple entries in the first column.  See manual for more details.
+
+**** ~latex-environment~ elements support ~caption~ keywords for LaTeX export
 *** ~org-edit-special~ can edit LaTeX environments
 
 Using ~C-c '~ on a LaTeX environment opens a sub-editing buffer.  By
@@ -202,6 +233,28 @@ This allow to use a different title than entry title.
 
 Using ~C-c C-a u~ prompts for a URL pointing to a file to be attached
 to the document.
+
+*** New option for ~org-refile-use-outline-path~
+~org-refile-use-outline-path~ now supports the setting ~buffer-name~,
+which causes refile targets to be prefixed with the buffer’s
+name. This is particularly useful when used in conjunction with
+~uniquify.el~.
+
+*** ~org-file-contents~ now allows the FILE argument to be a URL.
+This allows ~#+SETUPFILE:~ to accept a URL instead of a local file
+path.  The URL contents are auto-downloaded and saved to a temporary
+cache ~org--file-cache~.  A new optional argument ~NOCACHE~ is added
+to ~org-file-contents~.
+
+*** ~org-mode-restart~ now resets the newly added ~org--file-cache~.
+Using ~C-c C-c~ on any keyword (like ~#+SETUPFILE~) will reset the
+that file cache.
+
+*** New option : ~org-table-duration-hour-zero-padding~
+This variable allow computed durations in tables to be zero-padded.
+
+*** New mode switch for table formulas : =U=
+This mode omits seconds in durations.
 
 ** Removed functions
 
@@ -234,6 +287,11 @@ Use ~org-duration-to-minutes~ instead.
 
 Use ~org-duration-to-minutes~ instead.
 
+*** ~org-gnus-nnimap-cached-article-number~ is removed.
+
+This function relied on ~nnimap-group-overview-filename~, which was
+removed from Gnus circa September 2010.
+
 ** Removed options
 
 *** ~org-agenda-repeating-timestamp-show-all~ is removed.
@@ -242,10 +300,23 @@ For an equivalent to a ~nil~ value, set
 ~org-agenda-show-future-repeats~ to nil and
 ~org-agenda-prefer-last-repeat~ to ~t~.
 
+*** ~org-gnus-nnimap-query-article-no-from-file~ is removed.
+
+This variable has no effect, as it was relying on a function that was
+removed from Gnus circa September 2010.
+
+*** ~org-usenet-links-prefer-google~ is obsolete.
+
+Use ~org-gnus-prefer-web-links~ instead.
+
 *** ~org-publish-sitemap-file-entry-format~ is deprecated
 
 One can provide new ~:sitemap-format-entry~ property for a function
 equivalent to the removed format string.
+
+*** ~org-texinfo-def-table-markup~ is obsolete
+
+Use ~org-texinfo-table-default-markup~ instead.
 
 ** New functions
 
@@ -264,6 +335,13 @@ Call ~org-agenda-set-restriction-lock~ from the agenda.
 
 ** Miscellaneous
 
+*** Org Attach obeys ~dired-dwim-target~
+
+When a Dired buffer is opened next to the Org document being edited,
+the prompt for file to attach can start in the Dired buffer's
+directory if `dired-dwim-target' in non-nil.
+
+*** ~org-fill-paragraph~ can now fill a whole region
 *** More specific anniversary descriptions
 
 Anniversary descriptions (used in the agenda view, for instance)
@@ -289,11 +367,26 @@ document with ~org-mark-ring-goto~ (default binding =C-c &=).
 
 See docstring for details.
 
+*** ~tags-todo~ custom searches now include DONE keywords
+~tags-todo~ is now equivalent to ~C-c a m~ instead of ~C-c a M~ unless
+you use "/!" markup when filtering TODO keywords.
 *** New option ~org-babel-uppercase-example-markers~
 
 This variable is a ~defcustom~ and replaces the variable
 ~org-babel-capitalize-example-region-markers~, which is a ~defvar~ and
 is now obselete.
+*** =INCLUDE= keywords in commented trees are now ignored.
+*** Default value for ~org-texinfo-text-markup-alist~ changed.
+
+Now ~=...=~ markup uses ~@samp{}~ instead of ~@verb{}~.  You can use
+~@verb{}~ again by customizing the variable.
+*** Texinfo exports example blocks as ~@example~
+*** Texinfo exports inline src blocks as ~@code{}~
+*** Texinfo default table markup is ~@asis~
+It used to be ~@samp~ but ~@asis~ is neutral and, therefore, more
+suitable as a default value.
+*** ~org-parse-time-string~ accepts a new optional argument
+=ZONE= specifies the current time zone.
 
 * Version 9.0
 

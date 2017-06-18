@@ -919,20 +919,21 @@ Some other text
   "Test `footnote-definition' parser."
   (should
    (org-test-with-temp-text "[fn:1] Definition"
-     (org-element-map (org-element-parse-buffer) 'footnote-definition
-       'identity nil t)))
-  ;; Footnote with more contents
+     (eq (org-element-type (org-element-at-point)) 'footnote-definition)))
+  ;; Footnote with more contents.
   (should
-   (= 29
-      (org-element-property
-       :end
-       (org-test-with-temp-text "[fn:1] Definition\n\n| a | b |"
-	 (org-element-map (org-element-parse-buffer) 'footnote-definition
-	   'identity nil t)))))
+   (= 29 (org-test-with-temp-text "[fn:1] Definition\n\n| a | b |"
+	   (org-element-property :end (org-element-at-point)))))
+  ;; Test difference between :contents-end and :end property
+  (should
+   (< (org-test-with-temp-text "[fn:1] Definition\n\n\n"
+	(org-element-property :contents-end (org-element-at-point)))
+      (org-test-with-temp-text "[fn:1] Definition\n\n\n"
+	(org-element-property :end (org-element-at-point)))))
   ;; Footnote starting with special syntax.
   (should-not
-   (org-test-with-temp-text "[fn:1] - no item"
-     (org-element-map (org-element-parse-buffer) 'item 'identity)))
+   (org-test-with-temp-text "[fn:1] <point>- no item"
+     (eq (org-element-type (org-element-at-point)) 'item)))
   ;; Correctly handle footnote starting with an empty line.
   (should
    (= 9
@@ -952,7 +953,13 @@ Some other text
   (should
    (org-test-with-temp-text "[fn:1] 1\n\n#+attr_latex: :offset 0in\n[fn:2] 2"
      (goto-char (org-element-property :end (org-element-at-point)))
-     (looking-at "#"))))
+     (looking-at "#")))
+  ;; An empty footnote has no contents.
+  (should-not
+   (org-test-with-temp-text "[fn:1]\n\n"
+     (let ((footnote (org-element-at-point)))
+       (or (org-element-property :contents-begin footnote)
+	   (org-element-property :contents-end footnote))))))
 
 
 ;;;; Footnotes Reference.
@@ -1555,6 +1562,10 @@ e^{i\\pi}+1=0
    (eq 'latex-fragment
        (org-test-with-temp-text "$a$ "
 	 (org-element-type (org-element-context)))))
+  (should
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$a$'"
+	 (org-element-type (org-element-context)))))
   (should-not
    (eq 'latex-fragment
        (org-test-with-temp-text "$a$a"
@@ -1615,6 +1626,17 @@ e^{i\\pi}+1=0
    (org-test-with-temp-text "* <<<a>>>\n<point>a-bug"
      (org-update-radio-target-regexp)
      (org-element-parse-buffer)))
+  ;; Pathological case: radio target in an emphasis environment.
+  (should
+   (eq 'bold
+       (org-test-with-temp-text "* <<<radio>>>\n<point>*radio*"
+	 (org-update-radio-target-regexp)
+	 (org-element-type (org-element-context)))))
+  (should
+   (eq 'link
+       (org-test-with-temp-text "* <<<radio>>>\n*<point>radio*"
+	 (org-update-radio-target-regexp)
+	 (org-element-type (org-element-context)))))
   ;; Standard link.
   ;;
   ;; ... with description.
@@ -3401,15 +3423,6 @@ Text
   (should
    (eq 'table-cell
        (org-test-with-temp-text "| a | b<point> {{{macro}}} |"
-	 (org-element-type (org-element-context)))))
-  ;; Find objects in planning lines.
-  (should
-   (eq 'timestamp
-       (org-test-with-temp-text "* H\n  SCHEDULED: <2012<point>-03-29 thu.>"
-	 (org-element-type (org-element-context)))))
-  (should-not
-   (eq 'timestamp
-       (org-test-with-temp-text "* H\n  SCHEDULED<point>: <2012-03-29 thu.>"
 	 (org-element-type (org-element-context)))))
   ;; Find objects in item tags.
   (should

@@ -1092,7 +1092,9 @@ BACKEND is an export back-end, as return by, e.g,,
 for the shape of the return value.
 
 Unlike to `org-export-backend-options', this function also
-returns options inherited from parent back-ends, if any."
+returns options inherited from parent back-ends, if any.
+
+Return nil if BACKEND is unknown."
   (when (symbolp backend) (setq backend (org-export-get-backend backend)))
   (when backend
     (let ((options (org-export-backend-options backend))
@@ -1396,7 +1398,7 @@ specific items to read, if any."
 		   alist))
 	   alist))
 	;; Priority is given to back-end specific options.
-	(all (append (and backend (org-export-get-all-options backend))
+	(all (append (org-export-get-all-options backend)
 		     org-export-options-alist))
 	(plist))
     (when line
@@ -1433,7 +1435,7 @@ for export.  Return options as a plist."
 			     (match-string-no-properties 4))))))
 	 ;; Look for both general keywords and back-end specific
 	 ;; options, with priority given to the latter.
-	 (options (append (and backend (org-export-get-all-options backend))
+	 (options (append (org-export-get-all-options backend)
 			  org-export-options-alist)))
      ;; Handle other keywords.  Then return PLIST.
      (dolist (option options plist)
@@ -1469,7 +1471,7 @@ Assume buffer is in Org mode.  Narrowing, if any, is ignored."
   (let* ((case-fold-search t)
 	 (options (append
 		   ;; Priority is given to back-end specific options.
-		   (and backend (org-export-get-all-options backend))
+		   (org-export-get-all-options backend)
 		   org-export-options-alist))
 	 (regexp (format "^[ \t]*#\\+%s:"
 			 (regexp-opt (nconc (delq nil (mapcar #'cadr options))
@@ -1497,17 +1499,20 @@ Assume buffer is in Org mode.  Narrowing, if any, is ignored."
 			 (cond
 			  ;; Options in `org-export-special-keywords'.
 			  ((equal key "SETUPFILE")
-			   (let ((file
-				  (expand-file-name
-				   (org-unbracket-string "\"" "\"" (org-trim val)))))
+			   (let* ((uri (org-unbracket-string "\"" "\"" (org-trim val)))
+				  (uri-is-url (org-file-url-p uri))
+				  (uri (if uri-is-url
+					   uri
+					 (expand-file-name uri))))
 			     ;; Avoid circular dependencies.
-			     (unless (member file files)
+			     (unless (member uri files)
 			       (with-temp-buffer
-				 (setq default-directory
-				   (file-name-directory file))
-				 (insert (org-file-contents file 'noerror))
+				 (unless uri-is-url
+				   (setq default-directory
+					 (file-name-directory uri)))
+				 (insert (org-file-contents uri 'noerror))
 				 (let ((org-inhibit-startup t)) (org-mode))
-				 (funcall get-options (cons file files))))))
+				 (funcall get-options (cons uri files))))))
 			  ((equal key "OPTIONS")
 			   (setq plist
 				 (org-combine-plists
@@ -1606,7 +1611,7 @@ which back-end specific export options should also be read in the
 process."
   (let (plist
 	;; Priority is given to back-end specific options.
-	(all (append (and backend (org-export-get-all-options backend))
+	(all (append (org-export-get-all-options backend)
 		     org-export-options-alist)))
     (dolist (cell all plist)
       (let ((prop (car cell)))
@@ -1645,17 +1650,22 @@ an alist where associations are (VARIABLE-NAME VALUE)."
 				      "BIND")
 			       (push (read (format "(%s)" val)) alist)
 			     ;; Enter setup file.
-			     (let ((file (expand-file-name
-					  (org-unbracket-string "\"" "\"" val))))
-			       (unless (member file files)
+			     (let* ((uri (org-unbracket-string "\"" "\"" val))
+				    (uri-is-url (org-file-url-p uri))
+				    (uri (if uri-is-url
+					     uri
+					   (expand-file-name uri))))
+			       ;; Avoid circular dependencies.
+			       (unless (member uri files)
 				 (with-temp-buffer
-				   (setq default-directory
-					 (file-name-directory file))
+				   (unless uri-is-url
+				     (setq default-directory
+					   (file-name-directory uri)))
 				   (let ((org-inhibit-startup t)) (org-mode))
-				   (insert (org-file-contents file 'noerror))
+				   (insert (org-file-contents uri 'noerror))
 				   (setq alist
 					 (funcall collect-bind
-						  (cons file files)
+						  (cons uri files)
 						  alist))))))))))
 		   alist)))))
       ;; Return value in appropriate order of appearance.
@@ -2865,7 +2875,8 @@ containing their first reference."
      (org-element-create 'headline
 			 (list :footnote-section-p t
 			       :level 1
-			       :title org-footnote-section)
+			       :title org-footnote-section
+			       :raw-value org-footnote-section)
 			 (apply #'org-element-create
 				'section
 				nil
@@ -3059,7 +3070,8 @@ Return code as a string."
 	       (org-combine-plists
 		info (org-export-get-environment backend subtreep ext-plist)))
 	 ;; De-activate uninterpreted data from parsed keywords.
-	 (dolist (entry org-export-options-alist)
+	 (dolist (entry (append (org-export-get-all-options backend)
+				org-export-options-alist))
 	   (pcase entry
 	     (`(,p ,_ ,_ ,_ parse)
 	      (let ((value (plist-get info p)))
@@ -3278,116 +3290,119 @@ storing and resolving footnotes.  It is created automatically."
     ;; Expand INCLUDE keywords.
     (goto-char (point-min))
     (while (re-search-forward include-re nil t)
-      (let ((element (save-match-data (org-element-at-point))))
-	(when (eq (org-element-type element) 'keyword)
-	  (beginning-of-line)
-	  ;; Extract arguments from keyword's value.
-	  (let* ((value (org-element-property :value element))
-		 (ind (org-get-indentation))
-		 location
-		 (file
-		  (and (string-match
-			"^\\(\".+?\"\\|\\S-+\\)\\(?:\\s-+\\|$\\)" value)
-		       (prog1
-			   (save-match-data
-			     (let ((matched (match-string 1 value)))
-			       (when (string-match "\\(::\\(.*?\\)\\)\"?\\'"
-						   matched)
-				 (setq location (match-string 2 matched))
-				 (setq matched
-				       (replace-match "" nil nil matched 1)))
-			       (expand-file-name
-				(org-unbracket-string "\"" "\"" matched)
-				dir)))
-			 (setq value (replace-match "" nil nil value)))))
-		 (only-contents
-		  (and (string-match ":only-contents *\\([^: \r\t\n]\\S-*\\)?"
-				     value)
-		       (prog1 (org-not-nil (match-string 1 value))
-			 (setq value (replace-match "" nil nil value)))))
-		 (lines
-		  (and (string-match
-			":lines +\"\\(\\(?:[0-9]+\\)?-\\(?:[0-9]+\\)?\\)\""
-			value)
-		       (prog1 (match-string 1 value)
-			 (setq value (replace-match "" nil nil value)))))
-		 (env (cond
-		       ((string-match "\\<example\\>" value) 'literal)
-		       ((string-match "\\<export\\(?: +\\(.*\\)\\)?" value)
-			'literal)
-		       ((string-match "\\<src\\(?: +\\(.*\\)\\)?" value)
-			'literal)))
-		 ;; Minimal level of included file defaults to the child
-		 ;; level of the current headline, if any, or one.  It
-		 ;; only applies is the file is meant to be included as
-		 ;; an Org one.
-		 (minlevel
-		  (and (not env)
-		       (if (string-match ":minlevel +\\([0-9]+\\)" value)
-			   (prog1 (string-to-number (match-string 1 value))
-			     (setq value (replace-match "" nil nil value)))
-			 (get-text-property (point)
-					    :org-include-induced-level))))
-		 (args (and (eq env 'literal) (match-string 1 value)))
-		 (block (and (string-match "\\<\\(\\S-+\\)\\>" value)
-			     (match-string 1 value))))
-	    ;; Remove keyword.
-	    (delete-region (point) (line-beginning-position 2))
-	    (cond
-	     ((not file) nil)
-	     ((not (file-readable-p file))
-	      (error "Cannot include file %s" file))
-	     ;; Check if files has already been parsed.  Look after
-	     ;; inclusion lines too, as different parts of the same file
-	     ;; can be included too.
-	     ((member (list file lines) included)
-	      (error "Recursive file inclusion: %s" file))
-	     (t
+      (unless (org-in-commented-heading-p)
+	(let ((element (save-match-data (org-element-at-point))))
+	  (when (eq (org-element-type element) 'keyword)
+	    (beginning-of-line)
+	    ;; Extract arguments from keyword's value.
+	    (let* ((value (org-element-property :value element))
+		   (ind (org-get-indentation))
+		   location
+		   (file
+		    (and (string-match
+			  "^\\(\".+?\"\\|\\S-+\\)\\(?:\\s-+\\|$\\)" value)
+			 (prog1
+			     (save-match-data
+			       (let ((matched (match-string 1 value)))
+				 (when (string-match "\\(::\\(.*?\\)\\)\"?\\'"
+						     matched)
+				   (setq location (match-string 2 matched))
+				   (setq matched
+					 (replace-match "" nil nil matched 1)))
+				 (expand-file-name
+				  (org-unbracket-string "\"" "\"" matched)
+				  dir)))
+			   (setq value (replace-match "" nil nil value)))))
+		   (only-contents
+		    (and (string-match ":only-contents *\\([^: \r\t\n]\\S-*\\)?"
+				       value)
+			 (prog1 (org-not-nil (match-string 1 value))
+			   (setq value (replace-match "" nil nil value)))))
+		   (lines
+		    (and (string-match
+			  ":lines +\"\\(\\(?:[0-9]+\\)?-\\(?:[0-9]+\\)?\\)\""
+			  value)
+			 (prog1 (match-string 1 value)
+			   (setq value (replace-match "" nil nil value)))))
+		   (env (cond
+			 ((string-match "\\<example\\>" value) 'literal)
+			 ((string-match "\\<export\\(?: +\\(.*\\)\\)?" value)
+			  'literal)
+			 ((string-match "\\<src\\(?: +\\(.*\\)\\)?" value)
+			  'literal)))
+		   ;; Minimal level of included file defaults to the
+		   ;; child level of the current headline, if any, or
+		   ;; one.  It only applies is the file is meant to be
+		   ;; included as an Org one.
+		   (minlevel
+		    (and (not env)
+			 (if (string-match ":minlevel +\\([0-9]+\\)" value)
+			     (prog1 (string-to-number (match-string 1 value))
+			       (setq value (replace-match "" nil nil value)))
+			   (get-text-property (point)
+					      :org-include-induced-level))))
+		   (args (and (eq env 'literal) (match-string 1 value)))
+		   (block (and (string-match "\\<\\(\\S-+\\)\\>" value)
+			       (match-string 1 value))))
+	      ;; Remove keyword.
+	      (delete-region (point) (line-beginning-position 2))
 	      (cond
-	       ((eq env 'literal)
-		(insert
-		 (let ((ind-str (make-string ind ?\s))
-		       (arg-str (if (stringp args) (format " %s" args) ""))
-		       (contents
-			(org-escape-code-in-string
-			 (org-export--prepare-file-contents file lines))))
-		   (format "%s#+BEGIN_%s%s\n%s%s#+END_%s\n"
-			   ind-str block arg-str contents ind-str block))))
-	       ((stringp block)
-		(insert
-		 (let ((ind-str (make-string ind ?\s))
-		       (contents
-			(org-export--prepare-file-contents file lines)))
-		   (format "%s#+BEGIN_%s\n%s%s#+END_%s\n"
-			   ind-str block contents ind-str block))))
+	       ((not file) nil)
+	       ((not (file-readable-p file))
+		(error "Cannot include file %s" file))
+	       ;; Check if files has already been parsed.  Look after
+	       ;; inclusion lines too, as different parts of the same
+	       ;; file can be included too.
+	       ((member (list file lines) included)
+		(error "Recursive file inclusion: %s" file))
 	       (t
-		(insert
-		 (with-temp-buffer
-		   (let ((org-inhibit-startup t)
-			 (lines
-			  (if location
-			      (org-export--inclusion-absolute-lines
-			       file location only-contents lines)
-			    lines)))
-		     (org-mode)
-                     (insert
-		      (org-export--prepare-file-contents
-		       file lines ind minlevel
-		       (or (gethash file file-prefix)
-			   (puthash file (cl-incf current-prefix) file-prefix))
-		       footnotes)))
-		   (org-export-expand-include-keyword
-		    (cons (list file lines) included)
-		    (file-name-directory file)
-		    footnotes)
-		   (buffer-string)))))
-	      ;; Expand footnotes after all files have been included.
-	      ;; Footnotes are stored at end of buffer.
-	      (unless included
-		(org-with-wide-buffer
-		 (goto-char (point-max))
-		 (maphash (lambda (k v) (insert (format "\n[fn:%s] %s\n" k v)))
-			  footnotes)))))))))))
+		(cond
+		 ((eq env 'literal)
+		  (insert
+		   (let ((ind-str (make-string ind ?\s))
+			 (arg-str (if (stringp args) (format " %s" args) ""))
+			 (contents
+			  (org-escape-code-in-string
+			   (org-export--prepare-file-contents file lines))))
+		     (format "%s#+BEGIN_%s%s\n%s%s#+END_%s\n"
+			     ind-str block arg-str contents ind-str block))))
+		 ((stringp block)
+		  (insert
+		   (let ((ind-str (make-string ind ?\s))
+			 (contents
+			  (org-export--prepare-file-contents file lines)))
+		     (format "%s#+BEGIN_%s\n%s%s#+END_%s\n"
+			     ind-str block contents ind-str block))))
+		 (t
+		  (insert
+		   (with-temp-buffer
+		     (let ((org-inhibit-startup t)
+			   (lines
+			    (if location
+				(org-export--inclusion-absolute-lines
+				 file location only-contents lines)
+			      lines)))
+		       (org-mode)
+		       (insert
+			(org-export--prepare-file-contents
+			 file lines ind minlevel
+			 (or
+			  (gethash file file-prefix)
+			  (puthash file (cl-incf current-prefix) file-prefix))
+			 footnotes)))
+		     (org-export-expand-include-keyword
+		      (cons (list file lines) included)
+		      (file-name-directory file)
+		      footnotes)
+		     (buffer-string)))))
+		;; Expand footnotes after all files have been
+		;; included.  Footnotes are stored at end of buffer.
+		(unless included
+		  (org-with-wide-buffer
+		   (goto-char (point-max))
+		   (maphash (lambda (k v)
+			      (insert (format "\n[fn:%s] %s\n" k v)))
+			    footnotes))))))))))))
 
 (defun org-export--inclusion-absolute-lines (file location only-contents lines)
   "Resolve absolute lines for an included file with file-link.
@@ -4567,7 +4582,7 @@ ELEMENT doesn't allow line numbering."
 	     (let ((linum (org-element-property :number-lines el)))
 	       (when linum
 		 (let ((lines (org-count-lines
-			       (org-trim (org-element-property :value el)))))
+			       (org-element-property :value el))))
 		   ;; Accumulate locs or reset them.
 		   (pcase linum
 		     (`(new . ,n) (setq loc (+ n lines)))
@@ -4586,30 +4601,28 @@ an alist between relative line number (integer) and name of code
 reference on that line (string)."
   (let* ((line 0) refs
 	 (value (org-element-property :value element))
-	 ;; Get code and clean it.  Remove blank lines at its
-	 ;; beginning and end.
+	 ;; Remove global indentation from code, if necessary.  Also
+	 ;; remove final newline character, since it doesn't belongs
+	 ;; to the code proper.
 	 (code (replace-regexp-in-string
-		"\\`\\([ \t]*\n\\)+" ""
-		(replace-regexp-in-string
-		 "\\([ \t]*\n\\)*[ \t]*\\'" "\n"
-		 (if (or org-src-preserve-indentation
-			 (org-element-property :preserve-indent element))
-		     value
-		   (org-remove-indentation value)))))
+		"\n\\'" ""
+		(if (or org-src-preserve-indentation
+			(org-element-property :preserve-indent element))
+		    value
+		  (org-remove-indentation value))))
 	 ;; Build a regexp matching a loc with a reference.
 	 (ref-re (org-src-coderef-regexp (org-src-coderef-format element))))
     ;; Return value.
     (cons
      ;; Code with references removed.
-     (org-element-normalize-string
-      (mapconcat
-       (lambda (loc)
-	 (cl-incf line)
-	 (if (not (string-match ref-re loc)) loc
-	   ;; Ref line: remove ref, and signal its position in REFS.
-	   (push (cons line (match-string 3 loc)) refs)
-	   (replace-match "" nil nil loc 1)))
-       (org-split-string code "\n") "\n"))
+     (mapconcat
+      (lambda (loc)
+	(cl-incf line)
+	(if (not (string-match ref-re loc)) loc
+	  ;; Ref line: remove ref, and add its position in REFS.
+	  (push (cons line (match-string 3 loc)) refs)
+	  (replace-match "" nil nil loc 1)))
+      (split-string code "\n") "\n")
      ;; Reference alist.
      refs)))
 
@@ -4632,15 +4645,16 @@ number (i.e. ignoring NUM-LINES) and the name of the code
 reference on it.  If it is nil, FUN's third argument will always
 be nil.  It can be obtained through the use of
 `org-export-unravel-code' function."
-  (let ((--locs (org-split-string code "\n"))
+  (let ((--locs (split-string code "\n"))
 	(--line 0))
-    (org-element-normalize-string
+    (concat
      (mapconcat
       (lambda (--loc)
 	(cl-incf --line)
 	(let ((--ref (cdr (assq --line ref-alist))))
 	  (funcall fun --loc (and num-lines (+ num-lines --line)) --ref)))
-      --locs "\n"))))
+      --locs "\n")
+     "\n")))
 
 (defun org-export-format-code-default (element info)
   "Return source code from ELEMENT, formatted in a standard way.
@@ -4657,7 +4671,7 @@ code."
   ;; Extract code and references.
   (let* ((code-info (org-export-unravel-code element))
          (code (car code-info))
-	 (code-lines (org-split-string code "\n")))
+	 (code-lines (split-string code "\n")))
     (if (null code-lines) ""
       (let* ((refs (and (org-element-property :retain-labels element)
 			(cdr code-info)))
@@ -4682,9 +4696,9 @@ code."
 	      number-str
 	      loc
 	      (and ref
-		   (concat (make-string
-			    (- (+ 6 max-width)
-			       (+ (length loc) (length number-str))) ? )
+		   (concat (make-string (- (+ 6 max-width)
+					   (+ (length loc) (length number-str)))
+					?\s)
 			   (format "(%s)" ref))))))
 	 num-start refs)))))
 

@@ -752,16 +752,6 @@ captured item after finalizing."
 		(kill-region m1 m2))
 	    (setq abort-note 'dirty)))
 
-      ;; Make sure that the empty lines after are correct
-      (when (and (> (point-max) end) ; indeed, the buffer was still narrowed
-		 (member (org-capture-get :type 'local)
-			 '(entry item checkitem plain)))
-	(save-excursion
-	  (goto-char end)
-	  (or (bolp) (newline))
-	  (org-capture-empty-lines-after
-	   (or (org-capture-get :empty-lines-after 'local)
-	       (org-capture-get :empty-lines 'local) 0))))
       ;; Postprocessing:  Update Statistics cookies, do the sorting
       (when (derived-mode-p 'org-mode)
 	(save-excursion
@@ -1060,7 +1050,7 @@ case, raise an error."
   (let ((location (cond ((equal file "") org-default-notes-file)
 			((stringp file) (expand-file-name file org-directory))
 			((functionp file) (funcall file))
-			((and (symbolp file) (bound-and-true-p file)))
+			((and (symbolp file) (boundp file)) (symbol-value file))
 			(t nil))))
     (or (org-string-nw-p location)
 	(error "Invalid file location: %S" location))))
@@ -1098,48 +1088,38 @@ may have been stored before."
 
 (defun org-capture-place-entry ()
   "Place the template as a new Org entry."
-  (let* ((txt (org-capture-get :template))
-	 (reversed (org-capture-get :prepend))
-	 (target-entry-p (org-capture-get :target-entry-p))
-	 level beg end)
-
-    (and (org-capture-get :exact-position)
-	 (goto-char (org-capture-get :exact-position)))
+  (let ((reversed? (org-capture-get :prepend))
+	level)
+    (when (org-capture-get :exact-position)
+      (goto-char (org-capture-get :exact-position)))
     (cond
-     ((not target-entry-p)
-      ;; Insert as top-level entry, either at beginning or at end of
-      ;; file.
-      (setq level 1)
-      (if reversed
-	  (progn (goto-char (point-min))
-		 (or (org-at-heading-p)
-		     (outline-next-heading)))
-	(goto-char (point-max))
-	(or (bolp) (insert "\n"))))
-     (t
-      ;; Insert as a child of the current entry
-      (and (looking-at "\\*+")
-	   (setq level (- (match-end 0) (match-beginning 0))))
-      (setq level (org-get-valid-level (or level 1) 1))
-      (if reversed
-	  (progn
-	    (outline-next-heading)
-	    (or (bolp) (insert "\n")))
-	(org-end-of-subtree t nil)
-	(or (bolp) (insert "\n")))))
+     ;; Insert as a child of the current entry.
+     ((org-capture-get :target-entry-p)
+      (setq level (org-get-valid-level
+		   (if (org-at-heading-p) (org-outline-level) 1)
+		   1))
+      (if reversed? (outline-next-heading) (org-end-of-subtree t)))
+     ;; Insert as a top-level entry at the beginning of the file.
+     (reversed?
+      (goto-char (point-min))
+      (unless (org-at-heading-p) (outline-next-heading)))
+     ;; Otherwise, insert as a top-level entry at the end of the file.
+     (t (goto-char (point-max))))
+    (unless (bolp) (insert "\n"))
     (org-capture-empty-lines-before)
-    (setq beg (point))
-    (org-capture-verify-tree txt)
-    (org-paste-subtree level txt 'for-yank)
-    (org-capture-empty-lines-after 1)
-    (org-capture-position-for-last-stored beg)
-    (outline-next-heading)
-    (setq end (point))
-    (org-capture-mark-kill-region beg (1- end))
-    (org-capture-narrow beg (1- end))
-    (if (or (re-search-backward "%\\?" beg t)
-	    (re-search-forward "%\\?" end t))
-	(replace-match ""))))
+    (let ((beg (point))
+	  (template (org-capture-get :template)))
+      (org-capture-verify-tree template)
+      (org-paste-subtree level template 'for-yank)
+      (org-capture-empty-lines-after)
+      (org-capture-position-for-last-stored beg)
+      (unless (org-at-heading-p) (outline-next-heading))
+      (let ((end (point)))
+	(org-capture-mark-kill-region beg end)
+	(org-capture-narrow beg end)
+	(when (or (re-search-backward "%\\?" beg t)
+		  (re-search-forward "%\\?" end t))
+	  (replace-match ""))))))
 
 (defun org-capture-place-item ()
   "Place the template as a new plain list item."
@@ -1191,7 +1171,7 @@ may have been stored before."
 		      "\n"))
     ;; Insert item.
     (insert txt)
-    (org-capture-empty-lines-after 1)
+    (org-capture-empty-lines-after)
     (org-capture-position-for-last-stored beg)
     (forward-char 1)
     (setq end (point))
@@ -1312,7 +1292,7 @@ Of course, if exact position has been required, just put it there."
     (org-capture-empty-lines-before)
     (setq beg (point))
     (insert txt)
-    (org-capture-empty-lines-after 1)
+    (org-capture-empty-lines-after)
     (org-capture-position-for-last-stored beg)
     (setq end (point))
     (org-capture-mark-kill-region beg (1- end))
@@ -1396,7 +1376,7 @@ Point will remain at the first line after the inserted text."
   (let* ((template (org-capture-get :template))
 	 (type  (org-capture-get :type))
 	 beg end pp)
-    (or (bolp) (newline))
+    (unless (bolp) (insert "\n"))
     (setq beg (point))
     (cond
      ((and (eq type 'entry) (derived-mode-p 'org-mode))
@@ -1418,13 +1398,16 @@ Point will remain at the first line after the inserted text."
       (org-capture-empty-lines-after)
       (goto-char beg)
       (org-list-repair)
-      (org-end-of-item)
-      (setq end (point)))
-     (t (insert template)))
+      (org-end-of-item))
+     (t
+      (insert template)
+      (org-capture-empty-lines-after)
+      (skip-chars-forward " \t\n")
+      (unless (eobp) (beginning-of-line))))
     (setq end (point))
     (goto-char beg)
-    (if (re-search-forward "%\\?" end t)
-	(replace-match ""))))
+    (when (re-search-forward "%\\?" end t)
+      (replace-match ""))))
 
 (defun org-capture-set-plist (entry)
   "Initialize the property list from the template definition."
@@ -1580,6 +1563,9 @@ Lisp programs can force the template by setting KEYS to a string."
 	       '(("C" "Customize org-capture-templates")
 		 ("q" "Abort"))))))
 
+(defvar org-capture--clipboards nil
+  "List various clipboards values.")
+
 (defun org-capture-fill-template (&optional template initial annotation)
   "Fill a template and return the filled template as a string.
 The template may still contain \"%?\" for cursor positioning."
@@ -1628,12 +1614,13 @@ The template may still contain \"%?\" for cursor positioning."
 		   org-clock-heading)))
 	 (v-f (or (org-capture-get :original-file-nondirectory) ""))
 	 (v-F (or (org-capture-get :original-file) ""))
-	 (clipboards (delq nil
-			   (list v-i
-				 (org-get-x-clipboard 'PRIMARY)
-				 (org-get-x-clipboard 'CLIPBOARD)
-				 (org-get-x-clipboard 'SECONDARY)
-				 v-c))))
+	 (org-capture--clipboards
+	  (delq nil
+		(list v-i
+		      (org-get-x-clipboard 'PRIMARY)
+		      (org-get-x-clipboard 'CLIPBOARD)
+		      (org-get-x-clipboard 'SECONDARY)
+		      v-c))))
 
     (setq org-store-link-plist (plist-put org-store-link-plist :annotation v-a))
     (setq org-store-link-plist (plist-put org-store-link-plist :initial v-i))
@@ -1773,24 +1760,20 @@ The template may still contain \"%?\" for cursor positioning."
 			 (and (org-at-heading-p)
 			      (let ((org-ignore-region t))
 				(org-set-tags nil 'align))))))
-		    ("C"
-		     (cond
-		      ((= (length clipboards) 1) (insert (car clipboards)))
-		      ((> (length clipboards) 1)
-		       (insert (read-string "Clipboard/kill value: "
-					    (car clipboards)
-					    '(clipboards . 1)
-					    (car clipboards))))))
-		    ("L"
-		     (cond ((= (length clipboards) 1)
-			    (org-insert-link 0 (car clipboards)))
-			   ((> (length clipboards) 1)
-			    (org-insert-link
-			     0
-			     (read-string "Clipboard/kill value: "
-					  (car clipboards)
-					  '(clipboards . 1)
-					  (car clipboards))))))
+		    ((or "C" "L")
+		     (let ((insert-fun (if (equal key "C") #'insert
+					 (lambda (s) (org-insert-link 0 s)))))
+		       (pcase org-capture--clipboards
+			 (`nil nil)
+			 (`(,value) (funcall insert-fun value))
+			 (`(,first-value . ,_)
+			  (funcall insert-fun
+				   (read-string "Clipboard/kill value: "
+						first-value
+						'org-capture--clipboards
+						first-value)))
+			 (_ (error "Invalid `org-capture--clipboards' value: %S"
+				   org-capture--clipboards)))))
 		    ("p" (org-set-property prompt nil))
 		    ((guard key)
 		     ;; These are the date/time related ones.

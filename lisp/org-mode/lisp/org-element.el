@@ -22,79 +22,21 @@
 
 ;;; Commentary:
 ;;
-;; Org syntax can be divided into three categories: "Greater
-;; elements", "Elements" and "Objects".
+;; See <http://orgmode.org/worg/dev/org-syntax.html> for details about
+;; Org syntax.
 ;;
-;; Elements are related to the structure of the document.  Indeed, all
-;; elements are a cover for the document: each position within belongs
-;; to at least one element.
-;;
-;; An element always starts and ends at the beginning of a line.  With
-;; a few exceptions (`clock', `headline', `inlinetask', `item',
-;; `planning', `property-drawer', `node-property', `section' and
-;; `table-row' types), it can also accept a fixed set of keywords as
-;; attributes.  Those are called "affiliated keywords" to distinguish
-;; them from other keywords, which are full-fledged elements.  Almost
-;; all affiliated keywords are referenced in
-;; `org-element-affiliated-keywords'; the others are export attributes
-;; and start with "ATTR_" prefix.
-;;
-;; Element containing other elements (and only elements) are called
-;; greater elements.  Concerned types are: `center-block', `drawer',
-;; `dynamic-block', `footnote-definition', `headline', `inlinetask',
-;; `item', `plain-list', `property-drawer', `quote-block', `section'
-;; and `special-block'.
-;;
-;; Other element types are: `babel-call', `clock', `comment',
-;; `comment-block', `diary-sexp', `example-block', `export-block',
-;; `fixed-width', `horizontal-rule', `keyword', `latex-environment',
-;; `node-property', `paragraph', `planning', `src-block', `table',
-;; `table-row' and `verse-block'.  Among them, `paragraph' and
-;; `verse-block' types can contain Org objects and plain text.
-;;
-;; Objects are related to document's contents.  Some of them are
-;; recursive.  Associated types are of the following: `bold', `code',
-;; `entity', `export-snippet', `footnote-reference',
-;; `inline-babel-call', `inline-src-block', `italic',
-;; `latex-fragment', `line-break', `link', `macro', `radio-target',
-;; `statistics-cookie', `strike-through', `subscript', `superscript',
-;; `table-cell', `target', `timestamp', `underline' and `verbatim'.
-;;
-;; Some elements also have special properties whose value can hold
-;; objects themselves (e.g. an item tag or a headline name).  Such
-;; values are called "secondary strings".  Any object belongs to
-;; either an element or a secondary string.
-;;
-;; Notwithstanding affiliated keywords, each greater element, element
-;; and object has a fixed set of properties attached to it.  Among
-;; them, four are shared by all types: `:begin' and `:end', which
-;; refer to the beginning and ending buffer positions of the
-;; considered element or object, `:post-blank', which holds the number
-;; of blank lines, or white spaces, at its end and `:parent' which
-;; refers to the element or object containing it.  Greater elements,
-;; elements and objects containing objects will also have
-;; `:contents-begin' and `:contents-end' properties to delimit
-;; contents.  Eventually, All elements have a `:post-affiliated'
-;; property referring to the buffer position after all affiliated
-;; keywords, if any, or to their beginning position otherwise.
-;;
-;; At the lowest level, a `:parent' property is also attached to any
-;; string, as a text property.
-;;
-;; Lisp-wise, an element or an object can be represented as a list.
+;; Lisp-wise, a syntax object can be represented as a list.
 ;; It follows the pattern (TYPE PROPERTIES CONTENTS), where:
-;;   TYPE is a symbol describing the Org element or object.
+;;   TYPE is a symbol describing the object.
 ;;   PROPERTIES is the property list attached to it.  See docstring of
-;;              appropriate parsing function to get an exhaustive
-;;              list.
-;;   CONTENTS is a list of elements, objects or raw strings contained
-;;            in the current element or object, when applicable.
+;;              appropriate parsing function to get an exhaustive list.
+;;   CONTENTS is a list of syntax objects or raw strings contained
+;;            in the current object, when applicable.
 ;;
-;; An Org buffer is a nested list of such elements and objects, whose
-;; type is `org-data' and properties is nil.
+;; For the whole document, TYPE is `org-data' and PROPERTIES is nil.
 ;;
-;; The first part of this file defines Org syntax, while the second
-;; one provide accessors and setters functions.
+;; The first part of this file defines constants for the Org syntax,
+;; while the second one provide accessors and setters functions.
 ;;
 ;; The next part implements a parser and an interpreter for each
 ;; element and object type in Org syntax.
@@ -449,7 +391,7 @@ past the brackets."
 ;; There is `org-element-put-property', `org-element-set-contents'.
 ;; These low-level functions are useful to build a parse tree.
 ;;
-;; `org-element-adopt-element', `org-element-set-element',
+;; `org-element-adopt-elements', `org-element-set-element',
 ;; `org-element-extract-element' and `org-element-insert-before' are
 ;; high-level functions useful to modify a parse tree.
 ;;
@@ -848,7 +790,7 @@ CONTENTS is the contents of the element."
   (format "#+BEGIN: %s%s\n%s#+END:"
 	  (org-element-property :block-name dynamic-block)
 	  (let ((args (org-element-property :arguments dynamic-block)))
-	    (and args (concat " " args)))
+	    (if args (concat " " args) ""))
 	  contents))
 
 
@@ -878,14 +820,14 @@ Assume point is at the beginning of the footnote definition."
 			 (match-string-no-properties 1)))
 	   (begin (car affiliated))
 	   (post-affiliated (point))
-	   (ending
+	   (end
 	    (save-excursion
 	      (end-of-line)
 	      (cond
 	       ((not
 		 (re-search-forward org-element--footnote-separator limit t))
 		limit)
-	       ((eq (char-after (match-beginning 0)) ?\[)
+	       ((eq ?\[ (char-after (match-beginning 0)))
 		;; At a new footnote definition, make sure we end
 		;; before any affiliated keyword above.
 		(forward-line -1)
@@ -893,26 +835,27 @@ Assume point is at the beginning of the footnote definition."
 			    (looking-at-p org-element--affiliated-re))
 		  (forward-line -1))
 		(line-beginning-position 2))
-	       (t (match-beginning 0)))))
+	       ((eq ?* (char-after (match-beginning 0))) (match-beginning 0))
+	       (t (skip-chars-forward " \r\t\n" limit)
+		  (if (= limit (point)) limit (line-beginning-position))))))
 	   (contents-begin
-	    (progn
-	      (search-forward "]")
-	      (skip-chars-forward " \r\t\n" ending)
-	      (cond ((= (point) ending) nil)
-		    ((= (line-beginning-position) post-affiliated) (point))
-		    (t (line-beginning-position)))))
-	   (contents-end (and contents-begin ending))
-	   (end (progn (goto-char ending)
-		       (skip-chars-forward " \r\t\n" limit)
-		       (if (eobp) (point) (line-beginning-position)))))
+	    (progn (search-forward "]")
+		   (skip-chars-forward " \r\t\n" end)
+		   (cond ((= (point) end) nil)
+			 ((= (line-beginning-position) post-affiliated) (point))
+			 (t (line-beginning-position)))))
+	   (contents-end
+	    (progn (goto-char end)
+		   (skip-chars-backward " \r\t\n")
+		   (line-beginning-position 2))))
       (list 'footnote-definition
 	    (nconc
 	     (list :label label
 		   :begin begin
 		   :end end
 		   :contents-begin contents-begin
-		   :contents-end contents-end
-		   :post-blank (count-lines ending end)
+		   :contents-end (and contents-begin contents-end)
+		   :post-blank (count-lines contents-end end)
 		   :post-affiliated post-affiliated)
 	     (cdr affiliated))))))
 
@@ -3039,7 +2982,8 @@ Assume point is at the beginning of the LaTeX fragment."
 			 (search-forward "$" nil t 2)
 			 (not (memq (char-before (match-beginning 0))
 				    '(?\s ?\t ?\n ?, ?.)))
-			 (looking-at "\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|$\\)")
+			 (looking-at-p
+			  "\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|'\\|$\\)")
 			 (point)))
 		(pcase (char-after (1+ (point)))
 		  (?\( (search-forward "\\)" nil t))
@@ -4029,7 +3973,7 @@ Optional argument GRANULARITY determines the depth of the
 recursion.  It can be set to the following symbols:
 
 `headline'          Only parse headlines.
-`greater-element'   Don't recurse into greater elements excepted
+`greater-element'   Don't recurse into greater elements except
 		    headlines and sections.  Thus, elements
 		    parsed are the top-level ones.
 `element'           Parse everything but objects and plain text.
@@ -4038,7 +3982,7 @@ recursion.  It can be set to the following symbols:
 When VISIBLE-ONLY is non-nil, don't parse contents of hidden
 elements.
 
-An element or an objects is represented as a list with the
+An element or object is represented as a list with the
 pattern (TYPE PROPERTIES CONTENTS), where :
 
   TYPE is a symbol describing the element or object.  See
@@ -4365,6 +4309,10 @@ to an appropriate container (e.g., a paragraph)."
   (if (memq 'table-cell restriction) (org-element-table-cell-parser)
     (let* ((start (point))
 	   (limit
+	    ;; Object regexp sometimes needs to have a peek at
+	    ;; a character ahead.  Therefore, when there is a hard
+	    ;; limit, make it one more than the true beginning of the
+	    ;; radio target.
 	    (save-excursion
 	      (cond ((not org-target-link-regexp) nil)
 		    ((not (memq 'link restriction)) nil)
@@ -4380,8 +4328,8 @@ to an appropriate container (e.g., a paragraph)."
 		    ((and (= start (1+ (line-beginning-position)))
 			  (= start (match-end 1)))
 		     (and (re-search-forward org-target-link-regexp nil t)
-			  (match-beginning 1)))
-		    (t (match-beginning 1)))))
+			  (1+ (match-beginning 1))))
+		    (t (1+ (match-beginning 1))))))
 	   found)
       (save-excursion
 	(while (and (not found)
@@ -4453,7 +4401,8 @@ to an appropriate container (e.g., a paragraph)."
 			      (org-element-link-parser)))))))
 	    (or (eobp) (forward-char))))
 	(cond (found)
-	      (limit (org-element-link-parser))	;radio link
+	      (limit (forward-char -1)
+		     (org-element-link-parser)) ;radio link
 	      (t nil))))))
 
 (defun org-element--parse-objects (beg end acc restriction &optional parent)
@@ -5861,17 +5810,6 @@ Providing it allows for quicker computation."
 		    (or (< pos cend) (and (= pos cend) (eobp))))
 	       (narrow-to-region cbeg cend)
 	     (throw 'objects-forbidden element))))
-	;; At a planning line, if point is at a timestamp, return it,
-	;; otherwise, return element.
-	((eq type 'planning)
-	 (dolist (p '(:closed :deadline :scheduled))
-	   (let ((timestamp (org-element-property p element)))
-	     (when (and timestamp
-			(<= (org-element-property :begin timestamp) pos)
-			(> (org-element-property :end timestamp) pos))
-	       (throw 'objects-forbidden timestamp))))
-	 ;; All other locations cannot contain objects: bail out.
-	 (throw 'objects-forbidden element))
 	(t (throw 'objects-forbidden element)))
        (goto-char (point-min))
        (let ((restriction (org-element-restriction type))
