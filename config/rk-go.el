@@ -21,6 +21,8 @@
 (use-package go-mode
   :mode ("\\.go\\'" . go-mode)
 
+  :commands (godef-jump)
+
   :init
   (progn
     (spacemacs-keys-declare-prefix-for-mode 'go-mode "me" "playground")
@@ -54,6 +56,7 @@
     (defun rk-go--set-local-vars ()
       (setq-local tab-width 4)
       (setq-local indent-tabs-mode t)
+      (setq-local compile-command "go build -v")
       (with-no-warnings
         (setq-local evil-shift-width 4))
       (unless (getenv "GOROOT")
