@@ -113,7 +113,8 @@ Please include this in your report!"
   :package-version '(aggressive-indent . "0.3.1"))
 
 (defcustom aggressive-indent-excluded-modes
-  '(makefile-mode
+  '(inf-ruby-mode
+    makefile-mode
     makefile-gmake-mode
     text-mode
     yaml-mode)
@@ -444,7 +445,8 @@ typing, try tweaking this number."
       (if (and global-aggressive-indent-mode
                (or (cl-member-if #'derived-mode-p aggressive-indent-excluded-modes)
                    (equal indent-line-function #'indent-relative)
-                   (memq major-mode '(text-mode fundamental-mode))
+                   (derived-mode-p 'text-mode)
+                   (eq major-mode 'fundamental-mode)
                    buffer-read-only))
           (aggressive-indent-mode -1)
         ;; Should electric indent be ON or OFF?
