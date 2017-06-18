@@ -20,6 +20,86 @@ return (
   </div>;
 );
 
+const Demo = () => (
+  <ListItem
+    leftAvatar={
+      <Avatar
+        src=""
+      />
+    }
+  >
+  </ListItem>
+);
+
+import React, {Component} from 'react';
+class Confirm extends Component {
+  render() {
+    const project = this.props.project;
+    return (
+      <Route exac path='/' render={(matchProps) => (
+        <DefaultLayout>
+          <Home {...matchProps} />
+        </DefaultLayout>
+      )} />
+    )
+  },
+  render() {
+    const project = this.props.project;
+    return (
+      <Foo
+        someLongValue='x'
+        text={
+          <Text>
+            text
+          </Text>
+        }
+      />
+    )
+  }
+}
+
+import React, {Component} from 'react';
+class Confirm extends Component {
+  render() {
+    const project = this.props.project;
+    return (
+      <Route
+        exact
+        path="/"
+        render={ matchProps => (
+          <Home {...matchProps} />)
+        }
+      />
+    )
+  }
+};
+
+class Test extends Component {
+  render() {
+    return (
+      <Router>
+        <Switch>
+          <Route
+            exact
+            path="/"
+            render={matchProps => (
+              <DefaultLayout>
+                <Home {...matchProps} />
+              </DefaultLayout>
+            )} />
+          <Route
+            path="/settings"
+            render={matchProps => (
+              <DefaultLayout>
+                <Settings {...matchProps} />
+              </DefaultLayout>
+            )} />
+        </Switch>
+      </Router>
+    )
+  }
+};
+
 import React from 'react';
 
 const Front = props => {
@@ -92,6 +172,21 @@ function foo() {
   </label>;
 }
 
+import React, {Component} from 'react';
+class Confirm extends Component {
+  render() {
+    const project = this.props.project;
+    return (
+      <Switch>
+        <Route
+          path={'/home'}
+          render={ (props) => (
+            <Home {...props} />
+          )} />
+      </Switch>
+    )
+  }
+}
 
 // #870
 import React, {Component} from 'react';
@@ -103,10 +198,10 @@ class Confirm extends Component {
         <fieldset>
           {project.foo && (
              <div>Foo</div>
-           )}
+          )}
           {project.bar && (
              <p>Bar</p>
-           )}
+          )}
         </fieldset>
       </form>
     );
