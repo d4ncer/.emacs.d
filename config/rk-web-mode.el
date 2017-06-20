@@ -195,8 +195,8 @@
 
 (use-package prettier-js
   :after rk-web-modes
-  :commands (prettier
-             prettier-before-save)
+  :commands (prettier-js-mode
+             prettier-js)
   :preface
   (progn
     (autoload 'f-exists? "f")
@@ -205,18 +205,33 @@
       (-when-let* ((root (projectile-project-p))
                    (root-prettier-ignore (f-join root ".prettierignore"))
                    (enable-prettier? (not (f-exists? root-prettier-ignore))))
-        t)))
+        t))
+    (defun rk-web--parse-prettier-config (file)
+      "Parse a custom prettier config FILE."
+      (-mapcat (lambda (x) (list (car x) (cdr x)))
+               (let ((json-key-type 'string))
+                 (json-read-file file))))
+
+    (defun rk-web--set-prettier-args ()
+      "Use project specific prettier config or default, if none found."
+      (-if-let* ((root (projectile-project-p))
+                 (root-prettier-config (f-join root ".prettierrc.json"))
+                 (exists-prettier-config? (f-exists? root-prettier-config))
+                 (local-prettier-args (rk-web--parse-prettier-config root-prettier-config)))
+          (setq-local prettier-js-args local-prettier-args)
+        (setq-local prettier-js-args '("--single-quote" "true"
+                                       "--trailing-comma" "es5")))))
   :config
   (progn
-    (setq prettier-args '("--single-quote" "--trailing-comma=es5"))
-    (setq prettier-target-mode "rk-web-js-mode")
-    (add-hook 'rk-web-js-mode-hook
-              (lambda () (if (rk-web--should-enable-prettier)
-                             (add-hook 'before-save-hook #'prettier-before-save nil t)))))
+    (add-hook 'rk-web-js-mode-hook #'(lambda ()
+                                       (if (rk-web--should-enable-prettier)
+                                           (progn
+                                             (rk-web--set-prettier-args)
+                                             (prettier-js-mode +1))))))
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "." #'prettier)))
+      "." #'prettier-js)))
 
 (use-package company-flow
   :after rk-web-modes
