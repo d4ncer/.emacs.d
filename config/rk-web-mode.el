@@ -200,34 +200,34 @@
   :preface
   (progn
     (autoload 'f-exists? "f")
-    (defun rk-web--should-enable-prettier ()
+    (defun rk-web--prettier-enable-p ()
       "Enable prettier if no .prettierignore is found in project root."
-      (-when-let* ((root (projectile-project-p))
-                   (root-prettier-ignore (f-join root ".prettierignore"))
-                   (enable-prettier? (not (f-exists? root-prettier-ignore))))
-        t))
+      (-when-let (root (projectile-project-p))
+        (not (f-exists? (f-join root ".prettierignore")))))
+
     (defun rk-web--parse-prettier-config (file)
       "Parse a custom prettier config FILE."
-      (-mapcat (lambda (x) (list (car x) (cdr x)))
-               (let ((json-key-type 'string))
-                 (json-read-file file))))
+      (when (f-exists? file)
+        (--mapcat (list (car it) (cdr it))
+                  (let ((json-key-type 'string))
+                    (json-read-file file)))))
 
-    (defun rk-web--set-prettier-args ()
+    (defun rk-web--prettier-args ()
       "Use project specific prettier config or default, if none found."
-      (-if-let* ((root (projectile-project-p))
-                 (root-prettier-config (f-join root ".prettierrc.json"))
-                 (exists-prettier-config? (f-exists? root-prettier-config))
-                 (local-prettier-args (rk-web--parse-prettier-config root-prettier-config)))
-          (setq-local prettier-js-args local-prettier-args)
-        (setq-local prettier-js-args '("--single-quote" "true"
-                                       "--trailing-comma" "es5")))))
+      (or (-some-> (projectile-project-p)
+                   (f-join ".prettierrc.json")
+                   (rk-web--parse-prettier-config))
+          '("--single-quote" "true"
+            "--trailing-comma" "es5")))
+    (defun rk-web--setup-prettier ()
+      (when (rk-web--prettier-enable-p)
+        (setq-local prettier-js-args (rk-web--prettier-args))
+        (prettier-js-mode +1))))
+
   :config
   (progn
-    (add-hook 'rk-web-js-mode-hook #'(lambda ()
-                                       (if (rk-web--should-enable-prettier)
-                                           (progn
-                                             (rk-web--set-prettier-args)
-                                             (prettier-js-mode +1))))))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--setup-prettier))
+
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
