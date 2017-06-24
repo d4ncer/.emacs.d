@@ -105,6 +105,7 @@
              counsel-recentf
              counsel-yank-pop
              counsel-up-directory)
+  :defines (counsel-rg-base-command)
   :preface
   (progn
     (autoload 'ivy-immediate-done "ivy")
@@ -141,6 +142,7 @@
     (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
     (define-key ivy-minibuffer-map (kbd "C-h") #'counsel-up-directory)
 
+    (setq counsel-rg-base-command "rg -S --no-heading --line-number --max-columns 150 --color never %s .")
     (setq counsel-yank-pop-separator (concat "\n" (make-string 70 ?-) "\n"))
 
     (counsel-mode +1)))
