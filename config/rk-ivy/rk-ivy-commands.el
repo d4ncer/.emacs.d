@@ -32,33 +32,28 @@
   (-if-let* ((str-list (split-string string "" t))
              (escaped-str-list (-map-when #'rk-counsel--escape-character-p #'rk-counsel--escape-character str-list)))
       (s-join "" escaped-str-list)
-    (string)))
+    string))
 
-(defun rk-swiper-region-or-symbol ()
-  "Run `swiper' with the selected region or the symbol around point as the initial input."
-  (interactive)
-  (let ((input (if (region-active-p)
-                   (buffer-substring-no-properties
-                    (region-beginning) (region-end))
-                 (thing-at-point 'symbol t))))
-    (swiper input)))
+(defun rk--region-or-symbol-at-pt ()
+  (if (region-active-p)
+      (buffer-substring-no-properties (region-beginning) (region-end))
+    (thing-at-point 'symbol t)))
 
-(defun rk-counsel-project-region-or-symbol ()
-  "Search project for region or symbol at point."
-  (interactive)
-  (let ((input (if (region-active-p)
-                   (buffer-substring-no-properties (region-beginning) (region-end))
-                 (thing-at-point 'symbol t))))
-    (counsel-rg (rk-counsel--escape-string input) (projectile-project-root))))
+(defun rk-swiper-region-or-symbol (input)
+  "Run `swiper' with INPUT, which is either the selected region or the symbol at point."
+  (interactive (list (rk--region-or-symbol-at-pt)))
+  (swiper input))
 
-(defun rk-counsel-region-or-symbol ()
-  "Search initial directory for region or symbol at point."
-  (interactive)
-  (let ((init-dir (read-directory-name "Start from directory: ")))
-    (let ((input (if (region-active-p)
-                     (buffer-substring-no-properties (region-beginning) (region-end))
-                   (thing-at-point 'symbol t))))
-      (counsel-rg (rk-counsel--escape-string input) init-dir))))
+(defun rk-counsel-project-region-or-symbol (input)
+  "Search project for INPUT, which is either the selected region or the symbol at point."
+  (interactive (list (rk--region-or-symbol-at-pt)))
+  (counsel-rg (rk-counsel--escape-string input) (projectile-project-root)))
+
+(defun rk-counsel-region-or-symbol (start-dir input)
+  "Search START-DIR for INPUT which is either the selected region or symbol at point."
+  (interactive (list (read-directory-name "Start from directory: ")
+                     (rk--region-or-symbol-at-pt)))
+  (counsel-rg (rk-counsel--escape-string input) start-dir))
 
 (provide 'rk-ivy-commands)
 
