@@ -181,6 +181,11 @@
     (info-double-quoted-name
      ((t :weight normal)))
 
+    ;; Info
+
+    (makefile-space
+     ((t :background ,rk-theme-base-violet)))
+
     ;; web-mode
 
     (web-mode-function-call-face
