@@ -14,6 +14,7 @@
   (depends-on "shut-up")
   (depends-on "ruby-mode")
   (depends-on "racket-mode")
+  (depends-on "scala-mode")
   (depends-on "rust-mode")
   (depends-on "auctex")
   (depends-on "clojure-mode")
@@ -23,4 +24,5 @@
   (depends-on "scala-mode")
   (depends-on "elixir-mode")
   (depends-on "markdown-mode")
+  (depends-on "hungry-delete")
   (depends-on "evil"))
