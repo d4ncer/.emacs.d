@@ -22,7 +22,7 @@
 (require 'dash)
 (require 'subr-x)
 
-(defvar org-directory "~/.org")
+(defvar org-directory "~/org")
 
 (defconst rk-org-work-file (concat org-directory "/work_movio.org"))
 
@@ -555,7 +555,13 @@ Do not scheduled items or repeating todos."
 
          (rk-org--capture-template-entry
           "E" "Email task (work)"
-          `(file rk-org-work-file) "* TODO %?\n%a"))))
+          `(file rk-org-work-file) "* TODO %?\n%a")))
+  :init
+  (progn
+    (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
+      "c" #'org-capture-finalize
+      "k" #'org-capture-kill
+      "r" #'org-capture-refile)))
 
 (use-package org-download
   :after org
@@ -658,13 +664,17 @@ table tr.tr-even td {
   :functions (rk-org-clock-cascade-init)
   :init (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
 
+(use-package rk-org-export-koma-letter
+  :after org
+  :functions (rk-org-export-koma-letter-init)
+  :config
+  (progn
+    (add-to-list 'org-latex-classes `("koma-letter" ,rk-org-export-koma-letter-latex-class))
+    (setq org-latex-hyperref-template "")
+    (add-hook 'org-ctrl-c-ctrl-c-hook #'rk-org-export-koma-letter--handler t)))
+
 (use-package rk-org-capture-url
   :after org)
-
-(use-package rk-org-gdrive
-  :after org
-  :functions (rk-org-gdrive-init)
-  :init (add-hook 'org-mode-hook #'rk-org-gdrive-init))
 
 (use-package rk-org-goto
   :commands (rk-org-goto-agenda
