@@ -1156,6 +1156,7 @@ may have been stored before."
 			(mapconcat 'identity (split-string txt "\n")
 				   "\n  "))))
     ;; Prepare surrounding empty lines.
+    (unless (bolp) (insert "\n"))
     (org-capture-empty-lines-before)
     (setq beg (point))
     (unless (eolp) (save-excursion (insert "\n")))
@@ -1173,10 +1174,9 @@ may have been stored before."
     (insert txt)
     (org-capture-empty-lines-after)
     (org-capture-position-for-last-stored beg)
-    (forward-char 1)
     (setq end (point))
-    (org-capture-mark-kill-region beg (1- end))
-    (org-capture-narrow beg (1- end))
+    (org-capture-mark-kill-region beg end)
+    (org-capture-narrow beg end)
     (if (or (re-search-backward "%\\?" beg t)
 	    (re-search-forward "%\\?" end t))
 	(replace-match ""))))
@@ -1923,9 +1923,7 @@ Assume sexps have been marked with
 		       (if jump-to-captured '(:jump-to-captured t)))))
 
 	   org-remember-templates))))
-;;; The function was made obsolete by commit 65399674d5 of
-;;; 2013-02-22.  This make-obsolete call was added 2016-09-01.
-(make-obsolete 'org-capture-import-remember-templates "use the `org-capture-templates' variable instead." "Org 9.0")
+
 
 (provide 'org-capture)
 

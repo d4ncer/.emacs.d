@@ -1,4 +1,4 @@
-ORG NEWS -- history of user-visible changes.           -*- org -*-
+ORG NEWS -- history of user-visible changes.   -*- mode: org; coding: utf-8 -*-
 
 #+LINK: doc http://orgmode.org/worg/doc.html#%s
 #+LINK: git http://orgmode.org/cgit.cgi/org-mode.git/commit/?id=%s
@@ -23,7 +23,7 @@ Consider setting ~org-duration-units~ instead.
 
 *** ~org-at-timestamp-p~ optional argument accepts different values
 
-See docustrings for the allowed values.  For backward compatibility,
+See docstrings for the allowed values.  For backward compatibility,
 ~(org-at-timestamp-p t)~ is still supported, but should be updated
 accordingly.
 
@@ -49,6 +49,10 @@ You can now find them here :
 - https://github.com/sabof/org-bullets
 - https://github.com/org-mime/org-mime
 
+*** Change ~org-texinfo-classes~ value
+The value cannot support functions to create sectionning commands
+anymore.  Also, the sectionning commands should include commands for
+appendices.  See the docstring for more information.
 *** Removal of ~:sitemap-sans-extension~
 
 The publishing property is no longer recognized, as a consequence of
@@ -81,6 +85,8 @@ list as their first argument.
 The optional argument is now a string to extract the repeater from.
 See docstring for details.
 
+*** Change signature for ~org-time-string-to-time~
+See docstring for changes.
 ** New features
 *** New Org duration library
 This new library implements tools to read and print time durations in
@@ -385,8 +391,13 @@ Now ~=...=~ markup uses ~@samp{}~ instead of ~@verb{}~.  You can use
 *** Texinfo default table markup is ~@asis~
 It used to be ~@samp~ but ~@asis~ is neutral and, therefore, more
 suitable as a default value.
+*** New entities : ~\dollar~ and ~\USD~
 *** ~org-parse-time-string~ accepts a new optional argument
 =ZONE= specifies the current time zone.
+*** ~org-time-string-to-seconds~ now accepts an optional =ZONE= argument
+*** Support for date style URLs in =org-protocol://open-source=
+    URLs like =https://cool-blog.com/2017/05/20/cool-post/= are
+    covered by rewrite rules.
 
 * Version 9.0
 
@@ -2695,7 +2706,7 @@ instead of requiring each Babel library one by one.
 - New option [[doc:org-gnus-no-server][org-gnus-no-server]] to start Gnus with =gnus-no-server=
 - Org is now distributed with =htmlize.el= version 1.43
 - ~org-drill.el~ has been updated to version 2.3.7
-- ~org-mac-iCal.el~ now supports MacOSX version up to 10.8
+- ~org-mac-iCal.el~ now supports OS X versions up to 10.8
 - Various improvements to ~org-contacts.el~ and =orgpan.el=
 
 ** Outside Org

@@ -1637,30 +1637,37 @@ containing `:call', `:inside-header', `:arguments',
   (save-excursion
     (let* ((begin (car affiliated))
 	   (post-affiliated (point))
-	   (value (progn (search-forward ":" nil t)
+	   (before-blank (line-beginning-position 2))
+	   (value (progn (search-forward ":" before-blank t)
+			 (skip-chars-forward " \t")
 			 (org-trim
 			  (buffer-substring-no-properties
 			   (point) (line-end-position)))))
-	   (pos-before-blank (progn (forward-line) (point)))
-	   (end (progn (skip-chars-forward " \r\t\n" limit)
-		       (if (eobp) (point) (line-beginning-position))))
-	   (valid-value
-	    (string-match
-	     "\\([^()\n]+?\\)\\(?:\\[\\(.*?\\)\\]\\)?(\\(.*\\))[ \t]*\\(.*\\)"
-	     value)))
+	   (call
+	    (or (org-string-nw-p
+		 (buffer-substring-no-properties
+		  (point) (progn (skip-chars-forward "^[]()" before-blank)
+				 (point))))))
+	   (inside-header (org-element--parse-paired-brackets ?\[))
+	   (arguments (org-string-nw-p
+		       (org-element--parse-paired-brackets ?\()))
+	   (end-header
+	    (org-string-nw-p
+	     (org-trim
+	      (buffer-substring-no-properties (point) (line-end-position)))))
+	   (end (progn (forward-line)
+		       (skip-chars-forward " \r\t\n" limit)
+		       (if (eobp) (point) (line-beginning-position)))))
       (list 'babel-call
 	    (nconc
-	     (list :call (and valid-value (match-string 1 value))
-		   :inside-header (and valid-value
-				       (org-string-nw-p (match-string 2 value)))
-		   :arguments (and valid-value
-				   (org-string-nw-p (match-string 3 value)))
-		   :end-header (and valid-value
-				    (org-string-nw-p (match-string 4 value)))
+	     (list :call call
+		   :inside-header inside-header
+		   :arguments arguments
+		   :end-header end-header
 		   :begin begin
 		   :end end
 		   :value value
-		   :post-blank (count-lines pos-before-blank end)
+		   :post-blank (count-lines before-blank end)
 		   :post-affiliated post-affiliated)
 	     (cdr affiliated))))))
 
@@ -2975,16 +2982,8 @@ Assume point is at the beginning of the LaTeX fragment."
     (save-excursion
       (let* ((begin (point))
 	     (after-fragment
-	      (if (eq (char-after) ?$)
-		  (if (eq (char-after (1+ (point))) ?$)
-		      (search-forward "$$" nil t 2)
-		    (and (not (eq (char-before) ?$))
-			 (search-forward "$" nil t 2)
-			 (not (memq (char-before (match-beginning 0))
-				    '(?\s ?\t ?\n ?, ?.)))
-			 (looking-at-p
-			  "\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|'\\|$\\)")
-			 (point)))
+	      (cond
+	       ((not (eq ?$ (char-after)))
 		(pcase (char-after (1+ (point)))
 		  (?\( (search-forward "\\)" nil t))
 		  (?\[ (search-forward "\\]" nil t))
@@ -2992,10 +2991,23 @@ Assume point is at the beginning of the LaTeX fragment."
 		   ;; Macro.
 		   (and (looking-at "\\\\[a-zA-Z]+\\*?\\(\\(\\[[^][\n{}]*\\]\\)\
 \\|\\({[^{}\n]*}\\)\\)*")
-			(match-end 0))))))
-	     (post-blank (if (not after-fragment) (throw 'no-object nil)
-			   (goto-char after-fragment)
-			   (skip-chars-forward " \t")))
+			(match-end 0)))))
+	       ((eq ?$ (char-after (1+ (point))))
+		(search-forward "$$" nil t 2))
+	       (t
+		(and (not (eq ?$ (char-before)))
+		     (not (memq (char-after (1+ (point)))
+				'(?\s ?\t ?\n ?, ?. ?\;)))
+		     (search-forward "$" nil t 2)
+		     (not (memq (char-before (match-beginning 0))
+				'(?\s ?\t ?\n ?, ?.)))
+		     (looking-at-p
+		      "\\(\\s.\\|\\s-\\|\\s(\\|\\s)\\|\\s\"\\|'\\|$\\)")
+		     (point)))))
+	     (post-blank
+	      (if (not after-fragment) (throw 'no-object nil)
+		(goto-char after-fragment)
+		(skip-chars-forward " \t")))
 	     (end (point)))
 	(list 'latex-fragment
 	      (list :value (buffer-substring-no-properties begin after-fragment)

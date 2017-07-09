@@ -646,7 +646,7 @@ Texinfo export
 * Texinfo specific export settings::  Setting the environment.
 * Texinfo file header::         Generating the header.
 * Texinfo title and copyright page::  Creating preamble pages.
-* Texinfo @samp{Top} node::     Installing a manual in Info Top node.
+* Info directory file::     Installing a manual in Info file hierarchy.
 * Headings and sectioning structure::  Building document structure.
 * Indices::                     Creating indices.
 * Quoting Texinfo code::        Incorporating literal Texinfo code.
@@ -829,7 +829,7 @@ different formats such as HTML, @LaTeX{}, Open Document, and Markdown.  New
 export backends can be derived from existing ones, or defined from scratch.
 
 Org files can include source code blocks, which makes Org uniquely suited for
-authoring technical documents with code examples. Org source code blocks are
+authoring technical documents with code examples.  Org source code blocks are
 fully functional; they can be evaluated in place and their results can be
 captured in the file.  This makes it possible to create a single file
 reproducible research compendium.
@@ -1299,7 +1299,7 @@ Expose all direct children of the subtree.  With a numeric prefix argument N,
 expose all children down to level N@.
 @orgcmd{C-c C-x b,org-tree-to-indirect-buffer}
 Show the current subtree in an indirect buffer@footnote{The indirect buffer
-(@pxref{Indirect Buffers,,,emacs,GNU Emacs Manual}) will contain the entire
+(@pxref{Indirect Buffers,https://www.gnu.org/software/emacs/manual/html_node/emacs/Indirect-Buffers.html,,emacs,GNU Emacs Manual}) will contain the entire
 buffer, but will be narrowed to the current tree.  Editing the indirect
 buffer will also change the original buffer, but without affecting visibility
 in that buffer.}.  With a numeric prefix argument N, go up to level N and
@@ -3548,7 +3548,7 @@ file:projects.org                            @r{another Org file}
 file:projects.org::some words                @r{text search in Org file}@footnote{
 The actual behavior of the search will depend on the value of
 the option @code{org-link-search-must-match-exact-headline}.  If its value
-is @code{nil}, then a fuzzy text search will be done.  If it is t, then only
+is @code{nil}, then a fuzzy text search will be done.  If it is @code{t}, then only
 the exact headline will be matched, ignoring spaces and cookies.  If the
 value is @code{query-to-create}, then an exact headline will be searched; if
 it is not found, then the user will be queried to create it.}
@@ -8085,7 +8085,7 @@ you can use the following instead:
 @end example
 
 That will give you three days' warning: on the anniversary date itself and the
-two days prior. The argument is optional: if omitted, it defaults to 7.
+two days prior.  The argument is optional: if omitted, it defaults to 7.
 
 @subsubheading Appointment reminders
 @cindex @file{appt.el}
@@ -11443,8 +11443,8 @@ The default is ``xhtml-strict''.
 Org's HTML exporter does not by default enable new block elements introduced
 with the HTML5 standard.  To enable them, set @code{org-html-html5-fancy} to
 non-@code{nil}.  Or use an @code{OPTIONS} line in the file to set
-@code{html5-fancy}.  HTML5 documents can now have arbitrary #+BEGIN and #+END
-blocks.  For example:
+@code{html5-fancy}.  HTML5 documents can now have arbitrary @code{#+BEGIN}
+and @code{#+END} blocks.  For example:
 
 @example
 #+BEGIN_aside
@@ -12183,11 +12183,11 @@ also have additional layout @code{:placement} attributes.  These are the
 usual @code{[h t b p ! H]} permissions specified in square brackets.  Note
 that for @code{:float sideways} tables, the @LaTeX{} export back-end ignores
 @code{:placement} attributes.
-@item :align    
+@item :align
 @itemx :font
 @itemx :width
 The @LaTeX{} export back-end uses these attributes for regular tables to set
-their alignments, fonts, and widths. 
+their alignments, fonts, and widths.
 @item :spread
 When @code{:spread} is non-@code{nil}, the @LaTeX{} export back-end spreads
 or shrinks the table by the @code{:width} for @code{tabu} and @code{longtabu}
@@ -12777,7 +12777,7 @@ ODT export}.
 The ODT export back-end processes image links in Org files that do not have
 descriptions, such as these links @samp{[[file:img.jpg]]} or
 @samp{[[./img.jpg]]}, as direct image insertions in the final output.  Either
-of these examples works: 
+of these examples works:
 
 @example
 [[file:img.png]]
@@ -13462,7 +13462,7 @@ can compile to Info format.
 * Texinfo specific export settings::  Setting the environment.
 * Texinfo file header::         Generating the header.
 * Texinfo title and copyright page::  Creating preamble pages.
-* Texinfo @samp{Top} node::     Installing a manual in Info Top node.
+* Info directory file::     Installing a manual in Info file hierarchy.
 * Headings and sectioning structure::  Building document structure.
 * Indices::                     Creating indices.
 * Quoting Texinfo code::        Incorporating literal Texinfo code.
@@ -13590,7 +13590,7 @@ itself does not appear in the structure of the document.
 Copyright information is printed on the back of the title page.
 
 @example
-* Copying
+* Legalese
   :PROPERTIES:
   :COPYING: t
   :END:
@@ -13600,8 +13600,14 @@ Copyright information is printed on the back of the title page.
   Copyright \copy 2016 Free Software Foundation, Inc.
 @end example
 
-@node Texinfo @samp{Top} node
-@subsection Texinfo @samp{Top} node
+@node Info directory file
+@subsection Info directory file
+@cindex @samp{dir} file, in Texinfo export
+@cindex Texinfo export, @samp{dir} file
+@cindex Info directory file, in Texinfo export
+@cindex Texinfo export, Info directory file
+@cindex @code{install-info} parameters, in Texinfo export
+@cindex Texinfo export, @code{install-info} parameters
 
 @cindex #+TEXINFO_DIR_CATEGORY
 @cindex #+TEXINFO_DIR_TITLE
@@ -13612,7 +13618,7 @@ This Info file's metadata has variables for category, title, and description:
 @code{#+TEXINFO_DIR_DESC} that establish where in the Info hierarchy the file
 fits.
 
-Here's an example that writes to the @samp{Top} node:
+Here is an example that writes to the Info directory file:
 
 @example
 #+TEXINFO_DIR_CATEGORY: Emacs
@@ -13661,20 +13667,39 @@ entry:
   :END:
 @end example
 
+@cindex The Top node, in Texinfo export
+@cindex Texinfo export, Top node
+The text before the first headline belongs to the @samp{Top} node, i.e., the
+node in which a reader enters an Info manual.  As such, it is expected not to
+appear in printed output generated from the @file{.texi} file.  @inforef{The
+Top Node,,texinfo}, for more information.
+
 @node Indices
 @subsection Indices
 
 @cindex #+CINDEX
+@cindex concept index, in Texinfo export
+@cindex Texinfo export, index, concept
 @cindex #+FINDEX
+@cindex function index, in Texinfo export
+@cindex Texinfo export, index, function
 @cindex #+KINDEX
+@cindex keystroke index, in Texinfo export
+@cindex Texinfo export, keystroke index
 @cindex #+PINDEX
+@cindex program index, in Texinfo export
+@cindex Texinfo export, program index
 @cindex #+TINDEX
+@cindex data type index, in Texinfo export
+@cindex Texinfo export, data type index
 @cindex #+VINDEX
+@cindex variable index, in Texinfo export
+@cindex Texinfo export, variable index
 The Texinfo export back-end recognizes these indexing keywords if used in the
 Org file: @code{#+CINDEX}, @code{#+FINDEX}, @code{#+KINDEX}, @code{#+PINDEX},
-@code{#+TINDEX}, and @code{#+VINDEX}.  The back-end also recognizes custom
-index definitions that use raw Texinfo code in the Org file (@pxref{Quoting
-Texinfo code}).
+@code{#+TINDEX}, and @code{#+VINDEX}.  Write their value as verbatim Texinfo
+code; in particular, @samp{@{}, @samp{@}} and @samp{@@} characters need to be
+escaped with @samp{@@} if they not belong to a Texinfo command.
 
 @example
 #+CINDEX: Defining indexing entries
@@ -13726,15 +13751,15 @@ two columns.  To change this behavior, specify @code{:table-type} with
 @code{ftable} or @code{vtable} attributes.  For more information,
 @inforef{Two-column Tables,,texinfo}.
 
-@vindex org-texinfo-def-table-markup
+@vindex org-texinfo-table-default-markup
 @cindex :indic attribute, in Texinfo export
 The Texinfo export back-end by default also applies a text highlight based on
-the defaults stored in @code{org-texinfo-def-table-markup}.  To override the
-default highlight command, specify another one with the @code{:indic}
+the defaults stored in @code{org-texinfo-table-default-markup}.  To override
+the default highlight command, specify another one with the @code{:indic}
 attribute.
 
 @cindex Multiple entries in two-column tables, in Texinfo export
-@cindex :separator attribute, in Texinfo export
+@cindex :sep attribute, in Texinfo export
 Org syntax is limited to one entry per list item.  Nevertheless, the Texinfo
 export back-end can split that entry according to any text provided through
 the @code{:sep} attribute.  Each part then becomes a new entry in the first
@@ -13817,14 +13842,16 @@ Here is a more detailed example Org file.  @inforef{GNU Sample
 Texts,,texinfo} for an equivalent example using Texinfo code.
 
 @example
-#+MACRO: version 2.0
-#+MACRO: updated last updated 4 March 2014
-
-#+OPTIONS: ':t toc:t author:t email:t
 #+TITLE: GNU Sample @{@{@{version@}@}@}
+#+SUBTITLE: for version @{@{@{version@}@}@}, @{@{@{updated@}@}@}
 #+AUTHOR: A.U. Thor
 #+EMAIL: bug-sample@@gnu.org
+
+#+OPTIONS: ':t toc:t author:t email:t
 #+LANGUAGE: en
+
+#+MACRO: version 2.0
+#+MACRO: updated last updated 4 March 2014
 
 #+TEXINFO_FILENAME: sample.info
 #+TEXINFO_HEADER: @@syncodeindex pg cp
@@ -13834,7 +13861,9 @@ Texts,,texinfo} for an equivalent example using Texinfo code.
 #+TEXINFO_DIR_DESC: Invoking sample
 
 #+TEXINFO_PRINTED_TITLE: GNU Sample
-#+SUBTITLE: for version @{@{@{version@}@}@}, @{@{@{updated@}@}@}
+
+This manual is for GNU Sample (version @{@{@{version@}@}@},
+@{@{@{updated@}@}@}).
 
 * Copying
   :PROPERTIES:
@@ -13844,8 +13873,7 @@ Texts,,texinfo} for an equivalent example using Texinfo code.
   This manual is for GNU Sample (version @{@{@{version@}@}@},
   @{@{@{updated@}@}@}), which is an example in the Texinfo documentation.
 
-  Copyright @@@@texinfo:@@copyright@{@}@@@@ 2013 Free Software Foundation,
-  Inc.
+  Copyright \copy 2016 Free Software Foundation, Inc.
 
   #+BEGIN_QUOTE
   Permission is granted to copy, distribute and/or modify this
@@ -14010,7 +14038,7 @@ The Org export process relies on filters to process specific parts of
 conversion process.  Filters are just lists of functions to be applied to
 certain parts for a given back-end.  The output from the first function in
 the filter is passed on to the next function in the filter.  The final output
-is the output from the final function in the filter. 
+is the output from the final function in the filter.
 
 The Org export process has many filter sets applicable to different types of
 objects, plain text, parse trees, export options, and final output formats.
@@ -15143,8 +15171,8 @@ customization options for extracting source code.
 When Org tangles @samp{src} code blocks, it expands, merges, and transforms
 them.  Then Org recomposes them into one or more separate files, as
 configured through the options.  During this @emph{tangling} process, Org
-expands variables in the source code, and resolves any ``noweb'' style
-references (@pxref{Noweb reference syntax}).
+expands variables in the source code, and resolves any Noweb style references
+(@pxref{Noweb reference syntax}).
 
 @subsubheading Header arguments
 
@@ -16149,12 +16177,11 @@ Do not insert newlines to pad the tangled @samp{src} code blocks.
 By default Org expands @samp{src} code blocks during tangling.  The
 @code{:no-expand} header argument turns off such expansions.  Note that one
 side-effect of expansion by @code{org-babel-expand-src-block} also assigns
-values to @code{:var} (@pxref{var}) variables.  Expansions also replace
-``noweb'' references with their targets (@pxref{Noweb reference syntax}).
-Some of these expansions may cause premature assignment, hence this option.
-This option makes a difference only for tangling.  It has no effect when
-exporting since @samp{src} code blocks for execution have to be expanded
-anyway.
+values to @code{:var} (@pxref{var}) variables.  Expansions also replace Noweb
+references with their targets (@pxref{Noweb reference syntax}).  Some of
+these expansions may cause premature assignment, hence this option.  This
+option makes a difference only for tangling.  It has no effect when exporting
+since @samp{src} code blocks for execution have to be expanded anyway.
 
 @node session
 @subsubsection @code{:session}
@@ -16183,42 +16210,56 @@ subsequent source code language blocks change session names.
 @subsubsection @code{:noweb}
 @cindex @code{:noweb}, src header argument
 
-The @code{:noweb} header argument controls expansion of ``noweb'' syntax
+The @code{:noweb} header argument controls expansion of Noweb syntax
 references (@pxref{Noweb reference syntax}).  Expansions occur when source
 code blocks are evaluated, tangled, or exported.
 
 @itemize @bullet
 @item @code{no}
-Default.  No expansion of ``Noweb'' syntax references in the body of the code
+Default.  No expansion of Noweb syntax references in the body of the code
 when evaluating, tangling, or exporting.
 @item @code{yes}
-Expansion of ``Noweb'' syntax references in the body of the @samp{src} code
-block when evaluating, tangling, or exporting.
+Expansion of Noweb syntax references in the body of the @samp{src} code block
+when evaluating, tangling, or exporting.
 @item @code{tangle}
-Expansion of ``Noweb'' syntax references in the body of the @samp{src} code
-block when tangling.  No expansion when evaluating or exporting.
+Expansion of Noweb syntax references in the body of the @samp{src} code block
+when tangling.  No expansion when evaluating or exporting.
 @item @code{no-export}
-Expansion of ``Noweb'' syntax references in the body of the @samp{src} code
-block when evaluating or tangling.  No expansion when exporting.
+Expansion of Noweb syntax references in the body of the @samp{src} code block
+when evaluating or tangling.  No expansion when exporting.
 @item @code{strip-export}
-Expansion of ``Noweb'' syntax references in the body of the @samp{src} code
-block when expanding prior to evaluating or tangling.  Removes ``noweb''
-syntax references when exporting.
+Expansion of Noweb syntax references in the body of the @samp{src} code block
+when expanding prior to evaluating or tangling.  Removes Noweb syntax
+references when exporting.
 @item @code{eval}
-Expansion of ``Noweb'' syntax references in the body of the @samp{src} code
-block only before evaluating.
+Expansion of Noweb syntax references in the body of the @samp{src} code block
+only before evaluating.
 @end itemize
 
 @subsubheading Noweb prefix lines
-Noweb insertions now honor prefix characters that appear before
-@code{<<reference>>}.  This behavior is illustrated in the following example.
-Because the @code{<<example>>} noweb reference appears behind the SQL comment
-syntax, each line of the expanded noweb reference will be commented.
+Noweb insertions now honor prefix characters that appear before the Noweb
+syntax reference.
 
-This @samp{src} code block:
+This behavior is illustrated in the following example.  Because the
+@code{<<example>>} noweb reference appears behind the SQL comment syntax,
+each line of the expanded noweb reference will be commented.
+
+With:
 
 @example
+#+NAME: example
+#+BEGIN_SRC text
+this is the
+multi-line body of example
+#+END_SRC
+@end example
+
+this @samp{src} code block:
+
+@example
+#+BEGIN_SRC sql :noweb yes
 -- <<example>>
+#+END_SRC
 @end example
 
 expands to:
@@ -16231,17 +16272,60 @@ expands to:
 Since this change will not affect noweb replacement text without newlines in
 them, inline noweb references are acceptable.
 
+This feature can also be used for management of indentation in exported code snippets.
+
+With:
+
+@example
+#+NAME: if-true
+#+BEGIN_SRC python :exports none
+print('Do things when True')
+#+END_SRC
+
+#+NAME: if-false
+#+BEGIN_SRC python :exports none
+print('Do things when False')
+#+END_SRC
+@end example
+
+this @samp{src} code block:
+
+@example
+#+BEGIN_SRC python :noweb yes :results output
+if True:
+    <<if-true>>
+else:
+    <<if-false>>
+#+END_SRC
+@end example
+
+expands to:
+
+@example
+if True:
+    print('Do things when True')
+else:
+    print('Do things when False')
+@end example
+
+and evaluates to:
+
+@example
+Do things when True
+@end example
+
 @node noweb-ref
 @subsubsection @code{:noweb-ref}
 @cindex @code{:noweb-ref}, src header argument
 
-When expanding ``noweb'' style references, Org concatenates @samp{src} code
-blocks by matching the reference name to either the block name or the
+When expanding Noweb style references, Org concatenates @samp{src} code
+blocks by matching the reference name to either the code block name or the
 @code{:noweb-ref} header argument.
 
 For simple concatenation, set this @code{:noweb-ref} header argument at the
 sub-tree or file level.  In the example Org file shown next, the body of the
-source code in each block is extracted for concatenation to a pure code file.
+source code in each block is extracted for concatenation to a pure code file
+when tangled.
 
 @example
  #+BEGIN_SRC sh :tangle yes :noweb yes :shebang #!/bin/sh
@@ -16301,8 +16385,8 @@ A note of warning: when @code{:cache} is used for a @code{:session}, caching
 may cause unexpected results.
 
 When the caching mechanism tests for any source code changes, it will not
-expand ``noweb'' style references (@pxref{Noweb reference syntax}).  For
-reasons why, see @uref{http://thread.gmane.org/gmane.emacs.orgmode/79046}.
+expand Noweb style references (@pxref{Noweb reference syntax}).  For reasons
+why, see @uref{http://thread.gmane.org/gmane.emacs.orgmode/79046}.
 
 The @code{:cache} header argument can have one of two values: @code{yes} or
 @code{no}.
@@ -16744,38 +16828,80 @@ prints ``2''.  Results show that.
 @cindex syntax, noweb
 @cindex source code, noweb reference
 
-Org supports named blocks in ``noweb'' style syntax.  For ``noweb'' literate
+Org supports named blocks in Noweb style syntax.  For Noweb literate
 programming details, see @uref{http://www.cs.tufts.edu/~nr/noweb/}).
 
 @example
 <<code-block-name>>
 @end example
 
-For the header argument @code{:noweb yes}, Org expands ``noweb'' style
+For the header argument @code{:noweb yes}, Org expands Noweb style references
+in the @samp{src} code block before evaluation.
+
+For the header argument @code{:noweb no}, Org does not expand Noweb style
 references in the @samp{src} code block before evaluation.
 
-For the header argument @code{:noweb no}, Org does not expand ``noweb'' style
-references in the @samp{src} code block before evaluation.
+The default is @code{:noweb no}.  Org defaults to @code{:noweb no} so as not
+to cause errors in languages where Noweb syntax is ambiguous.  Change Org's
+default to @code{:noweb yes} for languages where there is no risk of
+confusion.
 
-The default is @code{:noweb no}.
-
-Org offers a more flexible way to resolve ``noweb'' style references
+Org offers a more flexible way to resolve Noweb style references
 (@pxref{noweb-ref}).
 
-Org can handle naming of @emph{results} block, rather than the body of the
-@samp{src} code block, using ``noweb'' style references.
-
-For ``noweb'' style reference, append parenthesis to the code block name for
-arguments, as shown in this example:
+Org can include the @emph{results} of a code block rather than its body.  To
+that effect, append parentheses, possibly including arguments, to the code
+block name, as show below.
 
 @example
 <<code-block-name(optional arguments)>>
 @end example
 
-Note: Org defaults to @code{:noweb no} so as not to cause errors in languages
-such as @samp{Ruby} where ``noweb'' syntax is equally valid characters.  For
-example, @code{<<arg>>}.  Change Org's default to @code{:noweb yes} for
-languages where there is no risk of confusion.
+Note that when using the above approach to a code block's results, the code
+block name set by @code{#+NAME} keyword is required; the reference set by
+@code{:noweb-ref} will not work.
+
+Here is an example that demonstrates how the exported content changes when
+Noweb style references are used with parentheses versus without.
+
+With:
+
+@example
+#+NAME: some-code
+#+BEGIN_SRC python :var num=0 :results output :exports none
+print(num*10)
+#+END_SRC
+@end example
+
+this code block:
+
+@example
+#+BEGIN_SRC text :noweb yes
+<<some-code>>
+#+END_SRC
+@end example
+
+expands to:
+
+@example
+print(num*10)
+@end example
+
+Below, a similar Noweb style reference is used, but with parentheses, while
+setting a variable @code{num} to 10:
+
+@example
+#+BEGIN_SRC text :noweb yes
+<<some-code(num=10)>>
+#+END_SRC
+@end example
+
+Note that now the expansion contains the @emph{results} of the code block
+@code{some-code}, not the code block itself:
+
+@example
+100
+@end example
 
 For faster tangling of large Org mode files, set
 @code{org-babel-use-quick-and-dirty-noweb-expansion} variable to @code{t}.
@@ -17012,12 +17138,9 @@ structural elements, such as @code{#+BEGIN_SRC} and @code{#+END_SRC}.  Easy
 templates use an expansion mechanism, which is native to Org, in a process
 similar to @file{yasnippet} and other Emacs template expansion packages.
 
-@kbd{@key{<}} @kbd{@key{s}} @kbd{@key{TAB}} completes the @samp{src} code
-block.
+@kbd{<} @kbd{s} @kbd{@key{TAB}} expands to a @samp{src} code block.
 
-@kbd{<} @kbd{l} @kbd{@key{TAB}}
-
-expands to:
+@kbd{<} @kbd{l} @kbd{@key{TAB}} expands to:
 
 #+BEGIN_EXPORT latex
 

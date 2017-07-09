@@ -432,12 +432,18 @@ Some other text
    (equal "test"
 	  (org-test-with-temp-text "#+CALL: test()"
 	    (org-element-property :call (org-element-at-point)))))
-  ;; Parse inside header.
+  ;; Parse inside header.  It may contain paired square brackets.
   (should
    (equal ":results output"
 	  (org-test-with-temp-text "#+CALL: test[:results output]()"
 	    (org-element-property :inside-header (org-element-at-point)))))
-  ;; Parse arguments, which can be nested.
+  (should
+   (equal ":results output, a=table[1:2], b=2"
+	  (org-test-with-temp-text
+	      "#+CALL: test[:results output, a=table[1:2], b=2]()"
+	    (org-element-property :inside-header (org-element-at-point)))))
+  ;; Parse arguments, which can be nested.  However, stop at paired
+  ;; parenthesis, even when, e.g.,end header contains some.
   (should
    (equal "n=4"
 	  (org-test-with-temp-text "#+CALL: test(n=4)"
@@ -445,6 +451,10 @@ Some other text
   (should
    (equal "test()"
 	  (org-test-with-temp-text "#+CALL: test(test())"
+	    (org-element-property :arguments (org-element-at-point)))))
+  (should
+   (equal "a=1"
+	  (org-test-with-temp-text "#+CALL: test(a=1) :post another-call()"
 	    (org-element-property :arguments (org-element-at-point)))))
   ;; Parse end header.
   (should
@@ -1538,9 +1548,15 @@ e^{i\\pi}+1=0
 
 (ert-deftest test-org-element/latex-fragment-parser ()
   "Test `latex-fragment' parser."
+  ;; Basic $...$ test.
   (should
    (eq 'latex-fragment
        (org-test-with-temp-text "$a$"
+	 (org-element-type (org-element-context)))))
+  ;; Test valid characters after $...$ construct.
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$a$a"
 	 (org-element-type (org-element-context)))))
   (should
    (eq 'latex-fragment
@@ -1566,18 +1582,46 @@ e^{i\\pi}+1=0
    (eq 'latex-fragment
        (org-test-with-temp-text "$a$'"
 	 (org-element-type (org-element-context)))))
+  ;; Test forbidden characters inside $...$.
   (should-not
    (eq 'latex-fragment
-       (org-test-with-temp-text "$a$a"
+       (org-test-with-temp-text "$.a$"
 	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$,a$"
+	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$;a$"
+	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$ a$"
+	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$a.$"
+	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$a,$"
+	 (org-element-type (org-element-context)))))
+  (should-not
+   (eq 'latex-fragment
+       (org-test-with-temp-text "$a $"
+	 (org-element-type (org-element-context)))))
+  ;; Test $$...$$.
   (should
    (eq 'latex-fragment
        (org-test-with-temp-text "$$a$$"
 	 (org-element-type (org-element-context)))))
+  ;; Test \(...\).
   (should
    (eq 'latex-fragment
        (org-test-with-temp-text "\\(a\\)"
 	 (org-element-type (org-element-context)))))
+  ;; Test \[...\].
   (should
    (eq 'latex-fragment
        (org-test-with-temp-text "\\[a\\]"
