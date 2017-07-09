@@ -153,17 +153,16 @@ maintainer if not).
 
 **Dependencies**
 
-`markdown-mode` depends on `cl-lib`, which has been bundled with
-GNU Emacs since 24.3.  Users of GNU Emacs 24.1 and 24.2 can install
-`cl-lib` with `package.el`.
+To enable editing of code blocks in indirect buffers using <kbd>C-c </kbd>`,
+you will need to install the [`edit-indirect`][ei] package.
+
+  [ei]: https://github.com/Fanael/edit-indirect/
 
 ## Usage
 
 Keybindings are grouped by prefixes based on their function.  For
-example, the commands for inserting links are grouped under `C-c
-C-a`, where the <kbd>C-a</kbd> is a mnemonic for the HTML `<a>` tag.  In
-other cases, the connection to HTML is not direct.  For example,
-commands dealing with headings begin with <kbd>C-c C-t</kbd> (mnemonic:
+example, the commands for styling text are grouped under <kbd>C-c C-s</kbd>
+and commands dealing with headings begin with <kbd>C-c C-t</kbd> (mnemonic:
 titling).  The primary commands in each group will are described
 below.  You can obtain a list of all keybindings by pressing `C-c
 C-h`.  Movement and shifting commands tend to be associated with
@@ -174,13 +173,17 @@ are grouped under the <kbd>C-c C-c</kbd> prefix.  The most commonly used
 commands are described below.  You can obtain a list of all
 keybindings by pressing <kbd>C-c C-h</kbd>.
 
-  * Hyperlinks: <kbd>C-c C-a</kbd>
+  * Links and Images: <kbd>C-c C-l</kbd> and <kbd>C-c C-i</kbd>
 
-    In this group, <kbd>C-c C-a l</kbd> inserts links, either inline,
-    reference, or plain URLs.  The URL or `[reference]` label, link
-    text, and optional title are entered through a series of
-    interactive prompts.  The type of link is determined by which
-    values are provided:
+    <kbd>C-c C-l</kbd> (`markdown-insert-link`) is a general command for
+    inserting new link markup or editing existing link markup. This
+    is especially useful when markup or URL hiding is enabled, so
+    that URLs can't easily be edited directly.  This command can be
+    used to insert links of any form: either inline links,
+    reference links, or plain URLs in angle brackets.  The URL or
+    `[reference]` label, link text, and optional title are entered
+    through a series of interactive prompts.  The type of link is
+    determined by which values are provided:
 
     *   If both a URL and link text are given, insert an inline link:
         `[text](url)`.
@@ -191,14 +194,27 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     *   If only a URL is given, insert a plain URL link:
         `<url>`.
 
-    If there is an active region, use the text as the default URL,
-    if it seems to be a URL, or link text value otherwise.  The region
+    Similarly, <kbd>C-c C-i</kbd> (`markdown-insert-image`) is a general
+    command for inserting or editing image markup.  As with the link
+    insertion command, through a series interactive prompts you can
+    insert either an inline or reference image:
+
+    *   If both a URL and alt text are given, insert an inline
+        image: `![alt text](url)`.
+    *   If both a `[reference]` label and alt text are given,
+        insert a reference link: `![alt text][reference]`.
+
+    If there is an existing link or image at the point, these
+    command will edit the existing markup rather than inserting new
+    markup.  Otherwise, if there is an active region, these commands
+    use the region as either the default URL (if it seems to be a
+    URL) or link text value otherwise.  In that case, the region
     will be deleted and replaced by the link.
 
-    Note that this function can be used to convert a link from one
-    type to another (inline, reference, or plain URL) by
-    selectively adding or removing properties via the interactive
-    prompts.
+    Note that these functions can be used to convert links and
+    images from one type to another (inline, reference, or plain
+    URL) by selectively adding or removing properties via the
+    interactive prompts.
 
     If a reference label is given that is not yet defined, you
     will be prompted for the URL and optional title and the
@@ -207,74 +223,60 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     added to the end of the reference definition and will be used
     to populate the title attribute when converted to HTML.
 
-    <kbd>C-c C-a f</kbd> inserts a footnote marker at the point, inserts a
-    footnote definition below, and positions the point for
-    inserting the footnote text.  Note that footnotes are an
-    extension to Markdown and are not supported by all processors.
-
-    <kbd>C-c C-a w</kbd> behaves much like the link insertion command
-    and inserts a wiki link of the form `[[WikiLink]]`.  If there
-    is an active region, use the region as the link text.  If the
-    point is at a word, use the word as the link text.  If there is
-    no active region and the point is not at word, simply insert
-    link markup.  Note that wiki links are an extension to Markdown
-    and are not supported by all processors.
-
-  * Images: <kbd>C-c C-i</kbd>
-
-    <kbd>C-c C-i i</kbd> inserts markup for an inline image, using the
-    active region or the word at point, if any, as the alt text.
-    <kbd>C-c C-i I</kbd> behaves similarly and inserts a reference-style
-    image.
-
     Local images associated with image links may be displayed
     inline in the buffer by pressing <kbd>C-c C-x C-i</kbd>
     (`markdown-toggle-inline-images`). This is a toggle command, so
     pressing this once again will remove inline images.
 
-  * Styles: <kbd>C-c C-s</kbd>
+  * Text Styles: <kbd>C-c C-s</kbd>
 
-    <kbd>C-c C-s e</kbd> inserts markup to make a region or word italic (<kbd>e</kbd>
-    for `<em>` or emphasis).  If there is an active region, make
-    the region italic.  If the point is at a non-italic word, make
-    the word italic.  If the point is at an italic word or phrase,
-    remove the italic markup.  Otherwise, simply insert italic
-    delimiters and place the cursor in between them.  Similarly,
-    use <kbd>C-c C-s s</kbd> for bold (`<strong>`), <kbd>C-c C-s c</kbd> for
-    inline code (`<code>`), and <kbd>C-c C-s k</kbd> for inserting `<kbd>`
-    tags.
+    <kbd>C-c C-s i</kbd> inserts markup to make a region or word italic. If
+    there is an active region, make the region italic.  If the point
+    is at a non-italic word, make the word italic.  If the point is
+    at an italic word or phrase, remove the italic markup.
+    Otherwise, simply insert italic delimiters and place the cursor
+    in between them.  Similarly, use <kbd>C-c C-s b</kbd> for bold, <kbd>C-c C-s c</kbd>
+    for inline code, and <kbd>C-c C-s k</kbd> for inserting `<kbd>` tags.
 
-    <kbd>C-c C-s b</kbd> inserts a blockquote using the active region, if any,
-    or starts a new blockquote.  <kbd>C-c C-s C-b</kbd> is a variation which
-    always operates on the region, regardless of whether it is
-    active or not.  The appropriate amount of indentation, if any,
-    is calculated automatically given the surrounding context, but
-    may be adjusted later using the region indentation commands.
+    <kbd>C-c C-s q</kbd> inserts a blockquote using the active region, if
+    any, or starts a new blockquote. <kbd>C-c C-s Q</kbd> is a variation
+    which always operates on the region, regardless of whether it
+    is active or not (i.e., when `transient-mark-mode` is off but
+    the mark is set).  The appropriate amount of indentation, if
+    any, is calculated automatically given the surrounding context,
+    but may be adjusted later using the region indentation
+    commands.
 
     <kbd>C-c C-s p</kbd> behaves similarly for inserting preformatted code
-    blocks, with <kbd>C-c C-s C-p</kbd> being the region-only counterpart.
+    blocks (with <kbd>C-c C-s P</kbd> being the region-only counterpart)
+    and <kbd>C-c C-s C</kbd> inserts a GFM style backquote fenced code block.
 
-  * Headings: <kbd>C-c C-t</kbd>
+  * Headings: <kbd>C-c C-s</kbd>
 
-    All heading insertion commands use the text in the active
-    region, if any, as the heading text.  Otherwise, if the current
-    line is not blank, they use the text on the current line.
-    Finally, the setext commands will prompt for heading text if
-    there is no active region and the current line is blank.
+    To insert or replace headings, there are two options.  You can
+    insert a specific level heading directly or you can have
+    `markdown-mode` determine the level for you based on the previous
+    heading.  As with the other markup commands, the heading
+    insertion commands use the text in the active region, if any,
+    as the heading text.  Otherwise, if the current line is not
+    blank, they use the text on the current line.  Finally, the
+    setext commands will prompt for heading text if there is no
+    active region and the current line is blank.
 
-    <kbd>C-c C-t h</kbd> inserts a heading with automatically chosen type and
-    level (both determined by the previous heading).  <kbd>C-c C-t H</kbd>
+    <kbd>C-c C-s h</kbd> inserts a heading with automatically chosen type and
+    level (both determined by the previous heading).  <kbd>C-c C-s H</kbd>
     behaves similarly, but uses setext (underlined) headings when
     possible, still calculating the level automatically.
     In cases where the automatically-determined level is not what
     you intended, the level can be quickly promoted or demoted
     (as described below).  Alternatively, a <kbd>C-u</kbd> prefix can be
-    given to insert a heading promoted by one level or a <kbd>C-u C-u</kbd>
-    prefix can be given to insert a heading demoted by one level.
+    given to insert a heading _promoted_ (lower number) by one
+    level or a <kbd>C-u C-u</kbd> prefix can be given to insert a heading
+    demoted (higher number) by one level.
 
-    To insert a heading of a specific level and type, use <kbd>C-c C-t 1</kbd>
-    through <kbd>C-c C-t 6</kbd> for atx (hash mark) headings and <kbd>C-c C-t !</kbd> or
-    <kbd>C-c C-t @</kbd> for setext headings of level one or two, respectively.
+    To insert a heading of a specific level and type, use <kbd>C-c C-s 1</kbd>
+    through <kbd>C-c C-s 6</kbd> for atx (hash mark) headings and <kbd>C-c C-s !</kbd> or
+    <kbd>C-c C-s @</kbd> for setext headings of level one or two, respectively.
     Note that <kbd>!</kbd> is <kbd>S-1</kbd> and <kbd>@</kbd> is <kbd>S-2</kbd>.
 
     If the point is at a heading, these commands will replace the
@@ -283,13 +285,29 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     press <kbd>C-c C-k</kbd> to kill the heading and press <kbd>C-y</kbd> to yank the
     heading text back into the buffer.
 
-  * Horizontal Rules: <kbd>C-c -</kbd>
+  * Horizontal Rules: <kbd>C-c C-s -</kbd>
 
-    <kbd>C-c -</kbd> inserts a horizontal rule.  By default, insert the
+    <kbd>C-c C-s -</kbd> inserts a horizontal rule.  By default, insert the
     first string in the list `markdown-hr-strings` (the most
     prominent rule).  With a <kbd>C-u</kbd> prefix, insert the last string.
     With a numeric prefix <kbd>N</kbd>, insert the string in position <kbd>N</kbd>
     (counting from 1).
+
+  * Footnotes: <kbd>C-c C-s f</kbd>
+
+    <kbd>C-c C-s f</kbd> inserts a footnote marker at the point, inserts a
+    footnote definition below, and positions the point for
+    inserting the footnote text.  Note that footnotes are an
+    extension to Markdown and are not supported by all processors.
+
+  * Wiki Links: <kbd>C-c C-s w</kbd>
+
+    <kbd>C-c C-s w</kbd> inserts a wiki link of the form `[[WikiLink]]`.  If
+    there is an active region, use the region as the link text.  If the
+    point is at a word, use the word as the link text.  If there is
+    no active region and the point is not at word, simply insert
+    link markup.  Note that wiki links are an extension to Markdown
+    and are not supported by all processors.
 
   * Markdown and Maintenance Commands: <kbd>C-c C-c</kbd>
 
@@ -344,15 +362,18 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     or in the other window with the <kbd>C-u</kbd> prefix).  Use <kbd>M-p</kbd> and
     <kbd>M-n</kbd> to quickly jump to the previous or next link of any type.
 
-  * Jumping: <kbd>C-c C-l</kbd>
+  * Doing Things: <kbd>C-c C-d</kbd>
 
-    Use <kbd>C-c C-l</kbd> to jump from the object at point to its counterpart
-    elsewhere in the text, when possible.  Jumps between reference
-    links and definitions; between footnote markers and footnote
-    text.  If more than one link uses the same reference name, a
-    new buffer will be created containing clickable buttons for jumping
-    to each link.  You may press <kbd>TAB</kbd> or <kbd>S-TAB</kbd> to jump between
-    buttons in this window.
+    Use <kbd>C-c C-d</kbd> to do something sensible with the object at the point:
+
+      - Jumps between reference links and reference definitions.
+        If more than one link uses the same reference label, a
+        window will be shown containing clickable buttons for
+        jumping to each link.  Pressing <kbd>TAB</kbd> or <kbd>S-TAB</kbd> cycles
+        between buttons in this window.
+      - Jumps between footnote markers and footnote text.
+      - Toggles the completion status of GFM task list items
+        (checkboxes).
 
   * Promotion and Demotion: <kbd>C-c C--</kbd> and <kbd>C-c C-=</kbd>
 
@@ -364,7 +385,7 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     moving backward or forward through the list of rule strings in
     `markdown-hr-strings`.  For bold and italic text, promotion and
     demotion means changing the markup from underscores to asterisks.
-    Press <kbd>C-c C--</kbd> or <kbd>M-LEFT</kbd> to promote the element at the point
+    Press <kbd>C-c C--</kbd> or <kbd>C-c <left></kbd> to promote the element at the point
     if possible.
 
     To remember these commands, note that <kbd>-</kbd> is for decreasing the
@@ -383,26 +404,33 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     completes the markup at the point, if it is determined to be
     incomplete.
 
-  * Editing Lists: <kbd>M-RET</kbd>, <kbd>M-UP</kbd>, <kbd>M-DOWN</kbd>, <kbd>M-LEFT</kbd>, and <kbd>M-RIGHT</kbd>
+  * Editing Lists: <kbd>M-RET</kbd>, <kbd>C-c <up></kbd>, <kbd>C-c <down></kbd>, <kbd>C-c <left></kbd>, and <kbd>C-c <right></kbd>
 
     New list items can be inserted with <kbd>M-RET</kbd> or <kbd>C-c C-j</kbd>.  This
     command determines the appropriate marker (one of the possible
     unordered list markers or the next number in sequence for an
     ordered list) and indentation level by examining nearby list
     items.  If there is no list before or after the point, start a
-    new list.  Prefix this command by <kbd>C-u</kbd> to decrease the
-    indentation by one level.  Prefix this command by <kbd>C-u C-u</kbd> to
-    increase the indentation by one level.
+    new list.  As with heading insertion, you may prefix this
+    command by <kbd>C-u</kbd> to decrease the indentation by one level.
+    Prefix this command by <kbd>C-u C-u</kbd> to increase the indentation by
+    one level.
 
-    Existing list items can be moved up or down with <kbd>M-UP</kbd> or
-    <kbd>M-DOWN</kbd> and indented or exdented with <kbd>M-RIGHT</kbd> or <kbd>M-LEFT</kbd>.
+    Existing list items (and their nested sub-items) can be moved
+    up or down with <kbd>C-c <up></kbd> or <kbd>C-c <down></kbd> and indented or
+    outdented with <kbd>C-c <right></kbd> or <kbd>C-c <left></kbd>.
 
-  * Editing Subtrees: <kbd>M-S-UP</kbd>, <kbd>M-S-DOWN</kbd>, <kbd>M-S-LEFT</kbd>, and <kbd>M-S-RIGHT</kbd>
+  * Editing Subtrees: <kbd>C-c <up></kbd>, <kbd>C-c <down></kbd>, <kbd>C-c <left></kbd>, and <kbd>C-c <right></kbd>
 
     Entire subtrees of ATX headings can be promoted and demoted
-    with <kbd>M-S-LEFT</kbd> and <kbd>M-S-RIGHT</kbd>, which mirror the bindings
-    for promotion and demotion of list items. Similarly, subtrees
-    can be moved up and down with <kbd>M-S-UP</kbd> and <kbd>M-S-DOWN</kbd>.
+    with <kbd>C-c <left></kbd> and <kbd>C-c <right></kbd>, which are the same keybindings
+    used for promotion and demotion of list items.   If the point is in
+    a list item, the operate on the list item.  Otherwise, they operate
+    on the current heading subtree.  Similarly, subtrees can be
+    moved up and down with <kbd>C-c <up></kbd> and <kbd>C-c <down></kbd>.
+
+    These commands currently do not work properly if there are
+    Setext headings in the affected region.
 
     Please note the following "boundary" behavior for promotion and
     demotion.  Any level-six headings will not be demoted further
@@ -413,9 +441,9 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
 
   * Shifting the Region: <kbd>C-c <</kbd> and <kbd>C-c ></kbd>
 
-    Text in the region can be indented or exdented as a group using
+    Text in the region can be indented or outdented as a group using
     <kbd>C-c ></kbd> to indent to the next indentation point (calculated in
-    the current context), and <kbd>C-c <</kbd> to exdent to the previous
+    the current context), and <kbd>C-c <</kbd> to outdent to the previous
     indentation point.  These keybindings are the same as those for
     similar commands in `python-mode`.
 
@@ -432,25 +460,35 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
 
   * Outline Navigation: <kbd>C-c C-n</kbd>, <kbd>C-c C-p</kbd>, <kbd>C-c C-f</kbd>, <kbd>C-c C-b</kbd>, and <kbd>C-c C-u</kbd>
 
-    Navigation between headings is possible using `outline-mode`.
-    Use <kbd>C-c C-n</kbd> and <kbd>C-c C-p</kbd> to move between the next and previous
-    visible headings.  Similarly, <kbd>C-c C-f</kbd> and <kbd>C-c C-b</kbd> move to the
-    next and previous visible headings at the same level as the one
-    at the point.  Finally, <kbd>C-c C-u</kbd> will move up to a lower-level
-    (higher precedence) visible heading.
+    These keys are used for hierarchical navigation in lists and
+    headings.  When the point is in a list, they move between list
+    items.  Otherwise, they move between headings.  Use <kbd>C-c C-n</kbd> and
+    <kbd>C-c C-p</kbd> to move between the next and previous visible
+    headings or list items of any level.  Similarly, <kbd>C-c C-f</kbd> and
+    <kbd>C-c C-b</kbd> move to the next and previous visible headings or
+    list items at the same level as the one at the point.  Finally,
+    <kbd>C-c C-u</kbd> will move up to the parent heading or list item.
 
-  * Movement by Markdown Blocks: <kbd>M-{</kbd> and <kbd>M-}</kbd>
+  * Movement by Markdown paragraph: <kbd>M-{</kbd>, <kbd>M-}</kbd>, and <kbd>M-h</kbd>
 
-    These keys are usually bound to `forward-paragraph` and
-    `backward-paragraph`, but those built-in Emacs functions are
-    based on simple regular expressions and can fail in Markdown.
-    Blocks in `markdown-mode` are code blocks, blockquotes, list
-    items (which may contain other blocks), headings, horizontal
-    rules, or plain text paragraphs separated by whitespace.
-    Instead, they are bound to `markdown-forward-block` and
-    `markdown-backward-block`.  To mark or narrow to a block, you
-    can use <kbd>M-h</kbd> (`markdown-mark-block`) and <kbd>C-x n b</kbd>
-    (`markdown-narrow-to-block`).
+    Paragraphs in `markdown-mode` are regular paragraphs,
+    paragraphs inside blockquotes, individual list items, headings,
+    etc.  These keys are usually bound to `forward-paragraph` and
+    `backward-paragraph`, but the built-in Emacs functions are
+    based on simple regular expressions that fail in Markdown
+    files.  Instead, they are bound to `markdown-forward-paragraph`
+    and `markdown-backward-paragraph`.  To mark a paragraph,
+    you can use <kbd>M-h</kbd> (`markdown-mark-paragraph`).
+
+  * Movement by Markdown block: <kbd>C-M-{</kbd>, <kbd>C-M-}</kbd>, and <kbd>C-c M-h</kbd>
+
+    Markdown blocks are regular paragraphs in many cases, but
+    contain many paragraphs in other cases: blocks are considered
+    to be entire lists, entire code blocks, and entire blockquotes.
+    To move backward one block use <kbd>C-M-{</kbd>
+    (`markdown-beginning-block`) and to move forward use <kbd>C-M-}</kbd>
+    (`markdown-end-of-block`).  To mark a block, use <kbd>C-c M-h</kbd>
+    (`markdown-mark-block`).
 
   * Movement by Defuns: <kbd>C-M-a</kbd>, <kbd>C-M-e</kbd>, and <kbd>C-M-h</kbd>
 
@@ -461,29 +499,17 @@ keybindings by pressing <kbd>C-c C-h</kbd>.
     to the end of the current or following defun, and <kbd>C-M-h</kbd> will
     put the region around the entire defun.
 
-  * Movement by Plain Text Blocks: <kbd>C-M-{</kbd>, <kbd>C-M-}</kbd>, and <kbd>C-c M-h</kbd>
-
-    While the block and defun movement commands respect Markdown
-    syntax, these commands simply move over whitespace-separated
-    plain text blocks without regard for the context.  You can use
-    these commands to move over entire lists, whitespace separated
-    segments of code, etc.  To move backward use <kbd>C-M-{</kbd>
-    (`markdown-beginning-of-text-block`) and to move forward use
-    <kbd>C-M-}</kbd> (`markdown-end-of-text-block`).  To mark a plain text
-    block, use <kbd>C-c M-h</kbd> (`markdown-mark-text-block`).
-
   * Miscellaneous Commands:
 
-    When the `[edit-indirect](https://github.com/Fanael/edit-indirect/)`
-    package is installed, <kbd>C-c '</kbd> (`markdown-edit-code-block`)
-    can be used to edit a code block in an indirect buffer in the
-    native major mode.  Press <kbd>C-c C-c</kbd> to commit changes
-    and return or <kbd>C-c C-k</kbd> to cancel.
+    When the [`edit-indirect`][ei] package is installed, <kbd>C-c </kbd>`
+    (`markdown-edit-code-block`) can be used to edit a code block
+    in an indirect buffer in the native major mode. Press <kbd>C-c C-c</kbd>
+    to commit changes and return or <kbd>C-c C-k</kbd> to cancel.
 
 As noted, many of the commands above behave differently depending
 on whether Transient Mark mode is enabled or not.  When it makes
 sense, if Transient Mark mode is on and the region is active, the
-command applies to the text in the region (e.g., <kbd>C-c C-s s</kbd> makes the
+command applies to the text in the region (e.g., <kbd>C-c C-s b</kbd> makes the
 region bold).  For users who prefer to work outside of Transient
 Mark mode, since Emacs 22 it can be enabled temporarily by pressing
 <kbd>C-SPC C-SPC</kbd>.  When this is not the case, many commands then
@@ -492,15 +518,15 @@ proceed to look work with the word or line at the point.
 When applicable, commands that specifically act on the region even
 outside of Transient Mark mode have the same keybinding as their
 standard counterpart, but the letter is uppercase.  For example,
-`markdown-insert-blockquote` is bound to <kbd>C-c C-s b</kbd> and only acts on
+`markdown-insert-blockquote` is bound to <kbd>C-c C-s q</kbd> and only acts on
 the region in Transient Mark mode while `markdown-blockquote-region`
-is bound to <kbd>C-c C-s B</kbd> and always applies to the region (when nonempty).
+is bound to <kbd>C-c C-s Q</kbd> and always applies to the region (when nonempty).
 
 Note that these region-specific functions are useful in many
 cases where it may not be obvious.  For example, yanking text from
 the kill ring sets the mark at the beginning of the yanked text
 and moves the point to the end.  Therefore, the (inactive) region
-contains the yanked text.  So, <kbd>C-y</kbd> followed by <kbd>C-c C-s C-b</kbd> will
+contains the yanked text.  So, <kbd>C-y</kbd> followed by <kbd>C-c C-s Q</kbd> will
 yank text and turn it into a blockquote.
 
 markdown-mode attempts to be flexible in how it handles
@@ -509,7 +535,7 @@ through several possible indentation levels corresponding to things
 you might have in mind when you press <kbd>RET</kbd> at the end of a line or
 <kbd>TAB</kbd>.  For example, you may want to start a new list item,
 continue a list item with hanging indentation, indent for a nested
-pre block, and so on.  Exdention is handled similarly when backspace
+pre block, and so on.  Outdenting is handled similarly when backspace
 is pressed at the beginning of the non-whitespace portion of a line.
 
 markdown-mode supports outline-minor-mode as well as org-mode-style
@@ -601,10 +627,11 @@ provides an interface to all of the possible customizations:
   * `markdown-uri-types` - a list of protocol schemes (e.g., "http")
     for URIs that `markdown-mode` should highlight.
 
-  * `markdown-enable-math` - syntax highlighting for LaTeX
-    fragments (default: `nil`).  Set this to `t` to turn on math
-    support by default.  Math support can be enabled, disabled, or
-    toggled later using the function `markdown-toggle-math`."
+  * `markdown-enable-math` - font lock for inline and display LaTeX
+    math expressions (default: `nil`).  Set this to `t` to turn on
+    math support by default.  Math support can be toggled
+    interactively later using <kbd>C-c C-x C-e</kbd>
+    (`markdown-toggle-math`).
 
   * `markdown-css-paths` - CSS files to link to in XHTML output
     (default: `nil`).
@@ -684,8 +711,8 @@ provides an interface to all of the possible customizations:
     `markdown-mode` as well as `gfm-mode`.
 
   * `markdown-hide-urls` - Determines whether URL and reference
-    labels are hidden for inline and reference links (default: `t`).
-    By default, inline links will appear in the buffer as
+    labels are hidden for inline and reference links (default: `nil`).
+    When non-nil, inline links will appear in the buffer as
     `[link](∞)` instead of
     `[link](http://perhaps.a/very/long/url/)`.  To change the
     placeholder (composition) character used, set the variable
@@ -805,23 +832,22 @@ by `markdown-mode` and `gfm-mode` as described below.
 * **Fenced code blocks:** Code blocks quoted with backquotes, with
   optional programming language keywords, are highlighted in
   both `markdown-mode` and `gfm-mode`.  They can be inserted with
-  <kbd>C-c C-s P</kbd>.  If there is an active region, the text in the
+  <kbd>C-c C-s C</kbd>.  If there is an active region, the text in the
   region will be placed inside the code block.  You will be
   prompted for the name of the language, but may press enter to
   continue without naming a language.
 
 * **Strikethrough:** Strikethrough text is supported in both
   `markdown-mode` and `gfm-mode`.  It can be inserted (and toggled)
-  using <kbd>C-c C-s d</kbd>.  Following the mnemonics for the other style
-  keybindings, the letter <kbd>d</kbd> coincides with the HTML tag `<del>`.
+  using <kbd>C-c C-s s</kbd>.
 
 * **Task lists:** GFM task lists will be rendered as checkboxes
   (Emacs buttons) in both `markdown-mode` and `gfm-mode` when
   `markdown-make-gfm-checkboxes-buttons` is set to a non-nil value
   (and it is set to t by default).  These checkboxes can be
   toggled by clicking `mouse-1`, pressing <kbd>RET</kbd> over the button,
-  or by pressing <kbd>C-c C-x C-x</kbd> with the point anywhere in the task
-  list item.
+  or by pressing <kbd>C-c C-d</kbd> (`markdown-do`) with the point anywhere
+  in the task list item.
 
 * **Wiki links:** Generic wiki links are supported in
   `markdown-mode`, but in `gfm-mode` specifically they will be
@@ -891,7 +917,7 @@ first version was released on May 24, 2007.
   * 2013-01-25: [Version 1.9][]
   * 2013-03-24: [Version 2.0][]
   * 2016-01-09: [Version 2.1][]
-  * 2016-05-26: [Version 2.2][]
+  * 2017-05-26: [Version 2.2][]
 
 [Version 1.1]: http://jblevins.org/projects/markdown-mode/rev-1-1
 [Version 1.2]: http://jblevins.org/projects/markdown-mode/rev-1-2
