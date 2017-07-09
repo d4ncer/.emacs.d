@@ -447,6 +447,20 @@ be."
     ("(foo |bar baz)" "(foo) |(bar) (baz)")
     ("\"foo |bar baz\"" "\"foo\" |\"bar\" \"baz\""))))
 
+(sp-test-command sp-extract-before-sexp
+  ((nil
+    ("(foo\n |bar\n baz\n )" "|bar\n(foo\n baz\n )")
+    ("(foo\n |bar\n baz)" "|bar\n(foo\n baz)")
+    ("(foo\n bar\n |baz\n )" "|baz\n(foo\n bar\n )")
+    ("(foo\n bar\n |baz)" "|baz\n(foo\n bar)"))))
+
+(sp-test-command sp-extract-after-sexp
+  ((nil
+    ("(foo\n |bar\n baz\n )" "(foo\n baz\n )\nbar|")
+    ("(foo\n |bar\n baz)" "(foo\n baz)\nbar|")
+    ("(foo\n bar\n |baz\n )" "(foo\n bar\n )\nbaz|")
+    ("(foo\n bar\n |baz)" "(foo\n bar)\nbaz|"))))
+
 (sp-test-command sp-join-sexp
   ((nil
     ("(foo bar) |(baz)" "(foo bar |baz)")
@@ -594,6 +608,67 @@ be."
     ("\\{foo\\}|" "\\{foo|\\}")
     ("\"foo\\\\\"|" "\"foo\\\\|\""))))
 
+(ert-deftest sp-test-command-sp-backward-delete-char-hungry-delete-mode ()
+  "In `hungry-delete-mode' we should kill all whitespace."
+  (sp-test-with-temp-elisp-buffer "(foo   )   |"
+    (require 'hungry-delete)
+    (hungry-delete-mode 1)
+    (sp-backward-delete-char)
+    (sp-buffer-equals "(foo   )|")
+    (sp-backward-delete-char)
+    (sp-buffer-equals "(foo   |)")
+    (sp-backward-delete-char)
+    (sp-buffer-equals "(foo|)")))
+
+(defun sp-test--sp-backward-delete-char-textmode (initial expected &optional n)
+  (setq n (or n 1))
+  (sp-test-with-temp-buffer initial
+      (text-mode)
+    (sp-backward-delete-char n)
+    (sp-buffer-equals expected)))
+
+(ert-deftest sp-test-command-sp-backward-delete-char-textmode ()
+  (let ((sp-pairs '((t . ((:open "\"" :close "\"" :actions (insert wrap autoskip navigate))
+                          (:open "'" :close "'" :actions (insert wrap autoskip navigate)))))))
+    (sp-test--sp-backward-delete-char-textmode "foo \"it'| OK\" baz" "foo \"it| OK\" baz")
+    (sp-test--sp-backward-delete-char-textmode "foo \"|OK\" baz" "foo \"|OK\" baz")
+    (sp-test--sp-backward-delete-char-textmode "foo \"it's OK\"| baz" "foo \"it's OK|\" baz")
+    (sp-test--sp-backward-delete-char-textmode "\"this\" doesn'|" "\"this\" doesn|")
+    (sp-test--sp-backward-delete-char-textmode "\"don't\"|" "|" 7)))
+
+(sp-test-command sp-delete-char
+  ((nil
+    ("|[foo]" "[|foo]")
+    ("|\\{foo\\}" "\\{|foo\\}")
+    ("|\"foo\\\\\"" "\"|foo\\\\\""))))
+
+(ert-deftest sp-test-command-sp-delete-char-hungry-delete-mode ()
+  "In `hungry-delete-mode' we should kill all whitespace."
+  (sp-test-with-temp-elisp-buffer "|   (   foo)"
+    (require 'hungry-delete)
+    (hungry-delete-mode 1)
+    (sp-delete-char)
+    (sp-buffer-equals "|(   foo)")
+    (sp-delete-char)
+    (sp-buffer-equals "(|   foo)")
+    (sp-delete-char)
+    (sp-buffer-equals "(|foo)")))
+
+(defun sp-test--sp-delete-char-textmode (initial expected)
+  (sp-test-with-temp-buffer initial
+      (text-mode)
+    (sp-delete-char)
+    (sp-buffer-equals expected)))
+
+(ert-deftest sp-test-command-sp-delete-char-textmode ()
+  (let ((sp-pairs '((t . ((:open "\"" :close "\"" :actions (insert wrap autoskip navigate))
+                          (:open "'" :close "'" :actions (insert wrap autoskip navigate)))))))
+    (sp-test--sp-delete-char-textmode "foo \"it|' OK\" baz" "foo \"it| OK\" baz")
+    (sp-test--sp-delete-char-textmode "foo \"OK|\" baz" "foo \"OK|\" baz")
+    (sp-test--sp-delete-char-textmode "foo |\"it's OK\" baz" "foo \"|it's OK\" baz")
+    (sp-test--sp-delete-char-textmode "foo|'s \"baz bar\" aaa" "foo|s \"baz bar\" aaa")
+    ))
+
 (sp-test-command sp-kill-whole-line
   ((nil
     ("(progn (some |long sexp))" "|")
@@ -705,6 +780,21 @@ be."
      (call-interactively 'sp-mark-sexp)
      (call-interactively 'sp-mark-sexp))
    :type 'user-error))
+
+(ert-deftest sp-test-command-sp-convolute-sexp-inside-symbol ()
+  "Calling `sp-convolute-sexp' with point inside of symbol moves
+point to end of symbol before convolving."
+  (sp-test-with-temp-elisp-buffer "(foo (bar b|az))"
+    (call-interactively #'sp-convolute-sexp)
+    (sp-buffer-equals "(bar baz (foo|))")))
+
+(ert-deftest sp-test-command-sp-convolute-sexp-whitespace ()
+  "Calling `sp-convolute-sexp' eliminates extra whitespace.
+
+This is the behavior of `paredit-convolute-sexp'."
+  (sp-test-with-temp-elisp-buffer "(foo (bar  |  baz))"
+    (call-interactively #'sp-convolute-sexp)
+    (sp-buffer-equals "(bar (foo |baz))")))
 
 (ert-deftest sp-test-yank-after-multiple-word-kill ()
   "When we `sp-kill-word' multiple times in a row, we should
