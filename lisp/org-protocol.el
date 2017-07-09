@@ -194,7 +194,14 @@ Example:
           :working-suffix \".org\"
           :base-url \"http://localhost/org/\"
           :working-directory \"/home/user/org/\"
-          :rewrites ((\"org/?$\" . \"index.php\")))))
+          :rewrites ((\"org/?$\" . \"index.php\")))
+         (\"Hugo based blog\"
+          :base-url \"https://www.site.com/\"
+          :working-directory \"~/site/content/post/\"
+          :online-suffix \".html\"
+          :working-suffix \".md\"
+          :rewrites ((\"\\(https://site.com/[0-9]+/[0-9]+/[0-9]+/\\)\" . \".md\")))))
+
 
    The last line tells `org-protocol-open-source' to open
    /home/user/org/index.php, if the URL cannot be mapped to an existing
@@ -520,7 +527,9 @@ The location for a browser's bookmark should look like this:
   ;; As we enter this function for a match on our protocol, the return value
   ;; defaults to nil.
   (let ((result nil)
-        (f (plist-get (org-protocol-parse-parameters fname nil '(:url)) :url)))
+	(f (org-protocol-sanitize-uri
+	    (plist-get (org-protocol-parse-parameters fname nil '(:url))
+		       :url))))
     (catch 'result
       (dolist (prolist org-protocol-project-alist)
         (let* ((base-url (plist-get (cdr prolist) :base-url))
@@ -554,8 +563,12 @@ The location for a browser's bookmark should look like this:
 		      ;; Try to match a rewritten URL and map it to
 		      ;; a real file.  Compare redirects without
 		      ;; suffix.
-		      (when (string-match-p (car rewrite) f2)
-			(throw 'result (concat wdir (cdr rewrite))))))))
+		      (when (string-match (car rewrite) f1)
+			(let ((replacement
+			       (concat (directory-file-name
+					(replace-match "" nil nil f1 1))
+				       (cdr rewrite))))
+			  (throw 'result (concat wdir replacement))))))))
 	      ;; -- end of redirects --
 
               (if (file-readable-p the-file)

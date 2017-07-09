@@ -2285,7 +2285,7 @@ The following commands are available:
 (org-defkey org-agenda-mode-map "!" 'org-agenda-toggle-deadlines)
 (org-defkey org-agenda-mode-map "G" 'org-agenda-toggle-time-grid)
 (org-defkey org-agenda-mode-map "r" 'org-agenda-redo)
-(org-defkey org-agenda-mode-map "g" (lambda () (interactive) (org-agenda-redo t)))
+(org-defkey org-agenda-mode-map "g" 'org-agenda-redo-all)
 (org-defkey org-agenda-mode-map "e" 'org-agenda-set-effort)
 (org-defkey org-agenda-mode-map "\C-c\C-xe" 'org-agenda-set-effort)
 (org-defkey org-agenda-mode-map "\C-c\C-x\C-e"
@@ -2350,6 +2350,7 @@ The following commands are available:
 (org-defkey org-agenda-mode-map "<" 'org-agenda-filter-by-category)
 (org-defkey org-agenda-mode-map "^" 'org-agenda-filter-by-top-headline)
 (org-defkey org-agenda-mode-map ";" 'org-timer-set-timer)
+(org-defkey org-agenda-mode-map "\C-c\C-x_" 'org-timer-stop)
 (define-key org-agenda-mode-map "?" 'org-agenda-show-the-flagging-note)
 (org-defkey org-agenda-mode-map "\C-c\C-x\C-mg"    'org-mobile-pull)
 (org-defkey org-agenda-mode-map "\C-c\C-x\C-mp"    'org-mobile-push)
@@ -6263,8 +6264,26 @@ scheduled items with an hour specification like [h]h:mm."
 	      (end-time (match-string 2)))
 	  (setq s1 (match-string 1)
 		s2 (match-string 2)
-		d1 (time-to-days (org-time-string-to-time s1 (current-buffer) pos))
-		d2 (time-to-days (org-time-string-to-time s2 (current-buffer) pos)))
+		d1 (time-to-days
+		    (condition-case err
+			(org-time-string-to-time s1)
+		      (error
+		       (error
+			"Bad timestamp %S at %d in buffer %S\nError was: %s"
+			s1
+			pos
+			(current-buffer)
+			(error-message-string err)))))
+		d2 (time-to-days
+		    (condition-case err
+			(org-time-string-to-time s2)
+		      (error
+		       (error
+			"Bad timestamp %S at %d in buffer %S\nError was: %s"
+			s2
+			pos
+			(current-buffer)
+			(error-message-string err))))))
 	  (if (and (> (- d0 d1) -1) (> (- d2 d0) -1))
 	      ;; Only allow days between the limits, because the normal
 	      ;; date stamps will catch the limits.
@@ -6837,11 +6856,16 @@ The optional argument TYPE tells the agenda type."
 	   (list 'face (org-get-todo-face (match-string 2 x)))
 	   x)
 	  (when (match-end 1)
-	    (setq x (concat (substring x 0 (match-end 1))
-			    (format org-agenda-todo-keyword-format
-				    (match-string 2 x))
-			    (org-add-props " " (text-properties-at 0 x))
-			    (substring x (match-end 3)))))))
+	    (setq x
+		  (concat
+		   (substring x 0 (match-end 1))
+		   (format org-agenda-todo-keyword-format
+			   (match-string 2 x))
+		   ;; Remove `display' property as the icon could leak
+		   ;; on the white space.
+		   (org-add-props " " (org-plist-delete (text-properties-at 0 x)
+							'display))
+		   (substring x (match-end 3)))))))
       x)))
 
 (defsubst org-cmp-values (a b property)
@@ -7279,6 +7303,17 @@ in the agenda."
     (and cols (called-interactively-p 'any) (org-agenda-columns))
     (org-goto-line line)
     (recenter window-line)))
+
+(defun org-agenda-redo-all (&optional exhaustive)
+  "Rebuild all agenda views in the current buffer.
+With a prefix argument, do so in all agenda buffers."
+  (interactive "P")
+  (if exhaustive
+      (dolist (buffer (buffer-list))
+        (with-current-buffer buffer
+          (when (derived-mode-p 'org-agenda-mode)
+            (org-agenda-redo t))))
+    (org-agenda-redo t)))
 
 (defvar org-global-tags-completion-table nil)
 (defvar org-agenda-filter-form nil)
