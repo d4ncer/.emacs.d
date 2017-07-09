@@ -4,12 +4,57 @@
 
 *   **Breaking changes:**
 
+    -   `markdown-mode` now requires Emacs 24.3 or later.
+    -   Markup insertion and replacement keybindings under <kbd>C-c
+        C-s</kbd> (_s_ for style) have been revised to make them
+        easier to remember.  Now, when the prefix <kbd>C-c C-s</kbd>
+        is pressed, a short minibuffer help prompt is presented as a
+        reminder of a few of the most frequently used keys.  The major
+        changes are that bold is now inserted with <kbd>b</kbd>
+        (previously <kbd>s</kbd>) and italic is now <kbd>i</kbd>
+        (previously <kbd>e</kbd>).  As a result, blockquote is now
+        <kbd>q</kbd> (previously <kbd>b</kbd>) and strikethrough
+        markup is inserted with <kbd>s</kbd> (previously
+        <kbd>d</kbd>).  Press <kbd>C-c C-s C-h</kbd> for a complete
+        list of markup insertion keybindings.  Heading insertion
+        commands are also now under <kbd>C-c C-s</kbd>.
+    -   Link insertion and editing has been consolidated into one
+        command, `markdown-insert-link`, bound to <kbd>C-c C-l</kbd>.
+        As such, the previous separate link insertion keybindings have
+        been removed: <kbd>C-c C-a l</kbd>, <kbd>C-c C-a L</kbd>,
+        <kbd>C-c C-a r</kbd>, and <kbd>C-c C-a u</kbd>.
+    -   Image insertion and editing has been consolidated into one
+        command, `markdown-insert-image`, bound to <kbd>C-c C-i</kbd>.
+        As such, the previous separate image insertion keybindings have
+        been removed: <kbd>C-c C-i i</kbd> and <kbd>C-c C-i I</kbd>.
+    -   Footnote and wiki link insertion have been moved to the
+        markup insertion prefix, as <kbd>C-c C-s f</kbd> and
+        <kbd>C-c C-s w</kbd>.
+    -   The list and outline editing commands have been removed from
+        the top-level positions (previously <kbd>M-<left></kbd>,
+        <kbd>M-<right></kbd>, <kbd>M-<up></kbd>, <kbd>M-<down></kbd>)
+        and moved to major mode keybindings under <kbd>C-c</kbd> to
+        <kbd>C-c <left></kbd>, <kbd>C-c <right></kbd>,
+        <kbd>C-c <up></kbd>, and <kbd>C-c <down></kbd>, respectively.
+        ([GH-164][])
+    -   The list and outline editing commands have also been unified
+        so that they all operate on entire subtrees of list items and
+        subtrees of atx headings, symmetrically.  Previously there were
+        separate commands for editing heading subtrees, but promoting
+        a single section is easy enough by directly inserting or
+        removing a hash mark or using the markup replacement commands.
+    -   Jumping between references and reference definitions via
+        `markdown-jump`, previously bound to <kbd>C-c C-l</kbd>, has
+        been moved to <kbd>C-c C-d</kbd> and rebranded as
+        `markdown-do`, which attempts to do something sensible with
+        the object at the point.
     -   Rename internal `markdown-link-link` to `markdown-link-url`
         for clarity.
     -   The old inline image toggling command <kbd>C-c C-i C-t</kbd>
-        should be considered deprecated by <kbd>C-c C-x C-i</kbd> and
-        may be removed in the near future.  Toggling keybindings are
-        currently being grouped under <kbd>C-c C-x</kbd>.
+        has been removed and replaced <kbd>C-c C-x C-i</kbd> in order
+        to allow for the new interactive image insertion command at
+        <kbd>C-c C-i</kbd>.  Toggling keybindings are currently being
+        grouped under <kbd>C-c C-x</kbd>.
     -   `markdown-blockquote-face` is now applied to the entire
         blockquote, including the leading `>`, so it can be used to
         apply a background if desired.
@@ -27,6 +72,16 @@
     -   Functions `markdown-insert-inline-link-dwim` and
         `markdown-insert-reference-link-dwim` have been combined and
         replaced with `markdown-insert-link`.
+    -   Functions `markdown-exdent-region` and `markdown-exdent-or-delete`
+        are now named `markdown-outdent-region` and
+        `markdown-outdent-or-delete`, respectively.
+    -   The non-interactive image insertion commands have been
+        refactored to mirror the corresponding link insertion
+        commands.  `markdown-insert-image` (for inline images) has
+        been renamed `markdown-insert-inline-image` and it now takes
+        three arguments (previously one optional argument).
+        `markdown-insert-reference-image` now takes four arguments
+        (previously none).
 
 *   New features:
 
@@ -51,7 +106,7 @@
         `markdown-hr-display-char`, and
         `markdown-definition-display-char`.
     -   URL and reference label hiding: URLs for inline links and
-        labels for reference links are now hidden by default.  This is
+        labels for reference links can now be hidden if desired.  This is
         configurable via `markdown-hide-urls`.  URLs will appear as
         `[link](∞)` instead of
         `[link](http://perhaps.a/very/long/url/)`.  To change the
@@ -67,7 +122,7 @@
         appropriate mode to use.  The language to mode mapping may be
         customized by setting the variable `markdown-code-lang-modes`.
         ([GH-123][], [GH-185][])
-    -   When the `[edit-indirect](https://github.com/Fanael/edit-indirect/)`
+    -   When the [`edit-indirect`](https://github.com/Fanael/edit-indirect/)
         package is installed, <kbd>C-c '</kbd> (`markdown-edit-code-block`)
         can be used to edit a code block in an indirect buffer in the native
         major mode.  Press <kbd>C-c C-c</kbd> to commit changes and return
@@ -84,10 +139,16 @@
         `markdown-mark-subtree` (<kbd>C-c C-M-h</kbd>) and
         `markdown-narrow-to-subtree` (<kbd>C-x n s</kbd>).
         ([GH-191][])
-    -   Add plain text block movement commands: <kbd>C-M-{</kbd>
-        (`markdown-beginning-of-text-block`) and <kbd>C-M-}</kbd>
-        (`markdown-end-of-text-block`).  To mark a plain text block,
-        use <kbd>C-c M-h</kbd> (`markdown-mark-text-block`).
+    -   Add syntax-aware Markdown paragraph movement commands:
+        <kbd>M-{</kbd> (`markdown-backward-paragraph`) and
+        <kbd>M-}</kbd> (`markdown-forward-paragraph`).  To mark a
+        paragraph, use <kbd>M-h</kbd> (`markdown-mark-paragraph`).
+        These move at a more granular level than the block movement
+        commands.  ([GH-191][])
+    -   The previous block movement and marking commands are now at
+        <kbd>C-M-{</kbd>, <kbd>C-M-}</kbd>, and <kbd>C-c M-h</kbd>.
+        In terms of lists, paragraph movement commands now stop at
+        each list item while block commands move over entire lists.
         ([GH-191][])
     -   Add `subtree` as a possible value for
         `markdown-reference-location` and
@@ -98,6 +159,8 @@
         plain URLs clickable.
     -   Add an additional keybinding for toggling inline image
         display, <kbd>C-c C-x C-i</kbd>.
+    -   Add a keybinding for toggling LaTeX math (_e_quation) support:
+        <kbd>C-c C-x C-e</kbd>.
     -   Support Leanpub blocks (asides, info blocks, warnings, etc.).
         These are simple extensions of the usual blockquote syntax.
     -   Font lock, with markup hiding, for subscripts (e.g., `H~2~0`)
@@ -106,16 +169,24 @@
     -   Add basic font-lock support for inline attribute lists or
         inline identifiers used by Pandoc, Python Markdown, PHP
         Markdown Extra, Leanpub, etc.
-    -   Add basic font-lock support for Leanpub section identifers and
+    -   Add basic font-lock support for Leanpub section identifiers and
         page breaks.
     -   Add basic font-lock support for common file inclusion syntax:
-        `<<(file)`, `<<[title](file)`, `<<[file]`, and ``<<{file}`.
+        `<<(file)`, `<<[title](file)`, `<<[file]`, and `<<{file}`.
     -   Add font lock support for Pandoc inline footnotes. ([GH-81][])
     -   Raise footnote markers and inline footnote text, and
         optionally hide markup.
     -   Filling with now respects Pandoc line blocks.  ([GH-144][])
     -   Add interactive link editing and insertion command
         `markdown-insert-link`.  ([GH-199][])
+    -   Added <kbd>C-c C-d</kbd>, `markdown-do`, which is a
+        replacement for <kbd>C-c C-l</kbd>, `markdown-jump`.  In
+        addition to jumping between reference/footnote labels and
+        definitions, it also toggles GFM checkboxes.
+    -   Outline movement keys <kbd>C-c C-p</kbd>, <kbd>C-c C-n</kbd>,
+        <kbd>C-c C-f</kbd>, <kbd>C-c C-b</kbd>, and <kbd>C-c C-u</kbd>
+        now move between list items, when the point is in a list,
+        and move between headings otherwise.
 
 *   Improvements:
 
@@ -123,7 +194,7 @@
         `:package-version` tags.
     -   Better consistency of function names: predicate functions
         ending in `-p` shouldn't modify match data.
-    -   Generalize rebinding of block movement commands in case users
+    -   Generalize rebinding of paragraph movement commands in case users
         have customized `{forward,backward,mark}-paragraph` bindings.
     -   Adjust point so that it is left at beginning of setext
         headings in heading navigation commands.
@@ -143,6 +214,7 @@
         a file.  Thanks to Tianxiang Xiong for a patch.
         ([GH-200][], [GH-201][])
     -   Adaptive filling for Leanpub blocks.
+    -   Set variable `comment-use-syntax`.  ([GH-213][])
 
 *   Bug fixes:
 
@@ -153,12 +225,17 @@
     -   Prevent matching italics, bold, and inline code in comments.
     -   Prevent matching italics and bold in URLs.
     -   Prevent matching links in inline code or comment spans.
+    -   Avoid infinite loop when promoting or demoting last section in
+        a buffer.
+    -   Fix font lock for subsequent inline links after a malformed
+        inline link.  ([GH-209][])
 
   [gh-81]:  https://github.com/jrblevin/markdown-mode/issues/81
   [gh-123]: https://github.com/jrblevin/markdown-mode/issues/123
   [gh-130]: https://github.com/jrblevin/markdown-mode/issues/130
   [gh-134]: https://github.com/jrblevin/markdown-mode/issues/134
   [gh-144]: https://github.com/jrblevin/markdown-mode/issues/144
+  [gh-164]: https://github.com/jrblevin/markdown-mode/issues/164
   [gh-172]: https://github.com/jrblevin/markdown-mode/issues/172
   [gh-176]: https://github.com/jrblevin/markdown-mode/issues/176
   [gh-185]: https://github.com/jrblevin/markdown-mode/issues/185
@@ -168,6 +245,8 @@
   [gh-199]: https://github.com/jrblevin/markdown-mode/issues/199
   [gh-200]: https://github.com/jrblevin/markdown-mode/issues/200
   [gh-201]: https://github.com/jrblevin/markdown-mode/issues/201
+  [gh-209]: https://github.com/jrblevin/markdown-mode/issues/209
+  [gh-213]: https://github.com/jrblevin/markdown-mode/issues/213
 
 # Markdown Mode 2.2
 
@@ -397,6 +476,7 @@ suggestions, and especially patches.
   [gh-115]: https://github.com/jrblevin/markdown-mode/issues/115
   [gh-116]: https://github.com/jrblevin/markdown-mode/pull/116
   [gh-117]: https://github.com/jrblevin/markdown-mode/issues/117
+  [gh-118]: https://github.com/jrblevin/markdown-mode/pull/118
   [gh-119]: https://github.com/jrblevin/markdown-mode/issues/119
   [gh-121]: https://github.com/jrblevin/markdown-mode/issues/121
   [gh-122]: https://github.com/jrblevin/markdown-mode/issues/122
@@ -405,6 +485,7 @@ suggestions, and especially patches.
   [gh-127]: https://github.com/jrblevin/markdown-mode/issues/127
   [gh-128]: https://github.com/jrblevin/markdown-mode/pull/128
   [gh-129]: https://github.com/jrblevin/markdown-mode/issues/129
+  [gh-132]: https://github.com/jrblevin/markdown-mode/pull/132
   [gh-135]: https://github.com/jrblevin/markdown-mode/issues/135
   [gh-136]: https://github.com/jrblevin/markdown-mode/issues/136
   [gh-137]: https://github.com/jrblevin/markdown-mode/issues/137
@@ -423,6 +504,8 @@ suggestions, and especially patches.
   [gh-159]: https://github.com/jrblevin/markdown-mode/issues/159
   [gh-161]: https://github.com/jrblevin/markdown-mode/issues/161
   [gh-162]: https://github.com/jrblevin/markdown-mode/pull/162
+  [gh-166]: https://github.com/jrblevin/markdown-mode/issues/166
+  [gh-167]: https://github.com/jrblevin/markdown-mode/pull/167
   [gh-168]: https://github.com/jrblevin/markdown-mode/pull/168
   [gh-169]: https://github.com/jrblevin/markdown-mode/issues/169
   [gh-170]: https://github.com/jrblevin/markdown-mode/issues/170
@@ -610,6 +693,7 @@ bug reports. Thanks to everyone for your contributions.
   [gh-38]: https://github.com/jrblevin/markdown-mode/issues/38
   [gh-39]: https://github.com/jrblevin/markdown-mode/issues/39
   [gh-40]: https://github.com/jrblevin/markdown-mode/pull/40
+  [gh-41]: https://github.com/jrblevin/markdown-mode/pull/41
   [gh-53]: https://github.com/jrblevin/markdown-mode/pull/53
   [gh-54]: https://github.com/jrblevin/markdown-mode/pull/54
   [gh-57]: https://github.com/jrblevin/markdown-mode/pull/57
@@ -627,10 +711,10 @@ bug reports. Thanks to everyone for your contributions.
 
 *March 24, 2013*
 
-Version 2.0 is a major new stable releaes with many new features,
+Version 2.0 is a major new stable release with many new features,
 including some changes to keybindings for element insertion and
 outline navigation.  In summary, Markdown Mode now has improved
-keybdinings, smarter markup insertion commands, a general markup
+keybindings, smarter markup insertion commands, a general markup
 removal command, markup completion (normalization), markup promotion
 and demotion, list and region editing, many syntax highlighting
 improvements, new and improved movement commands, and generalized link
@@ -648,7 +732,7 @@ following and movement.
          preferred over <kbd>C-c C-a r</kbd>, which is deprecated.
     -    Footnote keybindings have been moved away from the
          <kbd>C-c C-f n</kbd> prefix.
-    -    Several other new keybdings have been introduced and are
+    -    Several other new keybindings have been introduced and are
          described in more detail below.
     -    Removed wiki link following with `RET` and
          `markdown-follow-wiki-link-on-enter` setting.  Use the
@@ -671,15 +755,15 @@ following and movement.
          extra whitespace for atx headings).
     -    Markup promotion and demotion via <kbd>C-c C--</kbd> and
          <kbd>C-c C-=</kbd>, respectively.  The sequences
-         <kbd>M-&lt;up&gt;</kbd> and <kbd>M-&lt;down&gt;</kbd> may
+         <kbd>M-<up></kbd> and <kbd>M-<down></kbd> may
          also be used.
     -    List editing: move list items up and down with
-         <kbd>M-&lt;up&gt;</kbd> and <kbd>M-&lt;down&gt;</kbd>.
-         Indent and exdent list items with <kbd>M-&lt;left&gt;</kbd>
-         and <kbd>M-&lt;right&gt;</kbd>.
+         <kbd>M-<up></kbd> and <kbd>M-<down></kbd>.
+         Indent and exdent list items with <kbd>M-<left></kbd>
+         and <kbd>M-<right></kbd>.
     -    Region editing: indent and exdent regions, with tab stops
-         determined by context, using <kbd>C-c &lt;</kbd> and <kbd>C-c
-         &gt;</kbd> (as in `python-mode`).
+         determined by context, using <kbd>C-c <</kbd> and
+         <kbd>C-c ></kbd> (as in `python-mode`).
     -    Smart list item insertion with <kbd>M-RET</kbd>, with
          indentation and marker determined by the surrounding context.
          Prefix with <kbd>C-u</kbd> to decrease the indentation by one
@@ -762,7 +846,7 @@ following and movement.
          inserted headings and horizontal rules).
     -    Unified link following: open links in a browser and wiki
          links in a new buffer with the same keybinding (<kbd>C-c
-         C-o</kbd>).  This supercedes the separate wiki link following
+         C-o</kbd>).  This supersedes the separate wiki link following
          command (<kbd>C-c C-w</kbd>).
     -    Generalized link movement and following: move between and
          open all link types (inline, reference, wiki, angle URIs)
@@ -871,7 +955,7 @@ Version 1.9 is a major new stable release with important bug fixes.
          wiki links in another window.
     -    Open inline and reference links and inline URIs in browser
          (<kbd>C-c C-o</kbd>).  Thanks to Peter Jones.
-    -    Open files in a standaline previewer or editor
+    -    Open files in a standalone previewer or editor
          (<kbd>C-c C-c o</kbd>).
     -    Clean up numbered/ordered lists (<kbd>C-c C-c n</kbd>).
          Thanks to Donald Ephraim Curtis.
@@ -1145,7 +1229,7 @@ expressions, and highlighting for bracketed wiki links.
 
 *June 29, 2007*
 
-Version 1.4 includes a small fix to the regular expression syntaxto
+Version 1.4 includes a small fix to the regular expression syntax to
 fix the Emacs 21 "Invalid escape character syntax." error.  Thanks to
 Edward O'Connor for the fix.
 
