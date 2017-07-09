@@ -1294,10 +1294,11 @@ On error (read-only), call `ivy-on-del-error-function'."
             (avy--process
              (nreverse candidates)
              (avy--style-fn avy-style)))))
-    (goto-char candidate)
-    (ivy--done
-     (buffer-substring-no-properties
-      (point) (line-end-position)))))
+    (when (number-or-marker-p candidate)
+      (goto-char candidate)
+      (ivy--done
+       (buffer-substring-no-properties
+        (point) (line-end-position))))))
 
 (defun ivy-sort-file-function-default (x y)
   "Compare two files X and Y.
@@ -1655,6 +1656,7 @@ This is useful for recursive `ivy-read'."
     (setq ivy--old-text "")
     (setq ivy--full-length nil)
     (setq ivy-text "")
+    (setq ivy--index 0)
     (setq ivy-calling nil)
     (setq ivy-use-ignore ivy-use-ignore-default)
     (let (reb)
@@ -1680,10 +1682,9 @@ This is useful for recursive `ivy-read'."
              (when (and initial-input
                         (not (equal initial-input "")))
                (cond ((file-directory-p initial-input)
-                      (when (and (eq this-command 'dired-do-copy)
-                                 (equal (file-name-nondirectory initial-input)
-                                        ""))
-                        (setf (ivy-state-preselect state) (setq preselect nil)))
+                      (when (equal (file-name-nondirectory initial-input) "")
+                        (setf (ivy-state-preselect state) (setq preselect nil))
+                        (setf (ivy-state-def state) (setq def nil)))
                       (setq ivy--directory initial-input)
                       (setq initial-input nil)
                       (when preselect
@@ -2336,9 +2337,10 @@ STD-PROPS is a property list containing the default text properties."
         (when (ivy--prompt-selectable-p)
           (if (or (= ivy--index -1)
                   (= ivy--length 0))
-              (add-face-text-property (point-min) (line-end-position)
-                                      'ivy-prompt-match)
-            (remove-text-properties (point-min) (line-end-position) '(face))))
+              (add-face-text-property
+               (minibuffer-prompt-end) (line-end-position) 'ivy-prompt-match)
+            (remove-text-properties
+             (minibuffer-prompt-end) (line-end-position) '(face))))
         ;; get out of the prompt area
         (constrain-to-field nil (point-max))))))
 
@@ -3533,6 +3535,25 @@ Don't finish completion."
            (string-match "/$" (ivy-state-current ivy-last)))
       (insert (substring (ivy-state-current ivy-last) 0 -1))
     (insert (ivy-state-current ivy-last))))
+
+(defcustom ivy--preferred-re-builders
+  '((ivy--regex-plus . "ivy")
+    (ivy--regex-ignore-order . "order")
+    (ivy--regex-fuzzy . "fuzzy"))
+  "Alist of preferred re-builders with display names.
+This list can be rotated with `ivy-rotate-preferred-builders'."
+  :type '(alist :key-type function :value-type string)
+  :group 'ivy)
+
+(defun ivy-rotate-preferred-builders ()
+  "Switch to the next re builder in `ivy--preferred-re-builders'."
+  (interactive)
+  (when ivy--preferred-re-builders
+    (setq ivy--old-re nil)
+    (setq ivy--regex-function
+          (let ((cell (assoc ivy--regex-function ivy--preferred-re-builders)))
+            (car (or (cadr (memq cell ivy--preferred-re-builders))
+                     (car ivy--preferred-re-builders)))))))
 
 (defun ivy-toggle-fuzzy ()
   "Toggle the re builder between `ivy--regex-fuzzy' and `ivy--regex-plus'."
