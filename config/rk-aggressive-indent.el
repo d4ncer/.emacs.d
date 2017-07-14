@@ -21,6 +21,7 @@
     (add-to-list 'aggressive-indent-excluded-modes 'sql-mode)
     (add-to-list 'aggressive-indent-excluded-modes 'restclient-mode)
     (add-to-list 'aggressive-indent-excluded-modes 'rk-web-js-mode)
+    (add-to-list 'aggressive-indent-excluded-modes 'rnc-mode)
 
     (global-aggressive-indent-mode +1)))
 

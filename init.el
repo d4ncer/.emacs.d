@@ -104,6 +104,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-go)
 (use-package rk-markdown)
 (use-package rk-yaml)
+(use-package rk-rnc)
 
 ;;; Print overall startup time.
 
