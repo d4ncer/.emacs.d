@@ -144,6 +144,7 @@ Do not scheduled items or repeating todos."
     (setq org-insert-heading-respect-content t)
     (setq org-link-abbrev-alist '(("att" . org-attach-expand-link)))
     (setq org-log-done 'time)
+    (setq org-use-sub-superscripts '{})
     (setq org-log-into-drawer t)
     (setq org-hide-emphasis-markers t)
     (setq org-outline-path-complete-in-steps nil)
