@@ -25,6 +25,7 @@
 (defvar org-directory "~/org")
 
 (defconst rk-org-work-file (concat org-directory "/work_movio.org"))
+(defconst rk-org-numero-file (concat org-directory "/numero.org"))
 
 (use-package org
   :load-path rk-org-load-path
@@ -121,7 +122,9 @@ Do not scheduled items or repeating todos."
 
     (spacemacs-keys-set-leader-keys-for-major-mode
       'org-mode
-      "r" #'org-refile)
+      "r" #'org-refile
+      "d" #'org-deadline
+      "C" #'org-ctrl-c-ctrl-c)
 
     (evil-define-key 'normal org-mode-map (kbd "RET") #'org-return)
 
@@ -196,9 +199,6 @@ Do not scheduled items or repeating todos."
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
 
-  :bind
-  ("C-c a" . org-agenda)
-
   :config
   (progn
     (evilified-state-evilify-map org-agenda-mode-map
@@ -214,6 +214,8 @@ Do not scheduled items or repeating todos."
       (kbd "gr") 'org-agenda-redo
       (kbd "M-RET") 'org-agenda-show-and-scroll-up)
 
+    (spacemacs-keys-set-leader-keys
+      "oA" #'org-agenda)
 
     (define-key org-agenda-mode-map (kbd "C-f" ) #'evil-scroll-page-down)
     (define-key org-agenda-mode-map (kbd "C-b") #'evil-scroll-page-up)
@@ -265,14 +267,14 @@ Do not scheduled items or repeating todos."
 
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"
-             ((tags-todo "-study-someday-media/NEXT"
+             ((tags-todo "-study-someday-green-numero/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
               (stuck "")
-              (tags-todo "media|study/NEXT"
-                         ((org-agenda-overriding-header "Media & Study"))))
+              (tags-todo "green|numero|study/NEXT"
+                         ((org-agenda-overriding-header "Green, Numero & Study"))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-files (list org-default-notes-file org-agenda-diary-file))
               (org-agenda-dim-blocked-tasks nil)
@@ -296,7 +298,7 @@ Do not scheduled items or repeating todos."
               (todo "WAITING"
                     ((org-agenda-overriding-header "Review Tasks on Hold")))
 
-              (tags-todo "-someday-media/NEXT"
+              (tags-todo "-someday-green-numero/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (tags-todo "+goals+3_months+project/NEXT"
                          ((org-agenda-overriding-header "Review 3 Month Goals")))
@@ -311,12 +313,12 @@ Do not scheduled items or repeating todos."
              ((org-agenda-tag-filter-preset
                '("-drill" "-gtd" "-ignore"))
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list org-default-notes-file rk-org-work-file org-agenda-diary-file))
+              (org-agenda-files (list org-default-notes-file rk-org-numero-file rk-org-work-file org-agenda-diary-file))
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))
 
             ("w" "Work actions"
-             ((tags-todo "-study-someday-media/NEXT"
+             ((tags-todo "-study-someday-green-numero/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
@@ -559,6 +561,7 @@ Do not scheduled items or repeating todos."
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
+      "d" #'org-deadline
       "c" #'org-capture-finalize
       "k" #'org-capture-kill
       "r" #'org-capture-refile)))
@@ -681,6 +684,7 @@ table tr.tr-even td {
              rk-org-goto-diary
              rk-org-goto-notes
              rk-org-goto-work
+             rk-org-goto-numero
              rk-org-goto-todo-list
              rk-org-goto-tags-list)
   :init
@@ -689,6 +693,7 @@ table tr.tr-even td {
     "od" #'rk-org-goto-diary
     "on" #'rk-org-goto-notes
     "ow" #'rk-org-goto-work
+    "oN" #'rk-org-goto-numero
     "ot" #'rk-org-goto-todo-list
     "ov" #'rk-org-goto-tags-list))
 
