@@ -318,7 +318,7 @@ Do not scheduled items or repeating todos."
               (org-agenda-dim-blocked-tasks nil)))
 
             ("w" "Work actions"
-             ((tags-todo "-study-someday-green-numero/NEXT"
+             ((tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
