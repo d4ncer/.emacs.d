@@ -22,6 +22,7 @@
              projectile-run-async-shell-command-in-root
              projectile-run-project
              projectile-run-shell-command-in-root
+             projectile-cleanup-known-projects
              projectile-switch-project
              projectile-test-project)
 
@@ -35,6 +36,7 @@
       "p&" #'projectile-run-async-shell-command-in-root
       "pI" #'projectile-invalidate-cache
       "pc" #'projectile-compile-project
+      "pC" #'projectile-cleanup-known-projects
       "pr" #'projectile-replace
       "pt" #'projectile-test-project
       "pu" #'projectile-run-project))
