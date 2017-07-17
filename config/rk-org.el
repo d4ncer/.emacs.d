@@ -318,6 +318,16 @@ Do not scheduled items or repeating todos."
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))
 
+            ("s" "Standup"
+             ((tags "+standup/!-DONE"
+                    ((org-agenda-overriding-header "Standup"))))
+             ((org-agenda-tag-filter-preset '("-ignore"))
+              (org-agenda-use-tag-inheritance nil)
+              (org-agenda-files (list rk-org-work-file org-agenda-diary-file))
+              (org-agenda-dim-blocked-tasks nil)
+              (org-agenda-archives-mode nil)
+              (org-agenda-ignore-drawer-properties '(effort appt))))
+
             ("w" "Work actions"
              ((tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
