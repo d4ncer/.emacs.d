@@ -268,14 +268,14 @@ Do not scheduled items or repeating todos."
 
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"
-             ((tags-todo "-study-someday-green-numero/NEXT"
+             ((tags-todo "-study-someday-media/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
               (stuck "")
-              (tags-todo "green|numero|study/NEXT"
-                         ((org-agenda-overriding-header "Green, Numero & Study"))))
+              (tags-todo "media|study/NEXT"
+                         ((org-agenda-overriding-header "Media & Study"))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-files (list org-default-notes-file org-agenda-diary-file))
               (org-agenda-dim-blocked-tasks nil)
@@ -283,7 +283,7 @@ Do not scheduled items or repeating todos."
               (org-agenda-ignore-drawer-properties '(effort appt))))
 
             ("n" "Next actions"
-             ((tags-todo "-study-someday/NEXT"))
+             ((tags-todo "-study-someday-media/NEXT"))
              ((org-agenda-overriding-header "Next Actions")))
 
             ("r" "Weekly Review"
@@ -299,7 +299,7 @@ Do not scheduled items or repeating todos."
               (todo "WAITING"
                     ((org-agenda-overriding-header "Review Tasks on Hold")))
 
-              (tags-todo "-someday-green-numero/NEXT"
+              (tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (tags-todo "+goals+3_months+project/NEXT"
                          ((org-agenda-overriding-header "Review 3 Month Goals")))
@@ -319,13 +319,13 @@ Do not scheduled items or repeating todos."
               (org-agenda-dim-blocked-tasks nil)))
 
             ("w" "Work actions"
-             ((tags-todo "-someday/NEXT"
+             ((tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
               (stuck "")
               (agenda "")
-              (tags "+standup"
+              (tags "+standup/!-DONE"
                     ((org-agenda-overriding-header "Standup"))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-use-tag-inheritance nil)
