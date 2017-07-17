@@ -174,7 +174,7 @@
       "n w" #'widen
 
       "q w" #'delete-window
-      "q q" #'kill-emacs
+      "q q" #'save-buffers-kill-emacs
 
       "t F" #'toggle-frame-fullscreen
 
