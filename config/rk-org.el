@@ -478,27 +478,27 @@ Do not scheduled items or repeating todos."
         (list
          (rk-org--capture-template-entry
           "t" "Todo"
-          '(file org-default-notes-file) "* TODO %?")
+          '(file org-default-notes-file) "* TODO  %?")
 
          (rk-org--capture-template-entry
           "T" "Todo (work)"
-          `(file ,rk-org-work-file) "* TODO %?")
+          `(file ,rk-org-work-file) "* TODO  %?")
 
          (rk-org--capture-template-entry
           "n" "Next"
-          '(file org-default-notes-file) "* NEXT %?")
+          '(file org-default-notes-file) "* NEXT  %?")
 
          (rk-org--capture-template-entry
           "N" "Next (work)"
-          `(file rk-org-work-file) "* NEXT %?")
+          `(file rk-org-work-file) "* NEXT  %?")
 
          (rk-org--capture-template-entry
           "d" "Diary"
-          '(file+datetree org-agenda-diary-file) "* %?\n%^t")
+          '(file+datetree org-agenda-diary-file) "*  %?\n%^t")
 
          (rk-org--capture-template-entry
           "D" "Diary (work)"
-          `(file+datetree rk-org-work-file) "* %?\n%^t")
+          `(file+datetree rk-org-work-file) "*  %?\n%^t")
 
          (rk-org--capture-template-entry
           "l" "Link"
@@ -515,22 +515,22 @@ Do not scheduled items or repeating todos."
          (rk-org--capture-template-entry
           "s" "Someday"
           '(file+olp org-default-notes-file "Someday")
-          "* SOMEDAY %?")
+          "* SOMEDAY  %?")
 
          (rk-org--capture-template-entry
           "m" "Listening"
           '(file+olp org-default-notes-file "Media" "Listening")
-          "* MAYBE Listen to %i%?")
+          "* MAYBE Listen to %i %?")
 
          (rk-org--capture-template-entry
           "v" "Viewing"
           '(file+olp org-default-notes-file "Media" "Viewing")
-          "* MAYBE Watch %i%?")
+          "* MAYBE Watch %i %?")
 
          (rk-org--capture-template-entry
           "r" "Reading"
           '(file+olp org-default-notes-file "Media" "Reading")
-          "* MAYBE Read %i%?")
+          "* MAYBE Read %i %?")
 
          (rk-org--capture-template-entry
           "0" "Drill (item)"
