@@ -26,6 +26,7 @@
 
 (defconst rk-org-work-file (concat org-directory "/work_movio.org"))
 (defconst rk-org-numero-file (concat org-directory "/numero.org"))
+(defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 
 (use-package org
   :load-path rk-org-load-path
@@ -696,6 +697,7 @@ table tr.tr-even td {
              rk-org-goto-notes
              rk-org-goto-work
              rk-org-goto-numero
+             rk-org-goto-recruitment
              rk-org-goto-todo-list
              rk-org-goto-tags-list)
   :init
@@ -705,6 +707,7 @@ table tr.tr-even td {
     "on" #'rk-org-goto-notes
     "ow" #'rk-org-goto-work
     "oN" #'rk-org-goto-numero
+    "or" #'rk-org-goto-recruitment
     "ot" #'rk-org-goto-todo-list
     "ov" #'rk-org-goto-tags-list))
 

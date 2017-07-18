@@ -33,9 +33,15 @@
 
 ;;;###autoload
 (defun rk-org-goto-numero ()
-  "Switch to the work file."
+  "Switch to the Numero file."
   (interactive)
   (find-file rk-org-numero-file))
+
+;;;###autoload
+(defun rk-org-goto-recruitment ()
+  "Switch to the recruitment file."
+  (interactive)
+  (find-file rk-org-recruitment-file))
 
 ;;;###autoload
 (defun rk-org-goto-todo-list ()
