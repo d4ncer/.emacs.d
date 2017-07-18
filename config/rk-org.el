@@ -319,9 +319,18 @@ Do not scheduled items or repeating todos."
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))
 
-            ("s" "Standup"
+            ("s" "Standup "
              ((tags "+standup/!-DONE"
-                    ((org-agenda-overriding-header "Standup"))))
+                    ((org-agenda-overriding-header
+                      (concatenate 'string
+                                   "Standup "
+                                   (org-make-link-string "https://moviohq.atlassian.net/secure/RapidBoard.jspa?rapidView=134&selectedIssue=GREEN-60&quickFilter=523" "JIRA Board")
+                                   " "
+                                   (org-make-link-string "https://github.com/movio/mc-wysiwyg/issues" "WYSIWYG")
+                                   " "
+                                   (org-make-link-string "https://github.com/movio/green/issues" "Green")
+                                   " "
+                                   (org-make-link-string "https://github.com/movio/reporting-ui-components" "Reporting UI Components"))))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-use-tag-inheritance nil)
               (org-agenda-files (list rk-org-work-file org-agenda-diary-file))
