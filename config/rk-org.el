@@ -502,6 +502,10 @@ Do not scheduled items or repeating todos."
           `(file+datetree rk-org-work-file) "*  %?\n%^t")
 
          (rk-org--capture-template-entry
+          "S" "Standup (work)"
+          `(file+datetree rk-org-work-file) "* TODO %? :standup:\n%^t")
+
+         (rk-org--capture-template-entry
           "l" "Link"
           '(file+olp org-default-notes-file "Links")
           '(function rk-org-capture-url-read-url)
