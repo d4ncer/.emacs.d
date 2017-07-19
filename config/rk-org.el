@@ -589,7 +589,8 @@ Do not scheduled items or repeating todos."
       "d" #'org-deadline
       "c" #'org-capture-finalize
       "k" #'org-capture-kill
-      "r" #'org-capture-refile)))
+      "r" #'org-capture-refile
+      "A" #'org-align-all-tags)))
 
 (use-package org-download
   :after org
