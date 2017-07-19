@@ -32,6 +32,7 @@
     ;;; Rebind C-u to scroll up
 
     (define-key evil-normal-state-map (kbd "C-u") #'evil-scroll-up)
+    (define-key evil-motion-state-map (kbd "C-u") #'evil-scroll-up)
 
     ;; Configure cursors.
 
