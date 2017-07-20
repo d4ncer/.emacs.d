@@ -331,6 +331,8 @@ Do not scheduled items or repeating todos."
                                    " "
                                    (org-make-link-string "https://github.com/movio/green/issues" "Green")
                                    " "
+                                   (org-make-link-string "https://gogs.movio.co/movio/kube-mc-green/issues" "Gogs")
+                                   " "
                                    (org-make-link-string "https://github.com/movio/reporting-ui-components" "Reporting UI Components"))))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-use-tag-inheritance nil)
