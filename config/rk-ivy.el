@@ -89,6 +89,7 @@
   :after ivy)
 
 (use-package counsel
+  :after swiper
   :commands (counsel-M-x
              counsel-descbinds
              counsel-describe-face
@@ -104,6 +105,7 @@
              counsel-file-jump
              counsel-recentf
              counsel-yank-pop
+             counsel-grep-or-swiper
              counsel-up-directory)
   :defines (counsel-rg-base-command)
   :preface
@@ -130,6 +132,7 @@
       "h d v" #'counsel-describe-variable
       "h d c" #'counsel-describe-face)
 
+    (evil-global-set-key 'normal "/" #'counsel-grep-or-swiper)
     (bind-key "M-x" #'counsel-M-x)
     (bind-key "C-x C-f" #'counsel-find-file)
     (bind-key "C-h v" #'counsel-describe-variable)
@@ -146,12 +149,6 @@
     (setq counsel-yank-pop-separator (concat "\n" (make-string 70 ?-) "\n"))
 
     (counsel-mode +1)))
-
-(use-package swiper
-  :commands (swiper)
-  :init
-  (progn
-    (evil-global-set-key 'normal "/" #'swiper)))
 
 (use-package rk-ivy-commands
   :after swiper
