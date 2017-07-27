@@ -23,6 +23,10 @@
 
 (defvar magit-process-raise-error)
 
+(defconst rk-emacs-pinned-subtree-versions
+  '((ensime-emacs . "v1.0.1")))
+
+
 ;; Config Paths
 
 (defconst rk-emacs-cache-directory
@@ -33,6 +37,9 @@
 
 (defconst rk-emacs-lisp-directory
   (concat user-emacs-directory "lisp"))
+
+(defconst rk-emacs-elpa-directory
+  (concat user-emacs-directory "elpa"))
 
 (defconst rk-emacs-config-directory
   (concat user-emacs-directory "config"))
@@ -57,38 +64,45 @@
 (defun rk-emacs--read-new-remote ()
   (let* ((name (magit-read-string-ns "Remote name"))
          (url (magit-read-url "Remote url" (format "https://github.com/%s.git" name))))
-    (rk-emacs--with-signal-handlers "Adding remote..."
-      (magit-run-git "remote" "add" name url)
-      name)))
+    (unless (member name (magit-list-remotes))
+      (rk-emacs--with-signal-handlers "Adding remote..."
+        (magit-run-git "remote" "add" name url)))
+    name))
 
 (defun rk-emacs--assert-tree-not-dirty ()
   (require 'magit)
   (when (magit-anything-modified-p)
     (user-error "`%s' has uncommitted changes.  Aborting" default-directory)))
 
-(defun rk-emacs-add-subtree (subtree remote)
-  "Add a new SUBTREE at REMOTE."
+(defun rk-emacs-add-subtree (subtree remote version)
+  "Add a new SUBTREE at REMOTE at VERSION."
   (interactive  (let ((default-directory user-emacs-directory))
                   (rk-emacs--assert-tree-not-dirty)
                   (let* ((remote (rk-emacs--read-new-remote))
-                         (subtree (file-name-nondirectory remote)))
-                    (list subtree remote))))
+                         (subtree (file-name-nondirectory remote))
+                         (ref (read-string "Ref: " (alist-get (intern subtree) rk-emacs-pinned-subtree-versions "master"))))
+                    (list subtree remote ref))))
   (let ((default-directory user-emacs-directory))
     (rk-emacs--assert-tree-not-dirty)
     (run-hooks 'magit-credential-hook)
 
-    (rk-emacs--with-signal-handlers "Fetching remote..."
-      (magit-run-git "fetch" "-q" remote))
-
     (let* ((prefix (format "lisp/%s" subtree))
            (fullpath (f-join rk-emacs-lisp-directory subtree))
-           (commit-message (format "'Add %s@master to %s'" remote prefix)))
+           (commit-message (format "Add %s@master to %s" remote prefix)))
+
+      (unless (y-or-n-p (format "%s at %s will merged to %s. Continue? " remote version fullpath))
+        (user-error "Aborted"))
+
+      (rk-emacs--with-signal-handlers "Fetching remote..."
+        (magit-run-git "fetch" "-q" remote))
 
       (rk-emacs--with-signal-handlers "Importing subtree..."
-        (magit-run-git "subtree" "-q" "add" "--prefix" prefix remote "master" "--squash" "-m" commit-message))
+        (magit-run-git "subtree" "-q" "add" "--prefix" prefix remote version "--squash" "-m" commit-message))
 
       (rk-emacs--with-signal-handlers "Compiling..."
         (byte-recompile-directory fullpath 0))
+
+      (rk-init/init-load-path)
 
       (message "Subtree `%s' added successfully." prefix))))
 
@@ -108,17 +122,22 @@ prompt for REMOTE if it cannot be determined."
 
   (let ((default-directory user-emacs-directory))
     (rk-emacs--assert-tree-not-dirty)
-    (run-hooks 'magit-credential-hook)
-
-    (rk-emacs--with-signal-handlers "Fetching remote..."
-      (magit-run-git "fetch" "-q" remote))
 
     (let* ((prefix (format "lisp/%s" subtree))
            (fullpath (f-join rk-emacs-lisp-directory subtree))
-           (commit-message (format "'Merge %s@master into %s'" remote prefix)))
+           (version (alist-get (intern subtree) rk-emacs-pinned-subtree-versions "master"))
+           (commit-message (format "Merge %s@%s into %s" remote version prefix)))
+
+      (unless (y-or-n-p (format "%s at %s will merged to %s. Continue? " remote version fullpath))
+        (user-error "Aborted"))
+
+      (run-hooks 'magit-credential-hook)
+
+      (rk-emacs--with-signal-handlers "Fetching remote..."
+        (magit-run-git "fetch" "-q" remote))
 
       (rk-emacs--with-signal-handlers "Importing subtree..."
-        (magit-run-git "subtree" "-q" "pull" "--prefix" prefix remote "master" "--squash" "-m" commit-message))
+        (magit-run-git "subtree" "-q" "pull" "--prefix" prefix remote version "--squash" "-m" commit-message))
 
       (rk-emacs--with-signal-handlers "Compiling..."
         (byte-recompile-directory fullpath 0))
@@ -132,6 +151,16 @@ prompt for REMOTE if it cannot be determined."
                                  (-map #'f-filename (f-directories rk-emacs-lisp-directory))
                                  t)))
   (byte-recompile-directory (f-join rk-emacs-lisp-directory subtree) 0 t))
+
+(defun rk-emacs-compile-all-subtrees ()
+  "Force the byte compilation all subtrees."
+  (interactive)
+  (byte-recompile-directory rk-emacs-lisp-directory 0 t))
+
+(defun rk-emacs-compile-elpa ()
+  "Force the byte compilation ELPA directory."
+  (interactive)
+  (byte-recompile-directory rk-emacs-elpa-directory 0 t))
 
 (provide 'rk-emacs)
 
