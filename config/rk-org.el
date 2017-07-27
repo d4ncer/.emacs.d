@@ -126,6 +126,7 @@ Do not scheduled items or repeating todos."
       "r" #'org-refile
       "d" #'org-deadline
       "C" #'org-ctrl-c-ctrl-c
+      "f" #'org-fill-paragraph
       "L" #'org-insert-link)
 
     (evil-define-key 'normal org-mode-map (kbd "RET") #'org-return)
