@@ -223,7 +223,7 @@
      ((t :inherit highlight :background nil)))
 
     (highlight-thing
-     ((t :weight demibold :foreground ,rk-theme-base-blue)))
+     ((t :weight demibold :foreground ,rk-theme-base-violet, :underline ,rk-theme-base-violet)))
 
     (ahs-face
      ((t :inherit highlight)))
