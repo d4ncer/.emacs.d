@@ -762,6 +762,11 @@ table tr.tr-even td {
   :init
   (add-hook 'org-mode-hook #'org-indent-mode))
 
+(use-package flyspell
+  :after org
+  :commands (flyspell-mode)
+  :init
+  (add-hook 'org-mode-hook #'flyspell-mode))
 
 (provide 'rk-org)
 
