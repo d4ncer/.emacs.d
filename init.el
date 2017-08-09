@@ -102,6 +102,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-elisp)
 (use-package rk-web-mode)
 (use-package rk-go)
+(use-package rk-scala)
 (use-package rk-markdown)
 (use-package rk-yaml)
 (use-package rk-rnc)
