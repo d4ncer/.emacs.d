@@ -11,12 +11,18 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'spacemacs-keys)
+
 (use-package markdown-mode
-  :commands (markdown-mode gfm-mode)
+  :commands (markdown-mode
+             gfm-mode
+             markdown-fill-paragraph)
   :mode (("README\\.md\\'" . gfm-mode)
          ("\\.md\\'" . markdown-mode)
          ("\\.markdown\\'" . markdown-mode))
-
+  :config
+  (spacemacs-keys-set-leader-keys-for-major-mode 'markdown-mode
+    "f" #'markdown-fill-paragraph)
   :init (setq markdown-command "multimarkdown"))
 
 (provide 'rk-markdown)
