@@ -200,6 +200,7 @@
   :preface
   (progn
     (autoload 'f-exists? "f")
+    (autoload 'json-read-file "json")
     (defun rk-web--prettier-enable-p ()
       "Enable prettier if no .prettierignore is found in project root."
       (-when-let (root (projectile-project-p))
@@ -300,6 +301,12 @@
     (add-to-list 'aggressive-indent-dont-indent-if '(rk-web--in-flow-strict-object-type?))
     (add-hook 'aggressive-indent-stop-here-hook #'rk-web--in-flow-strict-object-type?)))
 
+(use-package stylefmt
+  :after rk-web-modes
+  :commands (stylefmt-enable-on-save stylefmt-format-buffer)
+  :config
+  (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-css-mode
+    "." #'stylefmt-format-buffer))
 
 (provide 'rk-web-mode)
 
