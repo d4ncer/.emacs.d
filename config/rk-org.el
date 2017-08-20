@@ -98,8 +98,12 @@ Do not scheduled items or repeating todos."
       (let (org-log-done org-log-states) ; turn off logging
         (org-todo (if (zerop n-todo) "DONE" "TODO")))))
 
-  :commands
-  (org-refile)
+  :commands (org-refile
+             org-deadline
+             org-ctrl-c-ctrl-c
+             org-fill-paragraph
+             org-insert-link
+             org-schedule)
 
   :init
   (progn
@@ -127,7 +131,8 @@ Do not scheduled items or repeating todos."
       "d" #'org-deadline
       "C" #'org-ctrl-c-ctrl-c
       "f" #'org-fill-paragraph
-      "L" #'org-insert-link)
+      "L" #'org-insert-link
+      "s" #'org-schedule)
 
     (evil-define-key 'normal org-mode-map (kbd "RET") #'org-return)
 
