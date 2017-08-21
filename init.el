@@ -108,6 +108,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-rnc)
 (use-package rk-highlight-thing)
 (use-package rk-spelling)
+(use-package rk-string)
 
 ;;; Print overall startup time.
 
