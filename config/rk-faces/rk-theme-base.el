@@ -24,6 +24,7 @@
 ;; Default fg/bg
 (defconst rk-theme-base-offblack "#333")
 (defconst rk-theme-base-offwhite "#fdfdfd")
+(defconst rk-theme-base-offwhite-dark "#fbf1d4")
 
 ;; Greys
 (defconst rk-theme-base-solarized-b03 "#002b36")
@@ -422,6 +423,18 @@
 
     (parenthesis
      ((t :weight light)))
+
+    (whitespace-line
+     ((t :background ,rk-theme-base-offblack :foreground ,rk-theme-base-offwhite)))
+
+    (whitespace-space
+     ((t :background ,rk-theme-base-offwhite-dark :foreground ,rk-theme-base-offblack)))
+
+    (whitespace-indentation
+     ((t :background ,rk-theme-base-offwhite-dark :foreground ,rk-theme-base-offblack)))
+
+    (whitespace-space-after-tab
+     ((t :background ,rk-theme-base-offwhite-dark :foreground ,rk-theme-base-offblack)))
 
     (link
      ((t :inherit default :underline t)))))
