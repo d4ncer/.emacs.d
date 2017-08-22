@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 's)
+(require 'dash)
 
 (defun rk--bounds-of-region-or-symbol-at-pt ()
   "Get bounds of region or symbol at point."
@@ -20,41 +21,35 @@
   "Get all words in buffer in BOUNDS."
   (buffer-substring-no-properties (car bounds) (cdr bounds)))
 
-(defun rk-word-or-region-to-camel-lower ()
-  "Convert selected region or symbol to lower camel case."
-  (interactive)
-  (let* ((bounds (rk--bounds-of-region-or-symbol-at-pt))
-         (text (rk--words-in-region bounds)))
-    (when bounds
-      (delete-region (car bounds) (cdr bounds))
-      (insert (s-lower-camel-case text)))))
+(defun rk--bounds-and-symbol ()
+  (-if-let* (((beg . end) (rk--bounds-of-region-or-symbol-at-pt))
+             (text (buffer-substring-no-properties beg end)))
+      (list beg end text)
+    (user-error "No symbol at point")))
 
-(defun rk-word-or-region-to-camel-upper ()
-  "Convert selected region or symbol to upper camel case."
-  (interactive)
-  (let* ((bounds (rk--bounds-of-region-or-symbol-at-pt))
-         (text (rk--words-in-region bounds)))
-    (when bounds
-      (delete-region (car bounds) (cdr bounds))
-      (insert (s-upper-camel-case text)))))
+(defun rk-word-or-region-to-camel-lower (beg end text)
+  "Convert TEXT in selected region or symbol in bounds BEG to END to lower camel case."
+  (interactive (rk--bounds-and-symbol))
+  (delete-region beg end)
+  (insert (s-lower-camel-case text)))
 
-(defun rk-word-or-region-to-snake ()
-  "Convert selected region or symbol to snake case."
-  (interactive)
-  (let* ((bounds (rk--bounds-of-region-or-symbol-at-pt))
-         (text (rk--words-in-region bounds)))
-    (when bounds
-      (delete-region (car bounds) (cdr bounds))
-      (insert (s-snake-case text)))))
+(defun rk-word-or-region-to-camel-upper (beg end text)
+  "Convert TEXT in selected region or symbol in bounds BEG to END to upper camel case."
+  (interactive (rk--bounds-and-symbol))
+  (delete-region beg end)
+  (insert (s-upper-camel-case text)))
 
-(defun rk-word-or-region-to-dashed ()
-  "Convert selected region or symbol to dashed case."
-  (interactive)
-  (let* ((bounds (rk--bounds-of-region-or-symbol-at-pt))
-         (text (rk--words-in-region bounds)))
-    (when bounds
-      (delete-region (car bounds) (cdr bounds))
-      (insert (s-dashed-words text)))))
+(defun rk-word-or-region-to-snake (beg end text)
+  "Convert TEXT in selected region or symbol in bounds BEG to END to snake case."
+  (interactive (rk--bounds-and-symbol))
+  (delete-region beg end)
+  (insert (s-snake-case text)))
+
+(defun rk-word-or-region-to-dashed (beg end text)
+  "Convert TEXT in selected region or symbol in bounds BEG to END to dashed case."
+  (interactive (rk--bounds-and-symbol))
+  (delete-region beg end)
+  (insert (s-dashed-words text)))
 
 (provide 'rk-string-fns)
 

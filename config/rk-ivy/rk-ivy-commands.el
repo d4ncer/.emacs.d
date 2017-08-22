@@ -35,24 +35,31 @@
     string))
 
 (defun rk--region-or-symbol-at-pt ()
+  "Get symbol at point or text in selected region."
   (if (region-active-p)
       (buffer-substring-no-properties (region-beginning) (region-end))
     (thing-at-point 'symbol t)))
 
+(defun rk--region-or-symbol ()
+  "Get text or symbol at point, or return a user error if neither exist."
+  (if-let ((text (rk--region-or-symbol-at-pt)))
+      text
+    (user-error "No symbol at point")))
+
 (defun rk-swiper-region-or-symbol (input)
   "Run `swiper' with INPUT, which is either the selected region or the symbol at point."
-  (interactive (list (rk--region-or-symbol-at-pt)))
+  (interactive (list (rk--region-or-symbol)))
   (swiper input))
 
 (defun rk-counsel-project-region-or-symbol (input)
   "Search project for INPUT, which is either the selected region or the symbol at point."
-  (interactive (list (rk--region-or-symbol-at-pt)))
+  (interactive (list (rk--region-or-symbol)))
   (counsel-rg (rk-counsel--escape-string input) (projectile-project-root)))
 
 (defun rk-counsel-region-or-symbol (start-dir input)
   "Search START-DIR for INPUT which is either the selected region or symbol at point."
   (interactive (list (read-directory-name "Start from directory: ")
-                     (rk--region-or-symbol-at-pt)))
+                     (rk--region-or-symbol)))
   (counsel-rg (rk-counsel--escape-string input) start-dir))
 
 (provide 'rk-ivy-commands)
