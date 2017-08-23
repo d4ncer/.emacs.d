@@ -109,6 +109,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-highlight-thing)
 (use-package rk-spelling)
 (use-package rk-string)
+(use-package rk-docker)
 
 ;;; Print overall startup time.
 
