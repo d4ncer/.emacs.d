@@ -113,7 +113,7 @@ supported not on this list, feel free to issue a PR.
 
 ## Misc notes
 
-* I use [Marked 2](marked2app.com) to preview markdown files. If you don't have
+* I use [Marked 2](http://marked2app.com/) to preview markdown files. If you don't have
   it, or you want to use something, set `markdown-open-command` to point to
   something else.
 * I put more effort into some modes than others, hence there are some modes
