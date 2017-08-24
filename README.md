@@ -2,6 +2,11 @@
 
 ## Installation
 
+``` shell
+$ mv ~/.emacs.d ~/.emacs.d.bak
+$ git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
+```
+
 ### Go setup
 
 Packages to install for Go config:
@@ -36,7 +41,8 @@ Binaries for global fallback (this is optional, but highly recommended):
 $ npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier
 ```
 
-If you do use a global `eslint`, you should add a fallback `.eslintrc.json` in your root folder. A sample:
+If you do use a global `eslint`, you should add a fallback `.eslintrc.json` in
+your root folder. A sample:
 
 ```js
 {
@@ -63,32 +69,41 @@ If you do use a global `eslint`, you should add a fallback `.eslintrc.json` in y
 
 ## Packages of note
 
-Most of my work is on the frontend, which is reflected in my setup. Some packages of note:
+Most of my work is on the frontend, which is reflected in my setup. Some
+packages of note:
 
-- Evil
-- Ivy (with ripgrep)
-- Spacemacs leader keys
-- Projectile
-- Flycheck
-- Magit
-- Org
-- IBuffer
-- Neotree
-- Smartparens
+* Evil
+* Ivy (with `ripgrep`)
+* Spacemacs leader keys
+* Projectile
+* Flycheck
+* Magit
+* Org
+* IBuffer
+* Neotree
+* Smartparens
 
 ## Language Modes
 
-- Web (JS, JSX, HTML, CSS). Includes support for Flow, Stylelint, and Prettier.
-- Go
-- YAML
-- RNC
-- Markdown
-- Elisp
-- CoffeeScript
+* Web
+  * JS/JSX/HTML/CSS
+  * Flow
+  * Stylelint
+  * Prettier
+* Elisp
+* Go
+* Scala
+* YAML
+* Markdown
+* CoffeeScript
+* Dockerfile
+* Groovy
+* RNC
 
 ## Planned Modes
 
-**NB** In order of importance to me. If you're using my setup and want something supported not on this list, feel free to issue a PR.
+**NB** In order of importance to me. If you're using my setup and want something
+supported not on this list, feel free to issue a PR.
 
 - TypeScript
 - Scala
@@ -96,6 +111,16 @@ Most of my work is on the frontend, which is reflected in my setup. Some package
 - Racket
 - Haskell
 
+## Misc notes
+
+* I use [Marked 2](marked2app.com) to preview markdown files. If you don't have
+  it, or you want to use something, set `markdown-open-command` to point to
+  something else.
+* I put more effort into some modes than others, hence there are some modes
+  with considered chordal bindings, and some with none. If you notice this,
+  and you'd like to flesh these modes out, please send me a PR!
+
 ## Credits
 
-Heavily ~~copied~~ borrowed & adapted from Chris Barrett's wonderful [setup](https://github.com/chrisbarrett/.emacs.d).
+Heavily ~~copied~~ borrowed & adapted from Chris Barrett's
+wonderful [setup](https://github.com/chrisbarrett/.emacs.d).
