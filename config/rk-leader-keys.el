@@ -77,6 +77,7 @@
       "SPC q"   "quit"
       "SPC w"   "window"
       "SPC s"   "search/edit"
+      "SPC S"   "string"
       "SPC t"   "toggles"
       "SPC SPC" "M-x"
       "SPC m"   '("major-mode-cmd" . "Major mode commands"))
