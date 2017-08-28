@@ -111,6 +111,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-string)
 (use-package rk-docker)
 (use-package rk-groovy)
+(use-package rk-lobsters)
 
 ;;; Print overall startup time.
 
