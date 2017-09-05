@@ -69,6 +69,7 @@
       "SPC g"   "git/goto"
       "SPC h"   "help"
       "SPC h d" "describe"
+      "SPC i"   "info"
       "SPC h f" "find"
       "SPC k"   "kill"
       "SPC n"   "narrow"
@@ -143,6 +144,7 @@
       "f R" #'rk/rename-file-and-buffer
       "f e" #'rk/sudo-edit
       "f f" #'find-file
+      "f m" #'mkdir
       "f s" #'save-buffer
       "f S" #'save-some-buffers
       "f W" #'write-file
