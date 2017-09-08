@@ -276,14 +276,12 @@ Do not scheduled items or repeating todos."
 
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"
-             ((tags-todo "-study-someday-media/NEXT"
+             ((tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
-              (stuck "")
-              (tags-todo "media|study/NEXT"
-                         ((org-agenda-overriding-header "Media & Study"))))
+              (stuck ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-files (list org-default-notes-file org-agenda-diary-file))
               (org-agenda-dim-blocked-tasks nil)
@@ -291,7 +289,7 @@ Do not scheduled items or repeating todos."
               (org-agenda-ignore-drawer-properties '(effort appt))))
 
             ("n" "Next actions"
-             ((tags-todo "-study-someday-media/NEXT"))
+             ((tags-todo "-someday/NEXT"))
              ((org-agenda-overriding-header "Next Actions")))
 
             ("r" "Weekly Review"
@@ -307,7 +305,7 @@ Do not scheduled items or repeating todos."
               (todo "WAITING"
                     ((org-agenda-overriding-header "Review Tasks on Hold")))
 
-              (tags-todo "-someday-media-study/NEXT"
+              (tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (tags-todo "+goals+3_months+project/NEXT"
                          ((org-agenda-overriding-header "Review 3 Month Goals")))
@@ -350,12 +348,10 @@ Do not scheduled items or repeating todos."
             ("w" "Work actions"
              ((tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
+              (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
-              (stuck "")
-              (agenda "")
-              (tags "+standup/!-DONE"
-                    ((org-agenda-overriding-header "Standup"))))
+              (stuck ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-use-tag-inheritance nil)
               (org-agenda-files (list rk-org-work-file org-agenda-diary-file))
@@ -496,102 +492,53 @@ Do not scheduled items or repeating todos."
   (setq org-capture-templates
         (list
          (rk-org--capture-template-entry
-          "t" "Todo"
-          '(file org-default-notes-file) "* TODO  %?")
-
-         (rk-org--capture-template-entry
-          "T" "Todo (work)"
-          `(file ,rk-org-work-file) "* TODO  %?")
-
-         (rk-org--capture-template-entry
-          "n" "Next"
-          '(file org-default-notes-file) "* NEXT  %?")
-
-         (rk-org--capture-template-entry
-          "N" "Next (work)"
-          `(file rk-org-work-file) "* NEXT  %?")
-
-         (rk-org--capture-template-entry
           "d" "Diary"
-          '(file+datetree org-agenda-diary-file) "*  %?\n%^t")
+          '(file+datetree org-agenda-diary-file) "*  %?\n%^T")
 
          (rk-org--capture-template-entry
           "D" "Diary (work)"
-          `(file+datetree rk-org-work-file) "*  %?\n%^t")
+          `(file+datetree rk-org-work-file) "*  %?\n%^T")
 
          (rk-org--capture-template-entry
-          "S" "Standup (work)"
+          "r" "Reporting"
+          '(file+olp+datetree rk-org-work-file "Reporting") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "e" "Editors"
+          '(file+olp+datetree rk-org-work-file "Editors") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "o" "Operations"
+          '(file+olp+datetree rk-org-work-file "Operations") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "i" "Infra"
+          '(file+olp+datetree rk-org-work-file "Infra") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "e" "ETL"
+          '(file+olp+datetree rk-org-work-file "ETL") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "l" "Legacy"
+          '(file+olp+datetree rk-org-work-file "Legacy") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "R" "Recruitment"
+          '(file+olp+datetree rk-org-work-file "Recruitment") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "t" "Team Lead"
+          '(file+olp+datetree rk-org-work-file "Team Lead") "*  %?\n%^T")
+
+         (rk-org--capture-template-entry
+          "S" "Standup"
           `(file+datetree rk-org-work-file) "* TODO %? :standup:\n%^t")
 
          (rk-org--capture-template-entry
-          "l" "Link"
-          '(file+olp org-default-notes-file "Links")
-          '(function rk-org-capture-url-read-url)
-          :immediate-finish t)
-
-         (rk-org--capture-template-entry
-          "L" "Link (work)"
-          `(file+olp rk-org-work-file "Links")
-          '(function rk-org-capture-url-read-url)
-          :immediate-finish t)
-
-         (rk-org--capture-template-entry
           "s" "Someday"
-          '(file+olp org-default-notes-file "Someday")
-          "* SOMEDAY  %?")
-
-         (rk-org--capture-template-entry
-          "m" "Listening"
-          '(file+olp org-default-notes-file "Media" "Listening")
-          "* MAYBE Listen to %i %?")
-
-         (rk-org--capture-template-entry
-          "v" "Viewing"
-          '(file+olp org-default-notes-file "Media" "Viewing")
-          "* MAYBE Watch %i %?")
-
-         (rk-org--capture-template-entry
-          "r" "Reading"
-          '(file+olp org-default-notes-file "Media" "Reading")
-          "* MAYBE Read %i %?")
-
-         (rk-org--capture-template-entry
-          "0" "Drill (item)"
-          '(file+olp rk-org-drill-file "Uncategorised")
-          "* Item                :drill:
-%?
-"
-          :jump-to-captured t)
-
-         (rk-org--capture-template-entry
-          "1" "Drill (question)"
-          '(file+olp rk-org-drill-file "Uncategorised")
-          "* Question                :drill:
-%?
-** Answer
-"
-          :jump-to-captured t)
-
-         (rk-org--capture-template-entry
-          "2" "Drill (two-sided)"
-          '(file+olp rk-org-drill-file "Uncategorised")
-          "* Question                :drill:
-:PROPERTIES:
-:DRILL_CARD_TYPE: twosided
-:END:
-%?
-** Side 1
-** Side 2
-"
-          :jump-to-captured t)
-
-         (rk-org--capture-template-entry
-          "e" "Email task"
-          '(file org-default-notes-file) "* TODO %?\n%a")
-
-         (rk-org--capture-template-entry
-          "E" "Email task (work)"
-          `(file rk-org-work-file) "* TODO %?\n%a")))
+          '(file+olp org-agenda-diary-file "Side projects")
+          "* SOMEDAY  %?")))
   :init
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
