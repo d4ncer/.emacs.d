@@ -501,35 +501,35 @@ Do not scheduled items or repeating todos."
 
          (rk-org--capture-template-entry
           "r" "Reporting"
-          '(file+olp+datetree rk-org-work-file "Reporting") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Reporting") "*  %?")
 
          (rk-org--capture-template-entry
           "e" "Editors"
-          '(file+olp+datetree rk-org-work-file "Editors") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Editors") "*  %?")
 
          (rk-org--capture-template-entry
           "o" "Operations"
-          '(file+olp+datetree rk-org-work-file "Operations") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Operations") "*  %?")
 
          (rk-org--capture-template-entry
           "i" "Infra"
-          '(file+olp+datetree rk-org-work-file "Infra") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Infra") "*  %?")
 
          (rk-org--capture-template-entry
           "e" "ETL"
-          '(file+olp+datetree rk-org-work-file "ETL") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "ETL") "*  %?")
 
          (rk-org--capture-template-entry
           "l" "Legacy"
-          '(file+olp+datetree rk-org-work-file "Legacy") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Legacy") "*  %?")
 
          (rk-org--capture-template-entry
           "R" "Recruitment"
-          '(file+olp+datetree rk-org-work-file "Recruitment") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Recruitment") "*  %?")
 
          (rk-org--capture-template-entry
           "t" "Team Lead"
-          '(file+olp+datetree rk-org-work-file "Team Lead") "*  %?\n%^T")
+          '(file+olp rk-org-work-file "Team Lead") "*  %?")
 
          (rk-org--capture-template-entry
           "S" "Standup"
