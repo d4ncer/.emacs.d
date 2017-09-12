@@ -708,6 +708,15 @@ table tr.tr-even td {
     (evil-define-key 'normal evil-org-mode-map (kbd "J") nil)
     (evil-define-key 'normal evil-org-mode-map (kbd "O") nil)))
 
+(use-package org-bullets
+  :after org
+  :commands (org-bullets-mode)
+  :defines (org-bullets-bullet-list)
+  :init
+  (progn
+    (setq org-bullets-bullet-list '("■" "◆" "▲" "▶"))
+    (add-hook 'org-mode-hook (lambda () (org-bullets-mode 1)))))
+
 (use-package org-indent
   :after org
   :commands (org-indent-mode)
