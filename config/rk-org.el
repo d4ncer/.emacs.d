@@ -516,7 +516,7 @@ Do not scheduled items or repeating todos."
           '(file+olp rk-org-work-file "Infra") "*  %?")
 
          (rk-org--capture-template-entry
-          "e" "ETL"
+          "E" "ETL"
           '(file+olp rk-org-work-file "ETL") "*  %?")
 
          (rk-org--capture-template-entry
