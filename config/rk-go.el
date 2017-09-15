@@ -38,7 +38,9 @@
       "eb" 'go-play-buffer
       "er" 'go-play-region
       "ed" 'go-download-play
-      "ga" 'ff-find-other-file
+      "gg" 'godef-jump
+      "gd" 'godef-describe
+      "gw" 'godef-jump-other-window
       "gc" 'go-coverage))
 
   :preface
