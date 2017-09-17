@@ -3,7 +3,7 @@
 
 ;; Copyright 2011-2017 François-Xavier Bois
 
-;; Version: 15.0.2
+;; Version: 15.0.11
 ;; Author: François-Xavier Bois <fxbois AT Google Mail Service>
 ;; Maintainer: François-Xavier Bois
 ;; Package-Requires: ((emacs "23.1"))
@@ -24,7 +24,7 @@
 
 ;;---- CONSTS ------------------------------------------------------------------
 
-(defconst web-mode-version "15.0.2"
+(defconst web-mode-version "15.0.11"
   "Web Mode version.")
 
 ;;---- GROUPS ------------------------------------------------------------------
@@ -211,6 +211,11 @@ See web-mode-block-face."
 
 (defcustom web-mode-enable-engine-detection nil
   "Detect such directive -*- engine: ENGINE -*- at the top of the file."
+  :type 'boolean
+  :group 'web-mode)
+
+(defcustom web-mode-enable-optional-tags t
+  "Enable omission of Certain closing tags (e.g. a li open tag followed by a li open tag is valid)."
   :type 'boolean
   :group 'web-mode)
 
@@ -627,7 +632,7 @@ Must be used in conjunction with web-mode-enable-block-face."
   :group 'web-mode-faces)
 
 (defface web-mode-current-element-highlight-face
-  '((t :background "#000000"))
+  '((t :background "#000000" :foreground "#ffffff"))
   "Overlay face for element highlight."
   :group 'web-mode-faces)
 
@@ -782,6 +787,7 @@ Must be used in conjunction with web-mode-enable-block-face."
     ("python"           . ())
     ("razor"            . ("play" "play2"))
     ("riot"             . ())
+    ("spip"             . ())
     ("template-toolkit" . ())
     ("smarty"           . ())
     ("thymeleaf"        . ())
@@ -855,6 +861,7 @@ Must be used in conjunction with web-mode-enable-block-face."
     ("razor"            . "\\.\\(cs\\|vb\\)html\\|\\.razor\\'")
     ("riot"             . "\\.tag\\'")
     ("smarty"           . "\\.tpl\\'")
+    ("spip"             . "spip")
     ("template-toolkit" . "\\.tt.?\\'")
     ("thymeleaf"        . "\\.thtml\\'")
     ("velocity"         . "\\.v\\(sl\\|tl\\|m\\)\\'")
@@ -866,8 +873,14 @@ Must be used in conjunction with web-mode-enable-block-face."
     )
   "Engine file extensions.")
 
+(defvar web-mode-content-types-alist nil
+  "A list of filename patterns and corresponding web-mode content types. For example,
+(setq web-mode-content-types-alist
+  '((\"json\" . \"/some/path/.*\\.api\\'\")
+    (\"jsx\"  . \"/some/react/path/.*\\.js[x]?\\'\")))")
+
 (defvar web-mode-engines-alist nil
-  "Alist of filename patterns and corresponding web-mode engine. For example,
+  "A list of filename patterns and corresponding web-mode engine. For example,
 (setq web-mode-engines-alist
       '((\"php\"    . \"\\\\.phtml\\\\'\")
         (\"blade\"  . \"\\\\.blade\\\\.\")))")
@@ -1161,6 +1174,7 @@ Must be used in conjunction with web-mode-enable-block-face."
    '("razor"            . "@.\\|^[ \t]*}")
    '("riot"             . "{.")
    '("smarty"           . "{[[:alpha:]#$/*\"]")
+   '("spip"             . "\\[(#REM)\\|(\\|#[A-Z0-9_]\\|{\\|<:")
    '("template-toolkit" . "\\[%.\\|%%#")
    '("underscore"       . "<%")
    '("velocity"         . "#[[:alpha:]#*]\\|$[[:alpha:]!{]")
@@ -1289,7 +1303,7 @@ shouldn't be moved back.)")
    (append
     (cdr (assoc "php" web-mode-extra-keywords))
     '("and" "array" "as" "break"
-      "callable" "case" "catch"  "catch all" "class" "const" "continue"
+      "callable" "case" "catch"  "catch all" "class" "clone" "const" "continue"
       "default" "die" "do" "echo" "else" "elseif" "empty"
       "endfor" "endforeach" "endif" "endswitch" "endwhile" "exit" "extends"
       "finally" "for" "foreach" "function" "global" "goto"
@@ -1699,6 +1713,7 @@ shouldn't be moved back.)")
    '("\\_<\\(function\\|get\\|set\\)[ ]+\\([[:alnum:]_]+\\)"
      (1 'web-mode-keyword-face)
      (2 'web-mode-function-name-face))
+   '("\\([[:alnum:]_]+\\)[ ]*([^)]*)[ \n]*{" 1 'web-mode-function-name-face)
    '("([ ]*\\([[:alnum:]_]+\\)[ ]*=>" 1 'web-mode-function-name-face)
    '("[ ]*\\([[:alnum:]_]+\\)[ ]*=[ ]*([^)]*)[ ]*=>[ ]*{" 1 'web-mode-function-name-face)
    '("\\_<\\(var\\|let\\|const\\)[ ]+\\([[:alnum:]_]+\\)" 2 'web-mode-variable-name-face)
@@ -2076,6 +2091,14 @@ shouldn't be moved back.)")
    '("\\_<\\([$]\\)\\([[:alnum:]_]*\\)" (1 nil) (2 'web-mode-variable-name-face))
    ))
 
+(defvar web-mode-spip-font-lock-keywords
+  (list
+   '("<:.+:>" 0 'web-mode-block-string-face)
+   '("#[A-Z0-9_]+" 0 'web-mode-variable-name-face)
+   '("|[a-z0-9_=!?<>]+" 0 'web-mode-function-call-face)
+   '("(\\([[:alnum:]_ ]+\\))" 1 'web-mode-constant-face)
+   ))
+
 (defvar web-mode-latex-font-lock-keywords
   (list
    '("[[:alnum:]_]+" 0 'web-mode-function-name-face t t)
@@ -2107,6 +2130,7 @@ shouldn't be moved back.)")
     ("razor"            . web-mode-razor-font-lock-keywords)
     ("riot"             . web-mode-riot-font-lock-keywords)
     ("smarty"           . web-mode-smarty-font-lock-keywords)
+    ("spip"             . web-mode-spip-font-lock-keywords)
     ("template-toolkit" . web-mode-template-toolkit-font-lock-keywords)
     ("underscore"       . web-mode-underscore-font-lock-keywords)
     ("web2py"           . web-mode-web2py-font-lock-keywords)
@@ -2971,6 +2995,21 @@ another auto-completion with different ac-sources (e.g. ac-php)")
                 delim-close "}")
           ) ;riot
 
+         ((string= web-mode-engine "spip")
+          (cond
+           ((and (string= sub1 "#")
+                 (looking-at "[A-Z0-9_]+"))
+            (setq closing-string (match-string-no-properties 0)))
+           ((string= sub1 "(")
+            (setq closing-string '("(" . ")")))
+           ((string= sub1 "{")
+            (setq closing-string '("{" . "}")))
+           ((string= sub2 "<:")
+            (setq closing-string ":>"))
+           (t
+            (setq closing-string "]"))
+            ))
+
          ((string= web-mode-engine "marko")
           (setq closing-string "}"
                 delim-open "${"
@@ -3443,6 +3482,13 @@ another auto-completion with different ac-sources (e.g. ac-php)")
         (setq regexp "\"\\|'")))
       ) ;xoops
 
+     ((string= web-mode-engine "spip")
+      (if (string= (buffer-substring-no-properties
+                    block-beg (+ block-beg 7))
+                   "[(#REM)")
+          (setq token-type 'comment
+                regexp "\\]")))
+
      ((string= web-mode-engine "dust")
       (cond
        ((string= sub2 "{!")
@@ -3687,56 +3733,62 @@ another auto-completion with different ac-sources (e.g. ac-php)")
         ) ;erb
 
        ((string= web-mode-engine "django")
-        (when (eq (char-after (1+ reg-beg)) ?\%)
-          (cond
-           ((and (string= web-mode-minor-engine "jinja") ;#504
-                 (web-mode-block-starts-with "else\\_>" reg-beg))
-            (let ((continue t)
-                  (pos reg-beg)
-                  (ctrl nil))
-              (while continue
-                (cond
-                 ((null (setq pos (web-mode-block-control-previous-position 'open pos)))
-                  (setq continue nil))
-                 ((member (setq ctrl (cdr (car (get-text-property pos 'block-controls)))) '("if" "ifequal" "ifnotequal" "for"))
-                  (setq continue nil)
-                  )
-                 ) ;cond
+        ;;(when (eq (char-after (1+ reg-beg)) ?\%)
+        (cond
+         ((and (string= web-mode-minor-engine "jinja") ;#504
+               (web-mode-block-starts-with "else\\_>" reg-beg))
+          (let ((continue t)
+                (pos reg-beg)
+                (ctrl nil))
+            (while continue
+              (cond
+               ((null (setq pos (web-mode-block-control-previous-position 'open pos)))
+                (setq continue nil))
+               ((member (setq ctrl (cdr (car (get-text-property pos 'block-controls)))) '("if" "ifequal" "ifnotequal" "for"))
+                (setq continue nil)
                 )
-              (setq controls (append controls (list (cons 'inside (or ctrl "if")))))
+               ) ;cond
               )
+            (setq controls (append controls (list (cons 'inside (or ctrl "if")))))
             )
-           ((web-mode-block-starts-with "\\(else\\|els?if\\)" reg-beg)
-            (let ((continue t)
-                  (pos reg-beg)
-                  (ctrl nil))
-              (while continue
-                (cond
-                 ((null (setq pos (web-mode-block-control-previous-position 'open pos)))
-                  (setq continue nil))
-                 ((member (setq ctrl (cdr (car (get-text-property pos 'block-controls)))) '("if" "ifequal" "ifnotequal"))
-                  (setq continue nil)
-                  )
-                 ) ;cond
-                ) ;while
-              (setq controls (append controls (list (cons 'inside (or ctrl "if")))))
-              ) ;let
-            ) ;case else
-           ((web-mode-block-starts-with "\\(empty\\)" reg-beg)
-            (setq controls (append controls (list (cons 'inside "for")))))
-           ((web-mode-block-starts-with "end\\([[:alpha:]]+\\)" reg-beg)
-            (setq controls (append controls (list (cons 'close (match-string-no-properties 1))))))
-           ((web-mode-block-starts-with (concat web-mode-django-control-blocks-regexp "[ %]") reg-beg)
-            (let (control)
-              (setq control (match-string-no-properties 1))
-              ;;(message "%S %S %S" control (concat "end" control) web-mode-django-control-blocks)
-              (when (member (concat "end" control) web-mode-django-control-blocks)
-                (setq controls (append controls (list (cons 'open control))))
-                ) ;when
-              ) ;let
-            ) ;case
-           ) ;cond
-          ) ;when
+          )
+         ((web-mode-block-starts-with "form_start[ ]*(" reg-beg)
+          (setq controls (append controls (list (cons 'open "form_start")))))
+         ((web-mode-block-starts-with "form_end[ ]*(" reg-beg)
+          (setq controls (append controls (list (cons 'close "form_start")))))
+         ((not (eq (char-after (1+ reg-beg)) ?\%))
+          )
+         ((web-mode-block-starts-with "\\(else\\|els?if\\)" reg-beg)
+          (let ((continue t)
+                (pos reg-beg)
+                (ctrl nil))
+            (while continue
+              (cond
+               ((null (setq pos (web-mode-block-control-previous-position 'open pos)))
+                (setq continue nil))
+               ((member (setq ctrl (cdr (car (get-text-property pos 'block-controls)))) '("if" "ifequal" "ifnotequal"))
+                (setq continue nil)
+                )
+               ) ;cond
+              ) ;while
+            (setq controls (append controls (list (cons 'inside (or ctrl "if")))))
+            ) ;let
+          ) ;case else
+         ((web-mode-block-starts-with "\\(empty\\)" reg-beg)
+          (setq controls (append controls (list (cons 'inside "for")))))
+         ((web-mode-block-starts-with "end\\([[:alpha:]]+\\)" reg-beg)
+          (setq controls (append controls (list (cons 'close (match-string-no-properties 1))))))
+         ((web-mode-block-starts-with (concat web-mode-django-control-blocks-regexp "[ %]") reg-beg)
+          (let (control)
+            (setq control (match-string-no-properties 1))
+            ;;(message "%S %S %S" control (concat "end" control) web-mode-django-control-blocks)
+            (when (member (concat "end" control) web-mode-django-control-blocks)
+              (setq controls (append controls (list (cons 'open control))))
+              ) ;when
+            ) ;let
+          ) ;case
+         ) ;cond
+        ;;) ;when
         ) ;django
 
        ((string= web-mode-engine "smarty")
@@ -4008,7 +4060,7 @@ another auto-completion with different ac-sources (e.g. ac-php)")
 
        ((string= web-mode-engine "freemarker")
         (cond
-         ((looking-at "<#\\(import\\|assign\\|return\\|local\\)")
+         ((looking-at "[<[]#\\(import\\|include\\|assign\\|return\\|local\\)")
           )
          ((eq (char-after (1- reg-end)) ?\/)
           )
@@ -4023,7 +4075,7 @@ another auto-completion with different ac-sources (e.g. ac-php)")
                 type (if (eq (aref (match-string-no-properties 0) 1) ?\/) 'close 'open))
           (setq controls (append controls (list (cons type control))))
           )
-         ((looking-at "</?\\(@\\)")
+         ((looking-at "[<[]/?\\(@\\)")
           (setq control (match-string-no-properties 1)
                 type (if (eq (aref (match-string-no-properties 0) 1) ?\/) 'close 'open))
           (setq controls (append controls (list (cons type control))))
@@ -7281,7 +7333,34 @@ another auto-completion with different ac-sources (e.g. ac-php)")
               (and (member language '("jsx"))
                    (string= options "is-html")))
           (when debug (message "I200(%S) web-mode-markup-indentation" pos))
+          (when web-mode-enable-optional-tags
+            (save-excursion
+              (let (prev-tag-pos next-tag-pos prev-tag next-tag)
+                (if (get-text-property pos 'tag-type)
+                    (setq next-tag-pos pos)
+                  (setq next-tag-pos (web-mode-tag-next-position pos)))
+                (setq prev-tag-pos (web-mode-tag-previous-position pos))
+                ;;(message "%S %S" prev-tag-pos next-tag-pos)
+                (when (and prev-tag-pos next-tag-pos
+                           (eq (get-text-property prev-tag-pos 'tag-type) 'start)
+                           (eq (get-text-property next-tag-pos 'tag-type) 'start))
+                  (setq prev-tag (get-text-property prev-tag-pos 'tag-name)
+                        next-tag (get-text-property next-tag-pos 'tag-name))
+                  ;;(message "%S %S" prev-tag next-tag)
+                  (when (or (and (string= prev-tag "p") (member next-tag '("p" "address", "article", "aside", "blockquote", "div", "dl", "fieldset", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "main", "nav", "ol", "p", "pre", "section", "table", "ul")))
+                            (and (string= prev-tag "li") (member next-tag '("li")))
+                            (and (string= prev-tag "dt") (member next-tag '("dt" "dd")))
+                            (and (string= prev-tag "td") (member next-tag '("td" "th")))
+                            (and (string= prev-tag "th") (member next-tag '("td" "th")))
+                            )
+                    (when debug (message "I205(%S) optional-tag" pos))
+                    (setq offset (web-mode-indentation-at-pos prev-tag-pos)))
+                  ) ;when
+                )) ;save-excursion let
+            ) ;when web-mode-enable-optional-tags
           (cond
+           ((not (null offset))
+            )
            ((get-text-property pos 'tag-beg)
             (setq offset (web-mode-markup-indentation pos))
             )
@@ -7576,7 +7655,7 @@ another auto-completion with different ac-sources (e.g. ac-php)")
          ;;((and (member language '("javascript" "jsx" "ejs" "php"))
          ((and (member language '("php"))
                (or (and (eq prev-char ?\))
-                        (string-match-p "^\\(for\\|if\\|while\\)[ ]*(" prev-line))
+                        (string-match-p "^\\(for\\|if\\|else[ ]*if\\|while\\)[ ]*(" prev-line))
                    (and is_js
                         (web-mode-part-is-opener prev-pos reg-beg))
                    (string-match-p "^else$" prev-line))
@@ -10077,7 +10156,11 @@ Prompt user if TAG-NAME isn't provided."
         (if (= web-mode-auto-quote-style 2)
             (insert "''")
           (insert "\"\""))
-        (backward-char)
+        (if (looking-at-p "[ \n>]")
+            (backward-char)
+          (insert " ")
+          (backward-char 2)
+          )
         (setq auto-quoted t))
        ((and (eq char ?\")
              (looking-back "=[ ]*\"" (point-min))
@@ -10282,6 +10365,7 @@ Prompt user if TAG-NAME isn't provided."
         (setq elt (aref elt 0))
         (setq elt (car (rassoc elt web-mode-html-entities)))
         (replace-match (concat "&" elt ";"))
+        (setq max (+ max (length elt) 1))
         ) ;while
       )))
 
@@ -10552,6 +10636,10 @@ Prompt user if TAG-NAME isn't provided."
         ) ;let
       ) ;when
     ) ;while
+  ;; Delete a potential space before the closing ">".
+  (if (and (looking-at ">")
+           (looking-back " " (point-min)))
+        (delete-char -1))
   )
 
 (defun web-mode-block-close (&optional pos)
@@ -12710,6 +12798,9 @@ Prompt user if TAG-NAME isn't provided."
       (setq web-mode-django-control-blocks-regexp
             (regexp-opt web-mode-django-control-blocks t))
       )
+
+    (when (string= web-mode-engine "spip")
+      (modify-syntax-entry ?# "w" (syntax-table)))
 
 ;;    (message "%S" (symbol-value (cdr (assoc web-mode-engine web-mode-engines-font-lock-keywords))))
 
