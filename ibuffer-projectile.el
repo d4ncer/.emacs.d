@@ -71,6 +71,11 @@ This option can be used to exclude certain files from the grouping mechanism."
   :type 'function
   :group 'ibuffer-projectile)
 
+(defcustom ibuffer-projectile-prefix "Projectile:"
+  "Prefix string for generated filter groups."
+  :type 'string
+  :group 'ibuffer-projectile)
+
 (defun ibuffer-projectile--include-file-p (file)
   "Return t iff FILE should be included in ibuffer-projectile's filtering."
   (and file
@@ -79,13 +84,15 @@ This option can be used to exclude certain files from the grouping mechanism."
        (funcall ibuffer-projectile-include-function file)))
 
 (defun ibuffer-projectile-root (buf)
-  "Return root-dir for BUF.
+  "Return a cons cell (project-name . root-dir) for BUF.
 If the file is not in a project, then nil is returned instead."
   (with-current-buffer buf
-    (let ((file-name (or buffer-file-name default-directory)))
-      (when (ibuffer-projectile--include-file-p file-name)
-        (let ((projectile-require-project-root nil))
-          (projectile-project-root))))))
+    (let ((file-name (buffer-file-name))
+          (root (ignore-errors (projectile-project-root))))
+      (when (and file-name
+                 root
+                 (ibuffer-projectile--include-file-p file-name))
+        (cons (projectile-project-name) root)))))
 
 (define-ibuffer-filter projectile-root
     "Toggle current view to buffers with projectile root dir QUALIFIER."
@@ -100,7 +107,7 @@ If the file is not in a project, then nil is returned instead."
   (let ((roots (ibuffer-remove-duplicates
                 (delq nil (mapcar 'ibuffer-projectile-root (buffer-list))))))
     (mapcar (lambda (root)
-              (cons (abbreviate-file-name root)
+              (cons (format "%s%s" ibuffer-projectile-prefix (car root))
                     `((projectile-root . ,root))))
             roots)))
 
