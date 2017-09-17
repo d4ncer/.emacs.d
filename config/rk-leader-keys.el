@@ -63,6 +63,7 @@
     (which-key-add-key-based-replacements
       "SPC ,"   "smartparens"
       "SPC a"   "applications"
+      "SPC a e" "emacs"
       "SPC b"   "buffers"
       "SPC c"   "comments"
       "SPC f"   "files"
@@ -91,6 +92,12 @@
     (autoload 'evil-window-next "evil-commands")
     (autoload 'evil-window-split "evil-commands")
     (autoload 'evil-window-vsplit "evil-commands")
+    (autoload 'evil-window-vsplit "rk-emacs")
+    (autoload 'rk-emacs-add-subtree "rk-emacs")
+    (autoload 'rk-emacs-update-subtree "rk-emacs")
+    (autoload 'rk-emacs-compile-subtree "rk-emacs")
+    (autoload 'rk-emacs-compile-all-subtrees "rk-emacs")
+    (autoload 'rk-emacs-compile-elpa "rk-emacs")
     (autoload 'counsel-git-log "counsel")
 
     (defun rk-get-face-at-point  (pos)
@@ -129,6 +136,12 @@
       "|"   #'rk/toggle-window-split
 
       "!"   #'shell-command
+
+      "a e a" #'rk-emacs-add-subtree
+      "a e u" #'rk-emacs-update-subtree
+      "a e c" #'rk-emacs-compile-subtree
+      "a e C" #'rk-emacs-compile-all-subtrees
+      "a e e" #'rk-emacs-compile-elpa
 
       "b d" #'kill-this-buffer
       "b b" #'bury-buffer
