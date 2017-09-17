@@ -146,10 +146,10 @@ If nil it will default to `buffer-file-coding-system'."
 (defcustom org-texinfo-classes
   '(("info"
      "@documentencoding AUTO\n@documentlanguage AUTO"
-     ("@chapter %s" "@unnumbered %s" "@appendix %s")
-     ("@section %s" "@unnumberedsec %s" "@appendixsec %s")
-     ("@subsection %s" "@unnumberedsubsec %s" "@appendixsubsec %s")
-     ("@subsubsection %s" "@unnumberedsubsubsec %s" "@appendixsubsubsec %s")))
+     ("@chapter %s"       "@chapheading %s"   "@appendix %s")
+     ("@section %s"       "@heading %s"       "@appendixsec %s")
+     ("@subsection %s"    "@subheading %s"    "@appendixsubsec %s")
+     ("@subsubsection %s" "@subsubheading %s" "@appendixsubsubsec %s")))
   "Alist of Texinfo classes and associated header and structure.
 If #+TEXINFO_CLASS is set in the buffer, use its value and the
 associated information.  Here is the structure of a class
@@ -193,7 +193,7 @@ of strings is specified.  A %s formatter is mandatory in each
 section string and will be replaced by the title of the section."
   :group 'org-export-texinfo
   :version "26.1"
-  :package-version '(Org . "9.1")
+  :package-version '(Org . "9.2")
   :type '(repeat
 	  (list (string :tag "Texinfo class")
 		(string :tag "Texinfo header")
@@ -351,7 +351,7 @@ The function should return the string to be exported."
 
 ;;;; Compilation
 
-(defcustom org-texinfo-info-process '("makeinfo %f")
+(defcustom org-texinfo-info-process '("makeinfo --no-split %f")
   "Commands to process a Texinfo file to an INFO file.
 
 This is a list of strings, each of them will be given to the
@@ -361,6 +361,8 @@ base name (i.e. without directory and extension parts), %o by the
 base directory of the file and %O by the absolute file name of
 the output file."
   :group 'org-export-texinfo
+  :version "26.1"
+  :package-version '(Org . "9.1")
   :type '(repeat :tag "Shell command sequence"
 		 (string :tag "Shell command")))
 
@@ -869,6 +871,7 @@ holding contextual information."
 	     (todo-type (and todo (org-element-property :todo-type headline)))
 	     (tags (and (plist-get info :with-tags)
 			(org-export-get-tags headline info)))
+	     (numbered? (org-export-numbered-headline-p headline info))
 	     (priority (and (plist-get info :with-priority)
 			    (org-element-property :priority headline)))
 	     (text (org-texinfo--sanitize-title
@@ -877,7 +880,8 @@ holding contextual information."
 	      (funcall (plist-get info :texinfo-format-headline-function)
 		       todo todo-type priority text tags))
 	     (contents
-	      (concat (if (org-string-nw-p contents)
+	      (concat "\n"
+		      (if (org-string-nw-p contents)
 			  (concat "\n" contents)
 			"")
 		      (let ((index (org-element-property :INDEX headline)))
@@ -885,18 +889,19 @@ holding contextual information."
 			     (format "\n@printindex %s\n" index))))))
 	(cond
 	 ((eq section-fmt 'plain-list)
-	  (let ((numbered? (org-export-numbered-headline-p headline info)))
-	    (concat (and (org-export-first-sibling-p headline info)
-			 (format "@%s\n" (if numbered? 'enumerate 'itemize)))
-		    "@item\n" full-text "\n"
-		    contents
-		    (if (org-export-last-sibling-p headline info)
-			(format "@end %s" (if numbered? 'enumerate 'itemize))
-		      "\n"))))
+	  (concat (and (org-export-first-sibling-p headline info)
+		       (format "@%s\n" (if numbered? 'enumerate 'itemize)))
+		  "@item\n" full-text "\n"
+		  contents
+		  (if (org-export-last-sibling-p headline info)
+		      (format "@end %s" (if numbered? 'enumerate 'itemize))
+		    "\n")))
 	 (t
-	  (concat (format "@node %s\n" (org-texinfo--get-node headline info))
-		  (format section-fmt full-text)
-		  contents)))))))
+	  (concat
+	   (and numbered?
+		(format "@node %s\n" (org-texinfo--get-node headline info)))
+	   (format section-fmt full-text)
+	   contents)))))))
 
 (defun org-texinfo-format-headline-default-function
   (todo _todo-type priority text tags)
@@ -1216,7 +1221,7 @@ holding contextual information."
 	       (cl-remove-if
 		(lambda (h)
 		  (org-not-nil (org-export-get-node-property :COPYING h t)))
-		(org-export-collect-headlines info nil scope))
+		(org-export-collect-headlines info 1 scope))
 	       cache))))
 
 ;;;; Node Property
@@ -1570,6 +1575,7 @@ contextual information."
 
 ;;; Interactive functions
 
+;;;###autoload
 (defun org-texinfo-export-to-texinfo
   (&optional async subtreep visible-only body-only ext-plist)
   "Export current buffer to a Texinfo file.
@@ -1604,6 +1610,7 @@ Return output file's name."
     (org-export-to-file 'texinfo outfile
       async subtreep visible-only body-only ext-plist)))
 
+;;;###autoload
 (defun org-texinfo-export-to-info
   (&optional async subtreep visible-only body-only ext-plist)
   "Export current buffer to Texinfo then process through to INFO.

@@ -1,6 +1,6 @@
 ;;; ob-lua.el --- Org Babel functions for Lua evaluation -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2014, 2016, 2017 Free Software Foundation, Inc.
+;; Copyright (C) 2014, 2016-2017 Free Software Foundation, Inc.
 
 ;; Authors: Dieter Schoen
 ;; Keywords: literate programming, reproducible research
@@ -25,7 +25,7 @@
 ;; for session support, lua-mode is needed.
 ;; lua-mode is not part of GNU Emacs/orgmode, but can be obtained
 ;; from marmalade or melpa.
-;; The source respository is here:
+;; The source repository is here:
 ;; https://github.com/immerrr/lua-mode
 
 ;; However, sessions are not yet working.
@@ -49,7 +49,7 @@
 
 (defcustom org-babel-lua-command "lua"
   "Name of the command for executing Lua code."
-  :version "24.5"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :group 'org-babel
   :type 'string)
@@ -58,21 +58,21 @@
   "Preferred lua mode for use in running lua interactively.
 This will typically be 'lua-mode."
   :group 'org-babel
-  :version "24.5"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :type 'symbol)
 
 (defcustom org-babel-lua-hline-to "None"
   "Replace hlines in incoming tables with this when translating to lua."
   :group 'org-babel
-  :version "24.5"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :type 'string)
 
 (defcustom org-babel-lua-None-to 'hline
   "Replace 'None' in lua tables with this before returning."
   :group 'org-babel
-  :version "24.5"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :type 'symbol)
 

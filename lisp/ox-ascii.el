@@ -341,13 +341,10 @@ Org mode, i.e. with \"=>\" as ellipsis."
   :type 'boolean)
 
 (defcustom org-ascii-table-use-ascii-art nil
-  "Non-nil means table.el tables are turned into ascii-art.
-
+  "Non-nil means \"table.el\" tables are turned into ASCII art.
 It only makes sense when export charset is `utf-8'.  It is nil by
-default since it requires ascii-art-to-unicode.el package.  You
-can download it here:
-
-  http://gnuvola.org/software/j/aa2u/ascii-art-to-unicode.el."
+default since it requires \"ascii-art-to-unicode.el\" package,
+available through, e.g., GNU ELPA."
   :group 'org-export-ascii
   :version "24.4"
   :package-version '(Org . "8.0")
@@ -404,7 +401,7 @@ The function must accept nine parameters:
 The function should return either the string to be exported or
 nil to ignore the inline task."
   :group 'org-export-ascii
-  :version "24.4"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :type 'function)
 
@@ -916,7 +913,8 @@ as a plist."
 	   ;; If destination is a target, make sure we can name the
 	   ;; container it refers to.
 	   (enumerable
-	    (org-element-lineage datum '(headline paragrah src-block table) t)))
+	    (org-element-lineage datum
+				 '(headline paragraph src-block table) t)))
        (pcase (org-element-type enumerable)
 	 (`headline
 	  (format (org-ascii--translate "See section %s" info)
@@ -1752,7 +1750,7 @@ contextual information."
   "Transcode a SPECIAL-BLOCK element from Org to ASCII.
 CONTENTS holds the contents of the block.  INFO is a plist
 holding contextual information."
-  ;; "JUSTIFYLEFT" and "JUSTFYRIGHT" have already been taken care of
+  ;; "JUSTIFYLEFT" and "JUSTIFYRIGHT" have already been taken care of
   ;; at a lower level.  There is no other special block type to
   ;; handle.
   contents)

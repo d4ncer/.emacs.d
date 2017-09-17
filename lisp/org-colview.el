@@ -67,7 +67,8 @@ or nil if the normal value should be used."
 (defcustom org-columns-summary-types nil
   "Alist between operators and summarize functions.
 
-Each association follows the pattern (LABEL . SUMMARIZE) where
+Each association follows the pattern (LABEL . SUMMARIZE),
+or (LABEL SUMMARISE COLLECT) where
 
   LABEL is a string used in #+COLUMNS definition describing the
   summary type.  It can contain any character but \"}\".  It is
@@ -77,6 +78,13 @@ Each association follows the pattern (LABEL . SUMMARIZE) where
   argument is a non-empty list of values, as non-empty strings.
   The second one is a format string or nil.  It has to return
   a string summarizing the list of values.
+
+  COLLECT is a function called with one argument, a property
+  name.  It is called in the context of a headline and must
+  return the collected property, or the empty string.  You can
+  use this to only collect a property if a related conditional
+  properties is set, e.g., to return VACATION_DAYS only if
+  CONFIRMED is true.
 
 Note that the return value can become one value for an higher
 order summary, so the function is expected to handle its own
@@ -88,17 +96,18 @@ in `org-columns-summary-types-default', which see."
   :version "26.1"
   :package-version '(Org . "9.0")
   :type '(alist :key-type (string :tag "       Label")
-		:value-type (function :tag "Summarize")))
+		:value-type
+		(choice (function :tag "Summarize")
+			(list :tag "Collect and summarize"
+			      (function :tag "Summarize")
+			      (function :tag "Collect")))))
 
 
 
 ;;; Column View
 
-(defvar org-columns-overlays nil
+(defvar-local org-columns-overlays nil
   "Holds the list of current column overlays.")
-
-(defvar org-columns--time 0.0
-  "Number of seconds since the epoch, as a floating point number.")
 
 (defvar-local org-columns-current-fmt nil
   "Local variable, holds the currently active column format.")
@@ -110,11 +119,14 @@ This is the compiled version of the format.")
 (defvar-local org-columns-current-maxwidths nil
   "Currently active maximum column widths, as a vector.")
 
-(defvar org-columns-begin-marker (make-marker)
+(defvar-local org-columns-begin-marker nil
   "Points to the position where last a column creation command was called.")
 
-(defvar org-columns-top-level-marker (make-marker)
+(defvar-local org-columns-top-level-marker nil
   "Points to the position where current columns region starts.")
+
+(defvar org-columns--time 0.0
+  "Number of seconds since the epoch, as a floating point number.")
 
 (defvar org-columns-map (make-sparse-keymap)
   "The keymap valid in column display.")
@@ -301,10 +313,22 @@ integers greater than 0."
 
 (defun org-columns--summarize (operator)
   "Return summary function associated to string OPERATOR."
-  (if (not operator) nil
-    (cdr (or (assoc operator org-columns-summary-types)
-	     (assoc operator org-columns-summary-types-default)
-	     (error "Unknown %S operator" operator)))))
+  (pcase (or (assoc operator org-columns-summary-types)
+	     (assoc operator org-columns-summary-types-default))
+    (`nil (error "Unknown %S operator" operator))
+    (`(,_ . ,(and (pred functionp) summarize)) summarize)
+    (`(,_ ,summarize ,_) summarize)
+    (_ (error "Invalid definition for operator %S" operator))))
+
+(defun org-columns--collect (operator)
+  "Return collect function associated to string OPERATOR.
+Return nil if no collect function is associated to OPERATOR."
+  (pcase (or (assoc operator org-columns-summary-types)
+	     (assoc operator org-columns-summary-types-default))
+    (`nil (error "Unknown %S operator" operator))
+    (`(,_ . ,(pred functionp)) nil)	;default value
+    (`(,_ ,_ ,collect) collect)
+    (_ (error "Invalid definition for operator %S" operator))))
 
 (defun org-columns--overlay-text (value fmt width property original)
   "Return text "
@@ -458,23 +482,22 @@ for the duration of the command.")
 (defun org-columns-remove-overlays ()
   "Remove all currently active column overlays."
   (interactive)
-  (when (marker-buffer org-columns-begin-marker)
-    (with-current-buffer (marker-buffer org-columns-begin-marker)
-      (when (local-variable-p 'org-previous-header-line-format)
-	(setq header-line-format org-previous-header-line-format)
-	(kill-local-variable 'org-previous-header-line-format)
-	(remove-hook 'post-command-hook 'org-columns-hscroll-title 'local))
-      (move-marker org-columns-begin-marker nil)
-      (move-marker org-columns-top-level-marker nil)
-      (org-with-silent-modifications
-       (mapc 'delete-overlay org-columns-overlays)
-       (setq org-columns-overlays nil)
-       (let ((inhibit-read-only t))
-	 (remove-text-properties (point-min) (point-max) '(read-only t))))
-      (when org-columns-flyspell-was-active
-	(flyspell-mode 1))
-      (when (local-variable-p 'org-colview-initial-truncate-line-value)
-	(setq truncate-lines org-colview-initial-truncate-line-value)))))
+  (when org-columns-overlays
+    (when (local-variable-p 'org-previous-header-line-format)
+      (setq header-line-format org-previous-header-line-format)
+      (kill-local-variable 'org-previous-header-line-format)
+      (remove-hook 'post-command-hook 'org-columns-hscroll-title 'local))
+    (set-marker org-columns-begin-marker nil)
+    (set-marker org-columns-top-level-marker nil)
+    (org-with-silent-modifications
+     (mapc #'delete-overlay org-columns-overlays)
+     (setq org-columns-overlays nil)
+     (let ((inhibit-read-only t))
+       (remove-text-properties (point-min) (point-max) '(read-only t))))
+    (when org-columns-flyspell-was-active
+      (flyspell-mode 1))
+    (when (local-variable-p 'org-colview-initial-truncate-line-value)
+      (setq truncate-lines org-colview-initial-truncate-line-value))))
 
 (defun org-columns-compact-links (s)
   "Replace [[link][desc]] with [desc] or [link]."
@@ -613,20 +636,20 @@ Where possible, use the standard interface for changing this line."
   (let* ((pom (or (org-get-at-bol 'org-marker)
 		  (org-get-at-bol 'org-hd-marker)
 		  (point)))
-	 (key (get-char-property (point) 'org-columns-key))
-	 (key1 (concat key "_ALL"))
-	 (allowed (org-entry-get pom key1 t))
-	 nval)
+	 (key (concat (or (get-char-property (point) 'org-columns-key)
+			  (user-error "No column to edit at point"))
+		      "_ALL"))
+	 (allowed (org-entry-get pom key t))
+	 (new-value (read-string "Allowed: " allowed)))
     ;; FIXME: Cover editing TODO, TAGS etc in-buffer settings.????
     ;; FIXME: Write back to #+PROPERTY setting if that is needed.
-    (setq nval (read-string "Allowed: " allowed))
     (org-entry-put
      (cond ((marker-position org-entry-property-inherited-from)
 	    org-entry-property-inherited-from)
 	   ((marker-position org-columns-top-level-marker)
 	    org-columns-top-level-marker)
 	   (t pom))
-     key1 nval)))
+     key new-value)))
 
 (defun org-columns--call (fun)
   "Call function FUN while preserving heading visibility.
@@ -760,6 +783,8 @@ current specifications.  This function also sets
 (defun org-columns-goto-top-level ()
   "Move to the beginning of the column view area.
 Also sets `org-columns-top-level-marker' to the new position."
+  (unless (markerp org-columns-top-level-marker)
+    (setq org-columns-top-level-marker (make-marker)))
   (goto-char
    (move-marker
     org-columns-top-level-marker
@@ -782,7 +807,9 @@ When COLUMNS-FMT-STRING is non-nil, use it as the column format."
   (interactive "P")
   (org-columns-remove-overlays)
   (when global (goto-char (point-min)))
-  (move-marker org-columns-begin-marker (point))
+  (if (markerp org-columns-begin-marker)
+      (move-marker org-columns-begin-marker (point))
+    (setq org-columns-begin-marker (point-marker)))
   (org-columns-goto-top-level)
   ;; Initialize `org-columns-current-fmt' and
   ;; `org-columns-current-fmt-compiled'.
@@ -940,29 +967,28 @@ starting the current column display, or in a #+COLUMNS line of
 the current buffer."
   (let ((fmt (org-columns-uncompile-format org-columns-current-fmt-compiled)))
     (setq-local org-columns-current-fmt fmt)
-    (when (marker-position org-columns-top-level-marker)
-      (org-with-wide-buffer
-       (goto-char org-columns-top-level-marker)
-       (if (and (org-at-heading-p) (org-entry-get nil "COLUMNS"))
-	   (org-entry-put nil "COLUMNS" fmt)
-	 (goto-char (point-min))
-	 (let ((case-fold-search t))
-	   ;; Try to replace the first COLUMNS keyword available.
-	   (catch :found
-	     (while (re-search-forward "^[ \t]*#\\+COLUMNS:\\(.*\\)" nil t)
-	       (let ((element (save-match-data (org-element-at-point))))
-		 (when (and (eq (org-element-type element) 'keyword)
-			    (equal (org-element-property :key element)
-				   "COLUMNS"))
-		   (replace-match (concat " " fmt) t t nil 1)
-		   (throw :found nil))))
-	     ;; No COLUMNS keyword in the buffer.  Insert one at the
-	     ;; beginning, right before the first heading, if any.
-	     (goto-char (point-min))
-	     (unless (org-at-heading-p t) (outline-next-heading))
-	     (let ((inhibit-read-only t))
-	       (insert-before-markers "#+COLUMNS: " fmt "\n"))))
-	 (setq-local org-columns-default-format fmt))))))
+    (when org-columns-overlays
+      (org-with-point-at org-columns-top-level-marker
+	(if (and (org-at-heading-p) (org-entry-get nil "COLUMNS"))
+	    (org-entry-put nil "COLUMNS" fmt)
+	  (goto-char (point-min))
+	  (let ((case-fold-search t))
+	    ;; Try to replace the first COLUMNS keyword available.
+	    (catch :found
+	      (while (re-search-forward "^[ \t]*#\\+COLUMNS:\\(.*\\)" nil t)
+		(let ((element (save-match-data (org-element-at-point))))
+		  (when (and (eq (org-element-type element) 'keyword)
+			     (equal (org-element-property :key element)
+				    "COLUMNS"))
+		    (replace-match (concat " " fmt) t t nil 1)
+		    (throw :found nil))))
+	      ;; No COLUMNS keyword in the buffer.  Insert one at the
+	      ;; beginning, right before the first heading, if any.
+	      (goto-char (point-min))
+	      (unless (org-at-heading-p t) (outline-next-heading))
+	      (let ((inhibit-read-only t))
+		(insert-before-markers "#+COLUMNS: " fmt "\n"))))
+	  (setq-local org-columns-default-format fmt))))))
 
 (defun org-columns-update (property)
   "Recompute PROPERTY, and update the columns display for it."
@@ -994,18 +1020,17 @@ the current buffer."
 (defun org-columns-redo ()
   "Construct the column display again."
   (interactive)
-  (message "Recomputing columns...")
-  (org-with-wide-buffer
-   (when (marker-position org-columns-begin-marker)
-     (goto-char org-columns-begin-marker))
-   (org-columns-remove-overlays)
-   (if (derived-mode-p 'org-mode)
-       ;; Since we already know the columns format, provide it instead
-       ;; of computing again.
-       (call-interactively #'org-columns org-columns-current-fmt)
-     (org-agenda-redo)
-     (call-interactively #'org-agenda-columns)))
-  (message "Recomputing columns...done"))
+  (when org-columns-overlays
+    (message "Recomputing columns...")
+    (org-with-point-at org-columns-begin-marker
+      (org-columns-remove-overlays)
+      (if (derived-mode-p 'org-mode)
+	  ;; Since we already know the columns format, provide it
+	  ;; instead of computing again.
+	  (call-interactively #'org-columns org-columns-current-fmt)
+	(org-agenda-redo)
+	(call-interactively #'org-agenda-columns)))
+    (message "Recomputing columns...done")))
 
 (defun org-columns-uncompile-format (compiled)
   "Turn the compiled columns format back into a string representation.
@@ -1109,7 +1134,9 @@ properties drawers."
 	 (last-level lmax)
 	 (property (car spec))
 	 (printf (nth 4 spec))
-	 (summarize (org-columns--summarize (nth 3 spec))))
+	 (operator (nth 3 spec))
+	 (collect (and operator (org-columns--collect operator)))
+	 (summarize (and operator (org-columns--summarize operator))))
     (org-with-wide-buffer
      ;; Find the region to compute.
      (goto-char org-columns-top-level-marker)
@@ -1121,7 +1148,8 @@ properties drawers."
 	 (setq last-level level))
        (setq level (org-reduced-level (org-outline-level)))
        (let* ((pos (match-beginning 0))
-	      (value (org-entry-get nil property))
+              (value (if collect (funcall collect property)
+		       (org-entry-get (point) property)))
 	      (value-set (org-string-nw-p value)))
 	 (cond
 	  ((< level last-level)
@@ -1371,7 +1399,6 @@ PARAMS is a property list of parameters:
 :maxlevel When set to a number, don't capture headlines below this level.
 :skip-empty-rows
 	  When t, skip rows where all specifiers other than ITEM are empty.
-:width    apply widths specified in columns format using <N> specifiers.
 :format   When non-nil, specify the column view format to use."
   (let ((table
 	 (let ((id (plist-get params :id))
@@ -1427,14 +1454,6 @@ PARAMS is a property list of parameters:
 			  (concat "\\_" (make-string (* 2 (1- level)) ?\s) item)
 			item))))
 	    (push (cdr row) new-table))))
-      (when (plist-get params :width)
-	(setq table
-	      (append table
-		      (list
-		       (mapcar (lambda (spec)
-				 (let ((w (nth 2 spec)))
-				   (if w (format "<%d>" (max 3 w)) "")))
-			       org-columns-current-fmt-compiled)))))
       (when (plist-get params :vlines)
 	(setq table
 	      (let ((size (length org-columns-current-fmt-compiled)))
@@ -1489,7 +1508,9 @@ PARAMS is a property list of parameters:
   "Turn on or update column view in the agenda."
   (interactive)
   (org-columns-remove-overlays)
-  (move-marker org-columns-begin-marker (point))
+  (if (markerp org-columns-begin-marker)
+      (move-marker org-columns-begin-marker (point))
+    (setq org-columns-begin-marker (point-marker)))
   (let* ((org-columns--time (float-time (current-time)))
 	 (fmt
 	  (cond
@@ -1608,26 +1629,23 @@ This will add overlays to the date lines, to show the summary for each day."
 
 (defun org-agenda-colview-compute (fmt)
   "Compute the relevant columns in the contributing source buffers."
-  (let ((files org-agenda-contributing-files)
-	(org-columns-begin-marker (make-marker))
-	(org-columns-top-level-marker (make-marker)))
-    (dolist (f files)
-      (let ((b (find-buffer-visiting f)))
-	(with-current-buffer (or (buffer-base-buffer b) b)
-	  (org-with-wide-buffer
-	   (org-with-silent-modifications
-	    (remove-text-properties (point-min) (point-max) '(org-summaries t)))
-	   (goto-char (point-min))
-	   (org-columns-get-format-and-top-level)
-	   (dolist (spec fmt)
-	     (let ((prop (car spec)))
-	       (cond
-		((equal prop "CLOCKSUM") (org-clock-sum))
-		((equal prop "CLOCKSUM_T") (org-clock-sum-today))
-		((and (nth 3 spec)
-		      (let ((a (assoc prop org-columns-current-fmt-compiled)))
-			(equal (nth 3 a) (nth 3 spec))))
-		 (org-columns-compute prop)))))))))))
+  (dolist (file org-agenda-contributing-files)
+    (let ((b (find-buffer-visiting file)))
+      (with-current-buffer (or (buffer-base-buffer b) b)
+	(org-with-wide-buffer
+	 (org-with-silent-modifications
+	  (remove-text-properties (point-min) (point-max) '(org-summaries t)))
+	 (goto-char (point-min))
+	 (org-columns-get-format-and-top-level)
+	 (dolist (spec fmt)
+	   (let ((prop (car spec)))
+	     (cond
+	      ((equal prop "CLOCKSUM") (org-clock-sum))
+	      ((equal prop "CLOCKSUM_T") (org-clock-sum-today))
+	      ((and (nth 3 spec)
+		    (let ((a (assoc prop org-columns-current-fmt-compiled)))
+		      (equal (nth 3 a) (nth 3 spec))))
+	       (org-columns-compute prop))))))))))
 
 
 (provide 'org-colview)
