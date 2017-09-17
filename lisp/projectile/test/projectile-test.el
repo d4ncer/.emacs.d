@@ -28,7 +28,8 @@
           ,@body))
 
 (defun projectile-test-should-root-in (root directory)
-  (let ((projectile-project-root-cache (make-hash-table :test 'equal)))
+  (let ((projectile-project-root-cache (make-hash-table :test 'equal))
+        (projectile-cached-project-root nil))
     (should (equal (file-truename (file-name-as-directory root))
                    (let ((default-directory
                            (expand-file-name
@@ -142,7 +143,8 @@
 
 (ert-deftest projectile-add-unignored-directories ()
   (noflet ((projectile-project-vcs () 'git)
-           (projectile-get-repo-ignored-files () '("path/unignored-file")))
+           (projectile-get-repo-ignored-files () '("path/unignored-file"))
+           (projectile-get-repo-ignored-directory (dir) (list (concat dir "unignored-file"))))
     (let ((projectile-globally-unignored-directories '("path")))
       (should (equal (projectile-add-unignored '("file"))
                      '("file" "path/unignored-file")))
@@ -676,11 +678,30 @@
          "project/spec/models/food/sea_spec.rb")
       (let ((projectile-indexing-method 'native))
         (noflet ((projectile-project-type () 'rails-rspec)
-                 (projectile-project-root
-                  () (file-truename (expand-file-name "project/"))))
+                 (projectile-project-root () (file-truename (expand-file-name "project/"))))
           (should (equal "app/models/food/sea.rb"
                          (projectile-find-matching-file
                           "spec/models/food/sea_spec.rb"))))))))
+
+(ert-deftest projectile-test-find-matching-test/file-custom-project ()
+  (projectile-test-with-sandbox
+   (projectile-test-with-files
+     ("project/src/foo/"
+      "project/src/bar/"
+      "project/test/foo/"
+      "project/test/bar/"
+      "project/src/foo/foo.service.js"
+      "project/src/bar/bar.service.js"
+      "project/test/foo/foo.service.spec.js"
+      "project/test/bar/bar.service.spec.js")
+     (let* ((projectile-indexing-method 'native)
+            (reg (projectile-register-project-type 'npm-project '("somefile") :test-suffix ".spec")))
+        (noflet ((projectile-project-type () 'npm-project)
+                 (projectile-project-root () (file-truename (expand-file-name "project/"))))
+          (let ((test-file (projectile-find-matching-test "src/foo/foo.service.js"))
+                (impl-file (projectile-find-matching-file "test/bar/bar.service.spec.js")))
+            (should (equal "test/foo/foo.service.spec.js" test-file))
+            (should (equal "src/bar/bar.service.js" impl-file))))))))
 
 (ert-deftest projectile-test-exclude-out-of-project-submodules ()
   (projectile-test-with-files
