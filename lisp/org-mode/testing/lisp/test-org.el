@@ -375,7 +375,9 @@
   "Test `org-deadline-close-p' specifications."
   ;; Pretend that the current time is 2016-06-03 Fri 01:43
   (cl-letf (((symbol-function 'current-time)
-	     (lambda () '(22353 6425 905205 644000))))
+	     (lambda ()
+	       (apply #'encode-time
+		      (org-parse-time-string "2016-06-03 Fri 01:43")))))
     ;; Timestamps are close if they are within `ndays' of lead time.
     (org-test-with-temp-text "* Heading"
       (should (org-deadline-close-p "2016-06-03 Fri" 0))
@@ -2468,6 +2470,23 @@ http://article.gmane.org/gmane.emacs.orgmode/21459/"
      (org-open-at-point)
      (eq (org-element-type (org-element-context)) 'radio-target))))
 
+(ert-deftest test-org/open-at-point/tag ()
+  "Test `org-open-at-point' on tags."
+  (should
+   (org-test-with-temp-text "* H :<point>tag:"
+     (catch :result
+       (cl-letf (((symbol-function 'org-tags-view)
+		  (lambda (&rest args) (throw :result t))))
+	 (org-open-at-point)
+	 nil))))
+  (should-not
+   (org-test-with-temp-text-in-file "* H<point> :tag:"
+     (catch :result
+       (cl-letf (((symbol-function 'org-tags-view)
+		  (lambda (&rest args) (throw :result t))))
+	 (org-open-at-point)
+	 nil)))))
+
 ;;;; Stored links
 
 (ert-deftest test-org/store-link ()
@@ -2914,6 +2933,73 @@ SCHEDULED: <2017-05-06 Sat>
 	    (org-sort-entries nil ?k)
 	    (buffer-string)))))
 
+(ert-deftest test-org/file-contents ()
+  "Test `org-file-contents' specifications."
+  ;; Open files.
+  (should
+   (string= "#+BIND: variable value
+#+DESCRIPTION: l2
+#+LANGUAGE: en
+#+SELECT_TAGS: b
+#+TITLE: b
+#+PROPERTY: a 1
+" (org-file-contents (expand-file-name "setupfile3.org"
+				       (concat org-test-dir "examples/")))))
+  ;; Throw error when trying to access an invalid file.
+  (should-error (org-file-contents "this-file-must-not-exist"))
+  ;; Try to access an invalid file, but do not throw an error.
+  (should
+   (progn (org-file-contents "this-file-must-not-exist" :noerror) t))
+  ;; Open URL.
+  (should
+   (string= "foo"
+	    (let ((buffer (generate-new-buffer "url-retrieve-output")))
+	      (unwind-protect
+		  ;; Simulate successful retrieval of a URL.
+		  (cl-letf (((symbol-function 'url-retrieve-synchronously)
+			     (lambda (&rest_)
+			       (with-current-buffer buffer
+				 (insert "HTTP/1.1 200 OK\n\nfoo"))
+			       buffer)))
+		    (org-file-contents "http://some-valid-url"))
+		(kill-buffer buffer)))))
+  ;; Throw error when trying to access an invalid URL.
+  (should-error
+   (let ((buffer (generate-new-buffer "url-retrieve-output")))
+     (unwind-protect
+	 ;; Simulate unsuccessful retrieval of a URL.
+	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
+		    (lambda (&rest_)
+		      (with-current-buffer buffer
+			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
+		      buffer)))
+	   (org-file-contents "http://this-url-must-not-exist"))
+       (kill-buffer buffer))))
+  ;; Try to access an invalid URL, but do not throw an error.
+  (should-error
+   (let ((buffer (generate-new-buffer "url-retrieve-output")))
+     (unwind-protect
+	 ;; Simulate unsuccessful retrieval of a URL.
+	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
+		    (lambda (&rest_)
+		      (with-current-buffer buffer
+			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
+		      buffer)))
+	   (org-file-contents "http://this-url-must-not-exist"))
+       (kill-buffer buffer))))
+  (should
+   (let ((buffer (generate-new-buffer "url-retrieve-output")))
+     (unwind-protect
+	 ;; Simulate unsuccessful retrieval of a URL.
+	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
+		    (lambda (&rest_)
+		      (with-current-buffer buffer
+			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
+		      buffer)))
+	   (org-file-contents "http://this-url-must-not-exist" :noerror))
+       (kill-buffer buffer))
+     t)))
+
 
 ;;; Navigation
 
@@ -3327,6 +3413,18 @@ SCHEDULED: <2017-05-06 Sat>
   (should
    (org-test-with-temp-text "Paragraph 1.<point>\n\nParagraph 2."
      (org-forward-sentence)
+     (eobp)))
+  ;; On a headline, stop at the end of the line, unless point is
+  ;; already there.
+  (should
+   (equal
+    "* Headline"
+    (org-test-with-temp-text "* <point>Headline\nSentence."
+      (org-forward-sentence)
+      (buffer-substring-no-properties (line-beginning-position) (point)))))
+  (should
+   (org-test-with-temp-text "* Headline<point>\nSentence."
+     (org-forward-sentence)
      (eobp))))
 
 (ert-deftest test-org/backward-sentence ()
@@ -3361,11 +3459,12 @@ SCHEDULED: <2017-05-06 Sat>
 
 (ert-deftest test-org/forward-paragraph ()
   "Test `org-forward-paragraph' specifications."
-  ;; At end of buffer, return an error.
-  (should-error
+  ;; At end of buffer, do not return an error.
+  (should
    (org-test-with-temp-text "Paragraph"
      (goto-char (point-max))
-     (org-forward-paragraph)))
+     (org-forward-paragraph)
+     t))
   ;; Standard test.
   (should
    (org-test-with-temp-text "P1\n\nP2\n\nP3"
@@ -3430,10 +3529,11 @@ SCHEDULED: <2017-05-06 Sat>
 
 (ert-deftest test-org/backward-paragraph ()
   "Test `org-backward-paragraph' specifications."
-  ;; Error at beginning of buffer.
-  (should-error
+  ;; Do not error at beginning of buffer.
+  (should
    (org-test-with-temp-text "Paragraph"
-     (org-backward-paragraph)))
+     (org-backward-paragraph)
+     t))
   ;; Regular test.
   (should
    (org-test-with-temp-text "P1\n\nP2\n\nP3"
@@ -4816,13 +4916,7 @@ Paragraph<point>"
    (equal '("A" "B" "COLUMNS")
 	  (org-test-with-temp-text
 	      "* H\n:PROPERTIES:\n:COLUMNS: %25ITEM %A %20B\n:END:"
-	    (org-buffer-property-keys nil nil t))))
-  ;; With non-nil IGNORE-MALFORMED malformed property drawers are silently ignored.
-  (should
-   (equal '("A")
-	  (org-test-with-temp-text
-	      "* a\n:PROPERTIES:\n:A: 1\n:END:\n* b\n:PROPERTIES:\nsome junk here\n:END:\n"
-	    (org-buffer-property-keys nil nil nil t)))))
+	    (org-buffer-property-keys nil nil t)))))
 
 (ert-deftest test-org/property-values ()
   "Test `org-property-values' specifications."
@@ -5476,7 +5570,7 @@ Paragraph<point>"
   ;; full file name.
   (should
    (org-test-with-temp-text-in-file "* H1"
-     (let* ((filename (buffer-file-name))
+     (let* ((filename (file-truename (buffer-file-name)))
 	    (org-refile-use-outline-path 'full-file-path)
 	    (org-refile-targets `(((,filename) :level . 1))))
        (member filename (mapcar #'car (org-refile-get-targets))))))
@@ -5947,7 +6041,7 @@ Paragraph<point>"
       (cl-letf (((symbol-function 'org-add-log-setup)
 		 (lambda (&rest args) nil)))
 	(org-test-with-temp-text
-	    "* TODO H\n<2012-03-29 Thu. +2y>\nCLOCK: [2012-03-29 Thu 16:40]"
+	    "* TODO H\n<2012-03-29 Thu +2y>\nCLOCK: [2012-03-29 Thu 16:40]"
 	  (org-todo "DONE")
 	  (buffer-string))))))
   ;; When a SCHEDULED entry has no repeater, remove it upon repeating
@@ -5958,6 +6052,19 @@ Paragraph<point>"
     (let ((org-todo-keywords '((sequence "TODO" "DONE"))))
       (org-test-with-temp-text
 	  "* TODO H\nSCHEDULED: <2014-03-04 Tue>\n<2012-03-29 Thu +2y>"
+	(org-todo "DONE")
+	(buffer-string)))))
+  ;; Properly advance repeater even when a clock entry is specified
+  ;; and `org-log-repeat' is nil.
+  (should
+   (string-match-p
+    "SCHEDULED: <2014-03-29"
+    (let ((org-log-repeat nil)
+	  (org-todo-keywords '((sequence "TODO" "DONE"))))
+      (org-test-with-temp-text
+	  "* TODO H
+SCHEDULED: <2012-03-29 Thu +2y>
+CLOCK: [2012-03-29 Thu 10:00]--[2012-03-29 Thu 16:40] =>  6:40"
 	(org-todo "DONE")
 	(buffer-string))))))
 
@@ -6506,72 +6613,52 @@ Paragraph<point>"
      (org-show-set-visibility 'minimal)
      (org-invisible-p2))))
 
-(ert-deftest test-org/file-contents ()
-  "Test `org-file-contents' specifications."
-  ;; Open files.
+(defun test-org/copy-visible ()
+  "Test `org-copy-visible' specifications."
   (should
-   (string= "#+BIND: variable value
-#+DESCRIPTION: l2
-#+LANGUAGE: en
-#+SELECT_TAGS: b
-#+TITLE: b
-#+PROPERTY: a 1
-" (org-file-contents (expand-file-name "setupfile3.org"
-				       (concat org-test-dir "examples/")))))
-  ;; Throw error when trying to access an invalid file.
-  (should-error (org-file-contents "this-file-must-not-exist"))
-  ;; Try to access an invalid file, but do not throw an error.
+   (equal "Foo"
+	  (org-test-with-temp-text "Foo"
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t)))))
+  ;; Skip invisible characters by text property.
   (should
-   (progn (org-file-contents "this-file-must-not-exist" :noerror) t))
-  ;; Open URL.
+   (equal "Foo"
+	  (org-test-with-temp-text #("F<hidden>oo" 1 7 (invisible t))
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t)))))
+  ;; Skip invisible characters by overlay.
   (should
-   (string= "foo"
-	    (let ((buffer (generate-new-buffer "url-retrieve-output")))
-	      (unwind-protect
-		  ;; Simulate successful retrieval of a URL.
-		  (cl-letf (((symbol-function 'url-retrieve-synchronously)
-			     (lambda (&rest_)
-			       (with-current-buffer buffer
-				 (insert "HTTP/1.1 200 OK\n\nfoo"))
-			       buffer)))
-		    (org-file-contents "http://some-valid-url"))
-		(kill-buffer buffer)))))
-  ;; Throw error when trying to access an invalid URL.
-  (should-error
-   (let ((buffer (generate-new-buffer "url-retrieve-output")))
-     (unwind-protect
-	 ;; Simulate unsuccessful retrieval of a URL.
-	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
-		    (lambda (&rest_)
-		      (with-current-buffer buffer
-			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
-		      buffer)))
-	   (org-file-contents "http://this-url-must-not-exist"))
-       (kill-buffer buffer))))
-  ;; Try to access an invalid URL, but do not throw an error.
-  (should-error
-   (let ((buffer (generate-new-buffer "url-retrieve-output")))
-     (unwind-protect
-	 ;; Simulate unsuccessful retrieval of a URL.
-	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
-		    (lambda (&rest_)
-		      (with-current-buffer buffer
-			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
-		      buffer)))
-	   (org-file-contents "http://this-url-must-not-exist"))
-       (kill-buffer buffer))))
+   (equal "Foo"
+	  (org-test-with-temp-text "F<hidden>oo"
+	    (let ((o (make-overlay 2 10)))
+	      (overlay-put o 'invisible t))
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t)))))
+  ;; Handle invisible characters at the beginning and the end of the
+  ;; buffer.
   (should
-   (let ((buffer (generate-new-buffer "url-retrieve-output")))
-     (unwind-protect
-	 ;; Simulate unsuccessful retrieval of a URL.
-	 (cl-letf (((symbol-function 'url-retrieve-synchronously)
-		    (lambda (&rest_)
-		      (with-current-buffer buffer
-			(insert "HTTP/1.1 404 Not found\n\ndoes not matter"))
-		      buffer)))
-	   (org-file-contents "http://this-url-must-not-exist" :noerror))
-       (kill-buffer buffer))
-     t)))
+   (equal "Foo"
+	  (org-test-with-temp-text #("<hidden>Foo" 0 8 (invisible t))
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t)))))
+  (should
+   (equal "Foo"
+	  (org-test-with-temp-text #("Foo<hidden>" 3 11 (invisible t))
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t)))))
+  ;; Handle multiple visible parts.
+  (should
+   (equal "abc"
+	  (org-test-with-temp-text
+	      #("aXbXc" 1 2 (invisible t) 3 4 (invisible t))
+	    (let ((kill-ring nil))
+	      (org-copy-visible (point-min) (point-max))
+	      (current-kill 0 t))))))
 
 
 (provide 'test-org)

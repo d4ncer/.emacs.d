@@ -525,7 +525,7 @@ means to use the maximum value consistent with other options."
  * @licstart  The following is the entire license notice for the
  *  JavaScript code in %SCRIPT_PATH.
  *
- * Copyright (C) 2012-2013 Free Software Foundation, Inc.
+ * Copyright (C) 2012-2017 Free Software Foundation, Inc.
  *
  *
  * The JavaScript code in this tag is free software: you can
@@ -554,7 +554,7 @@ means to use the maximum value consistent with other options."
 @licstart  The following is the entire license notice for the
 JavaScript code in this tag.
 
-Copyright (C) 2012-2013 Free Software Foundation, Inc.
+Copyright (C) 2012-2017 Free Software Foundation, Inc.
 
 The JavaScript code in this tag is free software: you can
 redistribute it and/or modify it under the terms of the GNU
@@ -1743,7 +1743,8 @@ If you then set `org-html-htmlize-output-type' to `css', calls
 to the function `org-html-htmlize-region-for-paste' will
 produce code that uses these same face definitions."
   (interactive)
-  (require 'htmlize)
+  (or (require 'htmlize nil t)
+      (error "Please install htmlize from https://github.com/hniksic/emacs-htmlize"))
   (and (get-buffer "*html*") (kill-buffer "*html*"))
   (with-temp-buffer
     (let ((fl (face-list))
@@ -1812,27 +1813,30 @@ INFO is a plist used as a communication channel."
 (defun org-html--build-meta-info (info)
   "Return meta tags for exported document.
 INFO is a plist used as a communication channel."
-  (let ((protect-string
-	 (lambda (str)
-	   (replace-regexp-in-string
-	    "\"" "&quot;" (org-html-encode-plain-text str))))
-	(title (org-export-data (plist-get info :title) info))
-	(author (and (plist-get info :with-author)
-		     (let ((auth (plist-get info :author)))
-		       (and auth
-			    ;; Return raw Org syntax, skipping non
-			    ;; exportable objects.
-			    (org-element-interpret-data
-			     (org-element-map auth
-				 (cons 'plain-text org-element-all-objects)
-			       'identity info))))))
-	(description (plist-get info :description))
-	(keywords (plist-get info :keywords))
-	(charset (or (and org-html-coding-system
-			  (fboundp 'coding-system-get)
-			  (coding-system-get org-html-coding-system
-					     'mime-charset))
-		     "iso-8859-1")))
+  (let* ((protect-string
+          (lambda (str)
+            (replace-regexp-in-string
+             "\"" "&quot;" (org-html-encode-plain-text str))))
+         (title (org-export-data (plist-get info :title) info))
+         ;; Set title to an invisible character instead of leaving it
+         ;; empty, which is invalid.
+         (title (if (org-string-nw-p title) title "&lrm;"))
+         (author (and (plist-get info :with-author)
+                      (let ((auth (plist-get info :author)))
+                        (and auth
+                             ;; Return raw Org syntax, skipping non
+                             ;; exportable objects.
+                             (org-element-interpret-data
+                              (org-element-map auth
+                                  (cons 'plain-text org-element-all-objects)
+                                'identity info))))))
+         (description (plist-get info :description))
+         (keywords (plist-get info :keywords))
+         (charset (or (and org-html-coding-system
+                           (fboundp 'coding-system-get)
+                           (coding-system-get org-html-coding-system
+                                              'mime-charset))
+                      "iso-8859-1")))
     (concat
      (when (plist-get info :time-stamp-file)
        (format-time-string
@@ -1906,7 +1910,7 @@ INFO is a plist used as a communication channel."
 INFO is a plist used as a communication channel."
   (when (and (memq (plist-get info :with-latex) '(mathjax t))
 	     (org-element-map (plist-get info :parse-tree)
-		 '(latex-fragment latex-environment) 'identity info t))
+		 '(latex-fragment latex-environment) #'identity info t nil t))
     (let ((template (plist-get info :html-mathjax-template))
 	  (options (plist-get info :html-mathjax-options))
 	  (in-buffer (or (plist-get info :html-mathjax) "")))
@@ -2068,7 +2072,8 @@ holding export options."
      (format "<%s id=\"%s\">\n" (nth 1 div) (nth 2 div)))
    ;; Document title.
    (when (plist-get info :with-title)
-     (let ((title (plist-get info :title))
+     (let ((title (and (plist-get info :with-title)
+		       (plist-get info :title)))
 	   (subtitle (plist-get info :subtitle))
 	   (html5-fancy (org-html--html5-fancy-p info)))
        (when title
@@ -2161,7 +2166,9 @@ is the language used for CODE, as a string, or nil."
       ;; Simple transcoding.
       (org-html-encode-plain-text code))
      ;; Case 2: No htmlize or an inferior version of htmlize
-     ((not (and (require 'htmlize nil t) (fboundp 'htmlize-region-for-paste)))
+     ((not (and (or (require 'htmlize nil t)
+		    (error "Please install htmlize from https://github.com/hniksic/emacs-htmlize"))
+		(fboundp 'htmlize-region-for-paste)))
       ;; Emit a warning.
       (message "Cannot fontify src block (htmlize.el >= 1.34 required)")
       ;; Simple transcoding.
@@ -2592,18 +2599,8 @@ holding contextual information."
            (full-text (funcall (plist-get info :html-format-headline-function)
                                todo todo-type priority text tags info))
            (contents (or contents ""))
-	   (ids (delq nil
-                      (list (org-element-property :CUSTOM_ID headline)
-                            (org-export-get-reference headline info)
-                            (org-element-property :ID headline))))
-           (preferred-id (car ids))
-           (extra-ids
-	    (mapconcat
-	     (lambda (id)
-	       (org-html--anchor
-		(if (org-uuidgen-p id) (concat "ID-" id) id)
-		nil nil info))
-	     (cdr ids) "")))
+	   (id (or (org-element-property :CUSTOM_ID headline)
+		   (org-export-get-reference headline info))))
       (if (org-export-low-level-p headline info)
           ;; This is a deep sub-tree: export it as a list item.
           (let* ((html-type (if numberedp "ol" "ul")))
@@ -2612,11 +2609,9 @@ holding contextual information."
 		  (apply #'format "<%s class=\"org-%s\">\n"
 			 (make-list 2 html-type)))
 	     (org-html-format-list-item
-                   contents (if numberedp 'ordered 'unordered)
-		   nil info nil
-                   (concat (org-html--anchor preferred-id nil nil info)
-                           extra-ids
-                           full-text)) "\n"
+	      contents (if numberedp 'ordered 'unordered)
+	      nil info nil
+	      (concat (org-html--anchor id nil nil info) full-text)) "\n"
 	     (and (org-export-last-sibling-p headline info)
 		  (format "</%s>\n" html-type))))
 	;; Standard headline.  Export it as a section.
@@ -2629,10 +2624,9 @@ holding contextual information."
                   (concat (format "outline-%d" level)
                           (and extra-class " ")
                           extra-class)
-                  (format "\n<h%d id=\"%s\">%s%s</h%d>\n"
+                  (format "\n<h%d id=\"%s\">%s</h%d>\n"
                           level
-                          preferred-id
-                          extra-ids
+                          id
                           (concat
                            (and numberedp
                                 (format
@@ -3003,16 +2997,11 @@ INFO is a plist holding contextual information.  See
 	    ;; relative to a custom-id, a headline title, a name or
 	    ;; a target.
 	    (let ((option (org-element-property :search-option link)))
-	      (cond ((not option) raw-path)
-		    ;; Since HTML back-end use custom-id value as-is,
-		    ;; resolving is them is trivial.
-		    ((eq (string-to-char option) ?#) (concat raw-path option))
-		    (t
-		     (concat raw-path
-			     "#"
-			     (org-publish-resolve-external-link
-			      option
-			      (org-element-property :path link)))))))
+	      (if (not option) raw-path
+		(let ((path (org-element-property :path link)))
+		  (concat raw-path
+			  "#"
+			  (org-publish-resolve-external-link option path t))))))
 	   (t raw-path)))
 	 ;; Extract attributes from parent's paragraph.  HACK: Only do
 	 ;; this for the first link in parent (inner image link for

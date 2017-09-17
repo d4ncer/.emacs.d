@@ -437,11 +437,7 @@ e.g. \"d:nil\"."
 		(repeat :tag "Specify names of drawers to ignore during export"
 			:inline t
 			(string :tag "Drawer name"))))
-  :safe (lambda (x) (or (booleanp x)
-			(and (listp x)
-			     (or (cl-every #'stringp x)
-				 (and (eq (nth 0 x) 'not)
-				      (cl-every #'stringp (cdr x))))))))
+  :safe (lambda (x) (or (booleanp x) (consp x))))
 
 (defcustom org-export-with-email nil
   "Non-nil means insert author email into the exported file.
@@ -598,7 +594,7 @@ properties to export, as strings.
 This option can also be set with the OPTIONS keyword,
 e.g. \"prop:t\"."
   :group 'org-export-general
-  :version "24.4"
+  :version "26.1"
   :package-version '(Org . "8.3")
   :type '(choice
 	  (const :tag "All properties" t)
@@ -1456,7 +1452,7 @@ for export.  Return options as a plist."
 				  (parse
 				   (org-element-parse-secondary-string
 				    value (org-element-restriction 'keyword)))
-				  (split (org-split-string value))
+				  (split (split-string value))
 				  (t value))))))))))))
 
 (defun org-export--get-inbuffer-options (&optional backend)
@@ -1564,7 +1560,7 @@ Assume buffer is in Org mode.  Narrowing, if any, is ignored."
 					   "\n"
 					   (org-trim val))))
 				 (split `(,@(plist-get plist property)
-					  ,@(org-split-string val)))
+					  ,@(split-string val)))
 				 ((t) val)
 				 (otherwise
 				  (if (not (plist-member plist property)) val
@@ -2743,14 +2739,11 @@ from tree."
 	     (org-element-map data '(footnote-definition footnote-reference)
 	       (lambda (f)
 		 (cond
-		  ((eq (org-element-type f) 'footnote-definition) f)
-		  ((eq (org-element-property :type f) 'standard) nil)
-		  (t (let ((label (org-element-property :label f)))
-		       (when label	;Skip anonymous references.
-			 (apply
-			  #'org-element-create
-			  'footnote-definition `(:label ,label :post-blank 1)
-			  (org-element-contents f))))))))))
+		  ((eq 'footnote-definition (org-element-type f)) f)
+		  ((and (eq 'inline (org-element-property :type f))
+			(org-element-property :label f))
+		   f)
+		  (t nil))))))
     ;; If a select tag is active, also ignore the section before the
     ;; first headline, if any.
     (when selected
@@ -4443,9 +4436,19 @@ REFERENCE is a number representing a reference, as returned by
 DATUM is either an element or an object.  INFO is the current
 export state, as a plist.
 
-This function checks `:crossrefs' property in INFO for search
-cells matching DATUM before creating a new reference.  Returned
-reference consists of alphanumeric characters only."
+References for the current document are stored in
+`:internal-references' property.  Its value is an alist with
+associations of the following types:
+
+  (REFERENCE . DATUM) and (SEARCH-CELL . ID)
+
+REFERENCE is the reference string to be used for object or
+element DATUM.  SEARCH-CELL is a search cell, as returned by
+`org-export-search-cells'.  ID is a number or a string uniquely
+identifying DATUM within the document.
+
+This function also checks `:crossrefs' property for search cells
+matching DATUM before creating a new reference."
   (let ((cache (plist-get info :internal-references)))
     (or (car (rassq datum cache))
 	(let* ((crossrefs (plist-get info :crossrefs))
@@ -5211,7 +5214,7 @@ there is no such headline, collect all headlines.  In any case,
 argument N becomes relative to the level of that headline.
 
 Return a list of all exportable headlines as parsed elements.
-Footnote sections are ignored."
+Footnote sections and unnumbered headlines are ignored."
   (let* ((scope (cond ((not scope) (plist-get info :parse-tree))
 		      ((eq (org-element-type scope) 'headline) scope)
 		      ((org-export-get-parent-headline scope))
@@ -5223,7 +5226,8 @@ Footnote sections are ignored."
 		   limit))))
     (org-element-map (org-element-contents scope) 'headline
       (lambda (headline)
-	(unless (org-element-property :footnote-section-p headline)
+	(unless (or (org-element-property :footnote-section-p headline)
+		    (not (org-export-numbered-headline-p headline info)))
 	  (let ((level (org-export-get-relative-level headline info)))
 	    (and (<= level n) headline))))
       info)))
