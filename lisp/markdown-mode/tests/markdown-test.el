@@ -1,6 +1,6 @@
 ;;;; markdown-test.el --- Tests for markdown-mode
 
-;; Copyright (C) 2013-2015 Jason R. Blevins <jrblevin@sdf.org>
+;; Copyright (C) 2013-2017 Jason R. Blevins <jblevins@xbeta.org>
 ;; Copyright (C) 2013 Makoto Motohashi <mkt.motohashi@gmail.com>
 ;; Copyright (C) 2015 Google, Inc. (Contributor: Samuel Freilich <sfreilich@google.com>)
 
@@ -2940,6 +2940,25 @@ takes precedence)."
     (should (markdown-on-heading-p))
     (should-not (markdown-range-property-any 453 484 'face '(markdown-hr-face)))))
 
+(ert-deftest test-markdown-font-lock/heading-code-block-no-whitespace ()
+  "Headings immediately before code blocks should be identified correctly.
+See GH-234."
+  (markdown-test-string
+   "#### code snippet
+```javascript
+const styles = require('gadgets/dist/styles.css');
+```"
+   (goto-char (point-min))
+   (forward-word)
+   (should (markdown-on-heading-p))
+   (should (markdown-match-propertized-text 'markdown-heading (point-at-eol)))
+   (goto-char (match-beginning 0))
+   (should (markdown-outline-level))
+   (should (= (markdown-outline-level) 4))
+   (markdown-test-range-has-face 6 17 'markdown-header-face-4)
+   (end-of-line)
+   (should-not (markdown-code-block-at-point-p))))
+
 (ert-deftest test-markdown-font-lock/inline-attributes ()
   "Test inline attributes before a fenced code block."
   (markdown-test-file "Leanpub.md"
@@ -4721,11 +4740,14 @@ paragraph 2")))))
       (should (string-equal (buffer-string) text)))))
 
 (ert-deftest test-markdown-filling/long-paragraph-with-link ()
-  "Test `fill-paragraph' on a long paragraph with a long link."
+  "Test `fill-paragraph' on a long paragraph with a long link.
+See GH-173."
   (markdown-test-string
    "aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa [aaa aaa aaa aaa](aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) aaa aaa aaa aaa aaa."
-   (fill-paragraph)
-   (should (string-equal (buffer-string) "aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa\naaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa\naaa aaa [aaa aaa aaa aaa](aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) aaa\naaa aaa aaa aaa."))))
+   (let ((fill-column 79)) (fill-paragraph))
+   (should (string-equal (buffer-string) "aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa
+aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa [aaa aaa aaa
+aaa](aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) aaa aaa aaa aaa aaa."))))
 
 (ert-deftest test-markdown-filling/pandoc-line-blocks ()
   "Filling should leave Pandoc line blocks undisturbed.
@@ -4956,6 +4978,11 @@ This includes preserving whitespace after the pipe."
    (should (equal (car (markdown-gfm-get-corpus)) "elisp"))
    (should (string-equal (buffer-string)
                          "line 1\n\n``` elisp\n\n```\n\nline 2\n")))
+  ;; Test ‘markdown-spaces-after-code-fence’.
+  (markdown-test-string-gfm ""
+    (let ((markdown-spaces-after-code-fence 0))
+      (markdown-insert-gfm-code-block "elisp")
+      (should (equal (buffer-string) "```elisp\n\n```"))))
   ;; Test with active region
   (markdown-test-string-gfm "line 1\nline 2\nline 3\n"
    (forward-line)
@@ -4965,7 +4992,27 @@ This includes preserving whitespace after the pipe."
    (should (markdown-use-region-p))
    (markdown-insert-gfm-code-block "elisp")
    (should (string-equal (buffer-string)
-                         "line 1\n\n``` elisp\nline 2\n```\n\nline 3\n"))))
+                         "line 1\n\n``` elisp\nline 2\n```\n\nline 3\n")))
+  ;; Test indented list item
+  (markdown-test-string-gfm "1. foo\n   "
+    (goto-char (point-max))
+    (markdown-insert-gfm-code-block "elisp")
+    (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                   "1. foo\n\n   ``` elisp\n   \n   ```"))
+    (should (equal (buffer-substring-no-properties (point) (point-max))
+                   "\n   ```")))
+  ;; Test indented list item with active region
+  (markdown-test-string-gfm "1.  foo\n    bar\n"
+    (let ((transient-mark-mode t))
+      (forward-line)
+      (push-mark nil :nomsg :activate)
+      (end-of-line)
+      (should (markdown-use-region-p))
+      (markdown-insert-gfm-code-block "elisp"))
+    (should (equal (buffer-substring-no-properties (point-min) (point-max))
+                   "1.  foo\n\n    ``` elisp\n    bar\n    ```\n\n"))
+    (should (equal (buffer-substring-no-properties (point) (point-max))
+                   "\n    bar\n    ```\n\n"))))
 
 (ert-deftest test-markdown-gfm/gfm-parse-buffer-for-languages ()
   "Parse buffer for existing languages for `markdown-gfm-used-languages' test."

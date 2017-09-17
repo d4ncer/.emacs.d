@@ -1,6 +1,6 @@
 # Markdown Mode 2.3
 
-*Under development*
+*August 31, 2017*
 
 *   **Breaking changes:**
 
@@ -31,11 +31,11 @@
         markup insertion prefix, as <kbd>C-c C-s f</kbd> and
         <kbd>C-c C-s w</kbd>.
     -   The list and outline editing commands have been removed from
-        the top-level positions (previously <kbd>M-<left></kbd>,
-        <kbd>M-<right></kbd>, <kbd>M-<up></kbd>, <kbd>M-<down></kbd>)
+        the top-level positions (previously <kbd>M-LEFT</kbd>,
+        <kbd>M-RIGHT</kbd>, <kbd>M-UP</kbd>, <kbd>M-DOWN</kbd>)
         and moved to major mode keybindings under <kbd>C-c</kbd> to
-        <kbd>C-c <left></kbd>, <kbd>C-c <right></kbd>,
-        <kbd>C-c <up></kbd>, and <kbd>C-c <down></kbd>, respectively.
+        <kbd>C-c LEFT</kbd>, <kbd>C-c RIGHT</kbd>,
+        <kbd>C-c UP</kbd>, and <kbd>C-c DOWN</kbd>, respectively.
         ([GH-164][])
     -   The list and outline editing commands have also been unified
         so that they all operate on entire subtrees of list items and
@@ -187,6 +187,15 @@
         <kbd>C-c C-f</kbd>, <kbd>C-c C-b</kbd>, and <kbd>C-c C-u</kbd>
         now move between list items, when the point is in a list,
         and move between headings otherwise.
+    -   New customization option `markdown-spaces-after-code-fence` to
+        control the number of spaces inserted after a code fence (` ``` `).
+        Thanks to Philipp Stephani for a patch.  ([GH-232][])
+    -   New customization option `markdown-gfm-uppercase-checkbox` which,
+        when non-nil, uses `[X]` to complete task list items instead of
+        `[x]`.  Thanks to Paul Rankin for a patch.  ([GH-236][])
+    -   Add prefix-specific prompts for styles (`C-c C-s`) and toggles
+        (`C-c C-x`).  These may be disabled if desired by setting
+        `markdown-enable-prefix-prompts` to `nil`.
 
 *   Improvements:
 
@@ -215,6 +224,12 @@
         ([GH-200][], [GH-201][])
     -   Adaptive filling for Leanpub blocks.
     -   Set variable `comment-use-syntax`.  ([GH-213][])
+    -   Support `electric-quote-inhibit-functions` for inhibiting
+        electric quoting in code spans and blocks.  Thanks to Philipp
+        Stephani for patches to both Emacs and Markdown Mode.
+        ([GH-220][])
+    -   Stop inhibiting line breaks inside links when filling.
+        ([GH-173][])
 
 *   Bug fixes:
 
@@ -229,6 +244,13 @@
         a buffer.
     -   Fix font lock for subsequent inline links after a malformed
         inline link.  ([GH-209][])
+    -   Prevent clobbering match data in
+        `markdown-font-lock-extend-region-function`.  Thanks to
+        Philipp Stephani for a patch.  ([GH-221][])
+    -   Fix incorrect indentation of inserted GFM code blocks in lists.
+        Thanks to Philipp Stephani for a patch. ([GH-215][])
+    -   Fix an issue with font lock for headings with code blocks immediately
+        afterwards, without whitespace. ([GH-234][])
 
   [gh-81]:  https://github.com/jrblevin/markdown-mode/issues/81
   [gh-123]: https://github.com/jrblevin/markdown-mode/issues/123
@@ -237,6 +259,7 @@
   [gh-144]: https://github.com/jrblevin/markdown-mode/issues/144
   [gh-164]: https://github.com/jrblevin/markdown-mode/issues/164
   [gh-172]: https://github.com/jrblevin/markdown-mode/issues/172
+  [gh-173]: https://github.com/jrblevin/markdown-mode/issues/173
   [gh-176]: https://github.com/jrblevin/markdown-mode/issues/176
   [gh-185]: https://github.com/jrblevin/markdown-mode/issues/185
   [gh-191]: https://github.com/jrblevin/markdown-mode/issues/191
@@ -247,6 +270,12 @@
   [gh-201]: https://github.com/jrblevin/markdown-mode/issues/201
   [gh-209]: https://github.com/jrblevin/markdown-mode/issues/209
   [gh-213]: https://github.com/jrblevin/markdown-mode/issues/213
+  [gh-215]: https://github.com/jrblevin/markdown-mode/issues/215
+  [gh-220]: https://github.com/jrblevin/markdown-mode/pull/220
+  [gh-221]: https://github.com/jrblevin/markdown-mode/pull/221
+  [gh-232]: https://github.com/jrblevin/markdown-mode/pull/232
+  [gh-234]: https://github.com/jrblevin/markdown-mode/issues/234
+  [gh-236]: https://github.com/jrblevin/markdown-mode/pull/236
 
 # Markdown Mode 2.2
 
@@ -265,7 +294,7 @@ suggestions, and especially patches.
         been changed to <kbd>C-c C-l</kbd> (think "leap" or "loop"
         instead of jump).  It's also close to <kbd>C-c C-o</kbd> (used
         for opening links).  ([GH-26][])
-    -   Insertion of `<kbd>` tags with <kbd>C-c C-s k</kbd> or
+    -   Insertion of `kbd` tags with <kbd>C-c C-s k</kbd> or
         `markdown-insert-kbd`.
     -   Add YAML metadata parsing.  Also allow multiple Pandoc
         metadata, with tests.  Thanks to Danny McClanahan and Syohei
@@ -580,7 +609,7 @@ bug reports. Thanks to everyone for your contributions.
         A list of pre-defined languages is included, but this can be
         augmented by setting `markdown-gfm-additional-languages`.
         ([GH-38][], [GH-54][], [GH-59][], [GH-60][], [GH-64][])
-    -   strikethrough support in `gfm-mode`.
+    -   Strikethrough support in `gfm-mode`.
     -   Support for GFM toggling checkboxes `mouse-1` or
         <kbd>RET</kbd>.  This is controlled by a new custom variable,
         `markdown-make-gfm-checkboxes-buttons`.  Thanks to Howard
@@ -755,12 +784,12 @@ following and movement.
          extra whitespace for atx headings).
     -    Markup promotion and demotion via <kbd>C-c C--</kbd> and
          <kbd>C-c C-=</kbd>, respectively.  The sequences
-         <kbd>M-<up></kbd> and <kbd>M-<down></kbd> may
+         <kbd>M-UP</kbd> and <kbd>M-DOWN</kbd> may
          also be used.
     -    List editing: move list items up and down with
-         <kbd>M-<up></kbd> and <kbd>M-<down></kbd>.
-         Indent and exdent list items with <kbd>M-<left></kbd>
-         and <kbd>M-<right></kbd>.
+         <kbd>M-UP</kbd> and <kbd>M-DOWN</kbd>.
+         Indent and exdent list items with <kbd>M-LEFT</kbd>
+         and <kbd>M-RIGHT</kbd>.
     -    Region editing: indent and exdent regions, with tab stops
          determined by context, using <kbd>C-c <</kbd> and
          <kbd>C-c ></kbd> (as in `python-mode`).
@@ -921,7 +950,7 @@ following and movement.
     -    More accurate font-lock for ATX headings in edge cases.
     -    Fix killing of footnotes from footnote text.
 
---- --- 
+--- ---
 
 # Markdown Mode 1.9
 
