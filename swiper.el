@@ -267,6 +267,8 @@
     woman-mode
     mu4e-view-mode
     mu4e-headers-mode
+    notmuch-tree-mode
+    notmuch-search-mode
     help-mode
     debbugs-gnu-mode
     occur-mode
@@ -464,7 +466,6 @@ line numbers.  For the buffer, use `ivy--regex' instead."
                 (setq ivy--subexps 0)
                 ".")
                ((string-match "^\\^" str)
-                (setq ivy--old-re "")
                 (let ((re (funcall re-builder (substring str 1))))
                   (if (zerop ivy--subexps)
                       (prog1 (format "^ ?\\(%s\\)" re)
@@ -474,15 +475,7 @@ line numbers.  For the buffer, use `ivy--regex' instead."
                 (mapconcat #'char-fold-to-regexp (ivy--split str) ".*"))
                (t
                 (funcall re-builder str)))))
-    (cond ((stringp re)
-           (replace-regexp-in-string "\t" "    " re))
-          ((and (consp re)
-                (consp (car re)))
-           (setf (caar re)
-                 (replace-regexp-in-string "\t" "    " (caar re)))
-           re)
-          (t
-           (error "Unexpected")))))
+    re))
 
 (defvar swiper-history nil
   "History for `swiper'.")
@@ -649,25 +642,31 @@ WND, when specified is the window."
           ;; RE can become an invalid regexp
           (while (and (ignore-errors (re-search-forward re end t))
                       (> (- (match-end 0) (match-beginning 0)) 0))
-            (swiper--add-overlay (match-beginning 0) (match-end 0)
-                                 (if (zerop ivy--subexps)
-                                     (cadr swiper-faces)
-                                   (car swiper-faces))
-                                 wnd 0)
+            (let ((mb (match-beginning 0))
+                  (me (match-end 0)))
+              (unless (> (- me mb) 2017)
+                (swiper--add-overlay mb me
+                                     (if (zerop ivy--subexps)
+                                         (cadr swiper-faces)
+                                       (car swiper-faces))
+                                     wnd 0)))
             (let ((i 1)
                   (j 0))
               (while (<= (cl-incf j) ivy--subexps)
                 (let ((bm (match-beginning j))
                       (em (match-end j)))
-                  (while (and (< j ivy--subexps)
-                              (= em (match-beginning (+ j 1))))
-                    (setq em (match-end (cl-incf j))))
-                  (swiper--add-overlay
-                   bm em
-                   (nth (1+ (mod (+ i 2) (1- (length swiper-faces))))
-                        swiper-faces)
-                   wnd i)
-                  (cl-incf i))))))))))
+                  (when (and (integerp em)
+                             (integerp bm))
+                    (while (and (< j ivy--subexps)
+                                (integerp (match-beginning (+ j 1)))
+                                (= em (match-beginning (+ j 1))))
+                      (setq em (match-end (cl-incf j))))
+                    (swiper--add-overlay
+                     bm em
+                     (nth (1+ (mod (+ i 2) (1- (length swiper-faces))))
+                          swiper-faces)
+                     wnd i)
+                    (cl-incf i)))))))))))
 
 (defun swiper--add-overlay (beg end face wnd priority)
   "Add overlay bound by BEG and END to `swiper--overlays'.
