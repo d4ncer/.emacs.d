@@ -5,7 +5,7 @@
 ;; Author: Nikolaj Schumacher
 ;; Maintainer: Dmitry Gutov <dgutov@yandex.ru>
 ;; URL: http://company-mode.github.io/
-;; Version: 0.9.3
+;; Version: 0.9.4
 ;; Keywords: abbrev, convenience, matching
 ;; Package-Requires: ((emacs "24.3"))
 
@@ -260,6 +260,12 @@ If this many lines are not available, prefer to display the tooltip above."
 This doesn't include the margins and the scroll bar."
   :type 'integer
   :package-version '(company . "0.8.0"))
+
+(defcustom company-tooltip-maximum-width most-positive-fixnum
+  "The maximum width of the tooltip's inner area.
+This doesn't include the margins and the scroll bar."
+  :type 'integer
+  :package-version '(company . "0.9.5"))
 
 (defcustom company-tooltip-margin 1
   "Width of margin columns to show around the toolip."
@@ -835,7 +841,9 @@ means that `company-mode' is always turned on except in `message-mode' buffers."
     (cons (+ col (window-hscroll)) row)))
 
 (defun company--col-row (&optional pos)
-  (company--posn-col-row (posn-at-point pos)))
+  (defvar display-line-numbers) ; For Emacs < 26.
+  (let (display-line-numbers)
+    (company--posn-col-row (posn-at-point pos))))
 
 (defun company--row (&optional pos)
   (cdr (company--col-row pos)))
@@ -957,7 +965,8 @@ matches IDLE-BEGIN-AFTER-RE, return it wrapped in a cons."
 (defun company--multi-backend-adapter-candidates (backends prefix separate)
   (let ((pairs (cl-loop for backend in backends
                         when (equal (company--prefix-str
-                                     (funcall backend 'prefix))
+                                     (let ((company-backend backend))
+                                       (company-call-backend 'prefix)))
                                     prefix)
                         collect (cons (funcall backend 'candidates prefix)
                                       (company--multi-candidates-mapper
@@ -1532,7 +1541,8 @@ prefix match (same case) will be prioritized."
             (if (or (symbolp backend)
                     (functionp backend))
                 (when (company--maybe-init-backend backend)
-                  (funcall backend 'prefix))
+                  (let ((company-backend backend))
+                    (company-call-backend 'prefix)))
               (company--multi-backend-adapter backend 'prefix)))
       (when prefix
         (when (company--good-prefix-p prefix)
@@ -2169,20 +2179,22 @@ character, stripping the modifiers.  That character must be a digit."
     (make-string len ?\ )))
 
 (defun company-safe-substring (str from &optional to)
-  (if (> from (string-width str))
-      ""
-    (with-temp-buffer
-      (insert str)
-      (move-to-column from)
-      (let ((beg (point)))
-        (if to
-            (progn
-              (move-to-column to)
-              (concat (buffer-substring beg (point))
-                      (let ((padding (- to (current-column))))
-                        (when (> padding 0)
-                          (company-space-string padding)))))
-          (buffer-substring beg (point-max)))))))
+  (let ((bis buffer-invisibility-spec))
+    (if (> from (string-width str))
+        ""
+      (with-temp-buffer
+        (setq buffer-invisibility-spec bis)
+        (insert str)
+        (move-to-column from)
+        (let ((beg (point)))
+          (if to
+              (progn
+                (move-to-column to)
+                (concat (buffer-substring beg (point))
+                        (let ((padding (- to (current-column))))
+                          (when (> padding 0)
+                            (company-space-string padding)))))
+            (buffer-substring beg (point-max))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -2701,6 +2713,7 @@ If SHOW-VERSION is non-nil, show the version in the echo area."
                          width))))
 
     (setq width (min window-width
+                     company-tooltip-maximum-width
                      (max company-tooltip-minimum-width
                           (if company-show-numbers
                               (+ 2 width)
