@@ -3,13 +3,13 @@
 ;; Copyright (C) 2007-2017 Jason R. Blevins and markdown-mode
 ;; contributors (see the commit log for details).
 
-;; Author: Jason R. Blevins <jrblevin@sdf.org>
-;; Maintainer: Jason R. Blevins <jrblevin@sdf.org>
+;; Author: Jason R. Blevins <jblevins@xbeta.org>
+;; Maintainer: Jason R. Blevins <jblevins@xbeta.org>
 ;; Created: May 24, 2007
-;; Version: 2.3-dev
+;; Version: 2.3
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
 ;; Keywords: Markdown, GitHub Flavored Markdown, itex
-;; URL: http://jblevins.org/projects/markdown-mode/
+;; URL: https://jblevins.org/projects/markdown-mode/
 
 ;; This file is not part of GNU Emacs.
 
@@ -29,41 +29,49 @@
 ;;; Commentary:
 
 ;; markdown-mode is a major mode for editing [Markdown][]-formatted
-;; text. The latest stable version is markdown-mode 2.2, released on
-;; May 26, 2017. See the [release notes][] for details.
-;; markdown-mode is free software, licensed under the GNU GPL v2.
+;; text.  The latest stable version is markdown-mode 2.3, released on
+;; August 31, 2017.  See the [release notes][] for details.
+;; markdown-mode is free software, licensed under the GNU GPL,
+;; version 3 or later.
 
-;; ![Markdown Mode Screenshot](http://jblevins.org/projects/markdown-mode/screenshots/20160108-001.png)
+;; ![Markdown Mode Screenshot](https://jblevins.org/projects/markdown-mode/screenshots/20170818-001.png)
 
 ;; [Markdown]: http://daringfireball.net/projects/markdown/
-;; [release notes]: http://jblevins.org/projects/markdown-mode/rev-2-2
+;; [release notes]: https://jblevins.org/projects/markdown-mode/rev-2-3
 
 ;;; Documentation:
 
-;; <a href="https://leanpub.com/markdown-mode"><img src="http://jblevins.org/projects/markdown-mode/guide-v2.2.png" align="right" height="350" width="252"></a>
+;; <a href="https://leanpub.com/markdown-mode">
+;; <img src="https://jblevins.org/projects/markdown-mode/guide-v2.3.png" align="right" height="350" width="231">
+;; </a>
 
-;; Documentation for Markdown Mode is available below, but Emacs is also
-;; a self-documenting editor.  That means that the source code itself
-;; contains additional documentation: each function has its own docstring
-;; available via `C-h f` (`describe-function'), individual keybindings
-;; can be investigated with `C-h k` (`describe-key'), and a complete list
-;; of keybindings is available using `C-h m` (`describe-mode').
-
-;; Additionally, to celebrate Markdown Mode's 10th birthday the package
-;; creator is writing a [Guide to Markdown Mode for Emacs][guide].  This
-;; ebook will supplement the existing documentation with in-depth
-;; discussion of advanced movement and editing commands, configuration
-;; examples, tips and tricks, and a survey of other packages that work
-;; with Markdown Mode.  It will be [published at Leanpub][guide] and
-;; possibly available through other channels.  Please visit
-;; the [book homepage][guide] to sign up to be notified when it is ready
-;; and to help determine the price.
+;; The primary documentation for Markdown Mode is available below, and
+;; is generated from comments in the source code.  For a more in-depth
+;; treatment, the [_Guide to Markdown Mode for Emacs_][guide] covers
+;; Markdown syntax, advanced movement and editing in Emacs,
+;; extensions, configuration examples, tips and tricks, and a survey
+;; of other packages that work with Markdown Mode.  Finally, Emacs is
+;; also a self-documenting editor.  This means that the source code
+;; itself contains additional documentation: each function has its own
+;; docstring available via `C-h f` (`describe-function'), individual
+;; keybindings can be investigated with `C-h k` (`describe-key'), and
+;; a complete list of keybindings is available using `C-h m`
+;; (`describe-mode').
 
 ;;  [guide]: https://leanpub.com/markdown-mode
 
 ;;; Installation:
 
-;; The recommended way to install markdown-mode is to install the package
+;; _Note:_ To use all of the features of `markdown-mode', you'll need
+;; to install the Emacs package itself and also have a local Markdown
+;; processor installed (e.g., Markdown.pl, MultiMarkdown, or Pandoc).
+;; The external processor is not required for editing, but will be
+;; used for rendering HTML for preview and export. After installing
+;; the Emacs package, be sure to configure `markdown-command' to point
+;; to the preferred Markdown executable on your system.  See the
+;; Customization section below for more details.
+
+;; The recommended way to install `markdown-mode' is to install the package
 ;; from [MELPA Stable](https://stable.melpa.org/#/markdown-mode)
 ;; using `package.el'. First, configure `package.el' and the MELPA Stable
 ;; repository by adding the following to your `.emacs', `init.el',
@@ -119,7 +127,7 @@
 ;; (add-to-list 'auto-mode-alist '("README\\.md\\'" . gfm-mode))
 ;; ```
 
-;; [markdown-mode.el]: http://jblevins.org/projects/markdown-mode/markdown-mode.el
+;; [markdown-mode.el]: https://jblevins.org/projects/markdown-mode/markdown-mode.el
 
 ;; **Development Version**
 
@@ -178,16 +186,15 @@
 
 ;; Keybindings are grouped by prefixes based on their function.  For
 ;; example, the commands for styling text are grouped under `C-c C-s`
-;; and commands dealing with headings begin with `C-c C-t` (mnemonic:
-;; titling).  The primary commands in each group will are described
-;; below.  You can obtain a list of all keybindings by pressing `C-c
-;; C-h`.  Movement and shifting commands tend to be associated with
-;; paired delimiters such as `M-{` and `M-}` or `C-c <` and `C-c >`.
-;; Outline navigation keybindings the same as in `org-mode'.  Finally,
-;; commands for running Markdown or doing maintenance on an open file
-;; are grouped under the `C-c C-c` prefix.  The most commonly used
-;; commands are described below.  You can obtain a list of all
-;; keybindings by pressing `C-c C-h`.
+;; and toggle commands begin with `C-c C-x`.  The primary commands in
+;; each group will are described below.  You can obtain a list of all
+;; keybindings by pressing `C-c C-h`.  Movement and shifting commands
+;; tend to be associated with paired delimiters such as `M-{` and
+;; `M-}` or `C-c <` and `C-c >`.  Outline navigation keybindings the
+;; same as in `org-mode'.  Finally, commands for running Markdown or
+;; doing maintenance on an open file are grouped under the `C-c C-c`
+;; prefix.  The most commonly used commands are described below. You
+;; can obtain a list of all keybindings by pressing `C-c C-h`.
 ;;
 ;;   * Links and Images: `C-c C-l` and `C-c C-i`
 ;;
@@ -344,7 +351,7 @@
 ;;     `markdown-live-preview-window-function' can be customized to open
 ;;     in a browser other than `eww'.  If you want to force the
 ;;     preview window to appear at the bottom or right, you can
-;;     customize `markdown-split-window-direction`.
+;;     customize `markdown-split-window-direction'.
 ;;
 ;;     To summarize:
 ;;
@@ -401,7 +408,7 @@
 ;;     moving backward or forward through the list of rule strings in
 ;;     `markdown-hr-strings'.  For bold and italic text, promotion and
 ;;     demotion means changing the markup from underscores to asterisks.
-;;     Press `C-c C--` or `C-c <left>` to promote the element at the point
+;;     Press `C-c C--` or `C-c LEFT` to promote the element at the point
 ;;     if possible.
 ;;
 ;;     To remember these commands, note that `-` is for decreasing the
@@ -420,7 +427,7 @@
 ;;     completes the markup at the point, if it is determined to be
 ;;     incomplete.
 ;;
-;;   * Editing Lists: `M-RET`, `C-c <up>`, `C-c <down>`, `C-c <left>`, and `C-c <right>`
+;;   * Editing Lists: `M-RET`, `C-c UP`, `C-c DOWN`, `C-c LEFT`, and `C-c RIGHT`
 ;;
 ;;     New list items can be inserted with `M-RET` or `C-c C-j`.  This
 ;;     command determines the appropriate marker (one of the possible
@@ -433,17 +440,17 @@
 ;;     one level.
 ;;
 ;;     Existing list items (and their nested sub-items) can be moved
-;;     up or down with `C-c <up>` or `C-c <down>` and indented or
-;;     outdented with `C-c <right>` or `C-c <left>`.
+;;     up or down with `C-c UP` or `C-c DOWN` and indented or
+;;     outdented with `C-c RIGHT` or `C-c LEFT`.
 ;;
-;;   * Editing Subtrees: `C-c <up>`, `C-c <down>`, `C-c <left>`, and `C-c <right>`
+;;   * Editing Subtrees: `C-c UP`, `C-c DOWN`, `C-c LEFT`, and `C-c RIGHT`
 ;;
 ;;     Entire subtrees of ATX headings can be promoted and demoted
-;;     with `C-c <left>` and `C-c <right>`, which are the same keybindings
+;;     with `C-c LEFT` and `C-c RIGHT`, which are the same keybindings
 ;;     used for promotion and demotion of list items.   If the point is in
 ;;     a list item, the operate on the list item.  Otherwise, they operate
 ;;     on the current heading subtree.  Similarly, subtrees can be
-;;     moved up and down with `C-c <up>` and `C-c <down>`.
+;;     moved up and down with `C-c UP` and `C-c DOWN`.
 ;;
 ;;     These commands currently do not work properly if there are
 ;;     Setext headings in the affected region.
@@ -589,7 +596,7 @@
 ;;     with a single argument, the filename of the current buffer.
 ;;     A representative program is the Mac app [Marked 2][], a
 ;;     live-updating Markdown previewer which can be [called from a
-;;     simple shell script](http://jblevins.org/log/marked-2-command).
+;;     simple shell script](https://jblevins.org/log/marked-2-command).
 ;;
 ;;   * `markdown-hr-strings' - list of strings to use when inserting
 ;;     horizontal rules.  Different strings will not be distinguished
@@ -758,13 +765,18 @@
 ;;     `markdown-definition-display-char'.
 ;;
 ;;   * `markdown-fontify-code-blocks-natively' - Whether to fontify
-;;      code in code blocks using the native major mode.  This only
-;;      works for fenced code blocks where the language is specified
-;;      where we can automatically determine the appropriate mode to
-;;      use.  The language to mode mapping may be customized by setting
-;;      the variable `markdown-code-lang-modes'.  This can be toggled
-;;      interactively by pressing `C-c C-x C-f`
-;;      (`markdown-toggle-fontify-code-blocks-natively').
+;;     code in code blocks using the native major mode.  This only
+;;     works for fenced code blocks where the language is specified
+;;     where we can automatically determine the appropriate mode to
+;;     use.  The language to mode mapping may be customized by setting
+;;     the variable `markdown-code-lang-modes'.  This can be toggled
+;;     interactively by pressing `C-c C-x C-f`
+;;     (`markdown-toggle-fontify-code-blocks-natively').
+;;
+;;   * `markdown-gfm-uppercase-checkbox' - When non-nil, complete GFM
+;;     task list items with `[X]` instead of `[x]` (default: `nil').
+;;     This is useful for compatibility with `org-mode', which doesn't
+;;     recognize the lowercase variant.
 ;;
 ;; Additionally, the faces used for syntax highlighting can be modified to
 ;; your liking by issuing `M-x customize-group RET markdown-faces`
@@ -912,7 +924,9 @@
 ;; markdown-mode is developed and tested primarily for compatibility
 ;; with GNU Emacs 24.3 and later.  If you find any bugs in
 ;; markdown-mode, please construct a test case or a patch and open a
-;; ticket on the [GitHub issue tracker][issues].
+;; ticket on the [GitHub issue tracker][issues].  See the
+;; contributing guidelines in `CONTRIBUTING.md` for details on
+;; creating pull requests.
 ;;
 ;;  [issues]: https://github.com/jrblevin/markdown-mode/issues
 
@@ -934,20 +948,22 @@
 ;;   * 2013-03-24: [Version 2.0][]
 ;;   * 2016-01-09: [Version 2.1][]
 ;;   * 2017-05-26: [Version 2.2][]
+;;   * 2017-08-31: [Version 2.3][]
 ;;
-;; [Version 1.1]: http://jblevins.org/projects/markdown-mode/rev-1-1
-;; [Version 1.2]: http://jblevins.org/projects/markdown-mode/rev-1-2
-;; [Version 1.3]: http://jblevins.org/projects/markdown-mode/rev-1-3
-;; [Version 1.4]: http://jblevins.org/projects/markdown-mode/rev-1-4
-;; [Version 1.5]: http://jblevins.org/projects/markdown-mode/rev-1-5
-;; [Version 1.6]: http://jblevins.org/projects/markdown-mode/rev-1-6
-;; [Version 1.7]: http://jblevins.org/projects/markdown-mode/rev-1-7
-;; [Version 1.8]: http://jblevins.org/projects/markdown-mode/rev-1-8
-;; [Version 1.8.1]: http://jblevins.org/projects/markdown-mode/rev-1-8-1
-;; [Version 1.9]: http://jblevins.org/projects/markdown-mode/rev-1-9
-;; [Version 2.0]: http://jblevins.org/projects/markdown-mode/rev-2-0
-;; [Version 2.1]: http://jblevins.org/projects/markdown-mode/rev-2-1
-;; [Version 2.2]: http://jblevins.org/projects/markdown-mode/rev-2-2
+;; [Version 1.1]: https://jblevins.org/projects/markdown-mode/rev-1-1
+;; [Version 1.2]: https://jblevins.org/projects/markdown-mode/rev-1-2
+;; [Version 1.3]: https://jblevins.org/projects/markdown-mode/rev-1-3
+;; [Version 1.4]: https://jblevins.org/projects/markdown-mode/rev-1-4
+;; [Version 1.5]: https://jblevins.org/projects/markdown-mode/rev-1-5
+;; [Version 1.6]: https://jblevins.org/projects/markdown-mode/rev-1-6
+;; [Version 1.7]: https://jblevins.org/projects/markdown-mode/rev-1-7
+;; [Version 1.8]: https://jblevins.org/projects/markdown-mode/rev-1-8
+;; [Version 1.8.1]: https://jblevins.org/projects/markdown-mode/rev-1-8-1
+;; [Version 1.9]: https://jblevins.org/projects/markdown-mode/rev-1-9
+;; [Version 2.0]: https://jblevins.org/projects/markdown-mode/rev-2-0
+;; [Version 2.1]: https://jblevins.org/projects/markdown-mode/rev-2-1
+;; [Version 2.2]: https://jblevins.org/projects/markdown-mode/rev-2-2
+;; [Version 2.3]: https://jblevins.org/projects/markdown-mode/rev-2-3
 
 
 ;;; Code:
@@ -970,7 +986,7 @@
 
 ;;; Constants =================================================================
 
-(defconst markdown-mode-version "2.3-dev"
+(defconst markdown-mode-version "2.3"
   "Markdown mode version number.")
 
 (defconst markdown-output-buffer-name "*markdown-output*"
@@ -1012,7 +1028,7 @@ Any changes to the output buffer made by this hook will be saved.")
   "Major mode for editing text files in Markdown format."
   :prefix "markdown-"
   :group 'wp
-  :link '(url-link "http://jblevins.org/projects/markdown-mode/"))
+  :link '(url-link "https://jblevins.org/projects/markdown-mode/"))
 
 (defcustom markdown-command "markdown"
   "Command to run markdown."
@@ -1327,6 +1343,14 @@ Used in `markdown-demote-list-item' and
   :group 'markdown
   :type 'integer)
 
+(defcustom markdown-enable-prefix-prompts t
+  "Display prompts for certain prefix commands.
+Set to nil to disable these prompts."
+  :group 'markdown
+  :type 'boolean
+  :safe 'booleanp
+  :package-version '(markdown-mode . "2.3"))
+
 (defcustom markdown-gfm-additional-languages nil
   "Extra languages made available when inserting GFM code blocks.
 Language strings must have be trimmed of whitespace and not
@@ -1346,6 +1370,12 @@ This applies to insertions done with
 `markdown-electric-backquote'."
   :group 'markdown
   :type 'boolean)
+
+(defcustom markdown-gfm-uppercase-checkbox nil
+  "If non-nil, use [X] for completed checkboxes, [x] otherwise."
+  :group 'markdown
+  :type 'boolean
+  :safe 'booleanp)
 
 (defcustom markdown-hide-urls nil
   "Hide URLs of inline links and reference tags of reference links.
@@ -1745,7 +1775,11 @@ and END are the previous region to refontify."
       ;; (point-max) is deleted, but font-lock-extend-region-functions
       ;; are called.  Force a syntax property update in that case.
       (when (= end (point-max))
-        (markdown-syntax-propertize (car res) (cdr res)))
+        ;; This function is called in a buffer modification hook.
+        ;; `markdown-syntax-propertize' doesn't save the match data,
+        ;; so we have to do it here.
+        (save-match-data
+          (markdown-syntax-propertize (car res) (cdr res))))
       (setq jit-lock-start (car res)
             jit-lock-end (cdr res)))))
 
@@ -2283,7 +2317,15 @@ is non-nil.
 Set this to a non-nil value to turn this feature on by default.
 You can interactively toggle the value of this variable with
 `markdown-toggle-markup-hiding', \\[markdown-toggle-markup-hiding],
-or from the Markdown > Show & Hide menu."
+or from the Markdown > Show & Hide menu.
+
+Markup hiding works by adding text properties to positions in the
+buffer---either the `invisible' property or the `display' property
+in cases where alternative glyphs are used (e.g., list bullets).
+This does not, however, affect printing or other output.
+Functions such as `htmlfontify-buffer' and `ps-print-buffer' will
+not honor these text properties.  For printing, it would be better
+to first convert to HTML or PDF (e.g,. using Pandoc)."
   :group 'markdown
   :type 'boolean
   :safe 'booleanp
@@ -2293,7 +2335,8 @@ or from the Markdown > Show & Hide menu."
 (defun markdown-toggle-markup-hiding (&optional arg)
   "Toggle the display or hiding of markup.
 With a prefix argument ARG, enable markup hiding if ARG is positive,
-and disable it otherwise."
+and disable it otherwise.
+See `markdown-hide-markup' for additional details."
   (interactive (list (or current-prefix-arg 'toggle)))
   (setq markdown-hide-markup
         (if (eq arg 'toggle)
@@ -2450,6 +2493,20 @@ and disable it otherwise."
 (defface markdown-blockquote-face
   '((t (:inherit font-lock-doc-face)))
   "Face for blockquote sections."
+  :group 'markdown-faces)
+
+(defface markdown-code-face
+  (let* ((default-bg (or (face-background 'default) "unspecified-bg"))
+         (light-bg (if (equal default-bg "unspecified-bg")
+                       "unspecified-bg"
+                     (color-darken-name default-bg 3)))
+         (dark-bg (if (equal default-bg "unspecified-bg")
+                       "unspecified-bg"
+                     (color-lighten-name default-bg 3))))
+    `((default :inherit fixed-pitch)
+      (((type graphic) (class color) (background dark)) (:background ,dark-bg))
+      (((type graphic) (class color) (background light)) (:background ,light-bg))))
+  "Face for inline code, pre blocks, and fenced code blocks."
   :group 'markdown-faces)
 
 (defface markdown-code-face
@@ -2626,22 +2683,6 @@ size of `markdown-header-face'."
                         (t (float (nth num markdown-header-scaling-values))))))
       (unless (get face-name 'saved-face) ; Don't update customized faces
         (set-face-attribute face-name nil :height scale)))))
-
-(defun markdown-update-code-face ()
-  "Generate `markdown-code-face' for code block backgrounds.
-When using a light-background theme, darken the background slightly for
-code blocks.  Similarly, when using a dark-background theme, lighten it
-slightly.  If the face has been customized already, leave it alone."
-  ;; Don't update customized faces
-  (unless (get 'markdown-code-face 'saved-face)
-    (let ((bg (face-background 'default)))
-      (when (and bg (not (equal bg "unspecified-bg")))
-        (set-face-attribute
-         'markdown-code-face nil
-         :background
-         (cl-case (cdr (assq 'background-mode (frame-parameters)))
-           ('light (color-darken-name bg 3))
-           ('dark (color-lighten-name bg 3))))))))
 
 (defun markdown-syntactic-face (state)
   "Return font-lock face for characters with given STATE.
@@ -4869,6 +4910,15 @@ if three backquotes inserted at the beginning of line."
   (setq markdown-gfm-used-languages
           (cons lang (remove lang markdown-gfm-used-languages))))
 
+(defcustom markdown-spaces-after-code-fence 1
+  "Number of space characters to insert after a code fence.
+\\<gfm-mode-map>\\[markdown-insert-gfm-code-block] inserts this many spaces between an
+opening code fence and an info string."
+  :group 'markdown
+  :type 'integer
+  :safe #'natnump
+  :package-version '(markdown-mode . "2.3"))
+
 (defun markdown-insert-gfm-code-block (&optional lang)
   "Insert GFM code block for language LANG.
 If LANG is nil, the language will be queried from user.  If a
@@ -4886,14 +4936,18 @@ automatically in order to have the correct markup."
                  'markdown-gfm-language-history))
              (quit "")))))
   (unless (string= lang "") (markdown-gfm-add-used-language lang))
-  (when (> (length lang) 0) (setq lang (concat " " lang)))
+  (when (> (length lang) 0)
+    (setq lang (concat (make-string markdown-spaces-after-code-fence ?\s)
+                       lang)))
   (if (markdown-use-region-p)
-      (let ((b (region-beginning)) (e (region-end)))
+      (let* ((b (region-beginning)) (e (region-end))
+             (indent (progn (goto-char b) (current-indentation))))
         (goto-char e)
         ;; if we're on a blank line, don't newline, otherwise the ```
         ;; should go on its own line
         (unless (looking-back "\n" nil)
           (newline))
+        (indent-to indent)
         (insert "```")
         (markdown-ensure-blank-line-after)
         (goto-char b)
@@ -4903,11 +4957,19 @@ automatically in order to have the correct markup."
           (newline)
           (forward-line -1))
         (markdown-ensure-blank-line-before)
+        (indent-to indent)
         (insert "```" lang))
-    (markdown-ensure-blank-line-before)
-    (insert "```" lang "\n\n```")
-    (markdown-ensure-blank-line-after)
-    (forward-line -1)))
+    (let ((indent (current-indentation)))
+      (delete-horizontal-space :backward-only)
+      (markdown-ensure-blank-line-before)
+      (indent-to indent)
+      (insert "```" lang "\n")
+      (indent-to indent)
+      (insert ?\n)
+      (indent-to indent)
+      (insert "```")
+      (markdown-ensure-blank-line-after))
+    (end-of-line 0)))
 
 (defun markdown-code-block-lang (&optional pos-prop)
   "Return the language name for a GFM or tilde fenced code block.
@@ -5630,18 +5692,32 @@ Assumes match data is available for `markdown-regex-italic'."
 
 (defun markdown--style-map-prompt ()
   "Return a formatted prompt for Markdown markup insertion."
-  (concat
-   "Markdown: "
-   (propertize "bold" 'face 'markdown-bold-face) ", "
-   (propertize "italic" 'face 'markdown-italic-face) ", "
-   (propertize "code" 'face 'markdown-inline-code-face) ", "
-   (propertize "C = GFM code" 'face 'markdown-code-face) ", "
-   (propertize "pre" 'face 'markdown-pre-face) ", "
-   (propertize "footnote" 'face 'markdown-footnote-text-face) ", "
-   (propertize "q = blockquote" 'face 'markdown-blockquote-face) ", "
-   (propertize "h & 1-6 = heading" 'face 'markdown-header-face) ", "
-   (propertize "- = hr" 'face 'markdown-hr-face) ", "
-   "C-h = more"))
+  (when markdown-enable-prefix-prompts
+    (concat
+     "Markdown: "
+     (propertize "bold" 'face 'markdown-bold-face) ", "
+     (propertize "italic" 'face 'markdown-italic-face) ", "
+     (propertize "code" 'face 'markdown-inline-code-face) ", "
+     (propertize "C = GFM code" 'face 'markdown-code-face) ", "
+     (propertize "pre" 'face 'markdown-pre-face) ", "
+     (propertize "footnote" 'face 'markdown-footnote-text-face) ", "
+     (propertize "q = blockquote" 'face 'markdown-blockquote-face) ", "
+     (propertize "h & 1-6 = heading" 'face 'markdown-header-face) ", "
+     (propertize "- = hr" 'face 'markdown-hr-face) ", "
+     "C-h = more")))
+
+(defun markdown--command-map-prompt ()
+  "Return prompt for Markdown buffer-wide commands."
+  (when markdown-enable-prefix-prompts
+    (concat
+     "Command: "
+     (propertize "m" 'face 'markdown-bold-face) "arkdown, "
+     (propertize "p" 'face 'markdown-bold-face) "review, "
+     (propertize "o" 'face 'markdown-bold-face) "pen, "
+     (propertize "e" 'face 'markdown-bold-face) "xport, "
+     "export & pre" (propertize "v" 'face 'markdown-bold-face) "iew, "
+     (propertize "c" 'face 'markdown-bold-face) "heck refs, "
+     "C-h = more")))
 
 (defvar markdown-mode-style-map
   (let ((map (make-keymap (markdown--style-map-prompt))))
@@ -5674,6 +5750,21 @@ Assumes match data is available for `markdown-regex-italic'."
     map)
   "Keymap for Markdown text styling commands.")
 
+(defvar markdown-mode-command-map
+  (let ((map (make-keymap (markdown--command-map-prompt))))
+    (define-key map (kbd "m") 'markdown-other-window)
+    (define-key map (kbd "p") 'markdown-preview)
+    (define-key map (kbd "e") 'markdown-export)
+    (define-key map (kbd "v") 'markdown-export-and-preview)
+    (define-key map (kbd "o") 'markdown-open)
+    (define-key map (kbd "l") 'markdown-live-preview-mode)
+    (define-key map (kbd "w") 'markdown-kill-ring-save)
+    (define-key map (kbd "c") 'markdown-check-refs)
+    (define-key map (kbd "n") 'markdown-cleanup-list-numbers)
+    (define-key map (kbd "]") 'markdown-complete-buffer)
+    map)
+  "Keymap for Markdown buffer-wide commands.")
+
 (defvar markdown-mode-map
   (let ((map (make-keymap)))
     ;; Markup insertion & removal
@@ -5687,6 +5778,7 @@ Assumes match data is available for `markdown-regex-italic'."
     ;; Following and doing things
     (define-key map (kbd "C-c C-o") 'markdown-follow-thing-at-point)
     (define-key map (kbd "C-c C-d") 'markdown-do)
+    (define-key map (kbd "C-c '") 'markdown-edit-code-block)
     ;; Indentation
     (define-key map (kbd "C-m") 'markdown-enter-key)
     (define-key map (kbd "DEL") 'markdown-outdent-or-delete)
@@ -5704,17 +5796,7 @@ Assumes match data is available for `markdown-regex-italic'."
     (define-key map (kbd "C-c C-b") 'markdown-outline-previous-same-level)
     (define-key map (kbd "C-c C-u") 'markdown-outline-up)
     ;; Buffer-wide commands
-    (define-key map (kbd "C-c C-c m") 'markdown-other-window)
-    (define-key map (kbd "C-c C-c p") 'markdown-preview)
-    (define-key map (kbd "C-c C-c e") 'markdown-export)
-    (define-key map (kbd "C-c C-c v") 'markdown-export-and-preview)
-    (define-key map (kbd "C-c C-c o") 'markdown-open)
-    (define-key map (kbd "C-c C-c l") 'markdown-live-preview-mode)
-    (define-key map (kbd "C-c C-c w") 'markdown-kill-ring-save)
-    (define-key map (kbd "C-c C-c c") 'markdown-check-refs)
-    (define-key map (kbd "C-c C-c n") 'markdown-cleanup-list-numbers)
-    (define-key map (kbd "C-c C-c ]") 'markdown-complete-buffer)
-    (define-key map (kbd "C-c '") 'markdown-edit-code-block)
+    (define-key map (kbd "C-c C-c") markdown-mode-command-map)
     ;; Subtree and list editing
     (define-key map (kbd "C-c <up>") 'markdown-move-up)
     (define-key map (kbd "C-c <down>") 'markdown-move-down)
@@ -6560,7 +6642,7 @@ the surrounding context in light of Markdown syntax.  For that, see
   "Move the point to the start of the current paragraph.
 With argument ARG, do it ARG times; a negative argument ARG = -N
 means move forward N blocks."
-  (interactive "p")
+  (interactive "^p")
   (or arg (setq arg 1))
   (if (< arg 0)
       (markdown-forward-paragraph (- arg))
@@ -6614,7 +6696,7 @@ means move forward N blocks."
   "Move forward to the next end of a paragraph.
 With argument ARG, do it ARG times; a negative argument ARG = -N
 means move backward N blocks."
-  (interactive "p")
+  (interactive "^p")
   (or arg (setq arg 1))
   (if (< arg 0)
       (markdown-backward-paragraph (- arg))
@@ -6665,7 +6747,7 @@ Moves across complete code blocks, list items, and blockquotes,
 but otherwise stops at blank lines, headers, and horizontal
 rules.  With argument ARG, do it ARG times; a negative argument
 ARG = -N means move forward N blocks."
-  (interactive "p")
+  (interactive "^p")
   (or arg (setq arg 1))
   (if (< arg 0)
       (markdown-forward-block (- arg))
@@ -6712,7 +6794,7 @@ Moves across complete code blocks, list items, and blockquotes,
 but otherwise stops at blank lines, headers, and horizontal
 rules.  With argument ARG, do it ARG times; a negative argument
 ARG = -N means move backward N blocks."
-  (interactive "p")
+  (interactive "^p")
   (or arg (setq arg 1))
   (if (< arg 0)
       (markdown-backward-block (- arg))
@@ -7004,12 +7086,13 @@ setext header, but should not be folded."
                              (point)))
                          nil)))
 
+;; This function was originally derived from `org-cycle' from org.el.
 (defun markdown-cycle (&optional arg)
   "Visibility cycling for Markdown mode.
 If ARG is t, perform global visibility cycling.  If the point is
 at an atx-style header, cycle visibility of the corresponding
-subtree.  Otherwise, insert a tab using `indent-relative'.
-Derived from `org-cycle'."
+subtree.  Otherwise, indent the current line or insert a tab,
+as appropriate, by calling `indent-for-tab-command'."
   (interactive "P")
   (cond
    ((eq arg t) ;; Global cycling
@@ -7089,7 +7172,9 @@ Calls `markdown-cycle' with argument t."
 (defun markdown-outline-level ()
   "Return the depth to which a statement is nested in the outline."
   (cond
-   ((markdown-code-block-at-point-p) 7) ;; Only 6 header levels are defined.
+   ((and (match-beginning 0)
+         (markdown-code-block-at-pos (match-beginning 0)))
+    7) ;; Only 6 header levels are defined.
    ((match-end 2) 1)
    ((match-end 3) 2)
    ((match-end 4)
@@ -7845,6 +7930,7 @@ Otherwise, open with `find-file' after stripping anchor and/or query string."
            ;; Markup part
            (mp (list 'face 'markdown-markup-face
                      'invisible 'markdown-markup
+                     'rear-nonsticky t
                      'font-lock-multiline t))
            ;; Link part
            (lp (list 'keymap markdown-mode-mouse-map
@@ -7883,6 +7969,7 @@ Otherwise, open with `find-file' after stripping anchor and/or query string."
            ;; Markup part
            (mp (list 'face 'markdown-markup-face
                      'invisible 'markdown-markup
+                     'rear-nonsticky t
                      'font-lock-multiline t))
            ;; Link part
            (lp (list 'keymap markdown-mode-mouse-map
@@ -7916,6 +8003,7 @@ Otherwise, open with `find-file' after stripping anchor and/or query string."
            ;; Markup part
            (mp (list 'face 'markdown-markup-face
                      'invisible 'markdown-markup
+                     'rear-nonsticky t
                      'font-lock-multiline t))
            ;; URI part
            (up (list 'keymap markdown-mode-mouse-map
@@ -7935,6 +8023,7 @@ Otherwise, open with `find-file' after stripping anchor and/or query string."
            (props (list 'keymap markdown-mode-mouse-map
                         'face 'markdown-plain-url-face
                         'mouse-face 'markdown-highlight-face
+                        'rear-nonsticky t
                         'font-lock-multiline t)))
       (add-text-properties start end props)
       t)))
@@ -8308,6 +8397,14 @@ return the number of paragraphs left to move."
         (goto-char start)))))
   arg)
 
+(defun markdown--inhibit-electric-quote ()
+  "Function added to `electric-quote-inhibit-functions'.
+Return non-nil if the quote has been inserted inside a code block
+or span."
+  (let ((pos (1- (point))))
+    (or (markdown-inline-code-at-pos pos)
+        (markdown-code-block-at-pos pos))))
+
 
 ;;; Extension Framework =======================================================
 
@@ -8461,7 +8558,9 @@ Returns nil if there is no task list item at the point."
           ;; Advance to column of first non-whitespace after marker
           (forward-char (cl-fourth bounds))
           (cond ((looking-at "\\[ \\]")
-                 (replace-match "[x]" nil t)
+                 (replace-match
+                  (if markdown-gfm-uppercase-checkbox "[X]" "[x]")
+                  nil t)
                  (match-string-no-properties 0))
                 ((looking-at "\\[[xX]\\]")
                  (replace-match "[ ]" nil t)
@@ -8673,6 +8772,13 @@ position."
 
 (require 'edit-indirect nil t)
 (defvar edit-indirect-guess-mode-function)
+(defvar edit-indirect-after-commit-functions)
+
+(defun markdown--edit-indirect-after-commit-function (_beg end)
+  "Ensure trailing newlines at the END of code blocks."
+  (goto-char end)
+  (unless (eq (char-before) ?\n)
+    (insert "\n")))
 
 (defun markdown-edit-code-block ()
   "Edit Markdown code block in an indirect buffer."
@@ -8746,7 +8852,7 @@ position."
 (defun markdown-mode-info ()
   "Open the `markdown-mode' homepage."
   (interactive)
-  (browse-url "http://jblevins.org/projects/markdown-mode/"))
+  (browse-url "https://jblevins.org/projects/markdown-mode/"))
 
 ;;;###autoload
 (define-derived-mode markdown-mode text-mode "Markdown"
@@ -8776,7 +8882,6 @@ position."
   (if markdown-hide-markup
       (add-to-invisibility-spec 'markdown-markup)
     (remove-from-invisibility-spec 'markdown-markup))
-  (markdown-update-code-face)
   ;; Reload extensions
   (markdown-reload-extensions)
   ;; Add a buffer-local hook to reload after file-local variables are read
@@ -8838,8 +8943,6 @@ position."
   ;; Separating out each condition into a separate function so that users can
   ;; override if desired (with remove-hook)
   (add-hook 'fill-nobreak-predicate
-            #'markdown-inside-link-p nil t)
-  (add-hook 'fill-nobreak-predicate
             #'markdown-line-is-reference-definition-p nil t)
   (add-hook 'fill-nobreak-predicate
             #'markdown-pipe-at-bol-p nil t)
@@ -8850,6 +8953,10 @@ position."
   ;; Flyspell
   (setq-local flyspell-generic-check-word-predicate
               #'markdown-flyspell-check-word-p)
+
+  ;; Electric quoting
+  (add-hook 'electric-quote-inhibit-functions
+            #'markdown--inhibit-electric-quote nil :local)
 
   ;; Backwards compatibility with markdown-css-path
   (when (boundp 'markdown-css-path)
@@ -8866,6 +8973,11 @@ position."
   (when markdown-make-gfm-checkboxes-buttons
     (markdown-make-gfm-checkboxes-buttons (point-min) (point-max))
     (add-hook 'after-change-functions #'markdown-gfm-checkbox-after-change-function t t))
+
+  ;; edit-indirect
+  (add-hook 'edit-indirect-after-commit-functions
+            #'markdown--edit-indirect-after-commit-function
+            nil 'local)
 
   ;; add live preview export hook
   (add-hook 'after-save-hook #'markdown-live-preview-if-markdown t t)
@@ -8910,7 +9022,9 @@ position."
 
 
 (provide 'markdown-mode)
+
 ;; Local Variables:
 ;; indent-tabs-mode: nil
+;; coding: utf-8
 ;; End:
 ;;; markdown-mode.el ends here
