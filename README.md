@@ -105,11 +105,12 @@ packages of note:
 **NB** In order of importance to me. If you're using my setup and want something
 supported not on this list, feel free to issue a PR.
 
-- TypeScript
-- Scala
-- Java
-- Racket
-- Haskell
+* OCaml
+* TypeScript
+* Scala
+* Java
+* Racket
+* Haskell
 
 ## Misc notes
 
