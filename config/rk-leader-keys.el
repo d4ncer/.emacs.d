@@ -152,6 +152,7 @@
 
       "c r" #'comment-or-uncomment-region
 
+      "f d" #'dired
       "f D" #'rk/delete-current-buffer-and-file
       "f F" #'find-file-other-window
       "f R" #'rk/rename-file-and-buffer
