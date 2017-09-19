@@ -100,6 +100,11 @@
     (autoload 'rk-emacs-compile-elpa "rk-emacs")
     (autoload 'counsel-git-log "counsel")
 
+    (defun rk-insert-iso-timestamp ()
+      "Insert current ISO timestamp at position."
+      (interactive)
+      (insert (format-time-string "%FT%T.%3NZ")))
+
     (defun rk-get-face-at-point  (pos)
       "Get the font face at POS."
       (interactive "d")
@@ -137,6 +142,7 @@
 
       "!"   #'shell-command
 
+      "a t" #'rk-insert-iso-timestamp
       "a e a" #'rk-emacs-add-subtree
       "a e u" #'rk-emacs-update-subtree
       "a e c" #'rk-emacs-compile-subtree
