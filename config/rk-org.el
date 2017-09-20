@@ -411,6 +411,20 @@ Do not scheduled items or repeating todos."
 
   :config
   (progn
+    (setq org-src-lang-modes '(("ocaml" . tuareg)
+                               ("json" . rk-web-json)
+                               ("elisp" . emacs-lisp)
+                               ("ditaa" . artist)
+                               ("asymptote" . asy)
+                               ("dot" . fundamental)
+                               ("sqlite" . sql)
+                               ("calc" . fundamental)
+                               ("C" . c)
+                               ("cpp" . c++)
+                               ("C++" . c++)
+                               ("screen" . shell-script)
+                               ("shell" . sh)
+                               ("bash" . sh)))
     (setq org-src-fontify-natively t)
     (setq org-src-window-setup 'current-window)
     (add-hook 'org-src-mode-hook #'rk-org--suppress-final-newline)
