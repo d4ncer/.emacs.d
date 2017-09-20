@@ -2375,6 +2375,9 @@ TEST-PREFIX which specifies test file prefix."
 (projectile-register-project-type 'cmake '("CMakeLists.txt")
                                   :compile #'projectile-cmake-compile
                                   :test #'projectile-cmake-test)
+(projectile-register-project-type 'nix '("default.nix")
+                                  :compile "nix-build"
+                                  :test "nix-build")
 
 (defvar-local projectile-project-type nil
   "Buffer local var for overriding the auto-detected project type.
@@ -3354,7 +3357,8 @@ This command will first prompt for the directory the file is in."
   (cl-mapcan
    (lambda (project)
      (when (file-exists-p project)
-       (let ((default-directory project))
+       (let ((default-directory project)
+             (projectile-cached-project-root nil))
          (mapcar (lambda (file)
                    (expand-file-name file project))
                  (projectile-current-project-files)))))
