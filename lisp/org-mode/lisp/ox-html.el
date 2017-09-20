@@ -19,7 +19,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
+;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 
@@ -174,7 +174,6 @@
     (:html-klipsify-src nil nil org-html-klipsify-src)
     (:html-klipse-css nil nil org-html-klipse-css)
     (:html-klipse-js nil nil org-html-klipse-js)
-    (:html-klipse-keep-old-src nil nil org-html-keep-old-src)
     (:html-klipse-selection-script nil nil org-html-klipse-selection-script)
     (:infojs-opt "INFOJS_OPT" nil nil)
     ;; Redefine regular options.
@@ -1325,7 +1324,7 @@ like that: \"%%\"."
   :type 'string)
 
 (defcustom org-html-creator-string
-  (format "<a href=\"http://www.gnu.org/software/emacs/\">Emacs</a> %s (<a href=\"http://orgmode.org\">Org</a> mode %s)"
+  (format "<a href=\"https://www.gnu.org/software/emacs/\">Emacs</a> %s (<a href=\"http://orgmode.org\">Org</a> mode %s)"
 	  emacs-version
 	  (if (fboundp 'org-version) (org-version) "unknown version"))
   "Information about the creator of the HTML document.
@@ -1571,12 +1570,6 @@ https://developer.mozilla.org/en-US/docs/Mozilla/Mobile/Viewport_meta_tag"
   :group 'org-export-html
   :package-version '(Org . "9.1")
   :type 'string)
-
-(defcustom org-html-keep-old-src nil
-  "When non-nil, use <pre class=\"\"> instead of <pre><code class=\"\">."
-  :group 'org-export-html
-  :package-version '(Org . "9.1")
-  :type 'boolean)
 
 
 ;;;; Todos
@@ -3384,12 +3377,16 @@ contextual information."
 			      listing-number
 			      (org-trim (org-export-data caption info))))))
 		;; Contents.
-		(let ((open (if org-html-keep-old-src "<pre" "<pre><code"))
-		      (close (if org-html-keep-old-src "</pre>" "</code></pre>")))
-		  (format "%s class=\"src src-%s\"%s%s>%s%s"
-			  open lang label (if (and klipsify (string= lang "html"))
-					      " data-editor-type=\"html\"" "")
-			  code close)))))))
+		(if klipsify
+		    (format "<pre><code class=\"src src-%s\"%s%s>%s</code></pre>"
+			    lang
+			    label
+			    (if (string= lang "html")
+				" data-editor-type=\"html\""
+			      "")
+			    code)
+		  (format "<pre class=\"src src-%s\"%s>%s</pre>"
+                          lang label code)))))))
 
 ;;;; Statistics Cookie
 

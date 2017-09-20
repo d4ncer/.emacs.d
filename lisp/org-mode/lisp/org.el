@@ -21,7 +21,7 @@
 ;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
+;; along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.
 ;;
 ;;; Commentary:
 ;;
@@ -185,22 +185,6 @@ Stars are put in group 1 and the trimmed body in group 2.")
 (declare-function org-latex-make-preamble "ox-latex" (info &optional template snippet?))
 
 (defvar ffap-url-regexp)		;Silence byte-compiler
-
-(defsubst org-uniquify (list)
-  "Non-destructively remove duplicate elements from LIST."
-  (let ((res (copy-sequence list))) (delete-dups res)))
-
-(defsubst org-get-at-bol (property)
-  "Get text property PROPERTY at the beginning of line."
-  (get-text-property (point-at-bol) property))
-
-(defsubst org-trim (s &optional keep-lead)
-  "Remove whitespace at the beginning and the end of string S.
-When optional argument KEEP-LEAD is non-nil, removing blank lines
-at the beginning of the string does not affect leading indentation."
-  (replace-regexp-in-string
-   (if keep-lead "\\`\\([ \t]*\n\\)+" "\\`[ \t\n\r]+") ""
-   (replace-regexp-in-string "[ \t\n\r]+\\'" "" s)))
 
 ;; load languages based on value of `org-babel-load-languages'
 (defvar org-babel-load-languages)
@@ -19477,7 +19461,6 @@ COMMANDS is a list of alternating OLDDEF NEWDEF command names."
 
 (org-defkey org-mode-map [(shift return)]   'org-table-copy-down)
 (org-defkey org-mode-map [(meta shift return)] 'org-insert-todo-heading)
-(org-defkey org-mode-map [(meta return)]       'org-meta-return)
 (org-defkey org-mode-map (kbd "M-RET") #'org-meta-return)
 
 ;; Cursor keys with modifiers
@@ -19615,6 +19598,7 @@ COMMANDS is a list of alternating OLDDEF NEWDEF command names."
 (org-defkey org-mode-map "\C-c\C-x>" 'org-agenda-remove-restriction-lock)
 (org-defkey org-mode-map "\C-c-"    'org-ctrl-c-minus)
 (org-defkey org-mode-map "\C-c*"    'org-ctrl-c-star)
+(org-defkey org-mode-map (kbd "C-c TAB") #'org-ctrl-c-tab)
 (org-defkey org-mode-map "\C-c^"    'org-sort)
 (org-defkey org-mode-map "\C-c\C-c" 'org-ctrl-c-ctrl-c)
 (org-defkey org-mode-map "\C-c\C-k" 'org-kill-note-or-show-branches)
@@ -21077,6 +21061,15 @@ Calls `org-table-next-row' or `newline-and-indent', depending on
 context.  See the individual commands for more information."
   (interactive)
   (org-return t))
+
+(defun org-ctrl-c-tab (&optional _arg)
+  "Toggle columns width in a table, or show children.
+Call `org-table-toggle-column-width' if point is in a table.
+Otherwise, call `org-show-children'."
+  (interactive "p")
+  (call-interactively
+   (if (org-at-table-p) #'org-table-toggle-column-width
+     #'org-show-children)))
 
 (defun org-ctrl-c-star ()
   "Compute table, or change heading status of lines.
