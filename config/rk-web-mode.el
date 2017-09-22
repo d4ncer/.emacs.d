@@ -199,7 +199,7 @@
     (defun rk-flow-insert-flow-annotation ()
       "Insert a flow annotation at the start of this file."
       (interactive)
-      (unless (rk-in-flow-buffer-p)
+      (unless (not (rk-in-flow-buffer-p))
         (user-error "Buffer already contains an @flow annotation"))
       (save-excursion
         (goto-char (point-min))
