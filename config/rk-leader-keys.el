@@ -57,8 +57,119 @@
 
     ;; Rename functions shown by which-key for legibility.
 
-    (add-to-list 'which-key-description-replacement-alist
-                 (cons (rx bos "cb" (* (not (any "/"))) "/" (group (+ nonl)) eos) "\\1"))
+    (push `((nil . ,(rx bos "rk" (*? nonl) "-" (group (+ nonl))))
+            .
+            (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up errors entries
+
+    (push `(("SPC e" . ,(rx (? "rk-") "flycheck-" (group (+? nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up goto and git
+
+    (push `(("SPC g" . ,(rx (? "rk-") "magit-" (group (+? nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `(("SPC g" . ,(rx "rk-" (group "goto-" (+? nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `(("SPC g" . "time-machine-transient-state/body") . (nil . "git-time-machine"))
+          which-key-replacement-alist)
+
+    ;; Clean up help
+
+    (push `(("SPC h d" . ,(rx bos (? "counsel-") "describe-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `(("SPC h f" . ,(rx bos "find-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up navigation
+
+    (push `(("SPC j" . ,(rx bos (? "evil-") "avy-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up kill
+
+    (push `(("SPC k" . "kill-this-buffer") . (nil . "buffer"))
+          which-key-replacement-alist)
+
+    (push `(("SPC k" . "delete-window") . (nil . "window"))
+          which-key-replacement-alist)
+
+    (push `(("SPC k" . "counsel-yank-pop") . (nil . "kill-ring"))
+          which-key-replacement-alist)
+
+    ;; Clean up narrowing
+
+    (push `(("SPC n" . ,(rx bos (? "org-") "narrow-to-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up org
+
+    (push `(("SPC o" . ,(rx bos (? "rk-") (or "org-" "ledger-") (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up projectile
+
+    (push `((nil . ,(rx bos (? "rk-") (? "counsel-") "projectile-" (group (+? nonl)) (? "-project") eos)) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `((nil . "projectile-dired") . (nil . "root (dired)"))
+          which-key-replacement-alist)
+
+    (push `((nil . "rk-neotree-find-project-root") . (nil . "root (neotree)"))
+          which-key-replacement-alist)
+
+    (push `(("SPC p" . ,(rx bos (*? nonl) "shell-command" (* nonl))) . (nil . "shell-command"))
+          which-key-replacement-alist)
+
+    (push `(("SPC p" . ,(rx bos (*? nonl) "async-shell-command" (* nonl))) . (nil . "shell-command (async)"))
+          which-key-replacement-alist)
+
+    ;; Clean up symbols
+
+    (push `(("SPC s" . "evil-iedit-state/iedit-mode") . (nil . "iedit"))
+          which-key-replacement-alist)
+
+    ;; Clean up toggles
+
+    (push `(("SPC t" . ,(rx bos "rk-" (? "faces/") (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up windows
+
+    (push `(("SPC w" . ,(rx bos (? "rk-") (? "evil-") "window-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `(("SPC w" . "balance-windows") . (nil . "balance"))
+          which-key-replacement-alist)
+
+    (push `(("SPC w" . "delete-window") . (nil . "delete"))
+          which-key-replacement-alist)
+
+    (push `(("SPC w" . "delete-other-windows") . (nil . "delete-others"))
+          which-key-replacement-alist)
+
+    ;; Clean up links
+
+    (push `(("SPC x" . ,(rx bos "link-hint-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    ;; Clean up yasnippet
+
+    (push `(("SPC y" . ,(rx bos (? "rk-") "yas" (any "-/") (group (+? nonl)) "-snippet" eos)) . (nil . "\\1"))
+          which-key-replacement-alist)
+
+    (push `(("SPC y" . "yas-visit-snippet-file") . (nil . "visit-file"))
+          which-key-replacement-alist)
+
+    ;; Clean up transient states
+
+    (push `((nil . ,(rx bos (group (+? nonl)) "-transient-state/body" eos)) . (nil . "\\1"))
+          which-key-replacement-alist)
 
     (which-key-add-key-based-replacements
       "SPC ,"   "smartparens"
@@ -79,8 +190,8 @@
       "SPC q"   "quit"
       "SPC w"   "window"
       "SPC s"   "search/edit"
-      "SPC S"   "string"
-      "SPC t"   "toggles"
+      "SPC t"   "text"
+      "SPC T"   "toggles"
       "SPC SPC" "M-x"
       "SPC m"   '("major-mode-cmd" . "Major mode commands"))
 
@@ -199,7 +310,8 @@
       "q w" #'delete-window
       "q q" #'save-buffers-kill-emacs
 
-      "t F" #'toggle-frame-fullscreen
+      "T F" #'toggle-frame-fullscreen
+      "T f" #'toggle-frame-maximized
 
       "w =" #'balance-windows
       "w w" #'evil-window-next
