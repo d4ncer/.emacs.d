@@ -17,7 +17,13 @@
    embrace-org-mode-hook)
 
   :init
-  (global-set-key (kbd "C-,") #'embrace-commander)
+  (progn
+
+    ;; Add custom pairs to embrace
+    (embrace-add-pair ?| "|" "|")
+    (embrace-add-pair ?# "#" "#")
+
+    (global-set-key (kbd "C-,") #'embrace-commander))
 
   :config
   (add-hook 'org-mode-hook #'embrace-org-mode-hook))
