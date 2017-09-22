@@ -22,10 +22,10 @@
 
   :init
   (spacemacs-keys-set-leader-keys
-    "Sl" #'rk-word-or-region-to-camel-lower
-    "Su" #'rk-word-or-region-to-camel-upper
-    "Ss" #'rk-word-or-region-to-snake
-    "Sd" #'rk-word-or-region-to-dashed))
+    "t l" #'rk-word-or-region-to-camel-lower
+    "t u" #'rk-word-or-region-to-camel-upper
+    "t s" #'rk-word-or-region-to-snake
+    "t d" #'rk-word-or-region-to-dashed))
 
 (provide 'rk-string)
 

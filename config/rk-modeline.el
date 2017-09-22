@@ -28,8 +28,8 @@
   :init
   (progn
     (spacemacs-keys-set-leader-keys
-      "tM" #'rk-header-line-mode
-      "tm" #'rk-header-line-global-mode)
+      "TM" #'rk-header-line-mode
+      "Tm" #'rk-header-line-global-mode)
     (add-hook 'after-init-hook #'rk-header-line-global-mode))
   :config
   (setq rk-header-line-function (lambda () rk-header-line-format)))
