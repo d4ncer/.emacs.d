@@ -168,17 +168,44 @@
   :preface
   (progn
     (autoload 's-matches? "s")
+
+    (defun rk-in-flow-buffer-p (&optional beg end)
+      "Checks if the buffer has a Flow annotation."
+      (s-matches? (rx (or (and "//" (* space) "@flow")
+                          (and "/*" (* space) "@flow" (* space) "*/")))
+                  (buffer-substring (or beg (point-min))
+                                    (or end (point-max)))))
+
+    (defun rk-flow-toggle-sealed-object ()
+      "Toggle between a sealed & unsealed object type."
+      (interactive)
+      (unless (rk-in-flow-buffer-p)
+        (user-error "Not in a flow buffer"))
+      (-let [(&plist :beg beg :end end :op op) (sp-get-enclosing-sexp)]
+        (save-excursion
+          (cond ((equal op "{")
+                 (goto-char (1- end))
+                 (insert "|")
+                 (goto-char (1+ beg))
+                 (insert "|"))
+                ((equal op "{|")
+                 (goto-char (- end 2))
+                 (delete-char 1)
+                 (goto-char (1+ beg))
+                 (delete-char 1))
+                (t
+                 (user-error "Not in an object type"))))))
+
     (defun rk-flow-insert-flow-annotation ()
       "Insert a flow annotation at the start of this file."
       (interactive)
+      (unless (rk-in-flow-buffer-p)
+        (user-error "Buffer already contains an @flow annotation"))
       (save-excursion
         (goto-char (point-min))
-        (if (s-matches? (rx (or (and "//" (* space) "@flow")
-                                (and "/*" (* space) "@flow" (* space) "*/")))
-                        (buffer-substring (line-beginning-position) (line-end-position)))
-            (user-error "Buffer already contains an @flow annotation")
-          (insert "// @flow\n")
-          (message "Inserted @flow annotation.")))))
+        (insert "// @flow\n")
+        (message "Inserted @flow annotation."))))
+
   :config
   (progn
     (add-hook 'rk-web-js-mode 'flow-minor-enable-automatically))
@@ -191,6 +218,7 @@
       "fs" #'flow-minor-suggest
       "fS" #'flow-minor-status
       "fc" #'flow-minor-coverage
+      "fo" #'rk-flow-toggle-sealed-object
       "fd" #'flow-minor-jump-to-definition)))
 
 (use-package prettier-js
