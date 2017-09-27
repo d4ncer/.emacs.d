@@ -1,4 +1,4 @@
-# My Emacs config
+# Here be dragons
 
 ## Installation
 
