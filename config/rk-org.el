@@ -503,64 +503,63 @@ Do not scheduled items or repeating todos."
            :prepend t)
      kws))
   :config
-  (setq org-capture-templates
-        (list
-         (rk-org--capture-template-entry
-          "d" "Diary"
-          '(file+datetree org-agenda-diary-file) "*  %?\n%^T")
-
-         (rk-org--capture-template-entry
-          "D" "Diary (work)"
-          `(file+datetree rk-org-work-file) "*  %?\n%^T")
-
-         (rk-org--capture-template-entry
-          "r" "Reporting"
-          '(file+olp rk-org-work-file "Reporting") "*  %?")
-
-         (rk-org--capture-template-entry
-          "e" "Editors"
-          '(file+olp rk-org-work-file "Editors") "*  %?")
-
-         (rk-org--capture-template-entry
-          "o" "Operations"
-          '(file+olp rk-org-work-file "Operations") "*  %?")
-
-         (rk-org--capture-template-entry
-          "i" "Infra"
-          '(file+olp rk-org-work-file "Infra") "*  %?")
-
-         (rk-org--capture-template-entry
-          "E" "ETL"
-          '(file+olp rk-org-work-file "ETL") "*  %?")
-
-         (rk-org--capture-template-entry
-          "l" "Legacy"
-          '(file+olp rk-org-work-file "Legacy") "*  %?")
-
-         (rk-org--capture-template-entry
-          "R" "Recruitment"
-          '(file+olp rk-org-work-file "Recruitment") "*  %?")
-
-         (rk-org--capture-template-entry
-          "t" "Team Lead"
-          '(file+olp rk-org-work-file "Team Lead") "*  %?")
-
-         (rk-org--capture-template-entry
-          "S" "Standup"
-          `(file+datetree rk-org-work-file) "* TODO %? :standup:\n%^t")
-
-         (rk-org--capture-template-entry
-          "s" "Someday"
-          '(file+olp org-agenda-diary-file "Side projects")
-          "* SOMEDAY  %?")))
-  :init
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
       "d" #'org-deadline
       "c" #'org-capture-finalize
       "k" #'org-capture-kill
       "r" #'org-capture-refile
-      "A" #'org-align-all-tags)))
+      "A" #'org-align-all-tags)
+    (setq org-capture-templates
+          (list
+           (rk-org--capture-template-entry
+            "d" "Diary"
+            '(file+datetree org-agenda-diary-file) "*  %?\n%^T")
+
+           (rk-org--capture-template-entry
+            "D" "Diary (work)"
+            `(file+datetree rk-org-work-file) "*  %?\n%^T")
+
+           (rk-org--capture-template-entry
+            "r" "Reporting"
+            '(file+olp rk-org-work-file "Reporting") "*  %?")
+
+           (rk-org--capture-template-entry
+            "e" "Editors"
+            '(file+olp rk-org-work-file "Editors") "*  %?")
+
+           (rk-org--capture-template-entry
+            "o" "Operations"
+            '(file+olp rk-org-work-file "Operations") "*  %?")
+
+           (rk-org--capture-template-entry
+            "i" "Infra"
+            '(file+olp rk-org-work-file "Infra") "*  %?")
+
+           (rk-org--capture-template-entry
+            "E" "ETL"
+            '(file+olp rk-org-work-file "ETL") "*  %?")
+
+           (rk-org--capture-template-entry
+            "l" "Legacy"
+            '(file+olp rk-org-work-file "Legacy") "*  %?")
+
+           (rk-org--capture-template-entry
+            "R" "Recruitment"
+            '(file+olp rk-org-work-file "Recruitment") "*  %?")
+
+           (rk-org--capture-template-entry
+            "t" "Team Lead"
+            '(file+olp rk-org-work-file "Team Lead") "*  %?")
+
+           (rk-org--capture-template-entry
+            "S" "Standup"
+            `(file+datetree rk-org-work-file) "* TODO %? :standup:\n%^t")
+
+           (rk-org--capture-template-entry
+            "s" "Someday"
+            '(file+olp org-agenda-diary-file "Side projects")
+            "* SOMEDAY  %?")))))
 
 (use-package org-download
   :after org
