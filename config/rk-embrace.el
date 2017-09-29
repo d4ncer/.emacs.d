@@ -14,19 +14,24 @@
 (use-package embrace
   :commands
   (embrace-commander
+   embrace-add-pair
    embrace-org-mode-hook)
 
-  :init
+  :preface
   (progn
-
-    ;; Add custom pairs to embrace
-    (embrace-add-pair ?| "|" "|")
-    (embrace-add-pair ?# "#" "#")
-
-    (global-set-key (kbd "C-,") #'embrace-commander))
+    (defun rk-embrace-all-mode-hook ()
+      "Add some default pairs to all modes."
+      (dolist (pair '((?| . ("|" . "|"))
+                      (?# . ("#" . "#"))))
+        (embrace-add-pair (car pair) (cadr pair) (cddr pair)))))
 
   :config
-  (add-hook 'org-mode-hook #'embrace-org-mode-hook))
+  (progn
+
+    (global-set-key (kbd "C-,") #'embrace-commander)
+
+    (add-hook 'prog-mode-hook #'rk-embrace-all-mode-hook)
+    (add-hook 'org-mode-hook #'embrace-org-mode-hook)))
 
 (provide 'rk-embrace)
 
