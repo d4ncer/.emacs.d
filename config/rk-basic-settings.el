@@ -381,6 +381,13 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq bookmark-save-flag nil)
     (setq bookmark-default-file (concat rk-emacs-cache-directory "/bookmarks"))))
 
+(use-package iedit
+  :defer t
+  :config
+  (progn
+    (define-key iedit-occurrence-keymap-default (kbd "<tab>") #'iedit-toggle-selection)
+    (define-key iedit-mode-keymap (kbd "<tab>") #'iedit-toggle-selection)))
+
 (use-package files
   :config
   (progn
