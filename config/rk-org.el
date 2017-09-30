@@ -274,6 +274,14 @@ Do not scheduled items or repeating todos."
 
     (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
 
+    (use-package rk-org-agenda-transient-state
+      :after org
+      :commands (rk-org-agenda-main-transient-state/body)
+      :config
+      (progn
+        (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-main-transient-state/body)))
+
+
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"
              ((tags-todo "-someday/NEXT"
