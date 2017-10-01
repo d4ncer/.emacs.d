@@ -291,7 +291,7 @@
      ((t :inherit default)))
 
     (org-date
-     ((t :weight light)))
+     ((t :weight light :underline t)))
 
     (org-sexp-date
      ((t :weight light)))
