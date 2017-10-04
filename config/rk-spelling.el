@@ -17,7 +17,7 @@
   :config
   (progn
     (setq ispell-program-name "aspell")
-    (setq ispell-dictionary "british")
+    (setq ispell-dictionary "en_GB")
     (setq ispell-dictionary-alist (ispell-find-aspell-dictionaries))
     (setq ispell-silently-savep t)))
 
