@@ -168,6 +168,7 @@
   :preface
   (progn
     (autoload 's-matches? "s")
+    (autoload 'sp-get-enclosing-sexp "smartparens")
 
     (defun rk-in-flow-buffer-p (&optional beg end)
       "Checks if the buffer has a Flow annotation."
