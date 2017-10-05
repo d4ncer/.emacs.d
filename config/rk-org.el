@@ -541,6 +541,10 @@ Do not scheduled items or repeating todos."
             '(file+olp rk-org-work-file "Operations") "*  %?")
 
            (rk-org--capture-template-entry
+            "y" "Design System"
+            '(file+olp rk-org-work-file "Design System") "*  %?")
+
+           (rk-org--capture-template-entry
             "i" "Infra"
             '(file+olp rk-org-work-file "Infra") "*  %?")
 
