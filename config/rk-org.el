@@ -676,6 +676,16 @@ table tr.tr-even td {
   :functions (rk-org-clock-cascade-init)
   :init (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
 
+(use-package typopunct
+  :after org
+  :commands (typopunct-change-language typopunct-mode)
+  :preface
+  (defun rk-typopunct-init ()
+    (typopunct-change-language 'english)
+    (typopunct-mode 1))
+  :config
+  (add-hook 'org-mode-hook #'rk-typopunct-init))
+
 (use-package rk-org-export-koma-letter
   :after org
   :functions (rk-org-export-koma-letter-init)
