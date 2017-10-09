@@ -325,7 +325,10 @@ Optional arg JUSTIFY will justify comments and strings."
   (scroll-bar-mode -1))
 
 (use-package align
-  :bind (("C-x a a" . align-regexp)))
+  :bind (("C-x a a" . align-regexp))
+
+  :config
+  (setq-default case-fold-search nil))
 
 (use-package simple
   :bind (("M-SPC" . cycle-spacing)))
