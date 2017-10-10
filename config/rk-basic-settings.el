@@ -280,6 +280,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (setq-default tab-width 4)
 (setq-default indent-tabs-mode nil)
 (setq-default sentence-end-double-space t)
+(setq-default line-spacing 2)
 
 (setq sentence-end-double-space nil)
 (setq delete-by-moving-to-trash nil)

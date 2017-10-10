@@ -45,8 +45,8 @@
         :background ,default-background
         :foreground ,default-foreground
         :weight normal
-        :family "Roboto Mono"
-        :height 140)))
+        :family "Fira Code"
+        :height 160)))
 
     (mode-line
      ((t :foreground ,rk-theme-base-solarized-b01 :background ,rk-theme-base-solarized-b01 :height 20)))
