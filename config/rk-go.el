@@ -86,8 +86,7 @@
     (autoload 'company-mode "company")
 
     (defun rk-go-company-setup ()
-      (with-no-warnings
-        (setq-local company-backends '(company-go)))
+      (set (make-local-variable 'company-backends) '(company-go))
       (company-mode)))
 
   :config
