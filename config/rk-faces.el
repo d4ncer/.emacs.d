@@ -20,6 +20,13 @@
 
 (load-theme 'rk-light t)
 
+(use-package rk-ligatures
+  :if (window-system)
+  :preface
+  (autoload 'rk-setup-fira-code-ligatures "rk-ligatures")
+  :config
+  (rk-setup-fira-code-ligatures))
+
 (provide 'rk-faces)
 
 ;;; rk-faces.el ends here
