@@ -106,6 +106,7 @@
              counsel-recentf
              counsel-yank-pop
              counsel-grep-or-swiper
+             counsel-load-theme
              counsel-up-directory)
   :defines (counsel-rg-base-command)
   :preface
@@ -128,6 +129,7 @@
       "i e" #'counsel-colors-emacs
       "i w" #'counsel-colors-web
       "i c" #'counsel-command-history
+      "i t" #'counsel-load-theme
       "h d f" #'counsel-describe-function
       "h d v" #'counsel-describe-variable
       "h d c" #'counsel-describe-face)
