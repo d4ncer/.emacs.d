@@ -20,12 +20,14 @@
 
 (load-theme 'rk-light t)
 
-(use-package rk-ligatures
-  :if (window-system)
-  :preface
-  (autoload 'rk-setup-fira-code-ligatures "rk-ligatures")
-  :config
-  (rk-setup-fira-code-ligatures))
+;;; Can't use ligatures at the moment due to breakage in non-prog mode buffers
+
+;; (use-package rk-ligatures
+;;   :if (window-system)
+;;   :preface
+;;   (autoload 'rk-setup-fira-code-ligatures "rk-ligatures")
+;;   :config
+;;   (add-hook 'prog-mode-hook #'rk-setup-fira-code-ligatures))
 
 (provide 'rk-faces)
 

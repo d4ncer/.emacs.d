@@ -36,10 +36,9 @@
 
 (defun rk-setup-fira-code-ligatures ()
   (when (equal 'Fira\ Code (ignore-errors (font-get (face-attribute 'default :font) :family)))
-    (let ((lig-alist rk-fira-ligatures))
-      (dolist (char-regexp lig-alist)
-        (set-char-table-range composition-function-table (car char-regexp)
-                              `([,(cdr char-regexp) 0 font-shape-gstring]))))))
+    (dolist (char-regexp rk-fira-ligatures)
+      (set-char-table-range composition-function-table (car char-regexp)
+                            `([,(cdr char-regexp) 0 font-shape-gstring])))))
 
 (provide 'rk-ligatures)
 
