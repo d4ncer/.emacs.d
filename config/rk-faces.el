@@ -13,7 +13,7 @@
 
 (require 'spacemacs-keys)
 
-;; Load themes.
+;; Load internal themes.
 
 (let ((this-dir (file-name-directory (or load-file-name (buffer-file-name)))))
   (add-to-list 'custom-theme-load-path (concat this-dir "rk-faces/")))
@@ -28,6 +28,11 @@
 ;;   (autoload 'rk-setup-fira-code-ligatures "rk-ligatures")
 ;;   :config
 ;;   (add-hook 'prog-mode-hook #'rk-setup-fira-code-ligatures))
+
+;;; Add custom themes here
+
+(use-package solarized)
+
 
 (provide 'rk-faces)
 
