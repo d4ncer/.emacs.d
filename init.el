@@ -98,6 +98,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
 (use-package rk-neotree)
+(use-package rk-php)
 (use-package rk-coffeescript)
 (use-package rk-elisp)
 (use-package rk-web-mode)
