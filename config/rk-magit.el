@@ -19,7 +19,7 @@
 (use-package with-editor
   :commands (with-editor-finish
              with-editor-cancel)
-  :init
+  :config
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'with-editor-mode
       "c" #'with-editor-finish
