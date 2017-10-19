@@ -134,6 +134,7 @@
       "h d v" #'counsel-describe-variable
       "h d c" #'counsel-describe-face)
 
+    (evil-global-set-key 'motion "/" #'counsel-grep-or-swiper)
     (evil-global-set-key 'normal "/" #'counsel-grep-or-swiper)
     (bind-key "M-x" #'counsel-M-x)
     (bind-key "C-x C-f" #'counsel-find-file)
