@@ -7,11 +7,13 @@
 
 ## Installation
 
+#### Automagic (recommended)
+
 ``` shell
 wget -O - https://raw.githubusercontent.com/d4ncer/.emacs.d/master/setup.sh | bash
 ```
 
-## OR (Manual)
+#### Manual
 
 ``` shell
 mv ~/.emacs.d ~/.emacs.d.bak
