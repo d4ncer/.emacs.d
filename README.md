@@ -135,5 +135,6 @@ supported not on this list, feel free to issue a PR.
 
 ## Credits
 
-Heavily ~~copied~~ borrowed & adapted from Chris Barrett's
+* Heavily ~~copied~~ borrowed & adapted from [Chris Barrett](https://github.com/chrisbarrett)'s
 wonderful [setup](https://github.com/chrisbarrett/.emacs.d).
+* Thanks to [JH](https://github.com/jackhopner) for the setup script
