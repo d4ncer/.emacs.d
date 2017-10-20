@@ -5,22 +5,20 @@
 * Emacs 25+
 * [Fira Code](https://github.com/tonsky/FiraCode)
 
-## Installation
-
-#### Automagic (recommended)
+## Quick install (recommended)
 
 ``` shell
 wget -O - https://raw.githubusercontent.com/d4ncer/.emacs.d/master/setup.sh | bash
 ```
 
-#### Manual
+## Manual install
 
 ``` shell
 mv ~/.emacs.d ~/.emacs.d.bak
 git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
 ```
 
-### Go setup
+#### Go setup
 
 Packages to install for Go config:
 
@@ -33,7 +31,7 @@ go get -u -v golang.org/x/tools/cmd/gorename
 go get -u -v golang.org/x/tools/cmd/goimports
 ```
 
-### JS setup
+#### JS setup
 
 Tern setup:
 
