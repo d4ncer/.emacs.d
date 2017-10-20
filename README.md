@@ -3,8 +3,14 @@
 ## Installation
 
 ``` shell
-$ mv ~/.emacs.d ~/.emacs.d.bak
-$ git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
+wget -O - https://raw.githubusercontent.com/d4ncer/.emacs.d/master/setup.sh | bash
+```
+
+## OR (Manual)
+
+``` shell
+mv ~/.emacs.d ~/.emacs.d.bak
+git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
 ```
 
 ### Go setup
@@ -12,12 +18,12 @@ $ git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
 Packages to install for Go config:
 
 ```bash
-$ go get -u -v github.com/nsf/gocode
-$ go get -u -v github.com/rogpeppe/godef
-$ go get -u -v github.com/kardianos/govendor
-$ go get -u -v golang.org/x/tools/cmd/guru
-$ go get -u -v golang.org/x/tools/cmd/gorename
-$ go get -u -v golang.org/x/tools/cmd/goimports
+go get -u -v github.com/nsf/gocode
+go get -u -v github.com/rogpeppe/godef
+go get -u -v github.com/kardianos/govendor
+go get -u -v golang.org/x/tools/cmd/guru
+go get -u -v golang.org/x/tools/cmd/gorename
+go get -u -v golang.org/x/tools/cmd/goimports
 ```
 
 ### JS setup
@@ -25,20 +31,20 @@ $ go get -u -v golang.org/x/tools/cmd/goimports
 Tern setup:
 
 ```bash
-$ cd lisp/tern
-$ npm install
+cd lisp/tern
+npm install
 ```
 
 Required binaries:
 
 ```bash
-$ npm intall -g stylefmt
+npm install -g stylefmt
 ```
 
 Binaries for global fallback (this is optional, but highly recommended):
 
 ```bash
-$ npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier
+npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier
 ```
 
 If you do use a global `eslint`, you should add a fallback `.eslintrc.json` in
