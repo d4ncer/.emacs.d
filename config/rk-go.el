@@ -66,7 +66,7 @@
 
   :config
   (progn
-    (setq gofmt-command "goimports")
+    (setq gofmt-command "gofmt")
     (setq gofmt-show-errors nil)
     (evil-define-key 'normal go-mode-map (kbd "K") #'godoc-at-point)
 
