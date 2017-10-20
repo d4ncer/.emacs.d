@@ -1,0 +1,19 @@
+{
+  "extends": ["airbnb", "prettier", "prettier/flowtype", "prettier/react"],
+  "env": {
+    "browser": true,
+    "jest": true,
+    "node": true
+  },
+  "plugins": ["react", "flowtype"],
+  "parser": "babel-eslint",
+  "rules": {
+    "flowtype/define-flow-type": 1,
+    "import/no-extraneous-dependencies": ["error", {
+      "devDependencies": true,
+      "optionalDependencies": false,
+      "peerDependencies": false
+    }
+    ]
+  }
+}
