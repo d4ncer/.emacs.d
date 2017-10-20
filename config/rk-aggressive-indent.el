@@ -10,6 +10,8 @@
 
 (defconst rk-aggressive-indent-exclude-modes
   '(toml-mode
+    haskell-mode
+    dockerfile-mode
     diff-auto-refine-mode
     sql-mode
     restclient-mode
