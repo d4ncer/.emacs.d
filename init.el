@@ -101,6 +101,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-neotree)
 (use-package rk-php)
 (use-package rk-coffeescript)
+(use-package rk-haskell)
 (use-package rk-elisp)
 (use-package rk-web-mode)
 (use-package rk-go)
