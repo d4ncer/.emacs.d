@@ -335,6 +335,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :bind (("M-SPC" . cycle-spacing)))
 
 (use-package tiny
+  :after iedit
   :config
   (progn
     (autoload 'undo-tree-undo "undo-tree")
@@ -393,9 +394,9 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq bookmark-default-file (concat rk-emacs-cache-directory "/bookmarks"))))
 
 (use-package iedit
-  :defer t
   :config
   (progn
+    (setq iedit-toggle-key-default nil)
     (define-key iedit-occurrence-keymap-default (kbd "<tab>") #'iedit-toggle-selection)
     (define-key iedit-mode-keymap (kbd "<tab>") #'iedit-toggle-selection)))
 
