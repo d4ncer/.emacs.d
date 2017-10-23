@@ -200,6 +200,13 @@ See `haskell-process-do-cabal' for more details."
   :type 'boolean
   :group 'haskell-interactive)
 
+(defcustom haskell-process-show-overlays
+  t
+  "Show in-buffer overlays for errors/warnings.
+Flycheck users might like to disable this."
+  :type 'boolean
+  :group 'haskell-interactive)
+
 (defcustom haskell-notify-p
   nil
   "Notify using notifications.el (if loaded)?"
@@ -404,8 +411,7 @@ properties; such as an indentation mode) that don't know what
 extensions to use can use this variable. Examples: hlint,
 hindent, structured-haskell-mode, tool-de-jour, etc.
 
-You can set this per-project with a .dir-locals.el file, in the
-same vein as `haskell-indent-spaces'."
+You can set this per-project with a .dir-locals.el file"
   :group 'haskell
   :type '(repeat 'string))
 
