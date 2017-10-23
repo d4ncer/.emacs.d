@@ -384,6 +384,23 @@ end" (buffer-string)))
 end" (buffer-string)))
     (should (= 4 (current-column)))))
 
+(ert-deftest yas-also-indent-empty-lines ()
+  "Respect `yas-also-indent-empty-lines' setting."
+  (with-temp-buffer
+    (ruby-mode)
+    (yas-minor-mode 1)
+    (set (make-local-variable 'yas-indent-line) 'auto)
+    (set (make-local-variable 'yas-also-auto-indent-first-line) t)
+    (set (make-local-variable 'yas-also-indent-empty-lines) t)
+    (yas-expand-snippet "def foo\n\nend")
+    (should (string= "def foo\n  \nend" (buffer-string)))
+    ;; Test that it keeps working without setting
+    ;; `yas-also-auto-indent-first-line'.
+    (setq yas-also-auto-indent-first-line nil)
+    (erase-buffer)
+    (yas-expand-snippet "def foo\n\nend")
+    (should (string= "def foo\n  \nend" (buffer-string)))))
+
 (ert-deftest indentation-markers ()
   "Test a snippet with indentation markers (`$<')."
   (with-temp-buffer
@@ -588,6 +605,14 @@ mapconcat #'(lambda (arg)
     (let ((yas-selected-text "He)}o world!"))
       (yas-expand-snippet "Look ma! ${1:`(yas-selected-text)`} OK?")
       (should (string= (yas--buffer-contents) "Look ma! He)}o world! OK?")))))
+
+(ert-deftest insert-snippet-with-backslashes-in-active-field ()
+  ;; This test case fails if `yas--inhibit-overlay-hooks' is not bound
+  ;; in `yas-expand-snippet' (see Github #844).
+  (with-temp-buffer
+    (yas-minor-mode 1)
+    (yas-expand-snippet "${1:$$(if (not yas-modified-p) \"a\")}")
+    (yas-expand-snippet "\\\\alpha")))
 
 (ert-deftest example-for-issue-271 ()
   (with-temp-buffer
@@ -994,13 +1019,13 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
         (yas-minor-mode +1)
         (save-current-buffer
           (yas-new-snippet t)
-          (with-current-buffer "*new snippet*"
+          (with-current-buffer yas-new-snippet-buffer-name
             (snippet-mode)
             (insert "# name: foo\n# key: bar\n# --\nsnippet foo")
             (call-interactively 'yas-load-snippet-buffer-and-close)))
         (save-current-buffer
           (yas-new-snippet t)
-          (with-current-buffer "*new snippet*"
+          (with-current-buffer yas-new-snippet-buffer-name
             (snippet-mode)
             (insert "# name: bar\n# key: bar\n# --\nsnippet bar")
             (call-interactively 'yas-load-snippet-buffer-and-close)))
