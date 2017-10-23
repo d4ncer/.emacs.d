@@ -5,7 +5,7 @@
 ;;          João Távora <joaotavora@gmail.com>,
 ;;          Noam Postavsky <npostavs@gmail.com>
 ;; Maintainer: Noam Postavsky <npostavs@gmail.com>
-;; Version: 0.12.1
+;; Version: 0.12.2
 ;; X-URL: http://github.com/joaotavora/yasnippet
 ;; Keywords: convenience, emulation
 ;; URL: http://github.com/joaotavora/yasnippet
@@ -261,7 +261,11 @@ applies)."
 (defcustom yas-also-auto-indent-first-line nil
   "Non-nil means also auto indent first line according to mode.
 
-Naturally this is only valid when `yas-indent-line' is `auto'"
+Naturally this is only valid when `yas-indent-line' is `auto'."
+  :type 'boolean)
+
+(defcustom yas-also-indent-empty-lines nil
+  "Non-nil means also indent empty lines according to mode."
   :type 'boolean)
 
 (defcustom yas-snippet-revival t
@@ -536,7 +540,7 @@ override bindings from other packages (e.g., `company-mode')."
 
 ;;; Internal variables
 
-(defconst yas--version "0.12.1")
+(defconst yas--version "0.12.2")
 
 (defvar yas--menu-table (make-hash-table)
   "A hash table of MAJOR-MODE symbols to menu keymaps.")
@@ -2524,6 +2528,10 @@ where snippets of table might exist."
               ;; create the .yas-parents file here...
               candidate)))))
 
+;; NOTE: Using the traditional "*new snippet*" stops whitespace mode
+;; from activating (it doesn't like the leading "*").
+(defconst yas-new-snippet-buffer-name "+new-snippet+")
+
 (defun yas-new-snippet (&optional no-template)
   "Pops a new buffer for writing a snippet.
 
@@ -2536,7 +2544,7 @@ NO-TEMPLATE is non-nil."
                                     (buffer-substring-no-properties
                                      (region-beginning) (region-end))))))
 
-    (switch-to-buffer "*new snippet*")
+    (switch-to-buffer yas-new-snippet-buffer-name)
     (erase-buffer)
     (kill-all-local-variables)
     (snippet-mode)
@@ -3839,9 +3847,14 @@ considered when expanding the snippet."
              (when first-field
                (sit-for 0) ;; fix issue 125
                (yas--letenv (yas--snippet-expand-env snippet)
-                 (yas--move-to-field snippet first-field))))
+                 (yas--move-to-field snippet first-field))
+               (when (and (eq (yas--field-number first-field) 0)
+                          (> (length (yas--field-text-for-display
+                                      first-field))
+                             0))
+                 ;; Keep region for ${0:exit text}.
+                 (setq deactivate-mark nil))))
            (yas--message 4 "snippet %d expanded." (yas--snippet-id snippet))
-           (setq deactivate-mark nil)
            t))))
 
 (defun yas--take-care-of-redo (_beg _end snippet)
@@ -4222,7 +4235,9 @@ The SNIPPET's markers are preserved."
         (goto-char from)
         (cl-loop for bol = (line-beginning-position)
                  for eol = (line-end-position)
-                 if (/= bol eol) do
+                 if (or yas-also-indent-empty-lines
+                        (/= bol eol))
+                 do
                  ;; Indent each non-empty line.
                  (let ((remarkers nil))
                    (dolist (m snippet-markers)
