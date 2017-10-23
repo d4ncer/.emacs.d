@@ -129,6 +129,12 @@ To use this, use the following mode hook:
   :group 'intero
   :type 'string)
 
+(defcustom intero-pop-to-repl
+  t
+  "When non-nil, pop to REPL when code is sent to it."
+  :group 'intero
+  :type 'boolean)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Modes
 
@@ -531,10 +537,10 @@ If the problem persists, please report this as a bug!")))
   "Simply restart the process with the same configuration as before."
   (interactive)
   (when (intero-buffer-p 'backend)
-    (let ((targets (with-current-buffer (intero-buffer 'backend)
-                     intero-targets))
-          (stack-yaml (with-current-buffer (intero-buffer 'backend)
-                        intero-stack-yaml)))
+    (let ((targets (buffer-local-value 'intero-targets
+                                       (intero-buffer 'backend)))
+          (stack-yaml (buffer-local-value 'intero-stack-yaml
+                                          (intero-buffer 'backend))))
       (intero-destroy 'backend)
       (intero-get-worker-create 'backend targets (current-buffer) stack-yaml)
       (intero-repl-restart))))
@@ -542,8 +548,7 @@ If the problem persists, please report this as a bug!")))
 (defun intero-read-targets ()
   "Read a list of stack targets."
   (let ((old-targets
-         (with-current-buffer (intero-buffer 'backend)
-           intero-targets))
+         (buffer-local-value 'intero-targets (intero-buffer 'backend)))
         (available-targets (intero-get-targets)))
     (if available-targets
         (intero-multiswitch
@@ -1110,7 +1115,8 @@ be activated after evaluation.  PROMPT-OPTIONS are passed to
     `(let ((,repl-buffer (intero-repl-buffer ,prompt-options t)))
        (with-current-buffer ,repl-buffer
          ,@body)
-       (pop-to-buffer ,repl-buffer))))
+       (when intero-pop-to-repl
+         (pop-to-buffer ,repl-buffer)))))
 
 (defun intero-repl-load (&optional prompt-options)
   "Load the current file in the REPL.
@@ -1217,7 +1223,7 @@ STORE-PREVIOUS is non-nil, note the caller's buffer in
     (forward-char (1- char))))
 
 (defun intero-linkify-file-line-char (begin end)
-  "Linkify all occurences of <file>:<line>:<char>: betwen BEGIN and END."
+  "Linkify all occurences of <file>:<line>:<char>: between BEGIN and END."
   (when (> end begin)
     (let ((end-marker (copy-marker end))
           ;; match - /path/to/file.ext:<line>:<char>:
@@ -2172,6 +2178,15 @@ The process ended. Here is the reason that Emacs gives us:
      (format "  %s %s"
              intero-stack-executable
              (combine-and-quote-strings intero-arguments))
+
+     "
+
+It's worth checking that the correct stack executable is being
+found on your path, or has been set via
+`intero-stack-executable'.  The executable being used now is:
+
+  "
+     (executable-find intero-stack-executable)
      "
 
 WHAT TO DO NEXT
