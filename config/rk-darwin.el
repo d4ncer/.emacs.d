@@ -20,7 +20,12 @@
 (use-package exec-path-from-shell
   :if window-system
   :config
-  (exec-path-from-shell-initialize)
+  (progn
+    (exec-path-from-shell-initialize)
+
+    ;;; Use gls instead of ls on OS X (if available)
+    (when (executable-find "gls")
+      (setq insert-directory-program "gls")))
   :functions
   (exec-path-from-shell-initialize))
 
@@ -29,7 +34,6 @@
   (osx-trash-setup)
   :functions
   (osx-trash-setup))
-
 
 (provide 'rk-darwin)
 
