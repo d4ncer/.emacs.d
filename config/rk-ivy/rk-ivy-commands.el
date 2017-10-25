@@ -16,7 +16,7 @@
 
 (autoload 'projectile-project-root "projectile")
 
-(defconst rk-counsel--escape-characters '("$")
+(defconst rk-counsel--escape-characters '("$" "*")
   "Characters to escape for input into counsel.")
 
 (defun rk-counsel--escape-character-p (char)
