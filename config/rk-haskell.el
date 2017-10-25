@@ -126,7 +126,7 @@
 (use-package intero
   :after haskell-mode
 
-  :commands (intero-mode intero-targets intero-goto-definition)
+  :commands (intero-mode intero-targets intero-goto-definition intero-type-at)
 
   :preface
   (progn
@@ -135,7 +135,12 @@
     (defun rk-haskell--maybe-intero-mode ()
       (unless (or (derived-mode-p 'ghc-core-mode)
                   (equal (get major-mode 'mode-class) 'special))
-        (intero-mode +1))))
+        (intero-mode +1)))
+
+    (defun rk-haskell--insert-intero-type ()
+      "Insert Intero type above decl."
+      (interactive)
+      (intero-type-at t)))
 
   :init
   (add-hook 'haskell-mode-hook #'rk-haskell--maybe-intero-mode)
@@ -149,7 +154,9 @@
   :config
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "t" #'intero-targets)
+      "t" #'intero-targets
+      "g" #'intero-goto-definition
+      "i" #'rk-haskell--insert-intero-type)
 
     (with-eval-after-load 'flycheck
       (flycheck-add-next-checker 'intero 'haskell-hlint))
@@ -157,6 +164,17 @@
     (with-no-warnings
       (evil-define-key 'normal intero-mode-map (kbd "M-.") #'intero-goto-definition)
       (evil-define-key 'normal intero-mode-map (kbd "M-,") #'pop-tag-mark))))
+
+(use-package hindent
+  :after haskell-mode
+  :commands (hindent-mode hindent-reformat-decl-or-fill hindent-reformat-buffer)
+  :config
+  (progn
+    (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
+      "." #'hindent-reformat-buffer
+      "f" #'hindent-reformat-decl-or-fill)
+    (setq hindent-reformat-buffer-on-save t)
+    (add-hook 'haskell-mode-hook #'hindent-mode)))
 
 (provide 'rk-haskell)
 

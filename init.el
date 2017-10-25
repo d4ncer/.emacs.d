@@ -59,6 +59,7 @@ If argument INTERACTIVE-P is set, log additional information."
 
     (add-to-list 'load-path (concat lisp-dir "/org-mode/contrib/lisp"))
     (add-to-list 'load-path (concat lisp-dir "/gocode/emacs-company"))
+    (add-to-list 'load-path (concat lisp-dir "/hindent/elisp"))
 
     (setq load-path (seq-filter #'file-directory-p load-path))
     (setq Info-default-directory-list (seq-filter #'file-directory-p Info-default-directory-list))
