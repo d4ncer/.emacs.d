@@ -32,7 +32,8 @@
 ;;; Add custom themes here
 
 (use-package solarized)
-
+(use-package base16-theme
+  :ensure t)
 
 (provide 'rk-faces)
 
