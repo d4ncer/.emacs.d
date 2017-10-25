@@ -110,6 +110,8 @@ packages of note:
 * Dockerfile
 * Groovy
 * RNC
+* Scala
+* Haskell
 
 ## Planned Modes
 
@@ -118,10 +120,8 @@ supported not on this list, feel free to issue a PR.
 
 * OCaml
 * TypeScript
-* Scala
 * Java
 * Racket
-* Haskell
 
 ## Misc notes
 
