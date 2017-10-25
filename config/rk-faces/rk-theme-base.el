@@ -58,7 +58,7 @@
      ((t :background ,default-background)))
 
     (header-line
-     ((t :background ,rk-theme-base-violet :foreground ,rk-theme-base-solarized-b3 :weight bold)))
+     ((t :background ,rk-theme-base-violet :foreground ,rk-theme-base-solarized-b3 :weight bold :box (:line-width 5 :color ,rk-theme-base-violet))))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
