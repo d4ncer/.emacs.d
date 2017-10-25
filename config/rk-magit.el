@@ -94,6 +94,36 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
   (spacemacs-keys-set-leader-keys
     "gt" #'time-machine-transient-state/body))
 
+(use-package diff-hl
+  :after magit
+  :commands (diff-hl-magit-post-refresh
+             global-diff-hl-mode
+             diff-hl-next-hunk
+             diff-hl-previous-hunk
+             diff-hl-revert-hunk
+             diff-hl-diff-goto-hunk)
+  :init
+  (progn
+
+    (evil-transient-state-define git-hunks
+      :title "Git Hunk Transient State"
+      :doc "
+[_p_/_N_] previous [_n_] next [_g_] goto [_x_] revert [_q_] quit"
+      :foreign-keys run
+      :bindings
+      ("n" diff-hl-next-hunk)
+      ("N" diff-hl-previous-hunk)
+      ("p" diff-hl-previous-hunk)
+      ("g" diff-hl-diff-goto-hunk)
+      ("x" diff-hl-revert-hunk)
+      ("q" nil :exit t))
+
+    (spacemacs-keys-set-leader-keys "g." 'git-hunks-transient-state/body))
+  :config
+  (progn
+    (add-hook 'magit-post-refresh-hook 'diff-hl-magit-post-refresh)
+    (global-diff-hl-mode)))
+
 (provide 'rk-magit)
 
 ;;; rk-magit.el ends here

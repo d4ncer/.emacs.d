@@ -42,6 +42,7 @@
 
   :init
   (progn
+    (autoload 'diff-hl-dired-mode-unless-remote "diff-hl-dired")
     (spacemacs-keys-declare-prefix-for-mode 'dired-mode "s" "subdir")
     (spacemacs-keys-set-leader-keys "d" #'dired)
     (spacemacs-keys-set-leader-keys-for-major-mode 'dired-mode
@@ -50,6 +51,7 @@
       "sd" #'dired-kill-subdir
       "w"  #'wdired-change-to-wdired-mode)
 
+    (add-hook 'dired-mode-hook #'diff-hl-dired-mode-unless-remote)
     (add-hook 'dired-mode-hook #'dired-hide-details-mode))
 
   :config
