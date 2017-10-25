@@ -258,7 +258,7 @@
             (compilation-buffer-name-function (lambda (_) rk-scala--ensime-gen-config-buffer)))
         (unless (executable-find ensime-sbt-command) (error "SBT command not found"))
 
-        (compile (format "%s %s" ensime-sbt-command task))
+        (compile (format "%s -Dsbt.log.noformat=true %s" ensime-sbt-command task))
 
         (with-current-buffer (get-buffer rk-scala--ensime-gen-config-buffer)
           (display-buffer (current-buffer))
