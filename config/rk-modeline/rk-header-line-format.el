@@ -16,6 +16,8 @@
 (autoload 'magit-get-current-branch "magit-git")
 (autoload 'projectile-project-p "projectile")
 
+;;; Faces
+
 (defgroup rk-header-line-format nil
   "Utilities for constructing the header line."
   :group 'themes
@@ -57,6 +59,19 @@
   "Face for git branch in header line."
   :group 'rk-header-line-format)
 
+;;; Helper for testing if window selected.
+
+(defvar rk-header-line-format--window-for-redisplay nil
+  "The window currently being redisplayed.")
+
+(defun rk-header-line-format--set-window-for-redisplay (_)
+  (when (not (minibuffer-window-active-p (frame-selected-window)))
+    (setq rk-header-line-format--window-for-redisplay (selected-window))))
+
+(add-function :before pre-redisplay-function #'rk-header-line-format--set-window-for-redisplay)
+
+(defun rk-header-line-format--window-selected? ()
+  (eq rk-header-line-format--window-for-redisplay (get-buffer-window)))
 
 ;;; Cache variable lookups to improve speed
 
@@ -116,23 +131,10 @@
         project))
     (rk-header-line-format--update-project)))
 
-
-;;; Helper for testing if window selected.
-
-(defvar rk-header-line-format--window-for-redisplay nil
-  "The window currently being redisplayed.")
-
-(defun rk-header-line-format--set-window-for-redisplay (_)
-  (when (not (minibuffer-window-active-p (frame-selected-window)))
-    (setq rk-header-line-format--window-for-redisplay (selected-window))))
-
-(add-function :before pre-redisplay-function #'rk-header-line-format--set-window-for-redisplay)
-
-(defun rk-header-line-format--window-selected? ()
-  (eq rk-header-line-format--window-for-redisplay (get-buffer-window)))
-
-
 ;;; Construction functions
+
+(defun rk-header-line-format--nonemphasised (str)
+  (propertize str 'face 'rk-header-line-format-nonemphased-element))
 
 (defun rk-header-line-format--access-mode-info ()
   (let ((str (concat
@@ -145,9 +147,6 @@
   (if (buffer-narrowed-p)
       (propertize " (Narrowed) " 'face 'rk-header-line-format-narrowing)
     ""))
-
-(defun rk-header-line-format--nonemphasised (str)
-  (propertize str 'face 'rk-header-line-format-nonemphased-element))
 
 (defun rk-header-line-format--project-info ()
   (let* ((project (rk-header-line-format--current-project))
