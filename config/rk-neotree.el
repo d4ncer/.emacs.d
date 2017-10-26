@@ -52,7 +52,7 @@
     (setq neo-show-updir-line nil)
     (setq neo-mode-line-type 'nerd)
     (setq neo-smart-open t)
-    (setq neo-theme 'ascii)
+    (setq neo-theme 'icons)
     (setq neo-dont-be-alone t)
     (setq neo-persist-show nil)
     (setq neo-show-hidden-files t)
@@ -85,7 +85,7 @@
       (kbd "q")   #'neotree-hide
       (kbd "r")   #'neotree-rename-node
       (kbd "R")   #'neotree-change-root
-      (kbd "?")   #'rk-neotree-neotree-transient-state/body
+      (kbd "?")   #'rk-neotree-transient-state/body
       (kbd "s")   #'neotree-hidden-file-toggle))
 
   :init
