@@ -53,7 +53,7 @@
 (use-package rk-ibuffer-transient-state
   :after ibuffer
   :commands (rk-ibuffer-main-transient-state/body)
-  :init
+  :config
   (progn
     (add-hook 'ibuffer-hook #'rk-ibuffer-main-transient-state/body)
     (define-key ibuffer-mode-map (kbd ".") #'rk-ibuffer-main-transient-state/body)))
