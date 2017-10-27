@@ -17,17 +17,19 @@
                     'org-last-args)))
          (nth 2 args))))
 
-(evil-transient-state-define rk-org-agenda-main
-  :title "Org Agenda Transient State"
-  :doc "
-
-_d_: ?d? day        _g_: time grid=?g?  _a_: arch-trees
-_w_: ?w? week       _[_: inactive       _A_: arch-files
-_t_: ?t? fortnight  _f_: follow=?f?     _r_: clock report=?r?
-_m_: ?m? month      _e_: entry text=?e? _D_: include diary=?D?
-_y_: ?y? year       _q_: quit           _L__l__c_: log = ?l?
+(defhydra rk-org-agenda-hydra
+  (:pre (setq which-key-inhibit t)
+        :post (setq which-key-inhibit nil)
+        :hint none)
+  "
+ ^Time^             | ^Flags^                | ^Misc^
+-^---------------^--+-^----^-----------------+-^---------------------
+ _d_: ?d? day       | _g_: time grid=?g?     | _a_: arch-trees
+ _w_: ?w? week      | _[_: inactive          | _A_: arch-files
+ _t_: ?t? fortnight | _f_: follow=?f?        | _r_: clock report=?r?
+ _m_: ?m? month     | _e_: entry text=?e?    | _L_/_l_/_c_: log = ?l?
+ _y_: ?y? year      | _D_: include diary=?D? |
 "
-  :bindings
   ("SPC" org-agenda-reset-view)
   ("d" org-agenda-day-view (if (eq 'day (org-agenda-cts)) "[x]" "[ ]"))
   ("w" org-agenda-week-view (if (eq 'week (org-agenda-cts)) "[x]" "[ ]"))
