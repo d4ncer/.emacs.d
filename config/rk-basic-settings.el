@@ -149,7 +149,6 @@ Optional arg JUSTIFY will justify comments and strings."
 
 ;;; Core advice
 
-
 ;; Do not prompt for confirmation for active processes.
 
 (defun rk-basic-settings--suppress-no-process-prompt (fn &rest args)
@@ -157,7 +156,6 @@ Optional arg JUSTIFY will justify comments and strings."
     (apply fn args)))
 
 (advice-add #'save-buffers-kill-emacs :around #'rk-basic-settings--suppress-no-process-prompt)
-
 
 ;; Insert a leading space after comment start for new comment lines.
 
@@ -169,7 +167,6 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (advice-add #'comment-indent-new-line :after #'rk-basic-settings--comment-insert-space)
 
-
 ;; Clean up whitespace when inserting yanked text.
 
 (defun rk-basic-settings--yank-ws-cleanup (&rest _)
@@ -177,7 +174,6 @@ Optional arg JUSTIFY will justify comments and strings."
   (delete-trailing-whitespace))
 
 (advice-add #'insert-for-yank :after #'rk-basic-settings--yank-ws-cleanup)
-
 
 ;; Process ANSI color codes in shell output.
 
