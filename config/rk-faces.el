@@ -34,6 +34,7 @@
 (use-package solarized)
 (use-package base16-theme
   :ensure t)
+(require 'doom-themes)
 
 (provide 'rk-faces)
 
