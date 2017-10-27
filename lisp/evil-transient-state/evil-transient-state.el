@@ -18,7 +18,7 @@
   :prefix "evil-transient-state-")
 
 (defface evil-transient-state-title-face
-  `((t :inherit mode-line))
+  `((t :inherit header-line))
   "Face for title of transient states."
   :group 'evil-transient-state)
 
@@ -240,6 +240,7 @@ used."
                         (propertize
                          ,title
                          'face 'evil-transient-state-title-face)
+                        "\n"
                         (if ,hint-doc-p " " "\n")) ,hint-var
                         ',dyn-hint
                         (concat "\n" guide)))))
