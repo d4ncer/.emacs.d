@@ -53,12 +53,6 @@
   "Face for host-name in header line."
   :group 'rk-header-line-format)
 
-(defface rk-header-line-format-narrowing
-  '((t
-     (:inherit header-line :slant italic)))
-  "Face for git branch in header line."
-  :group 'rk-header-line-format)
-
 ;;; Helper for testing if window selected.
 
 (defvar rk-header-line-format--window-for-redisplay nil
@@ -143,11 +137,6 @@
               (if (buffer-modified-p) "*" ""))))
     (propertize (s-pad-right 2 " " str) 'face 'rk-header-line-format-accent-element)))
 
-(defun rk-header-line-format--narrowing-info ()
-  (if (buffer-narrowed-p)
-      (propertize " (Narrowed) " 'face 'rk-header-line-format-narrowing)
-    ""))
-
 (defun rk-header-line-format--project-info ()
   (let* ((project (rk-header-line-format--current-project))
          (project (when project (directory-file-name project)))
@@ -190,7 +179,7 @@
     (propertize (buffer-name) 'face 'rk-header-line-format-nonemphased-element)))
 
 (defun rk-header-line-format--line-info ()
-  (let ((str "L %2l"))
+  (let ((str "%2l"))
     (if (rk-header-line-format--window-selected?)
         str
       (propertize str 'face 'rk-header-line-format-nonemphased-element))))
@@ -215,7 +204,6 @@
     ;; Buffer name, with braces on recursive edit
     "  %[" (:eval (rk-header-line-format--buffer-name)) "%] "
 
-    (:eval (rk-header-line-format--narrowing-info))
     (:eval (rk-header-line-format--context-info))
 
     " "
