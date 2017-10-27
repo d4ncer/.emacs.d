@@ -12,14 +12,17 @@
 
 (evil-transient-state-define rk-ibuffer-main
   :title "IBuffer Transient State"
+  :foreign-keys run
   :doc "
-
  ^Navigation^ | ^Mark^        | ^Actions^        | ^View^
 -^----------^-+-^----^--------+-^-------^--------+-^----^-------
   _k_:    ʌ   | _m_: mark     | _D_: delete      | _g_: refresh
- _RET_: visit | _u_: unmark   | _S_: save        | _s_: sort
+_RET_: visit  | _u_: unmark   | _S_: save        | _s_: sort
   _j_:    v   | _*_: specific | _a_: all actions | _/_: filter
+ ^^           | ^^            | ^^               | ^^
+  _o_: other  | _q_: quit     | _._: toggle      | ^^
 -^----------^-+-^----^--------+-^-------^--------+-^----^-------
+
 "
   :bindings
   ("j" ibuffer-forward-line)
