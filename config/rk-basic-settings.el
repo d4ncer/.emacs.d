@@ -43,7 +43,6 @@
   (load-file custom-file))
 
 ;; Scroll smoothly.
-
 (setq scroll-preserve-screen-position t)
 (setq scroll-margin 0)
 (setq scroll-conservatively 101)
@@ -56,6 +55,9 @@
 
 ;; Disable backup files
 (setq make-backup-files nil)
+
+;; Evil breaks cursor settings in Hydra buffers
+(setq-default cursor-in-non-selected-windows nil)
 
 ;; Enable hideshow in all programming buffers.
 
@@ -278,7 +280,6 @@ Optional arg JUSTIFY will justify comments and strings."
 (setq-default indent-tabs-mode nil)
 (setq-default sentence-end-double-space t)
 (setq-default line-spacing 2)
-(setq-default cursor-in-non-selected-windows nil)
 
 (setq sentence-end-double-space nil)
 (setq delete-by-moving-to-trash nil)
