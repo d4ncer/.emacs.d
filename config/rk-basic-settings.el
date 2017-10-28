@@ -277,6 +277,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (setq-default indent-tabs-mode nil)
 (setq-default sentence-end-double-space t)
 (setq-default line-spacing 2)
+(setq-default cursor-in-non-selected-windows nil)
 
 (setq sentence-end-double-space nil)
 (setq delete-by-moving-to-trash nil)
