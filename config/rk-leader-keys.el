@@ -43,8 +43,15 @@
   :preface
   (progn
     (autoload 'which-key-mode "which-key")
-    (autoload 'which-key-add-key-based-replacements "which-key"))
+    (autoload 'which-key-add-key-based-replacements "which-key")
 
+    (defun rk-leader-keys-set-up-which-key-buffer (&rest _)
+      (when-let (buf (get-buffer which-key-buffer-name))
+        (when (buffer-live-p buf)
+          (with-current-buffer buf
+            (setq-local mode-line-format nil)
+            (setq-local header-line-format nil)
+            (force-mode-line-update))))))
   :config
   (progn
     (setq which-key-special-keys nil)
@@ -54,6 +61,9 @@
     (setq which-key-sort-order 'which-key-key-order-alpha)
     (setq which-key-idle-delay 0.4)
     (setq which-key-allow-evil-operators t)
+
+    (advice-add 'which-key--create-buffer-and-show
+                :after #'rk-leader-keys-set-up-which-key-buffer)
 
     ;; Rename functions shown by which-key for legibility.
 

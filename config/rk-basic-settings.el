@@ -149,6 +149,7 @@ Optional arg JUSTIFY will justify comments and strings."
 
 ;;; Core advice
 
+
 ;; Do not prompt for confirmation for active processes.
 
 (defun rk-basic-settings--suppress-no-process-prompt (fn &rest args)
@@ -534,6 +535,19 @@ Optional arg JUSTIFY will justify comments and strings."
   (add-hook 'after-init-hook #'display-time-mode)
   :config
   (setq display-time-default-load-average nil))
+
+(use-package hydra
+  :defer t
+  :preface
+  (defun rk-basic-settings-set-up-hydra-buffer (&rest _)
+    (when-let (buf (get-buffer " *LV*"))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf
+          (setq-local mode-line-format nil)
+          (setq-local header-line-format nil)
+          (force-mode-line-update)))))
+  :config
+  (advice-add 'lv-window :after #'rk-basic-settings-set-up-hydra-buffer))
 
 (use-package world-time-mode
   :commands (world-time-list)
