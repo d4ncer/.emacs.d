@@ -18,7 +18,7 @@
   :prefix "evil-transient-state-")
 
 (defface evil-transient-state-title-face
-  `((t :inherit header-line))
+  `((t :background ,rk-theme-base-yellow :foreground ,rk-theme-base-solarized-b3))
   "Face for title of transient states."
   :group 'evil-transient-state)
 
@@ -238,7 +238,7 @@ used."
                  (list 'concat
                        (concat
                         (propertize
-                         ,title
+                         (concat " " ,title " ")
                          'face 'evil-transient-state-title-face)
                         "\n"
                         (if ,hint-doc-p " " "\n")) ,hint-var
