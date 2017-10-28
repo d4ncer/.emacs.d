@@ -278,10 +278,10 @@ Do not scheduled items or repeating todos."
 
     (use-package rk-org-agenda-transient-state
       :after org
-      :commands (rk-org-agenda-hydra/body)
+      :commands (rk-org-agenda-hydra-transient-state/body)
       :config
       (progn
-        (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra/body)))
+        (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra-transient-state/body)))
 
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"

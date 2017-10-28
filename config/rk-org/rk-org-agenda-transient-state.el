@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 'evil-transient-state)
+(require 'which-key)
 
 (defun org-agenda-cts ()
   (and (eq major-mode 'org-agenda-mode)
@@ -17,11 +18,10 @@
                     'org-last-args)))
          (nth 2 args))))
 
-(defhydra rk-org-agenda-hydra
-  (:pre (setq which-key-inhibit t)
-        :post (setq which-key-inhibit nil)
-        :hint none)
-  "
+
+(evil-transient-state-define rk-org-agenda-hydra
+  :title "Org Agenda Transient State"
+  :doc "
  ^Time^             | ^Flags^                | ^Misc^
 -^---------------^--+-^----^-----------------+-^---------------------
  _d_: ?d? day       | _g_: time grid=?g?     | _a_: arch-trees
@@ -30,6 +30,7 @@
  _m_: ?m? month     | _e_: entry text=?e?    | _L_/_l_/_c_: log = ?l?
  _y_: ?y? year      | _D_: include diary=?D? |
 "
+  :bindings
   ("SPC" org-agenda-reset-view)
   ("d" org-agenda-day-view (if (eq 'day (org-agenda-cts)) "[x]" "[ ]"))
   ("w" org-agenda-week-view (if (eq 'week (org-agenda-cts)) "[x]" "[ ]"))
