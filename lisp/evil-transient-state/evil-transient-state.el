@@ -11,6 +11,7 @@
 ;;; Code:
 
 (require 'hydra)
+(require 'rk-theme-base)
 
 (defgroup evil-transient-state nil
   "Transient evil states."
