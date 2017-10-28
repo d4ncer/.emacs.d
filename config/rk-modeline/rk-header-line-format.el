@@ -151,7 +151,7 @@
               (propertize project-root-name 'face 'rk-header-line-format-project-name)
               (rk-header-line-format--nonemphasised subdir)
               (rk-header-line-format--nonemphasised " on ")
-              (all-the-icons-octicon "git-branch" :v-adjust 0.05)
+              (all-the-icons-octicon "git-branch" :v-adjust 0.1 :height 0.9)
               " "
               (propertize branch 'face 'rk-header-line-format-branch-name)
               (rk-header-line-format--nonemphasised ") ")))
