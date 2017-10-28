@@ -4,7 +4,7 @@
 
 ![magit-with-leaderkeys](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/magit-with-leaderkeys.png "It's Magi{t,c}!")
 
-See more [here](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/SCREENSHOTS.md)
+See more [here](SCREENSHOTS.md)
 
 ## Things you need
 
