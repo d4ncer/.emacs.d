@@ -1,5 +1,11 @@
 # Here be dragons
 
+## What does it look like?
+
+![magit-with-leaderkeys](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/magit-with-leaderkeys.png "It's Magi{t,c}!")
+
+See more [here](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/SCREENSHOTS.md)
+
 ## Things you need
 
 * Emacs 25+
