@@ -13,6 +13,8 @@
 (require 'subr-x)
 (require 'rk-theme-base)
 
+(autoload 'all-the-icons-icon-for-mode "all-the-icons")
+(autoload 'all-the-icons-octicon "all-the-icons")
 (autoload 'magit-get-current-branch "magit-git")
 (autoload 'projectile-project-p "projectile")
 
@@ -145,10 +147,12 @@
          (subdir (when project (s-chop-prefix project (directory-file-name (file-truename default-directory))))))
     (cond
      ((and project branch)
-      (concat (rk-header-line-format--nonemphasised " (in ")
+      (concat (rk-header-line-format--nonemphasised " (")
               (propertize project-root-name 'face 'rk-header-line-format-project-name)
               (rk-header-line-format--nonemphasised subdir)
               (rk-header-line-format--nonemphasised " on ")
+              (all-the-icons-octicon "git-branch" :v-adjust 0.05)
+              " "
               (propertize branch 'face 'rk-header-line-format-branch-name)
               (rk-header-line-format--nonemphasised ") ")))
      (project
@@ -173,6 +177,17 @@
    (t
     (rk-header-line-format--project-info))))
 
+(defun rk-header-line-format--major-mode-info ()
+  (cond
+   ((eq major-mode 'turn-on-evil-mode)
+    "")
+   (t
+    (concat (all-the-icons-icon-for-mode major-mode
+                                         :height 0.8
+                                         :v-adjust (if (eq major-mode 'emacs-lisp-mode)
+                                                       -0.1
+                                                     0.05)) " "))))
+
 (defun rk-header-line-format--buffer-name ()
   (if (rk-header-line-format--window-selected?)
       (buffer-name)
@@ -193,6 +208,9 @@
     ;; Emacsclient info
     mode-line-client
 
+    ;; Major mode icon
+    (:eval (rk-header-line-format--major-mode-info))
+
     ;; Current line, padded
     (:eval (rk-header-line-format--line-info))
     "  "
@@ -204,12 +222,7 @@
     ;; Buffer name, with braces on recursive edit
     "  %[" (:eval (rk-header-line-format--buffer-name)) "%] "
 
-    (:eval (rk-header-line-format--context-info))
-
-    " "
-
-    ;; Global mode string, etc.
-    (:eval (if (rk-header-line-format--window-selected?) mode-line-misc-info ""))))
+    (:eval (rk-header-line-format--context-info))))
 
 (provide 'rk-header-line-format)
 
