@@ -15,8 +15,13 @@
 
 (autoload 'all-the-icons-icon-for-mode "all-the-icons")
 (autoload 'all-the-icons-octicon "all-the-icons")
+(autoload 'all-the-icons-fileicon "all-the-icons")
 (autoload 'magit-get-current-branch "magit-git")
 (autoload 'projectile-project-p "projectile")
+
+(defconst rk-header-line-format--derived-modes
+  '(rk-web-js-mode rk-web-css-mode rk-web-typescript-mode rk-web-html-mode rk-web-json-mode)
+  "Derived modes.")
 
 ;;; Faces
 
@@ -177,16 +182,21 @@
    (t
     (rk-header-line-format--project-info))))
 
+(defun rk-header-line-format--major-mode-icon ()
+  (-let* ((mode major-mode)
+          (is-derived-mode-p (-contains-p rk-header-line-format--derived-modes mode))
+          (fn (if is-derived-mode-p #'all-the-icons-icon-for-file #'all-the-icons-icon-for-mode))
+          (fn-args (if is-derived-mode-p (buffer-name) mode))
+          (height 0.8)
+          (v-adjust (if is-derived-mode-p 0.05 (if (eq mode 'emacs-lisp-mode) -0.1 0.05))))
+    (concat (funcall fn fn-args :height height :v-adjust v-adjust) " ")))
+
 (defun rk-header-line-format--major-mode-info ()
   (cond
    ((eq major-mode 'turn-on-evil-mode)
     "")
    (t
-    (concat (all-the-icons-icon-for-mode major-mode
-                                         :height 0.8
-                                         :v-adjust (if (eq major-mode 'emacs-lisp-mode)
-                                                       -0.1
-                                                     0.05)) " "))))
+    (rk-header-line-format--major-mode-icon))))
 
 (defun rk-header-line-format--buffer-name ()
   (if (rk-header-line-format--window-selected?)
