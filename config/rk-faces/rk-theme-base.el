@@ -417,7 +417,7 @@
      ((t :inherit font-lock-string-face)))
 
     (hl-todo
-     ((t :foreground ,rk-theme-base-red :weight bold)))
+     ((t :foreground nil :box t)))
 
     (parenthesis
      ((t :weight light)))
