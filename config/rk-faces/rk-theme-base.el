@@ -38,13 +38,15 @@
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
+(defconst rk-theme-font-family "Fira Code")
+
 (defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
       ((t
         :background ,default-background
         :foreground ,default-foreground
         :weight normal
-        :family "Fira Code"
+        :family ,rk-theme-font-family
         :height 160)))
 
     (mode-line
@@ -198,8 +200,8 @@
     (show-paren-match
      ((t
        :weight bold
-       :foreground ,rk-theme-base-cyan
-       :underline ,rk-theme-base-cyan)))
+       :foreground ,rk-theme-base-green
+       :underline ,rk-theme-base-green)))
 
     (show-paren-mismatch
      ((t
@@ -399,6 +401,14 @@
 
     (rk-rust-faces-bool
      ((t :weight normal)))
+
+    ;; Scala
+
+    (scala-font-lock:var-keyword-face
+     ((t :inherit error)))
+
+    (scala-font-lock:var-face
+     ((t :inherit font-lock-variable-name-face)))
 
     ;; Company
 
