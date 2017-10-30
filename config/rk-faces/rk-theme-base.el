@@ -50,15 +50,34 @@
         :height 160)))
 
     (mode-line
-     ((t :foreground ,rk-theme-base-solarized-b1 :background ,rk-theme-base-solarized-b1 :height 20)))
+     ((((background dark))
+       :foreground ,rk-theme-base-solarized-b01
+       :background ,rk-theme-base-solarized-b01
+       :height 20)
+      (((background light))
+       :foreground ,rk-theme-base-solarized-b1
+       :background ,rk-theme-base-solarized-b1
+       :height 20)))
 
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
 
     (fringe
      ((t :background ,default-background)))
+
     (header-line
-     ((t :background ,rk-theme-base-solarized-b2 :foreground ,rk-theme-base-solarized-b02 :weight bold :height 140 :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
+     ((((background dark))
+       :background ,rk-theme-base-solarized-b02
+       :foreground ,rk-theme-base-solarized-b2
+       :weight bold
+       :height 140
+       :box (:line-width 8 :color ,rk-theme-base-solarized-b02))
+      (((background light))
+       :background ,rk-theme-base-solarized-b2
+       :foreground ,rk-theme-base-solarized-b02
+       :weight bold
+       :height 140
+       :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
