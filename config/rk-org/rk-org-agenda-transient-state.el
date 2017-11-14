@@ -21,6 +21,7 @@
 
 (evil-transient-state-define rk-org-agenda-hydra
   :title "Org Agenda Transient State"
+  :foreign-keys run
   :doc "
  ^Time^             | ^Flags^                | ^Misc^
 -^---------------^--+-^----^-----------------+-^---------------------
