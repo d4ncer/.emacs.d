@@ -56,8 +56,8 @@
   (interactive)
   (org-tags-view nil))
 
-(defconst rk-org-goto--show-agenda-work-start-hour 6)
-(defconst rk-org-goto--show-agenda-work-end-hour 18)
+(defconst rk-org-goto--show-agenda-work-start-hour 4)
+(defconst rk-org-goto--show-agenda-work-end-hour 15)
 
 (defun rk-org-goto--is-work-time? (time)
   (-let* (((_s _m h d m y) time)
