@@ -89,6 +89,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-rg)
 (use-package rk-help)
 (use-package rk-projectile)
+(use-package rk-restclient)
 (use-package rk-dired)
 (use-package rk-hl-todo)
 (use-package rk-magit)
