@@ -24,7 +24,7 @@
 (defvar magit-process-raise-error)
 
 (defconst rk-emacs-pinned-subtree-versions
-  '((ensime-emacs . "v1.0.1")))
+  '((ensime-emacs . "v2.0.0")))
 
 
 ;; Config Paths
