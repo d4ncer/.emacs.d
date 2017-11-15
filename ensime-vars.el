@@ -46,6 +46,12 @@
   :type 'boolean
   :group 'ensime-ui)
 
+(defcustom ensime-eldoc-hints nil
+  "If non-nil, eldoc hints are activated.
+It can be set to 'all, 'error, 'implicit or 'type to limit the type of hints shown"
+  :type 'symbol
+  :group 'ensime-ui)
+
 (defcustom ensime-graphical-tooltips nil
   "If non-nil, show graphical bubbles for tooltips."
   :type 'boolean
@@ -68,14 +74,6 @@ update it when the project definition changes. At the moment, this only
 works for sbt projects."
   :type 'boolean
   :group 'ensime-ui)
-
-(defcustom ensime-server-version (or (getenv "ENSIME_SERVER_VERSION") "1.0.1")
-  "Distributed version of the server to upgrade and start.
-This is primarily useful for ENSIME developers (or bug reporters)
-to test against. The client is designed to work with the default
-version."
-  :type 'string
-  :group 'ensime-server)
 
 (defcustom ensime-default-server-env ()
   "A `process-environment' compatible list of environment variables"
@@ -161,76 +159,6 @@ used it must be installed separately."
   :type 'symbol
   :group 'ensime-ui)
 
-(defcustom ensime-goto-test-config-defaults
-  '(:test-class-names-fn ensime-goto-test--test-class-names
-    :test-class-suffixes ("Spec" "Test" "Check" "Specification")
-    :impl-class-name-fn  ensime-goto-test--impl-class-name
-    :impl-to-test-dir-fn ensime-goto-test--impl-to-test-dir
-    :is-test-dir-fn      ensime-goto-test--is-test-dir
-    :test-template-fn    ensime-goto-test--test-template-scalatest-flatspec)
-
-  "Configures the default behavior of the \"go to test/implementation\"
-feature. Behavior can also be defined on a per-project basis. See
-`ensime-goto-test-configs'.
-
-The value must be a plist with the following keys/values
-
-:test-class-names-fn : a function of one argument, which should
-take the fully-qualified name of an implementation class, and
-return a list of fully-qualified names of potential test
-classes. The first element of the list is used to create a new
-test class, if none of the list elements matches an existing
-class.
-
-:test-class-suffixes : a list of strings. This is used by
-`ensime-goto-test--test-class-names' to generate possible
-test class names. The first element in the list is the suffix
-used to create a new test class if no existing test is found.
-
-:impl-class-name-fn : a function of one argument, which should
-take the fully-qualified name of a test class, and return the
-fully-qualified name of the corresponding implementation class.
-
-:impl-to-test-dir-fn : a function of one argument, which should
-take an implementation source directory and return the
-corresponding test source directory.
-
-:is-test-dir-fn : a function of one argument, which should return
-true if the directory being passed is a test directory
-
-:test-template-fn : a function of zero argument that returns a
-string used to create new test classes. The string can contain
-the following substitution templates:
-  %TESTPACKAGE% : the fully-qualified package of the test class
-  %TESTCLASS% : the name of the test class (without package)
-  %IMPLPACKAGE% : the fully-qualified package of the implementation class
-  %IMPLCLASS% : the name of the implementation class (without package)
-Several sample templates are provided: see
-`ensime-goto-test--test-template-scalatest-2',
-`ensime-goto-test--test-template-scalatest-1',
-`ensime-goto-test--test-template-scalacheck',
-`ensime-goto-test--test-template-specs2'.
-
-"
-  :type 'plist
-  :group 'ensime-ui)
-
-(defcustom ensime-goto-test-configs
-  ()
-"Configures the behavior of the \"go to test/implementation\" feature
-for specific projects. This overrides the settings of
-`ensime-goto-test-config-defaults'.
-
-The value is an alist of the form:
-  ((\"PROJECT-NAME-RE\" . CONFIG-PLIST) ...)
-
-where PROJECT-NAME is a regexp matched against the current project's
-name (case sensitive), and CONFIG-PLIST has the same format as
-`ensime-goto-test-config-defaults'.
-"
-  :type 'alist
-  :group 'ensime-ui)
-
 (defcustom ensime-implicit-gutter-icons t
   "If non-nil, Ensime will provide gutter icons for implicit conversions
 and parameters."
@@ -310,9 +238,10 @@ Possible types: `organizeImport', `rename', `extractLocal',
   :type 'boolean
   :group 'ensime-ui)
 
-(defcustom ensime-use-helm nil
-  "Enable helm for some ensime features"
-  :type 'boolean
+(defcustom ensime-search-interface 'classic
+  "Completion mechanism for search.
+The options are `classic', `helm' and `ivy'."
+  :type '(repeat symbol)
   :group 'ensime-ui)
 
 (provide 'ensime-vars)
