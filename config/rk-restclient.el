@@ -12,10 +12,13 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
+(autoload 'evil-define-key "evil-core")
 
 (use-package restclient
   :commands (restclient-mode
              restclient-http-send-current
+             restclient-jump-next
+             restclient-jump-prev
              restclient-http-send-current-stay-in-window)
   :config
   (progn
@@ -24,6 +27,10 @@
       "o" #'restclient-http-send-current-stay-in-window)
 
     (setq restclient-same-buffer-response-name "*restclient*")
+
+    (evil-define-key 'normal restclient-mode-map
+      (kbd "C-n") #'restclient-jump-next
+      (kbd "C-p") #'restclient-jump-prev)
 
     (with-eval-after-load 'which-key
       (with-no-warnings
