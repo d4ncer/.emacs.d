@@ -34,6 +34,8 @@
 
 (defconst flow-minor-buffer "*Flow Output*")
 
+(defconst flow-minor-random-fucking-error "Please wait. Server is garbage collecting shared memory: -Please wait. Server is handling a request (starting up): \\")
+
 (defcustom flow-minor-default-binary "flow"
   "Flow executable to use when no project-specific binary is found."
   :group 'flow-minor-mode
@@ -164,7 +166,7 @@ BODY progn"
           (line (number-to-string (line-number-at-pos)))
           (col (number-to-string (1+ (current-column))))
           (type (flow-minor-cmd-to-string "type-at-pos" file line col)))
-     (message "%s" (flow-minor-colorize-type (car (split-string type "\n")))))))
+     (message "%s" (flow-minor-colorize-type (s-chop-prefix flow-minor-random-fucking-error (car (s-lines type))))))))
 
 (defun flow-minor-jump-to-definition ()
   "Jump to definition."
