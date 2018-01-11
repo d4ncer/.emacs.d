@@ -3,7 +3,7 @@
 ;; This source code is licensed under the BSD-style license found in
 ;; the LICENSE file in the root directory of this source tree.
 
-;; Version: 0.2
+;; Version: 0.3
 ;; URL: https://github.com/an-sh/flow-minor-mode
 
 ;; Package-Requires: ((emacs "25.1"))
@@ -30,6 +30,7 @@
 
 (require 'xref)
 (require 'json)
+(require 'compile)
 
 (defconst flow-minor-buffer "*Flow Output*")
 
@@ -138,6 +139,23 @@ BODY progn"
     (compilation-mode)
     (setf buffer-read-only t)))
 
+(defvar flow-type-font-lock-highlight
+  '(
+    ("\\([-_[:alnum:]]+\\)\\??:" . font-lock-variable-name-face)
+    ("\\_<\\(true\\|false\\|null\\|undefined\\|void\\)\\_>" . font-lock-constant-face)
+    ("<\\([-_[:alnum:]]+\\)>" . font-lock-type-face)
+    ))
+
+(defun flow-minor-colorize-buffer ()
+  (setq font-lock-defaults '(flow-type-font-lock-highlight))
+  (font-lock-fontify-buffer))
+
+(defun flow-minor-colorize-type (text)
+  (with-temp-buffer
+    (insert text)
+    (flow-minor-colorize-buffer)
+    (buffer-string)))
+
 (defun flow-minor-type-at-pos ()
   "Show type at position."
   (interactive)
@@ -146,7 +164,7 @@ BODY progn"
           (line (number-to-string (line-number-at-pos)))
           (col (number-to-string (1+ (current-column))))
           (type (flow-minor-cmd-to-string "type-at-pos" file line col)))
-     (message "%s" (car (split-string type "\n"))))))
+     (message "%s" (flow-minor-colorize-type (car (split-string type "\n")))))))
 
 (defun flow-minor-jump-to-definition ()
   "Jump to definition."
@@ -201,20 +219,20 @@ BODY progn"
 
 (add-hook 'kill-emacs-hook 'flow-minor-stop-flow-server t)
 
-(defun flow-minor-eldoc-filter (proc string))
-
 (defun flow-minor-maybe-delete-process (name)
   (when-let (process (get-process name))
     (delete-process name)))
 
 (defun flow-minor-eldoc-sentinel (process _event)
-  (when (and (eq (process-status process) 'exit)
-             (eq (process-exit-status process) 0))
-    (with-current-buffer "*Flow Eldoc*"
-      (goto-char (point-min))
-      (forward-line 1)
-      (delete-region (point) (point-max))
-      (eldoc-message (car (split-string (buffer-substring (point-min) (point-max)) "\n"))))))
+  (when (eq (process-status process) 'exit)
+    (if (eq (process-exit-status process) 0)
+        (with-current-buffer "*Flow Eldoc*"
+          (goto-char (point-min))
+          (forward-line 1)
+          (delete-region (point) (point-max))
+          (flow-minor-colorize-buffer)
+          (eldoc-message (car (split-string (buffer-substring (point-min) (point-max)) "\n"))))
+      (switch-to-buffer-other-window (get-buffer "*Flow Eldoc Error*") t))))
 
 (defun flow-minor-eldoc-documentation-function ()
   "Display type at point with eldoc."
@@ -223,6 +241,7 @@ BODY progn"
   (let* ((line (line-number-at-pos (point)))
          (col (+ 1 (current-column)))
          (buffer (get-buffer-create "*Flow Eldoc*"))
+         (errorbuffer (get-buffer-create "*Flow Eldoc Error*"))
          (command (list (flow-minor-binary)
                         "type-at-pos"
                         "--path" buffer-file-name
@@ -232,8 +251,11 @@ BODY progn"
                                 :buffer buffer
                                 :command command
                                 :connection-type 'pipe
-                                :sentinel 'flow-minor-eldoc-sentinel)))
+                                :sentinel 'flow-minor-eldoc-sentinel
+                                :stderr errorbuffer)))
     (with-current-buffer buffer
+      (erase-buffer))
+    (with-current-buffer errorbuffer
       (erase-buffer))
     (save-restriction
       (widen)
@@ -259,8 +281,9 @@ BODY progn"
       (while (not stop)
         (when (not (re-search-forward "[^\n[:space:]]" nil t))
           (setq stop t))
-        (backward-char)
-
+        (if (equal (point) (point-min))
+            (setq stop t)
+          (backward-char))
         (cond ((or (looking-at "//+[ ]*@flow")
                    (looking-at "/\\**[ ]*@flow"))
                (setq found t)
@@ -285,6 +308,16 @@ BODY progn"
   (when (and (flow-minor-configured-p)
              (flow-minor-tag-present-p))
     (flow-minor-mode +1)))
+
+(defun flow-status ()
+  "Invoke flow to check types"
+  (interactive)
+  (let ((cmd "flow status")
+        (regexp '(flow "^\\(Error:\\)[ \t]+\\(\\(.+\\):\\([[:digit:]]+\\)\\)"
+                       3 4 nil (1) 2 (1 compilation-error-face))))
+    (add-to-list 'compilation-error-regexp-alist 'flow)
+    (add-to-list 'compilation-error-regexp-alist-alist regexp)
+    (compile cmd)))
 
 (provide 'flow-minor-mode)
 ;;; flow-minor-mode.el ends here
