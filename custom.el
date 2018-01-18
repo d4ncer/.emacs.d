@@ -7,7 +7,7 @@
    (quote
     ("d677ef584c6dfc0697901a44b885cc18e206f05114c8a3b7fde674fce6180879" default)))
  '(magit-fetch-arguments (quote ("--prune")))
- '(package-selected-packages (quote (flycheck))))
+ '(package-selected-packages (quote (base16-theme flycheck))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
