@@ -1,6 +1,6 @@
 ;;; magit-bisect.el --- bisect support for Magit  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2011-2017  The Magit Project Contributors
+;; Copyright (C) 2011-2018  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -172,7 +172,7 @@ bisect run'."
       (magit-insert-heading "Bisect Rest:")
       (magit-git-wash (apply-partially 'magit-log-wash-log 'bisect-vis)
         "bisect" "visualize" "git" "log"
-        "--format=%h%d %s" "--decorate=full"
+        "--format=%h%d%x00%s" "--decorate=full"
         (and magit-bisect-show-graph "--graph")))))
 
 (defun magit-insert-bisect-log ()

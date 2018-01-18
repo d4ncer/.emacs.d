@@ -1,6 +1,6 @@
 ;;; magit-worktree.el --- worktree support  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2010-2017  The Magit Project Contributors
+;; Copyright (C) 2010-2018  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -34,11 +34,21 @@
 
 ;;; Commands
 
+;;;###autoload (autoload 'magit-worktree-popup "magit-worktree" nil t)
+(magit-define-popup magit-worktree-popup
+  "Popup console for worktree commands."
+  :man-page "git-worktree"
+  :actions  '((?b "Create new worktree"            magit-worktree-checkout)
+              (?c "Create new branch and worktree" magit-worktree-branch)
+              (?k "Delete worktree"                magit-worktree-delete)
+              (?g "Show status for worktree"       magit-worktree-status))
+  :max-action-columns 1)
+
 ;;;###autoload
 (defun magit-worktree-checkout (path branch)
   "Checkout BRANCH in a new worktree at PATH."
   (interactive
-   (let ((branch (magit-read-local-branch "Checkout")))
+   (let ((branch (magit-read-local-branch-or-commit "Checkout")))
      (list (read-directory-name (format "Checkout %s in new worktree: " branch))
            branch)))
   (magit-run-git "worktree" "add" (expand-file-name path) branch)
