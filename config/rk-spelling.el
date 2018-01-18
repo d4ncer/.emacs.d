@@ -12,14 +12,10 @@
   (require 'use-package))
 
 (use-package ispell
-  :preface
-  (autoload 'ispell-find-aspell-dictionaries "ispell")
   :config
   (progn
     (when (executable-find "aspell")
-      (setq ispell-program-name "aspell")
-      (setq ispell-dictionary "en_GB"))
-    (setq ispell-dictionary-alist (ispell-find-aspell-dictionaries))
+      (setq ispell-program-name "aspell"))
     (setq ispell-silently-savep t)))
 
 (use-package rk-evil-ispell
@@ -35,8 +31,8 @@
   :init
   (with-eval-after-load 'evil
     (evil-global-set-key 'normal (kbd "z u") #'flyspell-auto-correct-word)
-    (evil-global-set-key 'normal (kbd "z p")  #'rk-evil-ispell-previous-spelling-error)
-    (evil-global-set-key 'normal (kbd "z n")  #'rk-evil-ispell-next-spelling-error)
+    (evil-global-set-key 'normal (kbd "z p") #'rk-evil-ispell-previous-spelling-error)
+    (evil-global-set-key 'normal (kbd "z n") #'rk-evil-ispell-next-spelling-error)
     (evil-global-set-key 'normal (kbd "z g") #'rk-evil-ispell-mark-word-as-good)
     (evil-global-set-key 'normal (kbd "z G") #'rk-evil-ispell-mark-word-as-locally-good)
     (evil-global-set-key 'normal (kbd "z =") #'rk-evil-ispell-correct-word)))
