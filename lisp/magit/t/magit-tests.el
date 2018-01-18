@@ -1,6 +1,6 @@
 ;;; magit-tests.el --- tests for Magit
 
-;; Copyright (C) 2011-2017  The Magit Project Contributors
+;; Copyright (C) 2011-2018  The Magit Project Contributors
 ;;
 ;; License: GPLv3
 
@@ -9,6 +9,8 @@
 (require 'cl-lib)
 (require 'dash)
 (require 'ert)
+(require 'tramp)
+(require 'tramp-sh)
 
 (require 'magit)
 
@@ -61,21 +63,27 @@
                      (expand-file-name "repo/"))))))
 
 (ert-deftest magit-toplevel:tramp ()
-  (let ((find-file-visit-truename nil))
+  (cl-letf* ((find-file-visit-truename nil)
+             ;; Override tramp method so that we don't actually
+             ;; require a functioning `sudo'.
+             (sudo-method (cdr (assoc "sudo" tramp-methods)))
+             ((cdr (assq 'tramp-login-program sudo-method))
+              (list shell-file-name))
+             ((cdr (assq 'tramp-login-args sudo-method)) nil))
     (magit-with-test-directory
-      (setq default-directory
-            (concat (format "/sudo:%s@localhost:" (user-login-name))
-                    default-directory))
-      (magit-git "init" "repo")
-      (magit-test-magit-toplevel)
-      (should (equal (magit-toplevel   "repo/.git/")
-                     (expand-file-name "repo/")))
-      (should (equal (magit-toplevel   "repo/.git/objects/")
-                     (expand-file-name "repo/")))
-      (should (equal (magit-toplevel   "repo-link/.git/")
-                     (expand-file-name "repo-link/")))
-      (should (equal (magit-toplevel   "repo-link/.git/objects/")
-                     (expand-file-name "repo/"))))))
+     (setq default-directory
+           (concat (format "/sudo:%s@localhost:" (user-login-name))
+                   default-directory))
+     (magit-git "init" "repo")
+     (magit-test-magit-toplevel)
+     (should (equal (magit-toplevel   "repo/.git/")
+                    (expand-file-name "repo/")))
+     (should (equal (magit-toplevel   "repo/.git/objects/")
+                    (expand-file-name "repo/")))
+     (should (equal (magit-toplevel   "repo-link/.git/")
+                    (expand-file-name "repo-link/")))
+     (should (equal (magit-toplevel   "repo-link/.git/objects/")
+                    (expand-file-name "repo/"))))))
 
 (ert-deftest magit-toplevel:submodule ()
   (let ((find-file-visit-truename nil))
@@ -246,9 +254,9 @@
 
 (defun magit-test-get-section (list file)
   (magit-status-internal default-directory)
-  (--first (equal (magit-section-value it) file)
-           (magit-section-children
-            (magit-get-section `(,list (status))))))
+  (--first (equal (oref it value) file)
+           (oref (magit-get-section `(,list (status)))
+                 children)))
 
 (ert-deftest magit-status:file-sections ()
   (magit-with-test-repository

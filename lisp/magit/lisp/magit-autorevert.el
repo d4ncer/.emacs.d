@@ -1,6 +1,6 @@
 ;;; magit-autorevert.el --- revert buffers when files in repository change  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2010-2017  The Magit Project Contributors
+;; Copyright (C) 2010-2018  The Magit Project Contributors
 ;;
 ;; You should have received a copy of the AUTHORS.md file which
 ;; lists all contributors.  If not, see http://magit.vc/authors.
@@ -110,8 +110,9 @@ seconds of user inactivity.  That is not desirable."
                (file-readable-p buffer-file-name)
                (magit-toplevel)
                (or (not magit-auto-revert-tracked-only)
-                   (magit-file-tracked-p buffer-file-name)))
-      (auto-revert-mode))))
+                   (magit-file-tracked-p buffer-file-name))
+               (not auto-revert-mode)) ; see #3014
+      (auto-revert-mode 1))))
 
 ;;;###autoload
 (defvar magit-revert-buffers t) ; obsolete
