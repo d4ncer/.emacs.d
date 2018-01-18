@@ -16,8 +16,9 @@
   (autoload 'ispell-find-aspell-dictionaries "ispell")
   :config
   (progn
-    (setq ispell-program-name "aspell")
-    (setq ispell-dictionary "en_GB")
+    (when (executable-find "aspell")
+      (setq ispell-program-name "aspell")
+      (setq ispell-dictionary "en_GB"))
     (setq ispell-dictionary-alist (ispell-find-aspell-dictionaries))
     (setq ispell-silently-savep t)))
 
