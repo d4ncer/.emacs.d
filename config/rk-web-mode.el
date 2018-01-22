@@ -81,6 +81,13 @@
   (progn
     (autoload 'projectile-project-p "projectile")
     (autoload 'f-join "f")
+
+    (defun rk-web--add-custom-eslint-rules-dir ()
+      (-when-let* ((root (projectile-project-p))
+                   (rules-dir (f-join root "rules"))
+                   (rules-dir-p (f-exists-p rules-dir)))
+        (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
+
     (defun rk-web--add-node-modules-bin-to-path ()
       "Use binaries from node_modules, where available."
       (when-let (root (projectile-project-p))
@@ -95,7 +102,8 @@
 
     (add-hook 'rk-web-typescript-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-css-mode-hook #'rk-web--add-node-modules-bin-to-path)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)
+    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)))
 
 (use-package emmet-mode
   :defer t
