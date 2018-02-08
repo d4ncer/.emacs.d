@@ -47,7 +47,7 @@
         :foreground ,default-foreground
         :weight normal
         :family ,rk-theme-font-family
-        :height 160)))
+        :height 170)))
 
     (mode-line
      ((((background dark))
