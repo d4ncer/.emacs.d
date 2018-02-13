@@ -124,6 +124,14 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (global-set-key (kbd "<f2>") #'next-multiframe-window)
 
+;; Window move hotkeys
+
+(spacemacs-keys-set-leader-keys
+  "w <left>" #'windmove-left
+  "w <right>" #'windmove-right
+  "w <up>" #'windmove-up
+  "w <down>" #'windmove-down)
+
 ;; Unlimited print length for eval-expression.
 (setq eval-expression-print-length nil)
 (setq eval-expression-print-level nil)
