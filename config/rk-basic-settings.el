@@ -127,10 +127,10 @@ Optional arg JUSTIFY will justify comments and strings."
 ;; Window move hotkeys
 
 (spacemacs-keys-set-leader-keys
-  "w <left>" #'windmove-left
-  "w <right>" #'windmove-right
-  "w <up>" #'windmove-up
-  "w <down>" #'windmove-down)
+  "wh" #'windmove-left
+  "wl" #'windmove-right
+  "wk" #'windmove-up
+  "wj" #'windmove-down)
 
 ;; Unlimited print length for eval-expression.
 (setq eval-expression-print-length nil)
