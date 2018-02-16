@@ -556,7 +556,9 @@ Optional arg JUSTIFY will justify comments and strings."
           (setq-local header-line-format nil)
           (force-mode-line-update)))))
   :config
-  (advice-add 'lv-window :after #'rk-basic-settings-set-up-hydra-buffer))
+  (progn
+    (setq lv-use-separator t)
+    (advice-add 'lv-window :after #'rk-basic-settings-set-up-hydra-buffer)))
 
 (use-package world-time-mode
   :commands (world-time-list)
