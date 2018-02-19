@@ -15,6 +15,10 @@
 (require 'dash)
 (autoload 'f-split "f")
 
+(defconst rk-web--prettier-default-args
+  (list "--single-quote" "true" "--trailing-comma" "es5")
+  "Default values for prettier.")
+
 (use-package web-mode
   :defines (web-mode-markup-indent-offset
             web-mode-css-indent-offset)
@@ -239,28 +243,27 @@
     (autoload 'f-exists? "f")
     (autoload 'json-read-file "json")
     (defun rk-web--prettier-enable-p ()
-      "Enable prettier if no .prettierignore is found in project root."
+      "Enable prettier if no .prettierdisable is found in project root."
       (-when-let (root (projectile-project-p))
-        (not (f-exists? (f-join root ".prettierignore")))))
+        (not (f-exists? (f-join root ".prettierdisable")))))
 
-    (defun rk-web--parse-prettier-config (file)
-      "Parse a custom prettier config FILE."
-      (when (f-exists? file)
-        (--mapcat (list (car it) (cdr it))
-                  (let ((json-key-type 'string))
-                    (json-read-file file)))))
+    (defun rk-web--setup-prettier-local-binary-and-config ()
+      "Set up prettier config & binary for file if applicable."
+      (-if-let* ((root (projectile-project-p))
+                 (prettier-bin (f-join root "node_modules/.bin/prettier"))
+                 (prettier-bin-p (f-exists? prettier-bin))
+                 (prettier-config (s-trim (shell-command-to-string
+                                           (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name)))))))
+          (progn
+            (setq-local prettier-js-command prettier-bin)
+            (setq-local prettier-js-args (list "--config" prettier-config)))
+        (setq-local prettier-js-args rk-web--prettier-default-args)))
 
-    (defun rk-web--prettier-args ()
-      "Use project specific prettier config or default, if none found."
-      (or (-some-> (projectile-project-p)
-                   (f-join ".prettierrc.json")
-                   (rk-web--parse-prettier-config))
-          '("--single-quote" "true"
-            "--trailing-comma" "es5")))
     (defun rk-web--setup-prettier ()
       (when (rk-web--prettier-enable-p)
-        (setq-local prettier-js-args (rk-web--prettier-args))
-        (prettier-js-mode +1))))
+        (progn
+          (rk-web--setup-prettier-local-binary-and-config)
+          (prettier-js-mode +1)))))
 
   :config
   (progn
@@ -270,15 +273,6 @@
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "." #'prettier-js)))
-
-(use-package company-flow
-  :after rk-web-modes
-  :config
-  (progn
-    (setq company-flow-modes '(rk-web-js-mode))
-
-    (with-eval-after-load 'company
-      (add-to-list 'company-backends 'company-flow))))
 
 (use-package tern
   :defer t
@@ -316,6 +310,15 @@
 
     (with-eval-after-load 'company
       (add-to-list 'company-backends 'company-tern))))
+
+(use-package company-flow
+  :after rk-web-modes
+  :config
+  (progn
+    (setq company-flow-modes '(rk-web-js-mode))
+
+    (with-eval-after-load 'company
+      (add-to-list 'company-backends 'company-flow))))
 
 (use-package add-node-modules-path
   :after rk-web-modes
