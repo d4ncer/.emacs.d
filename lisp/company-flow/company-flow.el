@@ -64,6 +64,9 @@
                  (repeat (symbol :tag "Major mode")))
   :group 'company-flow)
 
+(defconst company-flow-garbage-error "Please wait. Server is garbage collecting shared memory: -")
+(defconst company-flow-handle-error "Please wait. Server is handling a request (starting up): \\")
+
 (defun company-flow--handle-signal (process _event)
   (when (memq (process-status process) '(signal exit))
     (let ((callback (process-get process 'company-flow-callback))
@@ -89,9 +92,10 @@ registrationSuccess () => {type: 'REGISTRATION_SUCCESS'}"
         (propertize text 'meta meta)))))
 
 (defun company-flow--parse-output (output)
-  (when (not (equal output "Error: not enough type information to autocomplete\n"))
-    (mapcar 'company-flow--make-candidate
-            (split-string output "\n"))))
+  (let ((cleaned-text (s-chop-prefixes (list company-flow-garbage-error company-flow-handle-error) output)))
+    (when (not (equal cleaned-text "Error: not enough type information to autocomplete\n"))
+      (mapcar 'company-flow--make-candidate
+              (split-string cleaned-text "\n")))))
 
 (defun company-flow--get-output (process)
   "Get the complete output of PROCESS."
