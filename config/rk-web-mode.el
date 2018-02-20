@@ -263,11 +263,17 @@
       (when (rk-web--prettier-enable-p)
         (progn
           (rk-web--setup-prettier-local-binary-and-config)
-          (prettier-js-mode +1)))))
+          (prettier-js-mode +1))))
+
+    (defun rk-web--enable-prettier-on-find-file ()
+      (when (and (derived-mode-p 'web-mode)
+                 (or (equal web-mode-content-type "javascript")
+                     (equal web-mode-content-type "jsx")))
+        (rk-web--setup-prettier))))
 
   :config
   (progn
-    (add-hook 'rk-web-js-mode-hook #'rk-web--setup-prettier))
+    (add-hook 'find-file-hook #'rk-web--enable-prettier-on-find-file))
 
   :init
   (progn
