@@ -109,7 +109,6 @@ packages of note:
   * Prettier
 * Elisp
 * Go
-* Scala
 * YAML
 * Markdown
 * CoffeeScript
