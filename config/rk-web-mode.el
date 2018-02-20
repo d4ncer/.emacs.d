@@ -313,12 +313,16 @@
 
 (use-package company-flow
   :after rk-web-modes
+  :preface
+  (defun rk-web--setup-company-flow-if-flow-buffer ()
+    "Setup company-flow if buffer if applicable."
+    (when (rk-in-flow-buffer-p)
+      (progn
+        (setq company-flow-modes '(rk-web-js-mode))
+        (with-eval-after-load 'company
+          (add-to-list 'company-backends 'company-flow)))))
   :config
-  (progn
-    (setq company-flow-modes '(rk-web-js-mode))
-
-    (with-eval-after-load 'company
-      (add-to-list 'company-backends 'company-flow))))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--setup-company-flow-if-flow-buffer))
 
 (use-package add-node-modules-path
   :after rk-web-modes
