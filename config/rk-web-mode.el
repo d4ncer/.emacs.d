@@ -267,8 +267,7 @@
 
     (defun rk-web--enable-prettier-on-find-file ()
       (when (and (derived-mode-p 'web-mode)
-                 (or (equal web-mode-content-type "javascript")
-                     (equal web-mode-content-type "jsx")))
+                 (-contains-p '("javascript" "jsx") web-mode-content-type))
         (rk-web--setup-prettier))))
 
   :config
