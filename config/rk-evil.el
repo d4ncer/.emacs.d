@@ -108,8 +108,6 @@
 
   :config
   (progn
-    (setq iedit-current-symbol-default t)
-    (setq iedit-only-at-symbol-boundaries t)
     (setq iedit-toggle-key-default nil)
 
     ;; Enable leader key in iedit and iedit-insert states
