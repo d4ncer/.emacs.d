@@ -22,6 +22,7 @@
   :config
   (progn
     (exec-path-from-shell-initialize)
+    (exec-path-from-shell-copy-env "GOPATH")
 
     ;;; Use gls instead of ls on OS X (if available)
     (when (executable-find "gls")
