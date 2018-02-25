@@ -1,33 +1,187 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-     .dialog INPUT[type=button]:hover,
-     .btn { color:#0aa; }
-     @media (min-with:900px) {
-       div[name="btn"] {
-         height:10px; /* comment */ }
-     }
-    </style>
-    <script>
-     var name = "fxbois";
-     function hello() {
-       alert("hello " + name); // comment
-     }
-    </script>
-  </head>
-  <body>
-    <ul class="main" id=x1
-        data-content="hello">
-      <?php foreach ($datas as $key => $value): ?>
-        <li><?=Helper::format($value)?></li>
-      <?php endforeach; ?>
-    </ul>
-    <div><?=$obj->show(array('url' => DOC_URL,
-                             'port' => "xx $var zz"))?><img src=""/></div>
-    <section><span-custom>hello</span-custom>
-      <span>world &#8211; and &eacute;</span><!-- comment -->
-    </section>
-  </body>
-</html>
+<div>
+  <a data="x"
+     data="cdcd" <?php // comment ?>
+     titi=2>hello world</a>
+  <a data="x"
+     <?php if ($x): ?>
+     data="x"
+     <?php endif; ?>
+     titi="2">hello world</a>
+</div>
+<span class="d">toto</span>
+
+<div>
+  <?php
+  if ($test == 5 &&
+      $test2 == 7) {
+    print("hello");
+  }
+  ?>
+  <!-- test folding -->
+</div>
+<div>
+  <?php
+
+  $x = is_xy() ?
+       123 :
+       456;
+
+  ?>
+</div>
+<div>
+  <?php
+
+  if ($x) {
+    $y = 2;
+  }
+
+  if ($x)
+    echo $x;
+  else
+    echo $x;
+
+  $this->setHeaders();
+  $meth = $wgRequest->getMethod();
+  switch ($meth) {
+    case "GET":
+      $this->methodGETs();
+      break;
+    case "POST":
+      $this->methodPOST();
+      break;
+    default:
+      $this->renderNothing();
+  }
+
+  if ( empty($id) ||
+       empty($name) ) {
+    $this->renderNothing( "organisation_name" );
+    return;
+  }
+
+  $res = $dbr->select('qrclient_organisations',
+                      array('organisation_name'),
+                      array('organisation_id' => $id,
+                            1 => 2));
+
+  ?>
+</div>
+
+<div>
+  <script>
+   func(x,
+        hello()
+       ,z,
+        y);
+   var a= 47,
+       b     = 48,
+       c = 49
+     , x;
+   var a= 47
+     , b = 48
+     , c = 49
+   ;
+   var a = require('titi')
+     , b = 48
+     , c = 49;
+   var x = "scd" +
+           "sxqsx" +
+           toto
+         + "xs";
+   func("scd" +
+        "sxqsx" +
+        toto
+      + "xs");
+   return "scd" +
+          "sxqsx" +
+          toto
+        + "xs";
+   var x = aaa.bbb().ccc.
+               ddd
+              .eee();
+
+   x = z ?
+       1 :
+       2;
+
+   x = z
+     ? 10
+     : 20;
+
+   fun(100 ||
+       200
+    || 300);
+
+   x = 1 + 2+
+       3
+     + 4;
+
+  </script>
+  <?php
+  func($aaa,
+       $bbb,
+       $ccc
+     , $ddd) {
+
+  }
+
+  $a->b($x->y()
+          ->z("aaa" . "bbb"
+            . "ccc"))
+    ->c();
+
+  $aa->f1()->f2()
+     ->f2();
+  return $aa->f1()->f2()
+            ->f2();
+  $a->x = $b->y
+            ->z . "aaa"
+        . "bbbb";
+  ?>
+</div>
+
+<div>
+  <?php
+
+  return "aa"
+       . $xx .
+         'dc';
+
+  echo('normal'
+      .'hello'
+      .'world' // 'hello' and 'world' lines are well indented
+      .afunction('misaligned') // as if the ')' was not taken into
+      .'hello'      // account
+      .'world'
+      .another('misaligned'  // Same context as lines before,
+              .'hello'       // but without the ')' :
+              .'world')      // same behaviour
+      .'and so on');
+
+  ?>
+</div>
+
+
+related issues: #293
+
+<div>
+  <!--   <?php if ($x): ?> -->
+  <!--   <?php endif; ?> -->
+</div>
+<div>
+  <?php
+  /*
+   * lorem lorem lorem lorem
+   * ipsum
+   */
+  ?>
+</div>
+
+<ul>
+  <li><?=$x?></li>
+  <li></li>
+</ul>
+<?php
+function hello() {
+  print("world");
+}
