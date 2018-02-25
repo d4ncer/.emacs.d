@@ -86,18 +86,22 @@ only supports Github, but that will change eventually."
          (id     (and (string-match "github.com[:/]\\(.+?\\)\\(?:\\.git\\)?\\'"
                                     url)
                       (match-string 1 url)))
+         (fmtfun (lambda (pull-request)
+                   (format "%s  %s"
+                           (cdr (assq 'number pull-request))
+                           (cdr (assq 'title  pull-request)))))
          (prs    (ghub-get (format "/repos/%s/pulls" id) nil :auth 'magit))
          (choice (magit-completing-read
-                  prompt
-                  (--map (format "%s  %s"
-                                 (cdr (assq 'number it))
-                                 (cdr (assq 'title  it)))
-                         prs)))
+                  prompt (mapcar fmtfun prs) nil nil nil nil
+                  (let ((default (thing-at-point 'github-pull-request)))
+                    (and default (funcall fmtfun default)))))
          (number (and (string-match "\\([0-9]+\\)" choice)
                       (string-to-number (match-string 1 choice)))))
     (and number
-         (or (--first (eq (cdr (assq 'number it)) number) prs)
-             (ghub-get (format "/repos/%s" id) nil :auth 'magit)))))
+         ;; Don't reuse the pr from the list, it lacks some information
+         ;; that is only returned when requesting a single pr.  #3371
+         (ghub-get (format "/repos/%s/pulls/%s" id number)
+                   nil :auth 'magit))))
 
 (defun magit-upstream-repository ()
   "Return the remote name of the upstream repository.

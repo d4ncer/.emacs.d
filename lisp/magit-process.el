@@ -41,11 +41,8 @@
 (require 'magit-git)
 (require 'magit-mode)
 
-(eval-when-compile (require 'dired))
-(declare-function dired-uncache 'dired)
-
-(eval-when-compile (require 'auth-source))
-(declare-function auth-source-search 'auth-source)
+(declare-function auth-source-search "auth-source"
+                  (&rest spec &key max require create delete &allow-other-keys))
 
 ;;; Options
 
@@ -287,10 +284,10 @@ optional NODISPLAY is non-nil also display it."
   (interactive)
   (magit-section-when process
     (let ((process (oref it value)))
-      (if (eq (process-status process) 'run)
-          (when (magit-confirm 'kill-process)
-            (kill-process process))
-        (user-error "Process isn't running")))))
+      (unless (eq (process-status process) 'run)
+        (user-error "Process isn't running"))
+      (magit-confirm 'kill-process)
+      (kill-process process))))
 
 ;;; Synchronous Processes
 
@@ -361,19 +358,27 @@ Process output goes into a new section in the buffer returned by
 Identical to `process-file' but temporarily enable Cygwin's
 \"noglob\" option during the call and ensure unix eol
 conversion."
-  (let ((process-environment (append (magit-cygwin-env-vars)
-                                     process-environment))
+  (let ((process-environment (magit-process-environment))
         (default-process-coding-system (magit--process-coding-system)))
     (apply #'process-file args)))
 
-(defun magit-cygwin-env-vars ()
-  (append magit-git-environment
-          (and magit-need-cygwin-noglob
-               (mapcar (lambda (var)
-                         (concat var "=" (--if-let (getenv var)
-                                             (concat it " noglob")
-                                           "noglob")))
-                       '("CYGWIN" "MSYS")))))
+(defun magit-process-environment ()
+  ;; The various w32 hacks are only applicable when running on the
+  ;; local machine.  As of Emacs 25.1, a local binding of
+  ;; process-environment different from the top-level value affects
+  ;; the environment used in
+  ;; tramp-sh-handle-{start-file-process,process-file}.
+  (let ((local (not (file-remote-p default-directory))))
+    (append magit-git-environment
+            (and local
+                 (cdr (assoc magit-git-executable magit-git-w32-path-hack)))
+            (and local magit-need-cygwin-noglob
+                 (mapcar (lambda (var)
+                           (concat var "=" (--if-let (getenv var)
+                                               (concat it " noglob")
+                                             "noglob")))
+                         '("CYGWIN" "MSYS")))
+            process-environment)))
 
 (defvar magit-this-process nil)
 
@@ -402,8 +407,7 @@ flattened before use."
                     (eq (process-status magit-this-process) 'run))
           (sleep-for 0.005)))
     (run-hooks 'magit-pre-call-git-hook)
-    (-let* ((process-environment (append (magit-cygwin-env-vars)
-                                         process-environment))
+    (-let* ((process-environment (magit-process-environment))
             (default-process-coding-system (magit--process-coding-system))
             (flat-args (magit-process-git-arguments args))
             ((process-buf . section)
@@ -522,8 +526,7 @@ Magit status buffer."
                   ;; Don't use a pty, because it would set icrnl
                   ;; which would modify the input (issue #20).
                   (and (not input) magit-process-connection-type))
-                 (process-environment (append (magit-cygwin-env-vars)
-                                              process-environment))
+                 (process-environment (magit-process-environment))
                  (default-process-coding-system (magit--process-coding-system)))
              (apply #'start-file-process
                     (file-name-nondirectory program)
@@ -842,8 +845,6 @@ as argument."
         (setq mode-line-process str)))
     (force-mode-line-update t)))
 
-(declare-function magit-repository-local-repository "magit-mode")
-
 (defun magit-process-set-mode-line-error-status (&optional error str)
   "Apply an error face to the string set by `magit-process-set-mode-line'.
 
@@ -971,7 +972,7 @@ Limited by `magit-process-error-tooltip-max-lines'."
     (setq default-dir (process-get arg 'default-dir))
     (setq section     (process-get arg 'section))
     (setq arg         (process-exit-status arg)))
-  (when (featurep 'dired)
+  (when (fboundp 'dired-uncache)
     (dired-uncache default-dir))
   (when (buffer-live-p process-buf)
     (with-current-buffer process-buf

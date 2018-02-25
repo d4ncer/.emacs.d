@@ -31,6 +31,15 @@
 
 (require 'magit)
 
+;;; Options
+
+(defcustom magit-fetch-modules-jobs 4
+  "Number of submodules to fetch in parallel.
+Ignored for Git versions before v2.8.0."
+  :package-version '(magit . "2.12.0")
+  :group 'magit-commands
+  :type '(choice (const :tag "one at a time" nil) number))
+
 ;;; Clone
 
 (defcustom magit-clone-set-remote-head nil
@@ -229,16 +238,17 @@ remote or replace the refspecs with the default refspec instead."
                   (magit-confirm 'prune-stale-refspecs
                     (format "Prune stale refspec %s and branch %%s" refspec)
                     (format "Prune stale refspec %s and %%i branches" refspec)
-                    refs))
+                    nil refs))
               (magit-confirm 'prune-stale-refspecs nil
                 (format "Prune %%i stale refspecs and %i branches"
                         (length (cl-mapcan (lambda (s) (copy-sequence (cdr s)))
                                            stale)))
-                (mapcar (pcase-lambda (`(,refspec . ,refs))
-                          (concat refspec "\n"
-                                  (mapconcat (lambda (b) (concat "  " b))
-                                             refs "\n")))
-                        stale)))
+                nil
+                (--map (pcase-let ((`(,refspec . ,refs) it))
+                         (concat refspec "\n"
+                                 (mapconcat (lambda (b) (concat "  " b))
+                                            refs "\n")))
+                       stale)))
             (pcase-dolist (`(,refspec . ,refs) stale)
               (magit-call-git "config" "--unset" variable
                               (regexp-quote refspec))
@@ -430,7 +440,7 @@ Delete the symbolic-ref \"refs/remotes/<remote>/HEAD\"."
               "Fetch"
               (?o "another branch"         magit-fetch-branch)
               (?r "explicit refspec"       magit-fetch-refspec)
-              (?m "submodules"             magit-submodule-fetch))
+              (?m "submodules"             magit-fetch-modules))
   :default-action 'magit-fetch
   :max-action-columns 1)
 
@@ -508,6 +518,23 @@ removed on the respective remote."
   (run-hooks 'magit-credential-hook)
   (magit-run-git-async "remote" "update"))
 
+;;;###autoload
+(defun magit-fetch-modules (&optional all)
+  "Fetch all submodules.
+
+Option `magit-fetch-modules-jobs' controls how many submodules
+are being fetched in parallel.  Also fetch the super-repository,
+because `git-fetch' does not support not doing that.  With a
+prefix argument fetch all remotes."
+  (interactive "P")
+  (magit-with-toplevel
+    (magit-run-git-async
+     "fetch" "--verbose" "--recurse-submodules"
+     (and magit-fetch-modules-jobs
+          (version<= "2.8.0" (magit-git-version))
+          (list "-j" (number-to-string magit-fetch-modules-jobs)))
+     (and all "--all"))))
+
 ;;; Pull
 
 ;;;###autoload (autoload 'magit-pull-popup "magit-remote" nil t)
@@ -580,7 +607,7 @@ missing.  To add them use something like:
              "Fetch"
              (?o "another branch"    magit-fetch-branch)
              (?s "explicit refspec"  magit-fetch-refspec)
-             (?m "submodules"        magit-submodule-fetch))
+             (?m "submodules"        magit-fetch-modules))
   :default-action 'magit-fetch
   :max-action-columns 1)
 
@@ -712,8 +739,7 @@ the push-remote can be changed before pushed to it."
                (setf (magit-get
                       (if (eq magit-push-current-set-remote-if-missing 'default)
                           "remote.pushDefault"
-                        (format "branch.%s.pushRemote"
-                                (magit-get-current-branch))))
+                        (format "branch.%s.pushRemote" it)))
                      push-remote))
              (-if-let (remote (magit-get-push-remote it))
                  (if (member remote (magit-list-remotes))
@@ -803,6 +829,8 @@ Both the source and the target are read in the minibuffer."
            (magit-push-arguments))))
   (magit-git-push source target args))
 
+(defvar magit-push-refspecs-history nil)
+
 ;;;###autoload
 (defun magit-push-refspecs (remote refspecs args)
   "Push one or multiple REFSPECS to a REMOTE.
@@ -814,7 +842,8 @@ is used."
    (list (magit-read-remote "Push to remote")
          (split-string (magit-completing-read-multiple
                         "Push refspec,s"
-                        (cons "HEAD" (magit-list-local-branch-names)))
+                        (cons "HEAD" (magit-list-local-branch-names))
+                        nil nil 'magit-push-refspecs-history)
                        crm-default-separator t)
          (magit-push-arguments)))
   (run-hooks 'magit-credential-hook)

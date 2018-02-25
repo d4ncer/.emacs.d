@@ -32,12 +32,16 @@
 (require 'magit-core)
 (require 'magit-diff)
 
-(declare-function magit-blob-visit 'magit)
-(declare-function magit-insert-head-branch-header 'magit)
-(declare-function magit-insert-upstream-branch-header 'magit)
-(declare-function magit-read-file-from-rev 'magit)
-(declare-function magit-show-commit 'magit)
-(defvar magit-refs-indent-cherry-lines)
+(declare-function magit-blob-visit "magit-files" (blob-or-file line))
+(declare-function magit-insert-head-branch-header "magit-status"
+                  (&optional branch))
+(declare-function magit-insert-upstream-branch-header "magit-status"
+                  (&optional branch pull keyword))
+(declare-function magit-read-file-from-rev "magit-files"
+                  (rev prompt &optional default))
+(declare-function magit-show-commit "magit-diff"
+                  (arg1 &optional arg2 arg3 arg4))
+(defvar magit-refs-focus-column-width)
 (defvar magit-refs-margin)
 (defvar magit-refs-show-commit-count)
 (defvar magit-buffer-margin)
@@ -963,6 +967,8 @@ Do not add this to a hook variable."
 
 (defvar magit-log-count nil)
 
+(defvar magit-log-format-message-function 'magit-log-propertize-keywords)
+
 (defun magit-log-wash-log (style args)
   (setq args (-flatten args))
   (when (and (member "--graph" args)
@@ -1025,7 +1031,7 @@ Do not add this to a hook variable."
         (when cherry
           (when (and (derived-mode-p 'magit-refs-mode)
                      magit-refs-show-commit-count)
-            (insert (make-string magit-refs-indent-cherry-lines ?\s)))
+            (insert (make-string (1- magit-refs-focus-column-width) ?\s)))
           (insert (propertize cherry 'face (if (string= cherry "-")
                                                'magit-cherry-equivalent
                                              'magit-cherry-unmatched)))
@@ -1059,7 +1065,7 @@ Do not add this to a hook variable."
                                     (?Y 'magit-signature-expired-key)
                                     (?R 'magit-signature-revoked)
                                     (?E 'magit-signature-error)))))
-          (insert (magit-log-propertize-keywords msg)))
+          (insert (funcall magit-log-format-message-function hash msg)))
         (when (and refs magit-log-show-refname-after-summary)
           (insert ?\s)
           (insert (magit-format-ref-labels refs)))
@@ -1123,7 +1129,7 @@ Do not add this to a hook variable."
                 (insert graph ?\n))))))))
   t)
 
-(defun magit-log-propertize-keywords (msg)
+(defun magit-log-propertize-keywords (_rev msg)
   (let ((start 0))
     (while (string-match "\\[[^[]*\\]" msg start)
       (setq start (match-end 0))
