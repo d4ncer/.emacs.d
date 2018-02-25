@@ -8246,6 +8246,59 @@ when an error stops the execution of the macro"
  	 ("uu")
  	 "line 1\n[l]ine 2\nline 3")))
 
+(ert-deftest evil-test-visual-update-x-selection ()
+  "Test `evil-visual-update-x-selection'."
+  :tags '(evil)
+  (ert-info ("Buffer argument isn't a live buffer")
+    ; create buffer in normal mode, so we don't try to actually copy anything to
+    ; the X selection.
+    (let ((buf (evil-test-buffer-from-string "foobar")))
+      (kill-buffer buf)
+      ; should not raise an "Selecting deleted buffer" error
+      (evil-visual-update-x-selection buf))))
+
+;;; Core
+
+(ert-deftest evil-test-initial-state ()
+  "Test `evil-initial-state'"
+  :tags '(evil core)
+  (define-derived-mode test-1-mode prog-mode "Test1")
+  (define-derived-mode test-2-mode test-1-mode "Test2")
+  (evil-set-initial-state 'test-1-mode 'insert)
+  (ert-info ("Check default state")
+    (should (eq (evil-initial-state 'prog-mode 'normal) 'normal)))
+  (ert-info ("Basic functionality 1")
+    (should (eq (evil-initial-state 'test-1-mode) 'insert)))
+  (ert-info ("Basic functionality 2")
+    (evil-test-buffer
+      "abc\ndef\n"
+      (test-1-mode)
+      (should (eq evil-state 'insert))))
+  (ert-info ("Inherit initial state from a parent")
+    (evil-test-buffer
+      "abc\ndef\n"
+      (test-2-mode)
+      (should (eq evil-state 'insert))))
+  (evil-set-initial-state 'test-1-mode nil)
+  (ert-info ("Check for inheritance loops")
+    (evil-test-buffer
+      "abc\ndef\n"
+      (unwind-protect
+          (let ((major-mode 'test-2-mode))
+            (put 'test-1-mode 'derived-mode-parent 'test-2-mode)
+            ;; avoid triggering all of the hooks here, some of which might get
+            ;; caught in loops depending on the environment. settings major-mode
+            ;; is sufficient for `evil-initial-state-for-buffer' to work.
+            (should-error (evil-initial-state-for-buffer)))
+        (put 'test-1-mode 'derived-mode-parent 'prog-mode))))
+  (defalias 'test-1-alias-mode 'test-1-mode)
+  (define-derived-mode test-3-mode test-1-alias-mode "Test3")
+  (evil-set-initial-state 'test-1-mode 'insert)
+  (ert-info ("Check inheritance from major mode aliases")
+    "abc\ndef\n"
+    (test-3-mode)
+    (should (eq evil-state 'insert))))
+
 (provide 'evil-tests)
 
 ;;; evil-tests.el ends here
