@@ -33,6 +33,7 @@
 
 (require 'magit)
 (require 'magit-collab)
+(require 'magit-reset)
 
 ;;; Options
 
@@ -375,7 +376,8 @@ Please see the manual for more information."
            (remote .head.repo.owner.login)
            (branch .head.ref)
            (pr-branch branch))
-      (when (member branch (list .base.ref .base.default_branch))
+      (when (or (not .maintainer_can_modify)
+                (magit-branch-p branch))
         (setq branch (format "pr-%s" .number)))
       (when (magit-branch-p branch)
         (user-error "Branch `%s' already exists" branch))
@@ -567,23 +569,23 @@ defaulting to the branch at point."
   (interactive
    (let ((branches (magit-region-values 'branch t))
          (force current-prefix-arg))
-     (if (if (> (length branches) 1)
-             (magit-confirm t nil "Delete %i branches" branches)
-           (setq branches
-                 (list (magit-read-branch-prefer-other
-                        (if force "Force delete branch" "Delete branch")))))
-         (unless force
-           (--when-let (-remove #'magit-branch-merged-p branches)
-             (if (magit-confirm 'delete-unmerged-branch
-                   "Delete unmerged branch %s"
-                   "Delete %i unmerged branches" it)
-                 (setq force branches)
-               (or (setq branches (-difference branches it))
-                   (user-error "Abort")))))
-       (user-error "Abort"))
+     (if (> (length branches) 1)
+         (magit-confirm t nil "Delete %i branches" nil branches)
+       (setq branches
+             (list (magit-read-branch-prefer-other
+                    (if force "Force delete branch" "Delete branch")))))
+     (unless force
+       (-when-let (unmerged (-remove #'magit-branch-merged-p branches))
+         (if (magit-confirm 'delete-unmerged-branch
+               "Delete unmerged branch %s"
+               "Delete %i unmerged branches"
+               'noabort unmerged)
+             (setq force branches)
+           (or (setq branches (-difference branches unmerged))
+               (user-error "Abort")))))
      (list branches force)))
   (let* ((refs (-map #'magit-ref-fullname branches))
-         (ambiguous (--filter (not it) refs)))
+         (ambiguous (--remove it refs)))
     (when ambiguous
       (user-error
        "%s ambiguous.  Please cleanup using git directly."
@@ -626,19 +628,17 @@ defaulting to the branch at point."
                      (?a "[a]bort"                    'abort)))
             (`detach (unless (or (equal force '(4))
                                  (member branch force)
-                                 (magit-branch-merged-p branch t)
-                                 (magit-confirm 'delete-unmerged-branch
-                                   "Delete unmerged branch %s" ""
-                                   (list branch)))
-                       (user-error "Abort"))
+                                 (magit-branch-merged-p branch t))
+                       (magit-confirm 'delete-unmerged-branch
+                         "Delete unmerged branch %s" ""
+                         nil (list branch)))
                      (magit-call-git "checkout" "--detach"))
             (`master (unless (or (equal force '(4))
                                  (member branch force)
-                                 (magit-branch-merged-p branch "master")
-                                 (magit-confirm 'delete-unmerged-branch
-                                   "Delete unmerged branch %s" ""
-                                   (list branch)))
-                       (user-error "Abort"))
+                                 (magit-branch-merged-p branch "master"))
+                       (magit-confirm 'delete-unmerged-branch
+                         "Delete unmerged branch %s" ""
+                         nil (list branch)))
                      (magit-call-git "checkout" "master"))
             (`abort  (user-error "Abort")))
           (setq force t))
@@ -745,6 +745,43 @@ the remote."
                             (format ":refs/heads/%s" old)))))))
   (magit-branch-unset-pushRemote old)
   (magit-refresh))
+
+;;;###autoload
+(defun magit-branch-shelve (branch)
+  "Shelve a BRANCH.
+Rename \"refs/heads/BRANCH\" to \"refs/shelved/BRANCH\",
+and also rename the respective reflog file."
+  (interactive (list (magit-read-other-local-branch "Shelve branch")))
+  (let ((old (concat "refs/heads/"   branch))
+        (new (concat "refs/shelved/" branch)))
+    (magit-git "update-ref" new old "")
+    (magit--rename-reflog-file old new)
+    (magit-branch-unset-pushRemote branch)
+    (magit-run-git "branch" "-D" branch)))
+
+;;;###autoload
+(defun magit-branch-unshelve (branch)
+  "Unshelve a BRANCH
+Rename \"refs/shelved/BRANCH\" to \"refs/heads/BRANCH\",
+and also rename the respective reflog file."
+  (interactive
+   (list (magit-completing-read
+          "Unshelve branch"
+          (--map (substring it 8)
+                 (magit-list-refnames "refs/shelved"))
+          nil t)))
+  (let ((old (concat "refs/shelved/" branch))
+        (new (concat "refs/heads/"   branch)))
+    (magit-git "update-ref" new old "")
+    (magit--rename-reflog-file old new)
+    (magit-run-git "update-ref" "-d" old)))
+
+(defun magit--rename-reflog-file (old new)
+  (let ((old (magit-git-dir (concat "logs/" old)))
+        (new (magit-git-dir (concat "logs/" new))))
+    (when (file-exists-p old)
+      (make-directory (file-name-directory new) t)
+      (rename-file old new t))))
 
 ;;; Config Popup
 

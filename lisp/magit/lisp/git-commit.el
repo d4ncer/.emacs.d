@@ -129,9 +129,10 @@
 (defvar font-lock-beg)
 (defvar font-lock-end)
 
-(declare-function magit-expand-git-file-name 'magit-git)
-(declare-function magit-list-local-branch-names 'magit-git)
-(declare-function magit-list-remote-branch-names 'magit-git)
+(declare-function magit-expand-git-file-name "magit-git" (filename))
+(declare-function magit-list-local-branch-names "magit-git" ())
+(declare-function magit-list-remote-branch-names "magit-git"
+                  (&optional remote relative))
 
 ;;; Options
 ;;;; Variables
@@ -498,12 +499,13 @@ finally check current non-comment text."
   (turn-on-flyspell)
   (setq flyspell-generic-check-word-predicate
         'git-commit-flyspell-verify)
-  (let (end)
+  (let ((end)
+        (comment-start-regex (format "^\\(%s\\|$\\)" comment-start)))
     (save-excursion
       (goto-char (point-max))
-      (while (and (not (bobp)) (looking-at "^\\(#\\|$\\)"))
+      (while (and (not (bobp)) (looking-at comment-start-regex))
         (forward-line -1))
-      (unless (looking-at "^\\(#\\|$\\)")
+      (unless (looking-at comment-start-regex)
         (forward-line))
       (setq end (point)))
     (flyspell-region (point-min) end)))
@@ -555,7 +557,7 @@ With a numeric prefix ARG, go back ARG comments."
   (save-restriction
     (goto-char (point-min))
     (narrow-to-region (point)
-                      (if (re-search-forward (concat "^" comment-start))
+                      (if (re-search-forward (concat "^" comment-start) nil t)
                           (max 1 (- (point) 2))
                         (point-max)))
     (log-edit-previous-comment arg)))

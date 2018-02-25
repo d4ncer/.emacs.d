@@ -44,11 +44,14 @@
 (require 'crm)
 
 (eval-when-compile (require 'ido))
-(declare-function ido-completing-read+ 'ido-completing-read+)
-(declare-function Info-get-token 'info)
+(declare-function ido-completing-read+ "ido-completing-read+"
+                  (prompt collection &optional predicate
+                          require-match initial-input
+                          hist def inherit-input-method))
+(declare-function Info-get-token "info" (pos start all &optional errorstring))
 
 (eval-when-compile (require 'vc-git))
-(declare-function vc-git--run-command-string 'vc-git)
+(declare-function vc-git--run-command-string "vc-git" (file &rest args))
 
 (defvar magit-wip-before-change-mode)
 
@@ -572,39 +575,33 @@ ACTION is a member of option `magit-slow-confirm'."
       (yes-or-no-p prompt)
     (y-or-n-p prompt)))
 
-(cl-defun magit-confirm (action &optional prompt prompt-n (items nil sitems))
+(cl-defun magit-confirm (action &optional prompt prompt-n noabort
+                                (items nil sitems))
   (declare (indent defun))
   (setq prompt-n (format (concat (or prompt-n prompt) "? ") (length items)))
   (setq prompt   (format (concat (or prompt (magit-confirm-make-prompt action))
                                  "? ")
                          (car items)))
-  (cond ((and (not (eq action t))
-              (or (eq magit-no-confirm t)
-                  (memq action
-                        `(,@magit-no-confirm
-                          ,@(and magit-wip-before-change-mode
-                                 (memq 'safe-with-wip magit-no-confirm)
-                                 `(discard reverse
-                                   stage-all-changes
-                                   unstage-all-changes))))))
-         (or (not sitems) items))
-        ((not sitems)
-         (magit-y-or-n-p prompt action))
-        ((= (length items) 1)
-         (and (magit-y-or-n-p prompt action) items))
-        ((> (length items) 1)
-         (let ((buffer (get-buffer-create " *Magit Confirm*")))
-           (with-current-buffer buffer
-             (with-current-buffer-window
-              buffer (cons 'display-buffer-below-selected
-                           '((window-height . fit-window-to-buffer)))
-              (lambda (window _value)
-                (with-selected-window window
-                  (unwind-protect (and (magit-y-or-n-p prompt-n action) items)
-                    (when (window-live-p window)
-                      (quit-restore-window window 'kill)))))
-              (dolist (item items)
-                (insert item "\n"))))))))
+  (or (cond ((and (not (eq action t))
+                  (or (eq magit-no-confirm t)
+                      (memq action
+                            `(,@magit-no-confirm
+                              ,@(and magit-wip-before-change-mode
+                                     (memq 'safe-with-wip magit-no-confirm)
+                                     `(discard reverse
+                                               stage-all-changes
+                                               unstage-all-changes))))))
+             (or (not sitems) items))
+            ((not sitems)
+             (magit-y-or-n-p prompt action))
+            ((= (length items) 1)
+             (and (magit-y-or-n-p prompt action) items))
+            ((> (length items) 1)
+             (and (magit-y-or-n-p (concat (mapconcat #'identity items "\n")
+                                          "\n\n" prompt-n)
+                                  action)
+                  items)))
+      (if noabort nil (user-error "Abort"))))
 
 (defun magit-confirm-files (action files &optional prompt)
   (when files
@@ -613,7 +610,7 @@ ACTION is a member of option `magit-slow-confirm'."
     (magit-confirm action
       (concat prompt " %s")
       (concat prompt " %i files")
-      files)))
+      nil files)))
 
 (defun magit-confirm-make-prompt (action)
   (let ((prompt (symbol-name action)))
@@ -787,18 +784,27 @@ and https://github.com/magit/magit/issues/2295."
 
 (defvar whitespace-mode)
 
-(defun whitespace-dont-turn-on-in-magit-mode ()
+(defun whitespace-dont-turn-on-in-magit-mode (fn)
   "Prevent `whitespace-mode' from being turned on in Magit buffers.
-Because `whitespace-mode' uses font-lock and Magit does not,
-they are not compatible.  See `magit-diff-paint-whitespace'
-for an alternative."
-  (when (derived-mode-p 'magit-mode)
-    (setq whitespace-mode nil)
-    (user-error
-     "Whitespace-Mode isn't compatible with Magit.  %s"
-     "See `magit-diff-paint-whitespace' for an alternative.")))
 
-(advice-add 'whitespace-turn-on :before
+Because `whitespace-mode' uses font-lock and Magit does not, they
+are not compatible.  Therefore you cannot turn on that minor-mode
+in Magit buffers.  If you try to enable it anyway, then this
+advice prevents that.
+
+It the reason the attempt is made is that `global-whitespace-mode'
+is enabled, then that is done silently.  However if you you call
+the local minor-mode interactively, then that results in an error.
+
+See `magit-diff-paint-whitespace' for an alternative."
+  (if (not (derived-mode-p 'magit-mode))
+      (funcall fn)
+    (setq whitespace-mode nil)
+    (when (eq this-command 'whitespace-mode)
+      (user-error
+       "Whitespace mode NOT enabled because it is not compatible with Magit"))))
+
+(advice-add 'whitespace-turn-on :around
             'whitespace-dont-turn-on-in-magit-mode)
 
 ;;; Kludges for Custom

@@ -42,9 +42,9 @@
 (defvar magit-diff-show-xref-buttons)
 (defvar magit-revision-show-xref-buttons)
 ;; For `magit-refresh' and `magit-refresh-all'
-(declare-function magit-auto-revert-buffers 'magit-autorevert)
+(declare-function magit-auto-revert-buffers "magit-autorevert" ())
 ;; For `magit-refresh-buffer'
-(declare-function magit-process-unset-mode-line-error-status 'magit-process)
+(declare-function magit-process-unset-mode-line-error-status "magit-process" ())
 
 (require 'format-spec)
 (require 'help-mode)
@@ -144,7 +144,7 @@ which in turn uses the function specified here."
   :type '(radio (function-item magit-generate-buffer-name-default-function)
                 (function :tag "Function")))
 
-(defcustom magit-buffer-name-format "*%M%v: %T"
+(defcustom magit-buffer-name-format "%x%M%v: %t%x"
   "The format string used to name Magit buffers.
 
 The following %-sequences are supported:
@@ -164,12 +164,19 @@ The following %-sequences are supported:
      repository, or if `magit-uniquify-buffer-names' is non-nil
      an abbreviation of that.
 
-`%T' Like \"%t\", but append an asterisk if and only if
-     `magit-uniquify-buffer-names' is nil.
+`%x' If `magit-uniquify-buffer-names' is nil \"*\", otherwise the
+     empty string.  Due to limitations of the `uniquify' package,
+     buffer names must end with the path.
 
-The value should always contain \"%m\" or \"%M\", \"%v\" or \"%V\",
-and \"%t\" or \"%T\".  If `magit-uniquify-buffer-names' is non-nil,
-then the value must end with \"%t\" or \"%T\" (see issue #2841).
+`%T' Obsolete, use \"%t%x\" instead.  Like \"%t\", but append an
+     asterisk if and only if `magit-uniquify-buffer-names' is nil.
+
+The value should always contain \"%m\" or \"%M\", \"%v\" or
+\"%V\", and \"%t\" (or the obsolete \"%T\").
+
+If `magit-uniquify-buffer-names' is non-nil, then the value must
+end with \"%t\" or \"%t%x\" (or the obsolete \"%T\").  See issue
+#2841.
 
 This is used by `magit-generate-buffer-name-default-function'.
 If another `magit-generate-buffer-name-function' is used, then
@@ -531,6 +538,7 @@ Magit is documented in info node `(magit)'."
   (make-local-variable 'text-property-default-nonsticky)
   (push (cons 'keymap t) text-property-default-nonsticky)
   (add-hook 'post-command-hook #'magit-section-update-highlight t t)
+  (add-hook 'deactivate-mark-hook #'magit-section-update-highlight t t)
   (setq-local redisplay-highlight-region-function 'magit-highlight-region)
   (setq-local redisplay-unhighlight-region-function 'magit-unhighlight-region)
   (when (bound-and-true-p global-linum-mode)
@@ -812,6 +820,7 @@ account."
        (?v . ,(or v ""))
        (?V . ,(if v (concat " " v) ""))
        (?t . ,n)
+       (?x . ,(if magit-uniquify-buffer-names "" "*"))
        (?T . ,(if magit-uniquify-buffer-names n (concat n "*")))))))
 
 (defun magit-toggle-buffer-lock ()
@@ -1109,6 +1118,8 @@ if you so desire."
 (add-hook 'magit-pre-call-git-hook #'magit-maybe-save-repository-buffers)
 (add-hook 'magit-pre-start-git-hook #'magit-maybe-save-repository-buffers)
 
+(defvar-local magit-inhibit-refresh-save nil)
+
 (defun magit-save-repository-buffers (&optional arg)
   "Save file-visiting buffers belonging to the current repository.
 After any buffer where `buffer-save-without-query' is non-nil
@@ -1117,10 +1128,22 @@ buffer which visits a file in the current repository.  Optional
 argument (the prefix) non-nil means save all with no questions."
   (interactive "P")
   (-when-let (topdir (magit-rev-parse-safe "--show-toplevel"))
-    (let ((remote (file-remote-p topdir)))
+    (let ((remote (file-remote-p topdir))
+          (save-some-buffers-action-alist
+           `((?Y (lambda (buffer)
+                   (with-current-buffer buffer
+                     (setq buffer-save-without-query t)
+                     (save-buffer)))
+                 "to save the current buffer and remember choice")
+             (?N (lambda (buffer)
+                   (with-current-buffer buffer
+                     (setq magit-inhibit-refresh-save t)))
+                 "to skip the current buffer and remember choice")
+             ,@save-some-buffers-action-alist)))
       (save-some-buffers
        arg (lambda ()
-             (and buffer-file-name
+             (and (not magit-inhibit-refresh-save)
+                  buffer-file-name
                   ;; Avoid needlessly connecting to unrelated remotes.
                   (equal (file-remote-p buffer-file-name)
                          remote)
@@ -1223,17 +1246,7 @@ Currently `magit-log-mode', `magit-reflog-mode',
   (setq magit-refresh-args (cdr args))
   (magit-refresh-buffer))
 
-;;; Utilities
-
-(defun magit-run-hook-with-benchmark (hook)
-  (when hook
-    (if magit-refresh-verbose
-        (let ((start (current-time)))
-          (message "Running %s..." hook)
-          (run-hooks hook)
-          (message "Running %s...done (%.3fs)" hook
-                   (float-time (time-subtract (current-time) start))))
-      (run-hooks hook))))
+;;; Repository-Local Cache
 
 (defvar magit-repository-local-cache nil
   "Alist mapping `magit-toplevel' paths to alists of key/value pairs.")
@@ -1302,6 +1315,33 @@ Unless specified, REPOSITORY is the current buffer's repository."
       ;; There is no `assoc-delete-all'.
       (setf (cdr cache)
             (cl-delete key (cdr cache) :key #'car :test #'equal)))))
+
+(defun magit-zap-caches ()
+  "Zap caches for the current repository.
+Remove the repository's entry from `magit-repository-cache'
+and set `magit-section-visibility-cache' to nil in all of the
+repository's Magit buffers."
+  (interactive)
+  (magit-with-toplevel
+    (setq magit-repository-local-cache
+          (cl-delete default-directory
+                     magit-repository-local-cache
+                     :key #'car :test #'equal)))
+  (dolist (buffer (magit-mode-get-buffers))
+    (with-current-buffer buffer
+      (setq magit-section-visibility-cache nil))))
+
+;;; Utilities
+
+(defun magit-run-hook-with-benchmark (hook)
+  (when hook
+    (if magit-refresh-verbose
+        (let ((start (current-time)))
+          (message "Running %s..." hook)
+          (run-hooks hook)
+          (message "Running %s...done (%.3fs)" hook
+                   (float-time (time-subtract (current-time) start))))
+      (run-hooks hook))))
 
 (provide 'magit-mode)
 ;;; magit-mode.el ends here
