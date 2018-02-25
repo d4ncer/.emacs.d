@@ -363,7 +363,7 @@ Do not scheduled items or repeating todos."
               (stuck ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-use-tag-inheritance nil)
-              (org-agenda-files (list rk-org-work-file org-agenda-diary-file))
+              (org-agenda-files (list rk-org-work-file))
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-drawer-properties '(effort appt))))))))
