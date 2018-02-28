@@ -64,7 +64,7 @@
   "Suppress void-function errors.
 
 This advice makes `symbol-function' return nil when called on a
-symbol with no function rather than throwing a void-fucntion
+symbol with no function rather than throwing a void-function
 error. On Emacs 24.4 and above, this has no effect, because
 `symbol-function' already does this, but on 24.3 and earlier, it
 will bring the behavior in line with the newer Emacsen."
@@ -72,7 +72,7 @@ will bring the behavior in line with the newer Emacsen."
       ad-do-it
     (void-function nil)))
 
-(ert-deftest ivy-partial ()
+(ert-deftest ivy-partial-1 ()
   (should (equal
            (ivy-with '(ivy-read "test: " '("case" "Case"))
                      "ca TAB C-m")
@@ -153,10 +153,10 @@ will bring the behavior in line with the newer Emacsen."
 (ert-deftest ivy--split ()
   (should (equal (ivy--split "King of the who?")
                  '("King" "of" "the" "who?")))
-  (should (equal (ivy--split "The  Brittons.")
-                 '("The Brittons.")))
-  (should (equal (ivy--split "Who  are the  Brittons?")
-                 '("Who are" "the Brittons?")))
+  (should (equal (ivy--split "The  Britons.")
+                 '("The Britons.")))
+  (should (equal (ivy--split "Who  are the  Britons?")
+                 '("Who are" "the Britons?")))
   (should (equal (ivy--split "We're  all  Britons and   I   am your   king.")
                  '("We're all Britons"
                    "and  I  am"
@@ -169,9 +169,60 @@ will bring the behavior in line with the newer Emacsen."
                   "\\(?:interactive\\|swiper\\) \\(?:list\\|symbol\\)")
                  "\\(\\(?:interactive\\|swiper\\)\\).*?\\(\\(?:list\\|symbol\\)\\)")))
 
+(ert-deftest ivy--split-negation ()
+  (should (equal (ivy--split-negation "") ()))
+  (should (equal (ivy--split-negation "not") '("not")))
+  (should (equal (ivy--split-negation "!not") '("" "not")))
+  (should (equal (ivy--split-negation "not!") '("not")))
+  (should (equal (ivy--split-negation "!not!") '("" "not")))
+  (should (equal (ivy--split-negation "not!not!not") '("not" "not")))
+  (should (equal (ivy--split-negation "not!not\\!not") '("not" "not!not")))
+  (should (equal (ivy--split-negation "\\!not!not\\!not") '("!not" "not!not")))
+  (should (equal (ivy--split-negation "\\!not!notnot\\!") '("!not" "notnot!"))))
+
+(ert-deftest ivy--split-spaces ()
+  (should (equal (ivy--split-spaces "") ()))
+  (should (equal (ivy--split-spaces " ") ()))
+  (should (equal (ivy--split-spaces "  ") ()))
+
+  (should (equal (ivy--split-spaces "a ") '("a")))
+  (should (equal (ivy--split-spaces " a") '("a")))
+  (should (equal (ivy--split-spaces " a ") '("a")))
+  (should (equal (ivy--split-spaces "a  ") '("a")))
+  (should (equal (ivy--split-spaces "  a") '("a")))
+  (should (equal (ivy--split-spaces "  a  ") '("a")))
+
+  (should (equal (ivy--split-spaces "\\ ") '(" ")))
+  (should (equal (ivy--split-spaces "\\  ") '(" ")))
+  (should (equal (ivy--split-spaces " \\ ") '(" ")))
+  (should (equal (ivy--split-spaces "\\ \\ ") '("  ")))
+  (should (equal (ivy--split-spaces "a\\ ") '("a ")))
+  (should (equal (ivy--split-spaces "\\ a") '(" a")))
+  (should (equal (ivy--split-spaces "\\ a\\ ") '(" a ")))
+
+  (should (equal (ivy--split-spaces "a b") '("a" "b")))
+  (should (equal (ivy--split-spaces "a\\ b") '("a b")))
+  (should (equal (ivy--split-spaces " a b\\ ") '("a" "b ")))
+  (should (equal (ivy--split-spaces "\\  a b ") '(" " "a" "b")))
+  (should (equal (ivy--split-spaces " a\\  \\ b ") '("a " " b"))))
+
+(ert-deftest ivy--regex-plus ()
+  (should (equal (ivy--regex-plus "add path\\!") "\\(add\\).*?\\(path!\\)")))
+
+(ert-deftest ivy-partial-2 ()
+  (when (fboundp 'read--expression)
+    (should
+     (equal
+      (ivy-with '(read--expression "Eval: "
+                  "'s-c-t-st")
+                "<tab> C-m")
+      '(quote shell-command-to-string)))))
+
 (ert-deftest ivy--regex-fuzzy ()
   (should (string= (ivy--regex-fuzzy "tmux")
                    "\\(t\\).*?\\(m\\).*?\\(u\\).*?\\(x\\)"))
+  (should (string= (ivy--regex-fuzzy ".tmux")
+                   "\\(\\.\\).*?\\(t\\).*?\\(m\\).*?\\(u\\).*?\\(x\\)"))
   (should (string= (ivy--regex-fuzzy "^tmux")
                    "^\\(t\\).*?\\(m\\).*?\\(u\\).*?\\(x\\)"))
   (should (string= (ivy--regex-fuzzy "^tmux$")
@@ -284,6 +335,20 @@ will bring the behavior in line with the newer Emacsen."
                  '(0.6705882352941176
                    0.07058823529411765
                    0.20392156862745098))))
+
+(ert-deftest colir-blend-face-background ()
+  ;; Note: should be `equal-including-properties', but it doesn't work as I like
+  ;; `equal' doesn't test text properties
+  (should (equal
+           (let ((str #("One" 0 3 (face (:foreground "#badfad")))))
+             (ivy--add-face str 'ivy-current-match)
+             str)
+           #("One" 0 3 (face (ivy-current-match :foreground "#badfad")))))
+  (should (equal
+           (let ((str #("Desktop" 0 7 (face ((foreground-color . "#badfad") bold)))))
+             (colir-blend-face-background 0 (length str) 'ivy-current-match str)
+             str)
+           #("Desktop" 0 7 (face (ivy-current-match (foreground-color . "#8ac6f2") bold))))))
 
 
 ;;* prefix arg tests
@@ -573,6 +638,31 @@ will bring the behavior in line with the newer Emacsen."
             "bl C-p C-M-j")
            "bl")))
 
+(defmacro ivy-with-r (expr &rest keys)
+  `(with-output-to-string
+     (save-window-excursion
+       (switch-to-buffer standard-output t)
+       ,expr
+       (ivy-mode)
+       (execute-kbd-macro
+        ,(apply #'vconcat (mapcar #'kbd keys))))))
+
+(ert-deftest ivy-completion-in-region ()
+  (should (string=
+           (ivy-with-r
+            (progn
+              (emacs-lisp-mode)
+              (insert " emacs-lisp-mode-h"))
+            "C-M-i")
+           " emacs-lisp-mode-hook"))
+  (should (string=
+           (ivy-with-r
+            (progn
+              (emacs-lisp-mode)
+              (insert "(nconc"))
+            "C-M-i")
+           "(nconc")))
+
 (ert-deftest ivy-completing-read-def-handling ()
   ;; DEF in COLLECTION
   (should
@@ -690,6 +780,22 @@ will bring the behavior in line with the newer Emacsen."
                       'test-command-recursive-handler)
                     "c RET"))))
       (ivy-mode ivy-mode-reset-arg))))
+
+(ert-deftest ivy-completion-common-length ()
+  (should (= 2
+             (ivy-completion-common-length
+              #("test/"
+                0 2 (face completions-common-part)
+                2 3 (face (completions-first-difference))))))
+  (should (= 5
+             (ivy-completion-common-length
+              #("Math/E"
+                0 5 (face (completions-common-part))
+                5 6 (face (completions-first-difference))))))
+  (should (= 3
+             (ivy-completion-common-length
+              #("vec"
+                0 3 (face (completions-common-part)))))))
 
 (provide 'ivy-test)
 
