@@ -45,7 +45,7 @@ exports.
 ** Exporting to texinfo
 
 ivy.texi is generated from ivy.org. To update the .texi file, eval
-ivy-ox.el then ~C-c C-e i t~ in the ivy.org bufer.
+ivy-ox.el then ~C-c C-e i t~ in the ivy.org buffer.
 * Copying
 :PROPERTIES:
 :COPYING:  t
@@ -502,14 +502,14 @@ display short aliases:
 Hydra reduces key strokes, for example: ~C-n C-n C-n C-n~ is ~C-o
 jjjj~ in Hydra.
 
-Hydra menu offers these additioanl bindings:
+Hydra menu offers these additional bindings:
 
 - ~c~ (=ivy-toggle-calling=) ::
      Toggle calling the action after each candidate change. It
      modifies ~j~ to ~jg~, ~k~ to ~kg~ etc.
 
-- ~m~ (=ivy-toggle-fuzzy=) ::
-     Toggle the current regexp matcher.
+- ~m~ (=ivy-rotate-preferred-builders=) ::
+     Rotate the current regexp matcher.
 
 - ~>~ (=ivy-minibuffer-grow=) ::
      Increase =ivy-height= for the current minibuffer.
@@ -541,7 +541,7 @@ Hydra menu offers these additioanl bindings:
 
 The new buffer is read-only and has a few useful bindings defined.
 
-- ~RET~ or ~j~ (=ivy-occur-press=) ::
+- ~RET~ or ~f~ (=ivy-occur-press=) ::
      Call the current action on the selected candidate.
 
 - ~mouse-1~ (=ivy-occur-click=) ::
@@ -997,23 +997,28 @@ bindings that work here:
 
      Likewise, =./= can be removed.
 
-- Using TRAMP ::
-     From any directory, with the empty input, inputting =/ssh:= and
-     pressing ~C-j~ (or ~RET~, which is the same thing) completes for
-     host and user names.
-
-     For =/ssh:user@= input, completes the domain name.
-
-     ~C-i~ works in a similar way to the default completion.
-
-     You can also get sudo access for the current directory by
-     inputting =/sudo::= ~RET~. Using =/sudo:= (i.e. single colon instead of
-     double) will result in a completion session for the desired user.
-
 - History ::
      File history works the same with ~M-p~, ~M-n~, and ~C-r~, but
      uses a custom code for file name completion that cycles through
      files previously opened. It also works with TRAMP files.
+
+*** Using TRAMP
+From any directory, with the empty input, inputting =/ssh:= and pressing
+~C-j~ (or ~RET~, which is the same thing) completes for host and user
+names.
+
+For =/ssh:user@= input, completes the domain name.
+
+~C-i~ works in a similar way to the default completion.
+
+You can also get sudo access for the current directory by inputting
+=/sudo::= ~RET~. Using =/sudo:= (i.e. single colon instead of double) will
+result in a completion session for the desired user.
+
+Multi-hopping is possible, although a bit complex.
+
+- Example : connect to a remote host =cloud= and open a file with =sudo= there ::
+  - ~C-x C-f~ =/ssh:cloud|sudo:root:/=.
 
 ** Buffer Name Completion
 :PROPERTIES:
