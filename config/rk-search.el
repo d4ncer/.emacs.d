@@ -14,9 +14,8 @@
 (use-package ag
   :commands ag)
 
-;;; Add rg and then uncomment this
-;; (use-package rg
-;;   :commands rg)
+(use-package rg
+  :commands rg)
 
 (use-package wgrep
   :commands (wgrep-setup)
