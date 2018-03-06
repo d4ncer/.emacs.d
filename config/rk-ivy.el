@@ -148,7 +148,8 @@
     (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
     (define-key ivy-minibuffer-map (kbd "C-h") #'counsel-up-directory)
 
-    (setq counsel-rg-base-command "rg -S -g '!.git/*' --no-heading --line-number --hidden --max-columns 120 --color never %s .")
+    (setq counsel-git-cmd "rg --files")
+    (setq counsel-rg-base-command "rg -i -g '!.git/*' --no-heading --line-number --hidden --max-columns 120 --color never %s .")
     (setq counsel-yank-pop-separator (concat "\n" (make-string 70 ?-) "\n"))
 
     (counsel-mode +1)))
