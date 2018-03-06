@@ -41,10 +41,10 @@
     (thing-at-point 'symbol t)))
 
 (defun rk--region-or-symbol ()
-  "Get text or symbol at point, or return a user error if neither exist."
+  "Get text or symbol at point, or an empty string if neither exist."
   (if-let* ((text (rk--region-or-symbol-at-pt)))
       text
-    (user-error "No symbol at point")))
+    ""))
 
 (defun rk-swiper-region-or-symbol (input)
   "Run `swiper' with INPUT, which is either the selected region or the symbol at point."
