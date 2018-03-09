@@ -35,7 +35,6 @@
       "ig" 'go-goto-imports
       "ia" 'go-import-add
       "ir" 'go-remove-unused-imports
-      "eb" 'go-play-buffer
       "er" 'go-play-region
       "ed" 'go-download-play
       "gg" 'godef-jump
