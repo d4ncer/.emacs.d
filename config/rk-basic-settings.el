@@ -560,6 +560,11 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq lv-use-separator t)
     (advice-add 'lv-window :after #'rk-basic-settings-set-up-hydra-buffer)))
 
+(use-package sql-indent
+  :after sql
+  :config
+  (add-hook 'sql-mode-hook #'sqlind-minor-mode))
+
 (use-package world-time-mode
   :commands (world-time-list)
   :init

@@ -33,8 +33,8 @@
       (add-to-list 'aggressive-indent-excluded-modes item)))
   :config
   (progn
-    (rk-extend-aggressive-indent-exclude-modes)
-    (global-aggressive-indent-mode +1)))
+    (global-aggressive-indent-mode 1)
+    (rk-extend-aggressive-indent-exclude-modes)))
 
 (provide 'rk-aggressive-indent)
 
