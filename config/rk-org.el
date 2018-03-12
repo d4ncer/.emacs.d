@@ -632,14 +632,19 @@ Do not scheduled items or repeating todos."
   :config
   (progn
     (advice-add 'org-insert-heading :after #'rk-org--evil-insert-state)
+    (advice-add 'org-insert-subheading :after #'rk-org--evil-insert-state)
     (advice-add 'org-insert-heading-respect-content :after #'rk-org--evil-insert-state)
     (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--evil-insert-state)
     (advice-add 'org-insert-todo-heading :after #'rk-org--evil-insert-state)
 
     (advice-add 'org-insert-heading :after #'rk-org--add-blank-line-after-heading)
+    (advice-add 'org-insert-subheading :after #'rk-org--add-blank-line-after-heading)
     (advice-add 'org-insert-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
     (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading)))
+    (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading)
+
+    (evil-define-key 'normal evil-org-mode-map (kbd "M-o") #'org-insert-subheading)
+    (evil-define-key 'insert evil-org-mode-map (kbd "M-o") #'org-insert-subheading)))
 
 (use-package ox
   :after org
