@@ -490,39 +490,40 @@ Do not scheduled items or repeating todos."
     (org-clock-persistence-insinuate)
     (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t)))
 
-(use-package org-drill
-  :after org
-  :commands (org-drill
-             org-drill-strip-all-data
-             org-drill-cram
-             org-drill-tree
-             org-drill-resume
-             org-drill-merge-buffers
-             org-drill-entry
-             org-drill-directory
-             org-drill-again)
-  :preface
-  (defconst rk-org-drill-files (f-files (concat org-directory "/drill")))
+;;; TODO: Review if I need this
+;; (use-package org-drill
+;;   :after org
+;;   :commands (org-drill
+;;              org-drill-strip-all-data
+;;              org-drill-cram
+;;              org-drill-tree
+;;              org-drill-resume
+;;              org-drill-merge-buffers
+;;              org-drill-entry
+;;              org-drill-directory
+;;              org-drill-again)
+;;   :preface
+;;   (defconst rk-org-drill-files (f-files (concat org-directory "/drill")))
 
-  :defines
-  (org-drill-scope
-   org-drill-learn-fraction
-   org-drill-adjust-intervals-for-early-and-late-repetitions-p
-   org-drill-add-random-noise-to-intervals-p
-   org-drill-save-buffers-after-drill-sessions-p)
+;;   :defines
+;;   (org-drill-scope
+;;    org-drill-learn-fraction
+;;    org-drill-adjust-intervals-for-early-and-late-repetitions-p
+;;    org-drill-add-random-noise-to-intervals-p
+;;    org-drill-save-buffers-after-drill-sessions-p)
 
-  :config
-  (progn
-    (defconst rk-org-drill-file (f-join org-directory "drill" "drill.org"))
+;;   :config
+;;   (progn
+;;     (defconst rk-org-drill-file (f-join org-directory "drill" "drill.org"))
 
-    (setq org-drill-scope rk-org-drill-files)
+;;     (setq org-drill-scope rk-org-drill-files)
 
-    (add-to-list 'org-refile-targets '(rk-org-drill-files :maxlevel . 3))
+;;     (add-to-list 'org-refile-targets '(rk-org-drill-files :maxlevel . 3))
 
-    (setq org-drill-learn-fraction 0.25)
-    (setq org-drill-adjust-intervals-for-early-and-late-repetitions-p t)
-    (setq org-drill-add-random-noise-to-intervals-p t)
-    (setq org-drill-save-buffers-after-drill-sessions-p nil)))
+;;     (setq org-drill-learn-fraction 0.25)
+;;     (setq org-drill-adjust-intervals-for-early-and-late-repetitions-p t)
+;;     (setq org-drill-add-random-noise-to-intervals-p t)
+;;     (setq org-drill-save-buffers-after-drill-sessions-p nil)))
 
 (use-package org-capture
   :after org
