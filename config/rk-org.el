@@ -357,8 +357,16 @@ Do not scheduled items or repeating todos."
             ("p" "Personal actions"
              ((tags-todo "-someday-media-study-@consume/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
-              (tags-todo "+@consume/NEXT"
-                         ((org-agenda-overriding-header "Consume next")))
+              (tags-todo "+@consume+@read/NEXT"
+                         ((org-agenda-overriding-header "Read next")))
+              (tags-todo "+@consume+@watch/NEXT"
+                         ((org-agenda-overriding-header "Watch next")))
+              (tags-todo "+@consume+@eat/NEXT"
+                         ((org-agenda-overriding-header "Eat next")))
+              (tags-todo "+@consume+@listen/NEXT"
+                         ((org-agenda-overriding-header "Listen next")))
+              (tags-todo "+@consume+@experience/NEXT"
+                         ((org-agenda-overriding-header "Experience next")))
               (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
