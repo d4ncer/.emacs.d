@@ -84,6 +84,7 @@
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
       "c" #'haskell-compile)
 
+    (setq haskell-compile-command "stack exec -- ghc -Wall -ferror-spans -fforce-recomp -c %s")
     (setq haskell-compile-cabal-build-command "stack build --ghc-options -ferror-spans")))
 
 
