@@ -104,6 +104,7 @@ Do not scheduled items or repeating todos."
              org-ctrl-c-ctrl-c
              org-fill-paragraph
              org-insert-link
+             org-align-all-tags
              org-schedule)
 
   :init
@@ -128,6 +129,7 @@ Do not scheduled items or repeating todos."
 
     (spacemacs-keys-set-leader-keys-for-major-mode
       'org-mode
+      "A" #'org-align-all-tags
       "r" #'org-refile
       "d" #'org-deadline
       "C" #'org-ctrl-c-ctrl-c
