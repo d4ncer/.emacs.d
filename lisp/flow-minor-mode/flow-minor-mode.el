@@ -223,7 +223,7 @@ BODY progn"
 (add-hook 'kill-emacs-hook 'flow-minor-stop-flow-server t)
 
 (defun flow-minor-maybe-delete-process (name)
-  (when-let (process (get-process name))
+  (when (get-process name)
     (delete-process name)))
 
 (defun flow-minor-eldoc-sentinel (process _event)
@@ -234,8 +234,7 @@ BODY progn"
           (forward-line 1)
           (delete-region (point) (point-max))
           (flow-minor-colorize-buffer)
-          (eldoc-message (car (split-string (buffer-substring (point-min) (point-max)) "\n"))))
-      (switch-to-buffer-other-window (get-buffer "*Flow Eldoc Error*") t))))
+          (eldoc-message (car (split-string (buffer-substring (point-min) (point-max)) "\n")))))))
 
 (defun flow-minor-eldoc-documentation-function ()
   "Display type at point with eldoc."
