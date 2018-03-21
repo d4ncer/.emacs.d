@@ -6,7 +6,7 @@
 ;; Version: 0.3
 ;; URL: https://github.com/an-sh/flow-minor-mode
 
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "25.1") (s "1.10.0"))
 
 ;;; Commentary:
 
@@ -31,6 +31,7 @@
 (require 'xref)
 (require 'json)
 (require 'compile)
+(require 's)
 
 (defconst flow-minor-buffer "*Flow Output*")
 
