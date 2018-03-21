@@ -81,10 +81,12 @@
           (setq message-code-reason .descr
                 message-filename .loc.source
                 message-line .loc.start.line
+                message-descr .descr
                 message-column .loc.start.column))
 
         (let-alist (car (cdr .message))
-          (setq message-descr .descr)))
+          (when (string= .type "Comment")
+            (setq message-descr .descr))))
 
       (when (string= message-kind "parse")
         (setq message-descr message-kind))
@@ -124,7 +126,7 @@ See URL `http://flowtype.org/'."
     :predicate flycheck-flow--predicate
     :error-parser flycheck-flow--parse-json
     ;; js3-mode doesn't support jsx
-    :modes (js-mode js-jsx-mode js2-mode js2-jsx-mode js3-mode))
+    :modes (js-mode js-jsx-mode js2-mode js2-jsx-mode js3-mode web-mode rjsx-mode))
 
 (flycheck-define-checker javascript-flow-coverage
   "A coverage checker for Flow.
@@ -134,7 +136,6 @@ See URL `http://flowtype.org/'."
             "flow"
             "coverage"
             (eval flycheck-javascript-flow-args)
-            "--quiet"
             "--json"
             "--from" "emacs"
             "--path" source-original)
@@ -163,7 +164,7 @@ See URL `http://flowtype.org/'."
                    :level 'warning)))
               locs)))
   ;; js3-mode doesn't support jsx
-  :modes (js-mode js-jsx-mode js2-mode js2-jsx-mode js3-mode))
+  :modes (js-mode js-jsx-mode js2-mode js2-jsx-mode js3-mode rjsx-mode))
 
 (add-to-list 'flycheck-checkers 'javascript-flow)
 (add-to-list 'flycheck-checkers 'javascript-flow-coverage t)
