@@ -125,12 +125,21 @@
 
 (use-package sbt-mode
   :commands (sbt-start sbt-command)
+  :preface
+  (defun rk-set-sbt-root ()
+    "Sets sbt root for the given project."
+    (-when-let* ((root (locate-dominating-file (buffer-file-name) "build.sbt"))
+                 (sbt-root (and root
+                                (sbt:find-root-impl "build.sbt" root))))
+      (setq-local sbt:buffer-project-root sbt-root)))
   :config
   ;; WORKAROUND: https://github.com/ensime/emacs-sbt-mode/issues/31
   ;; allows using SPACE when in the minibuffer
-  (substitute-key-definition 'minibuffer-complete-word
-                             'self-insert-command
-                             minibuffer-local-completion-map))
+  (progn
+    (add-hook 'sbt-mode-hook #'rk-set-sbt-root)
+    (substitute-key-definition 'minibuffer-complete-word
+                               'self-insert-command
+                               minibuffer-local-completion-map)))
 
 (eval-when-compile
   (defconst rk-scala-ensime-load-path (concat rk-emacs-lisp-directory "/ensime-emacs")))
