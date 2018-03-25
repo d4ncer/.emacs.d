@@ -127,7 +127,13 @@
 (use-package intero
   :after haskell-mode
 
-  :commands (intero-mode intero-targets intero-goto-definition intero-type-at)
+  :commands (intero-mode
+             intero-targets
+             intero-goto-definition
+             intero-repl
+             intero-repl-load
+             intero-repl-switch-back
+             intero-type-at)
 
   :preface
   (progn
@@ -150,19 +156,31 @@
   (:map
    intero-mode-map
    ("M-." . intero-goto-definition)
-   ("M-," . pop-tag-mark))
+   ("M-," . pop-tag-mark)
+   :map
+   intero-repl-mode-map
+   ("C-." . intero-repl-switch-back)
+   ("C-d" . delete-window))
 
   :config
   (progn
+    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m r" "repl")
+    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m i" "intero")
+    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m g" "goto")
+
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "t" #'intero-targets
-      "g" #'intero-goto-definition
-      "i" #'rk-haskell--insert-intero-type)
+      "rr" #'intero-repl
+      "rl" #'intero-repl-load
+      "it" #'intero-targets
+      "gg" #'intero-goto-definition
+      "ii" #'rk-haskell--insert-intero-type)
 
     (with-eval-after-load 'flycheck
       (flycheck-add-next-checker 'intero 'haskell-hlint))
 
     (with-no-warnings
+      (evil-define-key 'normal intero-mode-map (kbd "C-.") #'intero-repl)
+      (evil-define-key 'insert intero-mode-map (kbd "C-.") #'intero-repl)
       (evil-define-key 'normal intero-mode-map (kbd "M-.") #'intero-goto-definition)
       (evil-define-key 'normal intero-mode-map (kbd "M-,") #'pop-tag-mark))))
 
@@ -171,9 +189,10 @@
   :commands (hindent-mode hindent-reformat-decl-or-fill hindent-reformat-buffer)
   :config
   (progn
+    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m f" "format")
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "." #'hindent-reformat-buffer
-      "f" #'hindent-reformat-decl-or-fill)
+      "f." #'hindent-reformat-buffer
+      "ff" #'hindent-reformat-decl-or-fill)
     (setq hindent-reformat-buffer-on-save t)
     (add-hook 'haskell-mode-hook #'hindent-mode)))
 
