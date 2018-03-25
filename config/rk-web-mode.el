@@ -66,16 +66,21 @@
          ("\\.html\\'" . rk-web-html-mode))
   :defines (flycheck-html-tidy-executable)
   :config
-  (with-eval-after-load 'flycheck
-    (let ((tidy-bin "/usr/local/bin/tidy"))
-      (when (file-exists-p tidy-bin)
-        (setq flycheck-html-tidy-executable tidy-bin)))
+  (progn
 
-    (flycheck-add-mode 'typescript-tslint 'rk-web-typescript-mode)
-    (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
-    (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
-    (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
-    (flycheck-add-mode 'html-tidy 'rk-web-html-mode)))
+    (dolist (name (list "node" "nodejs" "gjs" "rhino"))
+      (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
+
+    (with-eval-after-load 'flycheck
+      (let ((tidy-bin "/usr/local/bin/tidy"))
+        (when (file-exists-p tidy-bin)
+          (setq flycheck-html-tidy-executable tidy-bin)))
+
+      (flycheck-add-mode 'typescript-tslint 'rk-web-typescript-mode)
+      (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
+      (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
+      (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
+      (flycheck-add-mode 'html-tidy 'rk-web-html-mode))))
 
 (use-package flycheck
   :defer t
