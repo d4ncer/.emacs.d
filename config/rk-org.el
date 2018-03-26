@@ -756,6 +756,13 @@ table tr.tr-even td {
     (evil-define-key 'normal org-mode-map (kbd "C-c <return>") #'rk-org-ctrl-c-ret)
     (evil-define-key 'emacs org-mode-map (kbd "C-c <return>") #'rk-org-ctrl-c-ret)))
 
+(use-package rk-org-jira-url
+  :after org
+  :commands (rk-org--create-jira-url)
+  :config
+  (spacemacs-keys-set-leader-keys-for-major-mode 'org-mode
+    "j" #'rk-org--create-jira-url))
+
 (use-package rk-org-ctrl-c-ctrl-k
   :after org
   :config
