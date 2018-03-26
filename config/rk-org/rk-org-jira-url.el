@@ -9,7 +9,6 @@
 ;;; Code:
 
 (autoload 'org-insert-link "org")
-(autoload 'ivy-read "ivy")
 
 (defconst rk-org--jira-base-url-template
   "https://moviohq.atlassian.net/browse/%s"
@@ -26,9 +25,7 @@
 (defun rk-org--create-jira-url (ticket project)
   "Create a URL for TICKET, scoped to the Green project by default, unless PROJECT is specified."
   (interactive (let ((ticket (read-string "Ticket number: " nil))
-                     (project (ivy-read "Project: " '("Green" "Support" "Red" "Blue" "Yellow" "Cinema")
-                                        :predicate nil
-                                        :require-match t)))
+                     (project (completing-read "Project: " '("Green" "Support" "Red" "Blue" "Yellow" "Cinema") nil t)))
                  (list ticket project)))
   (let* ((project-tag (cdr (assoc project rk-org--jira-project-alist)))
          (ticket-and-project (format "%s-%s" project-tag ticket)))
