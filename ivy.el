@@ -821,12 +821,13 @@ contains a single candidate.")
         (setq dir (ivy-expand-file-if-directory (ivy-state-current ivy-last))))
        (ivy--cd dir)
        (ivy--exhibit))
-      ((and (not (string= ivy-text ""))
-            (ignore-errors (file-exists-p ivy-text)))
-       (if (file-directory-p ivy-text)
-           (ivy--cd (expand-file-name
-                     (file-name-as-directory ivy-text) ivy--directory))
-         (ivy-done)))
+      ((unless (string= ivy-text "")
+         (let ((file (expand-file-name ivy-text ivy--directory)))
+           (when (ignore-errors (file-exists-p file))
+             (if (file-directory-p file)
+                 (ivy--cd (file-name-as-directory file))
+               (ivy-done))
+             ivy-text))))
       ((or (and (equal ivy--directory "/")
                 (string-match "\\`[^/]+:.*:.*\\'" ivy-text))
            (string-match "\\`/[^/]+:.*:.*\\'" ivy-text))
@@ -969,9 +970,7 @@ If the text hasn't changed as a result, forward to `ivy-alt-done'."
          :require-match (ivy-state-require-match ivy-last)
          :initial-input ivy-text
          :history (ivy-state-history ivy-last)
-         :preselect (unless (eq (ivy-state-collection ivy-last)
-                                'read-file-name-internal)
-                      (ivy-state-current ivy-last))
+         :preselect (ivy-state-current ivy-last)
          :keymap (ivy-state-keymap ivy-last)
          :update-fn (ivy-state-update-fn ivy-last)
          :sort (ivy-state-sort ivy-last)
@@ -2244,8 +2243,8 @@ This allows to \"quote\" N spaces by inputting N+1 spaces."
                               (- (match-beginning 0) 2)
                               (match-beginning 0))))
           (progn
-            (setq start1 (match-end 0))
-            (setq start0 0))
+            (setq start0 start1)
+            (setq start1 (match-end 0)))
         (setq match-len (- (match-end 0) (match-beginning 0)))
         (if (= match-len 1)
             (progn
@@ -2598,7 +2597,7 @@ If nil, the text properties are applied to the whole match."
             (cl-sort (copy-sequence collection) sort-fn)
           collection)))))
 
-(defcustom ivy-magic-slash-non-match-action #'ivy-magic-slash-non-match-cd-selected
+(defcustom ivy-magic-slash-non-match-action 'ivy-magic-slash-non-match-cd-selected
   "Action to take when a slash is added to the end of a non existing directory.
 Possible choices are 'ivy-magic-slash-non-match-cd-selected,
 'ivy-magic-slash-non-match-create, or nil"
@@ -3661,6 +3660,24 @@ BUFFER may be a string or nil."
     (with-current-buffer buffer
       (rename-buffer new-name))))
 
+(defun ivy--find-file-action (buffer)
+  "Find file from BUFFER's directory."
+  (let* ((b (get-buffer buffer))
+         (default-directory
+           (or (and b (buffer-local-value 'default-directory b))
+               default-directory)))
+    (call-interactively (if (functionp 'counsel-find-file)
+                            #'counsel-find-file
+                          #'find-file))))
+
+(defun ivy--kill-buffer-action (buffer)
+  "Kill BUFFER."
+  (kill-buffer buffer)
+  (unless (buffer-live-p (ivy-state-buffer ivy-last))
+    (setf (ivy-state-buffer ivy-last) (current-buffer)))
+  (setq ivy--index 0)
+  (ivy--reset-state ivy-last))
+
 (defvar ivy-switch-buffer-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-k") 'ivy-switch-buffer-kill)
@@ -3682,26 +3699,14 @@ BUFFER may be a string or nil."
 
 (ivy-set-actions
  'ivy-switch-buffer
- `(("f"
-    ,(lambda (x)
-       (let* ((b (get-buffer x))
-              (default-directory
-               (or (and b (buffer-local-value 'default-directory b))
-                   default-directory)))
-         (call-interactively (if (functionp 'counsel-find-file)
-                                 #'counsel-find-file
-                               #'find-file))))
+ '(("f"
+    ivy--find-file-action
     "find file")
    ("j"
     ivy--switch-buffer-other-window-action
     "other window")
    ("k"
-    ,(lambda (x)
-       (kill-buffer x)
-       (unless (buffer-live-p (ivy-state-buffer ivy-last))
-         (setf (ivy-state-buffer ivy-last) (current-buffer)))
-       (setq ivy--index 0)
-       (ivy--reset-state ivy-last))
+    ivy--kill-buffer-action
     "kill")
    ("r"
     ivy--rename-buffer-action
