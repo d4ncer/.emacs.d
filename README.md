@@ -2,7 +2,7 @@
 
 ## What does it look like?
 
-![magit-with-leaderkeys](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/magit-with-leaderkeys.png "It's Magi{t,c}!")
+![web-mode-trifecta](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/web-mode-trifecta.png "JS + CSS + MD")
 
 See more [here](SCREENSHOTS.md)
 
