@@ -6,7 +6,15 @@ See more [here](SCREENSHOTS.md)
 
 ## Should I use it?
 
-I would highly recommend you do not use it as-is. If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it") 
+I would highly recommend you do not use it as-is. Here are a few reasons to hopefully discourage you:
+
+* I have **no** syntax highlighting
+* Not everyone likes solarized light as much as I do
+* My bindings are haphazard at best, and a chaotic mix between the Emacs & Vim philosophies
+* I don't support <SOME LANGUAGE> mode that you need so bad
+* I don't use yasnippet
+
+If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it") 
 
 ## No but look I'm super lazy
 
