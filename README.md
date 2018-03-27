@@ -1,30 +1,36 @@
-# Here be dragons
-
-## What does it look like?
+# My .emacs setup
 
 ![web-mode-trifecta](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/web-mode-trifecta.png "JS + CSS + MD")
 
 See more [here](SCREENSHOTS.md)
 
-## Things you need
+## Should you use it?
+
+I would highly recommend you do not use it as-is. If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it") 
+
+## No but look I'm super lazy
+
+Fine, but you were warned.
+
+### Things you need
 
 * Emacs 25+
 * [Fira Code](https://github.com/tonsky/FiraCode)
 
-## Quick install (recommended)
+### Quick install (recommended)
 
 ``` shell
 wget -O - https://raw.githubusercontent.com/d4ncer/.emacs.d/master/setup.sh | bash
 ```
 
-## Manual install
+### Manual install
 
 ``` shell
 mv ~/.emacs.d ~/.emacs.d.bak
 git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
 ```
 
-#### Go setup
+**Go setup**
 
 Packages to install for Go config:
 
@@ -37,7 +43,7 @@ go get -u -v golang.org/x/tools/cmd/gorename
 go get -u -v golang.org/x/tools/cmd/goimports
 ```
 
-#### JS setup
+**JS setup**
 
 Tern setup:
 
