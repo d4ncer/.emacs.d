@@ -28,6 +28,7 @@
 ;;; Code:
 
 (defun evilnc--check-fonts (fonts-under-cursor fonts-list)
+  "Check whether FONTS-UNDER-CURSOR among FONTS-LIST."
   (delq nil
         (mapcar #'(lambda (f)
                     ;; learn this trick from flyspell
@@ -61,6 +62,9 @@
   "Character at POS is line end."
   (member (evilnc-get-char pos) '(10 11)))
 
+(defun evilnc-get-comment-end (end)
+  (if (= end (point-max)) end (1- end)))
+
 (defun evilnc-is-comment (pos)
   "Check whether the code at POS is comment by comparing font face.
 Please note the white spaces out of comment is treated as comment,
@@ -79,11 +83,13 @@ or else we can't select multiple lines comment."
       (evilnc-is-pure-comment pos)))))
 
 (defun evilnc-get-char (pos)
+  "Get character at POS."
   (save-excursion
     (goto-char pos)
     (following-char)))
 
 (defun evilnc-is-comment-delimiter (pos)
+  "Is character at POS a comment delimiter?"
   (let* ((fontfaces (if (> pos 0) (get-text-property pos 'face))))
     (if (not (listp fontfaces))
         (setf fontfaces (list fontfaces)))

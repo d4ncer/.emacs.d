@@ -4,7 +4,7 @@
 
 ;; Author: Chen Bin <chenbin.sh@gmail.com>
 ;; URL: http://github.com/redguardtoo/evil-nerd-commenter
-;; Version: 3.1.1
+;; Version: 3.1.3
 ;; Keywords: commenter vim line evil
 ;;
 ;; This file is not part of GNU Emacs.
@@ -109,8 +109,8 @@
 (autoload 'count-lines "simple")
 
 (defvar evilnc-original-above-comment-when-copy-and-comment nil
-  "Original text is above commented out when using `evilnc-copy-and-comment-lines'
- and `evilnc-copy-and-comment-operator'.")
+  "Keep the original text above the commented copy, when using either:
+`evilnc-copy-and-comment-lines' or `evilnc-copy-and-comment-operator'.")
 
 (defvar evilnc-invert-comment-line-by-line nil
   "If t then invert region comment status line by line.
@@ -251,45 +251,6 @@ See http://lists.gnu.org/archive/html/bug-gnu-emacs/2013-03/msg00891.html."
         (setq e (point-max))))
     (list b e)))
 
-(defun evilnc--in-comment-p (pos)
-  "Check whether the code at POS is comment by comparing font face."
-  (interactive)
-  (let* ((fontfaces (get-text-property pos 'face)))
-    (if (not (listp fontfaces))
-        (setf fontfaces (list fontfaces)))
-    (delq nil
-          (mapcar #'(lambda (f)
-                      ;; learn this trick from flyspell
-                      (or (eq f 'font-lock-comment-face)
-                          (eq f 'font-lock-comment-delimiter-face)))
-                  fontfaces))))
-
-(defun evilnc--extend-to-whole-comment (beg end)
-  "Extend the comment region defined by BEG and END so ALL comment is included."
-  (interactive)
-  (if (evilnc--in-comment-p beg)
-      (save-excursion
-        (let* ((newbeg beg)
-               (newend end))
-
-          ;; extend the beginning
-          (goto-char newbeg)
-          (while (and (>= newbeg (line-beginning-position)) (evilnc--in-comment-p newbeg))
-            (setq newbeg (1- newbeg)))
-
-          ;; make sure newbeg is at the beginning of the comment
-          (if (< newbeg beg) (setq newbeg (1+ newbeg)))
-
-          ;; extend the end
-          (goto-char newend)
-          (while (and (<= newend (line-end-position)) (evilnc--in-comment-p newend))
-            (setq newend (1+ newend)))
-          ;; make sure newend is at the end of the comment
-          (if (> newend end) (setq newend (1- newend)))
-
-          (list newbeg newend)))
-    (list beg end)))
-
 (defun evilnc--invert-comment (beg end)
   "Scan the region from BEG to END line by line, invert its comment status."
   (let* (done b e)
@@ -356,6 +317,7 @@ Code snippets embedded in Org-mode is identified and right `major-mode' is used.
 (defvar web-mode-engine)
 
 (defun evilnc--warn-on-web-mode (is-comment)
+  "Check certain part of html code IS-COMMENT."
   (let* ((comment-operation (concat "web-mode-"
                                     (if is-comment "comment-" "uncomment-")
                                     web-mode-engine
@@ -366,6 +328,7 @@ Code snippets embedded in Org-mode is identified and right `major-mode' is used.
     is-comment))
 
 (defun evilnc--web-mode-is-region-comment (beg end)
+  "Is region between BEG and END is comment in web mode?"
   (let* ((rlt (and (save-excursion
                      (goto-char beg)
                      (goto-char (line-end-position))
@@ -605,23 +568,28 @@ Then we operate the expanded region.  NUM is ignored."
     (forward-line (1+ num))
     (setq num (- 0 num)))
 
-  (evilnc--operation-on-lines-or-region
-   '(lambda (beg end)
-      (evilnc--fix-buggy-major-modes)
-      (let* ((str (buffer-substring-no-properties beg end)))
-        (cond
-         (evilnc-original-above-comment-when-copy-and-comment
-          (let* ((p (point)))
-            (comment-region beg end)
-            (goto-char beg)
-            (insert-before-markers (concat str "\n"))
-            (goto-char p)))
-         (t
-          (goto-char end)
-          (newline 1)
-          (insert-before-markers str)
-          (comment-region beg end)))))
-   num))
+  (let* ((original-column (current-column)))
+    (evilnc--operation-on-lines-or-region
+     '(lambda (beg end)
+        (evilnc--fix-buggy-major-modes)
+        (let* ((str (buffer-substring-no-properties beg end)))
+          (cond
+           (evilnc-original-above-comment-when-copy-and-comment
+            (let* ((p (point)))
+              (comment-region beg end)
+              (goto-char beg)
+              (insert-before-markers (concat str "\n"))
+              (goto-char p)))
+           (t
+            (goto-char end)
+            (newline 1)
+            (insert-before-markers str)
+            (comment-region beg end)))))
+     num)
+    ;; Go to original column after evilnc-copy-and-comment-lines
+    ;; @see https://github.com/redguardtoo/evil-nerd-commenter/issues/79
+    ;; Thanks for Kevin Brubeck (AKA unhammer) for idea/implementation
+    (move-to-column original-column)))
 
 ;;;###autoload
 (defun evilnc-comment-and-kill-ring-save (&optional num)
@@ -649,7 +617,7 @@ Then we operate the expanded region.  NUM is ignored."
 ;; {{ for non-evil user only
 ;;;###autoload
 (defun evilnc-copy-to-line (&optional LINENUM)
-  "Copy from current line to LINENUM line. For non-evil user only."
+  "Copy from current line to LINENUM line.  For non-evil user only."
   (interactive "nCopy to line: ")
   (if (not (region-active-p))
       (let* ((b (line-beginning-position))
@@ -685,7 +653,7 @@ Then we operate the expanded region.  NUM is ignored."
 (defun evilnc-version ()
   "The version number."
   (interactive)
-  (message "3.1.1"))
+  (message "3.1.3"))
 
 (defvar evil-normal-state-map)
 (defvar evil-visual-state-map)
@@ -693,10 +661,9 @@ Then we operate the expanded region.  NUM is ignored."
 (defvar evil-outer-text-objects-map)
 ;;;###autoload
 (defun evilnc-default-hotkeys (&optional no-evil-keybindings)
-  "Set up the key bindings of evil-nerd-comment.
-If NO-EVIL-KEYBINDINGS is t, we don't define keybindings in evil-mode."
+  "Setup the key bindings of evil-nerd-comment.
+If NO-EVIL-KEYBINDINGS is t, we don't define keybindings in EVIL."
   (interactive)
-
   ;; Install hotkeys for Emacs mode
   (global-set-key (kbd "M-;") 'evilnc-comment-or-uncomment-lines)
   (global-set-key (kbd "C-c l") 'evilnc-quick-comment-or-uncomment-to-the-line)
