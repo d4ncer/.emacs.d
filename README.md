@@ -4,7 +4,7 @@
 
 See more [here](SCREENSHOTS.md)
 
-## Should you use it?
+## Should I use it?
 
 I would highly recommend you do not use it as-is. If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it") 
 
