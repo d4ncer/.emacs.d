@@ -1,20 +1,29 @@
-* evil-surround
+[[https://user-images.githubusercontent.com/8352747/33807810-91656488-ddc3-11e7-8029-985f28471a47.png][https://user-images.githubusercontent.com/8352747/33807810-91656488-ddc3-11e7-8029-985f28471a47.png]]
 
-[[https://travis-ci.org/emacs-evil/evil-surround][https://travis-ci.org/emacs-evil/evil-surround.png]]
+[[https://travis-ci.org/emacs-evil/evil-surround.svg?branch=master][https://travis-ci.org/emacs-evil/evil-surround.svg?branch=master]]
 [[https://melpa.org/#/evil-surround][https://melpa.org/packages/evil-surround-badge.svg]]
+[[https://stable.melpa.org/#/evil-surround][file:https://stable.melpa.org/packages/evil-surround-badge.svg]]
+[[https://www.gnu.org/licenses/gpl-3.0.en.html][https://img.shields.io/badge/license-GPLv3-blue.svg]]
+
 
 This package emulates [[https://github.com/tpope/vim-surround][surround.vim]] by [[https://github.com/tpope][Tim Pope]]. The functionality is wrapped into a minor mode.
-To enable it globally, add the following lines to ~/.emacs:
-
-#+BEGIN_SRC emacs-lisp
-(require 'evil-surround)
-(global-evil-surround-mode 1)
-#+END_SRC
-
-Alternatively, you can enable =surround-mode= along a major mode by adding
-=turn-on-surround-mode= to the mode hook.
 
 This package uses [[https://github.com/emacs-evil/evil][Evil]] as its vi layer.
+
+* Installation
+
+To enable it through [[https://github.com/jwiegley/use-package][use-package]], add the following lines to =~/.emacs= or =~/.emacs.d/init.el=:
+
+#+BEGIN_SRC emacs-lisp
+  (use-package evil-surround
+    :ensure t
+    :config
+    (global-evil-surround-mode 1))
+#+END_SRC
+
+Alternatively, can add the =evil-surround.el= file to your load-path and add =(require 'evil-surround)= to your init file.
+
+Also, Instead of enabling it globally, you can also enable =surround-mode= along a major mode by adding =turn-on-surround-mode= to the mode hook.
 
 * Usage
 ** Add surrounding
@@ -82,8 +91,8 @@ for example to remove all default pairs:
 or to add a pair that surrounds with two ` if you enter ~:
 
 #+BEGIN_SRC emacs-lisp
-  (setq-default evil-surround-pairs-alist (cons '(?~ . ("``" . "``"))
-                                           evil-surround-pairs-alist))
+  (setq-default evil-surround-pairs-alist
+                (push '(?~ . ("``" . "``")) evil-surround-pairs-alist))
 #+END_SRC
 
 ** Add new supported operators
@@ -199,7 +208,7 @@ pressing return you would get
 This is due to an upstream change in =vim-surround=. It happened in this [[https://github.com/tpope/vim-surround/commit/6f0984a][commit]]. See the
 discussion in [[https://github.com/timcharper/evil-surround/pull/48][this]] pull request for more details.
 * Credits
-credits and many [[https://github.com/emacs-evil/evil/issues/842][thanks]] go to [[http://github.com/timcharper][Tim Harper]], the original mantainer of the package.
+Credits and many [[https://github.com/emacs-evil/evil/issues/842][thanks]] go to [[http://github.com/timcharper][Tim Harper]], the original mantainer of the package.
 * LICENSE
 
 - [[https://www.gnu.org/licenses/gpl-3.0.en.html][GNU General Public License v3]]

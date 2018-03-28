@@ -39,10 +39,14 @@
 
 (require 'evil)
 
-(defgroup surround nil
+(defgroup evil-surround nil
   "surround.vim for Emacs"
-  :prefix "surround-"
+  :prefix "evil-surround-"
   :group 'evil)
+
+;; make surround's `ysw' work like `cw', not `ce'
+(when (boundp 'evil-change-commands)
+  (add-to-list 'evil-change-commands 'evil-surround-region))
 
 (defcustom evil-surround-pairs-alist
   '((?\( . ("( " . " )"))
@@ -64,7 +68,7 @@
 Each item is of the form (TRIGGER . (LEFT . RIGHT)), all strings.
 Alternatively, a function can be put in place of (LEFT . RIGHT).
 This only affects inserting pairs, not deleting or changing them."
-  :group 'surround
+  :group 'evil-surround
   :type '(alist
           :key-type (character :tag "Key")
           :value-type (choice
@@ -72,12 +76,40 @@ This only affects inserting pairs, not deleting or changing them."
                        (function :tag "Function"))))
 (make-variable-buffer-local 'evil-surround-pairs-alist)
 
+(defcustom evil-surround-lisp-modes '(
+				      cider-repl-mode
+				      clojure-mode
+				      clojurec-mode
+				      clojurescript-mode
+				      clojurex-mode
+				      common-lisp-mode
+				      emacs-lisp-mode
+				      eshell-mode
+				      geiser-repl-mode
+				      inf-clojure-mode
+				      inferior-emacs-lisp-mode
+				      inferior-lisp-mode
+				      inferior-scheme-mode
+				      lisp-interaction-mode
+				      lisp-mode
+				      monroe-mode
+				      racket-mode
+				      racket-repl-mode
+				      scheme-interaction-mode
+				      scheme-mode
+				      slime-repl-mode
+				      stumpwm-mode
+				      )
+  "List of Lisp-related modes."
+  :type '(repeat symbol)
+  :group 'evil-surround)
+
 (defcustom evil-surround-operator-alist
   '((evil-change . change)
     (evil-delete . delete))
   "Association list of operators to their fundamental operation.
 Each item is of the form (OPERATOR . OPERATION)."
-  :group 'surround
+  :group 'evil-surround
   :type '(repeat (cons (symbol :tag "Operator")
                        (symbol :tag "Operation"))))
 
@@ -87,15 +119,27 @@ Each item is of the form (OPERATOR . OPERATION)."
     map)
   "Keymap used by `evil-surround-read-tag'.")
 
+(defvar evil-surround-record-repeat nil
+  "Flag to indicate we're manually recording repeat info.")
+
+(defun evil-surround-read-from-minibuffer (&rest args)
+  (when evil-surround-record-repeat
+    (evil-repeat-keystrokes 'post))
+  (let ((res (apply #'read-from-minibuffer args)))
+    (when evil-surround-record-repeat
+      (evil-repeat-record res))
+    res))
+
 (defun evil-surround-function ()
   "Read a functionname from the minibuffer and wrap selection in function call"
-  (let ((fname (read-from-minibuffer "" "" )))
-    (cons (format "%s(" (or fname ""))
-          ")")))
+  (let ((fname (evil-surround-read-from-minibuffer "" "")))
+    (cons (format (if (member major-mode evil-surround-lisp-modes)
+		      "(%s " "%s(")
+		  (or fname "")) ")")))
 
 (defun evil-surround-read-tag ()
   "Read a XML tag from the minibuffer."
-  (let* ((input (read-from-minibuffer "<" "" evil-surround-read-tag-map))
+  (let* ((input (evil-surround-read-from-minibuffer "<" "" evil-surround-read-tag-map))
          (match (string-match "\\([0-9a-z-]+\\)\\(.*?\\)[>]*$" input))
          (tag  (match-string 1 input))
          (rest (match-string 2 input)))
@@ -142,7 +186,7 @@ See also `evil-surround-inner-overlay'."
         (while (looking-at regexp) (forward-char))
         (evil-set-range-beginning range (point))
         (goto-char (evil-range-end range))
-        (while (looking-back regexp) (backward-char))
+        (while (looking-back regexp nil) (backward-char))
         (evil-set-range-end range (point))))))
 
 (defun evil-surround-inner-overlay (char)
@@ -245,7 +289,14 @@ This is necessary because `evil-yank' operator is not repeatable (:repeat nil)"
   (evil-repeat-start)
   (evil-repeat-record "y")
   (evil-repeat-record (this-command-keys))
-  (call-interactively callback)
+
+  ;; set `this-command-keys' to the command that will be executed
+  ;; interactively; as a result, `evil-this-operator' will be
+  ;; correctly set to, for example, `evil-surround-region' instead of
+  ;; `evil-yank' when surround has been invoked by `ys'
+  (setq this-command callback)
+  (let ((evil-surround-record-repeat t))
+    (call-interactively callback))
   (evil-repeat-keystrokes 'post)
   (evil-repeat-stop))
 
@@ -309,8 +360,8 @@ Becomes this:
                   ((eq type 'line)
                    (setq force-new-line
                          (or force-new-line
-                             ;; Force newline if not invoked from an operator, e.g. VS)
-                             (eq evil-this-operator 'evil-surround-region)
+                             ;; Force newline if not invoked from an operator, e.g. visual line mode with VS)
+                             (evil-visual-state-p)
                              ;; Or on multi-line operator surrounds (like 'ysj]')
                              (/= (line-number-at-pos) (line-number-at-pos (1- end)))))
 
