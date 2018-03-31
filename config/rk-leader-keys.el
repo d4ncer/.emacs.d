@@ -185,6 +185,7 @@
       "SPC ,"   "smartparens"
       "SPC a"   "applications"
       "SPC a e" "emacs"
+      "SPC a m" "misc"
       "SPC b"   "buffers"
       "SPC c"   "comments"
       "SPC f"   "files"
@@ -263,7 +264,7 @@
 
       "!"   #'shell-command
 
-      "a t" #'rk-insert-iso-timestamp
+      "a m t" #'rk-insert-iso-timestamp
       "a e a" #'rk-emacs-add-subtree
       "a e u" #'rk-emacs-update-subtree
       "a e c" #'rk-emacs-compile-subtree

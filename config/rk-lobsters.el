@@ -19,7 +19,7 @@
 
   :init
   (spacemacs-keys-set-leader-keys
-    "al" #'ivy-lobsters))
+    "a m l" #'ivy-lobsters))
 
 (provide 'rk-lobsters)
 

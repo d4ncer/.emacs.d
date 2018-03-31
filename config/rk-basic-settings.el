@@ -568,7 +568,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package world-time-mode
   :commands (world-time-list)
   :init
-  (spacemacs-keys-set-leader-keys "aw" 'world-time-list)
+  (spacemacs-keys-set-leader-keys "a m w" 'world-time-list)
   :config
   (progn
     (setq display-time-world-list '(("Pacific/Auckland" "NZT")
