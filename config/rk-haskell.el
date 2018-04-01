@@ -123,7 +123,6 @@
   :config
   (evil-define-key 'normal haskell-presentation-mode-map (kbd "q") #'quit-window))
 
-
 (use-package intero
   :after haskell-mode
 
@@ -138,11 +137,25 @@
   :preface
   (progn
     (autoload 'intero-mode-map "intero")
+    (autoload 'f-filename "f")
+    (autoload 'f-base "f")
+    (autoload 's-lex-format "s")
+    (autoload 's-titleize "s")
 
     (defun rk-haskell--maybe-intero-mode ()
       (unless (or (derived-mode-p 'ghc-core-mode)
                   (equal (get major-mode 'mode-class) 'special))
         (intero-mode +1)))
+
+    (defun rk-haskell--insert-module-annotation ()
+      "Insert the module annotation for the current module."
+      (interactive)
+      (let ((file-name (f-filename (buffer-file-name)))
+            (module-name (s-titleize (f-base (buffer-file-name)))))
+        (save-excursion
+          (goto-char (point-min))
+          (insert (s-lex-format "-- ${file-name}\nmodule ${module-name} where\n\n"))
+          (message "Inserted module annotation."))))
 
     (defun rk-haskell--insert-intero-type ()
       "Insert Intero type above decl."
@@ -169,6 +182,7 @@
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m g" "goto")
 
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
+      "a" #'rk-haskell--insert-module-annotation
       "rr" #'intero-repl
       "rl" #'intero-repl-load
       "it" #'intero-targets
