@@ -885,6 +885,22 @@ The libraries are offered from `load-path'."
  '(("d" counsel--find-symbol "definition")))
 
 ;;** `counsel-find-library'
+(declare-function find-library-name "find-func")
+(defun counsel-find-library-other-window (library)
+  (let ((buf (find-file-noselect (find-library-name library))))
+    (pop-to-buffer buf 'other-window)))
+
+(defun counsel-find-library-other-frame (library)
+  (let ((buf (find-file-noselect (find-library-name library))))
+    (condition-case nil
+        (switch-to-buffer-other-frame buf)
+      (error (pop-to-buffer buf)))))
+
+(ivy-set-actions
+ 'counsel-find-library
+ '(("j" counsel-find-library-other-window "other window")
+   ("f" counsel-find-library-other-frame "other frame")))
+
 ;;;###autoload
 (defun counsel-find-library ()
   "Visit a selected the Emacs Lisp library.
@@ -1095,7 +1111,7 @@ INITIAL-INPUT can be given as the initial minibuffer input."
 (ivy-set-occur 'counsel-git-grep 'counsel-git-grep-occur)
 (ivy-set-display-transformer 'counsel-git-grep 'counsel-git-grep-transformer)
 
-(defvar counsel-git-grep-cmd-default "git --no-pager grep --full-name -n --no-color -i -e \"%s\""
+(defvar counsel-git-grep-cmd-default "git --no-pager grep --full-name -n --no-color -i -I -e \"%s\""
   "Initial command for `counsel-git-grep'.")
 
 (defvar counsel-git-grep-cmd nil
@@ -1232,7 +1248,7 @@ files in a project.")
   "Default defun to calculate `counsel--git-grep-count'."
   (if (eq system-type 'windows-nt)
       0
-    (read (shell-command-to-string "du -s 2>/dev/null"))))
+    (read (shell-command-to-string "du -s .git 2>/dev/null"))))
 
 (defvar counsel--git-grep-count-func #'counsel--git-grep-count-func-default
   "Defun to calculate `counsel--git-grep-count' for `counsel-git-grep'.")
@@ -1617,12 +1633,13 @@ Does not list the currently checked out one."
         (find-alternate-file file-name)
       (find-file file-name))))
 
-(defun counsel-find-file-mkdir-action (x)
-  (make-directory x))
+(defun counsel-find-file-mkdir-action (_x)
+  (make-directory (expand-file-name ivy-text ivy--directory)))
 
 (ivy-set-actions
  'counsel-find-file
  '(("j" find-file-other-window "other window")
+   ("f" find-file-other-frame "other frame")
    ("b" counsel-find-file-cd-bookmark-action "cd bookmark")
    ("x" counsel-find-file-extern "open externally")
    ("r" counsel-find-file-as-root "open as root")
@@ -1888,6 +1905,7 @@ result as a URL."
 (ivy-set-actions
  'counsel-recentf
  '(("j" find-file-other-window "other window")
+   ("f" find-file-other-frame "other frame")
    ("x" counsel-find-file-extern "open externally")))
 
 ;;** `counsel-locate'

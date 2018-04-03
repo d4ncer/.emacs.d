@@ -565,13 +565,15 @@ functionality, e.g. as seen in `isearch'."
 
 (defmacro ivy-quit-and-run (&rest body)
   "Quit the minibuffer and run BODY afterwards."
+  (declare (indent 0))
   `(progn
      (put 'quit 'error-message "")
      (run-at-time nil nil
                   (lambda ()
                     (put 'quit 'error-message "Quit")
-                    ,@body))
-     (minibuffer-keyboard-quit)))
+                    (with-demoted-errors "Error: %S"
+                      ,@body)))
+     (abort-recursive-edit)))
 
 (defun ivy-exit-with-action (action)
   "Quit the minibuffer and call ACTION afterwards."
@@ -792,11 +794,11 @@ When ARG is t, exit with current text, ignoring the candidates."
         ((eq (ivy-state-collection ivy-last) 'Info-read-node-name-1)
          (if (member (ivy-state-current ivy-last) '("(./)" "(../)"))
              (ivy-quit-and-run
-              (ivy-read "Go to file: " 'read-file-name-internal
-                        :action (lambda (x)
-                                  (Info-find-node
-                                   (expand-file-name x ivy--directory)
-                                   "Top"))))
+               (ivy-read "Go to file: " 'read-file-name-internal
+                         :action (lambda (x)
+                                   (Info-find-node
+                                    (expand-file-name x ivy--directory)
+                                    "Top"))))
            (ivy-done)))
         (t
          (ivy-done))))
@@ -1312,6 +1314,7 @@ If so, move to that directory, while keeping only the file name."
     (setq ivy--all-candidates
           (ivy--sorted-files (setq ivy--directory dir)))
     (setq ivy-text "")
+    (setf (ivy-state-directory ivy-last) dir)
     (delete-minibuffer-contents)))
 
 (defun ivy-backward-delete-char ()
@@ -1853,14 +1856,16 @@ This is useful for recursive `ivy-read'."
                             (file-name-nondirectory initial-input)))))
              (require 'dired)
              (when preselect
-               (let ((preselect-directory (file-name-directory preselect)))
+               (let ((preselect-directory (file-name-directory
+                                           (directory-file-name preselect))))
                  (unless (or (null preselect-directory)
                              (string= preselect-directory
                                       default-directory))
                    (setq ivy--directory preselect-directory))
                  (setf
                   (ivy-state-preselect state)
-                  (setq preselect (file-name-nondirectory preselect)))))
+                  (setq preselect (file-relative-name preselect
+                                                      preselect-directory)))))
              (setq coll (ivy--sorted-files ivy--directory))
              (when initial-input
                (unless (or require-match
