@@ -488,13 +488,13 @@ If any character set is complemented, the result is also complemented."
   (let ((bracket "") (complement "") (hyphen "") result)
     (save-match-data
       (dolist (set sets)
-        (when (string-match "^\\^" set)
+        (when (string-match-p "^\\^" set)
           (setq set (substring set 1)
                 complement "^"))
-        (when (string-match "^]" set)
+        (when (string-match-p "^]" set)
           (setq set (substring set 1)
                 bracket "]"))
-        (when (string-match "^-" set)
+        (when (string-match-p "^-" set)
           (setq set (substring set 1)
                 hyphen "-"))
         (setq result (concat result set)))
@@ -1886,7 +1886,7 @@ closer if MOVE is non-nil."
 with regard to indentation."
   (evil-narrow-to-field
     (evil-move-beginning-of-line)
-    (insert "\n")
+    (insert (if use-hard-newlines hard-newline "\n"))
     (forward-line -1)
     (back-to-indentation)))
 
@@ -1895,7 +1895,7 @@ with regard to indentation."
 with regard to indentation."
   (evil-narrow-to-field
     (evil-move-end-of-line)
-    (insert "\n")
+    (insert (if use-hard-newlines hard-newline "\n"))
     (back-to-indentation)))
 
 ;;; Markers
