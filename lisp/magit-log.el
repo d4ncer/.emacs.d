@@ -131,6 +131,14 @@ This is useful if you use really long branch names."
   :group 'magit-log
   :type 'boolean)
 
+(defcustom magit-log-header-line-function 'magit-log-header-line-sentence
+  "Function used to generate text shown in header line of log buffers."
+  :package-version '(magit . "2.12.0")
+  :group 'magit-log
+  :type '(choice (function-item magit-log-header-line-arguments)
+                 (function-item magit-log-header-line-sentence)
+                 function))
+
 (defface magit-log-graph
   '((((class color) (background light)) :foreground "grey30")
     (((class color) (background  dark)) :foreground "grey80"))
@@ -353,6 +361,7 @@ the upstream isn't ahead of the current branch) show."
                (?u "Show diffs"              "--patch")
                (?s "Show diffstats"          "--stat")
                (?h "Show header"             "++header" magit-log++header)
+               (?r "Show in reverse order"   "--reverse")
                (?D "Simplify by decoration"  "--simplify-by-decoration")
                (?f "Follow renames when showing single-file log" "--follow"))
     :options  ((?n "Limit number of commits" "-n")
@@ -384,6 +393,7 @@ the upstream isn't ahead of the current branch) show."
                (?S "Show signatures"         "--show-signature")
                (?u "Show diffs"              "--patch")
                (?s "Show diffstats"          "--stat")
+               (?r "Show in reverse order"   "--reverse")
                (?D "Simplify by decoration"  "--simplify-by-decoration")
                (?f "Follow renames when showing single-file log" "--follow"))
     :options  ((?n "Limit number of commits" "-n")
@@ -676,9 +686,7 @@ active, restrict the log to the lines that the region touches."
                            ;; of a trailing newline.
                            (1- end)))))))))
   (require 'magit)
-  (-if-let (file (or (magit-file-relative-name)
-                     (and (derived-mode-p 'dired-mode)
-                          default-directory)))
+  (-if-let (file (magit-file-relative-name))
       (magit-mode-setup-internal
        #'magit-log-mode
        (list (list (or magit-buffer-refname
@@ -687,7 +695,7 @@ active, restrict the log to the lines that the region touches."
              (let ((args (car (magit-log-arguments))))
                (when (and follow (not (member "--follow" args)))
                  (push "--follow" args))
-               (when (and beg end)
+               (when (and (file-regular-p file) beg end)
                  (setq args (cons (format "-L%s,%s:%s" beg end file)
                                   (cl-delete "-L" args :test
                                              'string-prefix-p)))
@@ -835,13 +843,7 @@ Type \\[magit-reset] to reset `HEAD' to the commit at point.
 
 (defun magit-log-refresh-buffer (revs args files)
   (magit-set-header-line-format
-   (concat "Commits in "
-           (mapconcat #'identity revs " ")
-           (and files (concat " touching "
-                              (mapconcat 'identity files " ")))
-           (--some (and (string-prefix-p "-L" it)
-                        (concat " " it))
-                   args)))
+   (funcall magit-log-header-line-function revs args files))
   (if (= (length files) 1)
       (unless (magit-file-tracked-p (car files))
         (setq args (cons "--full-history" args)))
@@ -871,6 +873,27 @@ Type \\[magit-reset] to reset `HEAD' to the commit at point.
   (magit-insert-section (logbuf)
     (magit-insert-log revs args files)))
 
+(defun magit-log-header-line-arguments (revs args files)
+  "Return string describing some of the used arguments."
+  (mapconcat (lambda (arg)
+               (if (string-match-p " " arg)
+                   (prin1 arg)
+                 arg))
+             `("git" "log" ,@args ,@revs "--" ,@files)
+             " "))
+
+(defun magit-log-header-line-sentence (revs args files)
+  "Return string containing all arguments."
+  (concat "Commits in "
+          (mapconcat #'identity revs " ")
+          (and (member "--reverse" args)
+               " in reverse")
+          (and files (concat " touching "
+                             (mapconcat 'identity files " ")))
+          (--some (and (string-prefix-p "-L" it)
+                       (concat " " it))
+                  args)))
+
 (defun magit-insert-log (revs &optional args files)
   "Insert a log section.
 Do not add this to a hook variable."
@@ -892,9 +915,11 @@ Do not add this to a hook variable."
         (--when-let (--first (string-match "^\\+\\+order=\\(.+\\)$" it) args)
           (setq args (cons (format "--%s-order" (match-string 1 it))
                            (remove it args))))
-        (if (member "--decorate" args)
-            (cons "--decorate=full" (remove "--decorate" args))
-          args))
+        (when (member "--decorate" args)
+          (setq args (cons "--decorate=full" (remove "--decorate" args))))
+        (when (member "--reverse" args)
+          (setq args (remove "--graph" args)))
+        args)
       "--use-mailmap" "--no-prefix" revs "--" files)))
 
 (defvar magit-commit-section-map
