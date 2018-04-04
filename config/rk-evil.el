@@ -104,17 +104,17 @@
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
 
-(use-package evil-iedit-state
-  :commands (evil-iedit-state evil-iedit-state/iedit-mode)
-  :init
-  (spacemacs-keys-set-leader-keys "se" #'evil-iedit-state/iedit-mode)
+;; (use-package evil-iedit-state
+;;   :commands (evil-iedit-state evil-iedit-state/iedit-mode)
+;;   :init
+;;   (spacemacs-keys-set-leader-keys "se" #'evil-iedit-state/iedit-mode)
 
-  :config
-  (progn
-    (setq iedit-toggle-key-default nil)
+;;   :config
+;;   (progn
+;;     (setq iedit-toggle-key-default nil)
 
-    ;; Enable leader key in iedit and iedit-insert states
-    (define-key evil-iedit-state-map (kbd "SPC") spacemacs-keys-default-map)))
+;;     ;; Enable leader key in iedit and iedit-insert states
+;;     (define-key evil-iedit-state-map (kbd "SPC") spacemacs-keys-default-map)))
 
 (use-package evil-ex
   :defer t
