@@ -404,9 +404,18 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq bookmark-default-file (concat rk-emacs-cache-directory "/bookmarks"))))
 
 (use-package iedit
+  :preface
+  (progn
+    (autoload 'diff-hl-mode "diff-hl")
+    (defun rk-iedit--disable-diff-hl ()
+      (diff-hl-mode -1))
+    (defun rk-iedit--enable-diff-hl ()
+      (diff-hl-mode +1)))
   :config
   (progn
     (setq iedit-toggle-key-default nil)
+    (add-hook 'iedit-mode-hook #'rk-iedit--disable-diff-hl)
+    (add-hook 'iedit-mode-end-hook #'rk-iedit--enable-diff-hl)
     (define-key iedit-occurrence-keymap-default (kbd "<tab>") #'iedit-toggle-selection)
     (define-key iedit-mode-keymap (kbd "<tab>") #'iedit-toggle-selection)))
 
