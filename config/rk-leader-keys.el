@@ -141,8 +141,8 @@
 
     ;; Clean up symbols
 
-    ;; (push `(("SPC s" . "evil-iedit-state/iedit-mode") . (nil . "iedit"))
-    ;;       which-key-replacement-alist)
+    (push `(("SPC s" . "evil-multiedit-match-all") . (nil . "mult-iedit"))
+          which-key-replacement-alist)
 
     ;; Clean up toggles
 
