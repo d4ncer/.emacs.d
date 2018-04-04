@@ -9,9 +9,9 @@ See more [here](SCREENSHOTS.md)
 I would highly recommend you do not use it as-is. Here are a few reasons to hopefully discourage you:
 
 * I have **no** syntax highlighting
-* Not everyone likes solarized light as much as I do
+* Not everyone likes Solarized Light as much as I do
 * My bindings are haphazard at best, and a chaotic mix between the Emacs & Vim philosophies
-* I don't support <SOME LANGUAGE> mode that you need so bad
+* I don't support that one language mode that you can't live without
 * I don't use yasnippet
 
 If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it")
@@ -120,34 +120,38 @@ packages of note:
 * Web
   * JS/JSX/HTML/CSS
   * Flow
+  * Tern
   * Stylelint
   * Prettier
 * Elisp
 * Go
+* Scala
+* Haskell
 * YAML
 * Markdown
 * CoffeeScript
 * Dockerfile
 * Groovy
 * RNC
-* Scala
-* Haskell
 
 ## Planned Modes
 
 **NB** In order of importance to me. If you're using my setup and want something
 supported not on this list, feel free to issue a PR.
 
+* Python
+* Java
 * OCaml
 * TypeScript
-* Java
 * Racket
 
 ## Misc notes
 
-* I use [Marked 2](http://marked2app.com/) to preview markdown files. If you don't have
-  it, or you want to use something, set `markdown-open-command` to point to
-  something else.
+* I use [Marked 2](http://marked2app.com/) to preview markdown files. If you
+  don't have it, or you want to use something, set `markdown-open-command` to
+  point to something else. If you are using Marked 2,
+  [here](https://jblevins.org/log/marked-2-command "Running Marked 2 from the
+  Command Line") is how you set it up
 * If you want to tweak the font settings look in `config/rk-faces/rk-theme-base.el`.
 * I put more effort into some modes than others, hence there are some modes
   with considered chordal bindings, and some with none. If you notice this,
