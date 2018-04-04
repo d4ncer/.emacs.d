@@ -104,6 +104,10 @@
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
 
+(use-package evil-multiedit
+  :commands (evil-multiedit-match-all)
+  :init
+  (spacemacs-keys-set-leader-keys "s e" #'evil-multiedit-match-all))
 ;; (use-package evil-iedit-state
 ;;   :commands (evil-iedit-state evil-iedit-state/iedit-mode)
 ;;   :init
