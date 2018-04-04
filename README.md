@@ -14,7 +14,7 @@ I would highly recommend you do not use it as-is. Here are a few reasons to hope
 * I don't support <SOME LANGUAGE> mode that you need so bad
 * I don't use yasnippet
 
-If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it") 
+If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it")
 
 ## No but look I'm super lazy
 
@@ -24,6 +24,7 @@ Fine, but you were warned.
 
 * Emacs 25+
 * [Fira Code](https://github.com/tonsky/FiraCode)
+* [Fira Code Symbol](https://github.com/tonsky/FiraCode/files/412440/FiraCode-Regular-Symbol.zip) (this is for ligatures in all `prog-mode` buffers)
 
 ### Quick install (recommended)
 
