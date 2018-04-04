@@ -585,6 +585,11 @@ Optional arg JUSTIFY will justify comments and strings."
 
   :defines (display-time-world-list world-time-table-mode-map))
 
+(use-package smex
+  :commands (smex-initialize)
+  :config
+  (smex-initialize))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
