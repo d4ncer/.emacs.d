@@ -20,5 +20,7 @@ go get -u -v golang.org/x/tools/cmd/goimports
 # JS setup
 cd ~/.emacs.d/lisp/tern
 npm install
-npm install -g stylefmt eslint flow prettier eslint-config-airbnb eslint-config-prettier
+npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier \
+    eslint-plugin-flowtype eslint-plugin-import eslint-plugin-jsx-a11y \
+    eslint-plugin-prettier  eslint-plugin-react
 cp ~/.emacs.d/.eslintrc.json.sample ~/.eslintrc.json

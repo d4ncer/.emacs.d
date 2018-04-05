@@ -70,7 +70,9 @@ npm install -g stylefmt
 Binaries for global fallback (this is optional, but highly recommended):
 
 ```bash
-npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier
+npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier \
+    eslint-plugin-flowtype eslint-plugin-import eslint-plugin-jsx-a11y \
+    eslint-plugin-prettier  eslint-plugin-react
 ```
 
 If you do use a global `eslint`, you should add a fallback `.eslintrc.json` in
