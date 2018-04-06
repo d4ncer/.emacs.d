@@ -103,25 +103,17 @@
     (evil-define-key 'visual evil-surround-mode-map "s" #'evil-surround-region)
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
-
-(use-package evil-multiedit
-  :after iedit
-  :commands (evil-multiedit-match-all
-             evil-multiedit-next
-             evil-multiedit-prev
-             evil-multiedit--substitute)
+(use-package evil-iedit-state
+  :commands (evil-iedit-state evil-iedit-state/iedit-mode)
   :init
-  (spacemacs-keys-set-leader-keys "s e" #'evil-multiedit-match-all)
+  (spacemacs-keys-set-leader-keys "se" #'evil-iedit-state/iedit-mode)
+
   :config
   (progn
-    (define-key evil-multiedit-state-map (kbd "J") 'iedit-expand-down-a-line)
-    (define-key evil-multiedit-state-map (kbd "K") 'iedit-expand-up-a-line)
-    (define-key evil-multiedit-state-map (kbd "L") 'iedit-restrict-current-line)
-    (define-key evil-multiedit-state-map (kbd "S") 'evil-multiedit--substitute)
-    (define-key evil-multiedit-state-map (kbd "n") 'evil-multiedit-next)
-    (define-key evil-multiedit-state-map (kbd "p") 'evil-multiedit-prev)
-    (define-key evil-multiedit-insert-state-map (kbd "C-n") 'evil-multiedit-next)
-    (define-key evil-multiedit-insert-state-map (kbd "C-p") 'evil-multiedit-prev)))
+    (setq iedit-toggle-key-default nil)
+
+    ;; Enable leader key in iedit and iedit-insert states
+    (define-key evil-iedit-state-map (kbd "SPC") spacemacs-keys-default-map)))
 
 (use-package evil-ex
   :defer t
