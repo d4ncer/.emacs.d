@@ -57,6 +57,7 @@
                                 js-jsx-mode
                                 js2-mode
                                 js2-jsx-mode
+                                rjsx-mode
                                 web-mode
                                 )
   "List of major modes where company-flow will be providing completions."
@@ -120,6 +121,7 @@ PROCESS, and terminates standard input with EOF."
          (col (+ 1 (current-column)))
          (command (list (executable-find company-flow-executable)
                         "autocomplete"
+                        "--quiet"
                         buffer-file-name
                         (number-to-string line)
                         (number-to-string col)))
