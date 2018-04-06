@@ -95,11 +95,12 @@
              counsel-describe-face
              counsel-describe-function
              counsel-describe-variable
-             counsel-expression-history
+             counsel-minibuffer-history
              counsel-find-file
              counsel-imenu
              counsel-faces
              counsel-colors-emacs
+             counsel-list-processes
              counsel-colors-web
              counsel-command-history
              counsel-file-jump
@@ -129,6 +130,8 @@
       "i e" #'counsel-colors-emacs
       "i w" #'counsel-colors-web
       "i c" #'counsel-command-history
+      "i m" #'counsel-minibuffer-history
+      "i p" #'counsel-list-processes
       "i t" #'counsel-load-theme
       "h d f" #'counsel-describe-function
       "h d v" #'counsel-describe-variable
