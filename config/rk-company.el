@@ -49,6 +49,17 @@
     (setq company-dabbrev-ignore-case nil)
     (setq company-dabbrev-downcase nil)))
 
+(use-package company-lsp
+  :after company
+  :defines company-lsp
+  :preface
+  (defun rk-company--lsp-mode-p ()
+    (and (bound-and-true-p lsp-mode)
+         (bound-and-true-p company-mode)))
+  :config
+  (if (rk-company--lsp-mode-p)
+      (set (make-local-variable 'company-backends) '(company-lsp))))
+
 (provide 'rk-company)
 
 ;;; rk-company.el ends here
