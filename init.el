@@ -120,6 +120,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-embrace)
+(use-package rk-python)
 
 ;;; Print overall startup time.
 
