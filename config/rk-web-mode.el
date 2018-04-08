@@ -362,6 +362,16 @@
   (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-css-mode
     "." #'stylefmt-format-buffer))
 
+(use-package nvm
+  :after rk-web-modes
+  :functions (nvm-use-for-buffer)
+  :preface
+  (defun rk-web--maybe-use-nvm ()
+    (when (locate-dominating-file default-directory ".nvmrc")
+      (nvm-use-for-buffer)))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-nvm))
+
 (provide 'rk-web-mode)
 
 ;;; rk-web-mode.el ends here
