@@ -94,6 +94,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-hl-todo)
 (use-package rk-magit)
 (use-package rk-smartparens)
+(use-package rk-lsp)
 (use-package rk-company)
 (use-package rk-undo-tree)
 (use-package rk-ws-butler)
