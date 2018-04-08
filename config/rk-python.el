@@ -13,44 +13,18 @@
 
 (require 'dash)
 
-(use-package lsp-mode
-  :commands (lsp-define-stdio-client)
-  :preface
+(use-package python)
+
+(use-package rk-lsp-python
+  :after python
+  :commands (rk-lsp-python--setup)
+  :config
   (progn
-    (autoload 'projectile-project-root "projectile")
-
-    (defun rk-python--find-python-root ()
-      "Return the current Python project root, if any.
-This is marked with setup.py or setup.cfg."
-      (or (locate-dominating-file default-directory "setup.py")
-          (locate-dominating-file default-directory "setup.cfg")))
-
-    (defun rk-python--find-git-root ()
-      "Return the current git repository root, if any."
-      (locate-dominating-file default-directory ".git"))
-
-    (defun rk-python--find-projectile-root ()
-      "Return the current project root according to projectile."
-      ;; `ignore-errors' both to avoid an unbound function error as well
-      ;; as ignore projectile saying there is no project root here.
-      (ignore-errors
-        (projectile-project-root)))
-
-    (defun rk-python--find-root ()
-      (cond ((rk-python--find-git-root)
-             (rk-python--find-git-root)
-             (rk-python--find-projectile-root))))
-
-    (defun rk-python--get-lsp-root ()
-      (if (rk-python--find-root) (rk-python--find-root) default-directory)))
-
-  :config
-  (lsp-define-stdio-client lsp-python-major-mode "python" #'rk-python--get-lsp-root '("pyls")))
-
-(use-package python
-  :commands (python-mode-hook)
-  :config
-  (add-hook 'python-mode-hook #'lsp-python-major-mode-enable))
+    (autoload 'flycheck-mode "flycheck")
+    (autoload 'python-mode-hook "python")
+    (rk-lsp-python--setup)
+    (add-hook 'python-mode-hook #'lsp-python-enable)
+    (add-hook 'lsp-python-mode-hook 'flycheck-mode)))
 
 (provide 'rk-python)
 
