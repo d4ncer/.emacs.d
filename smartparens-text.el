@@ -1,4 +1,4 @@
-;;; smartparens-latex.el --- Additional configuration for text-mode.
+;;; smartparens-latex.el --- Additional configuration for text-mode.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Matus Goljer
 
@@ -51,7 +51,7 @@
   (when (memq action '(insert navigate))
     (sp--looking-back-p ":-?[()]" 3)))
 
-(defun sp-text-mode-skip-emoticon (ms mb me)
+(defun sp-text-mode-skip-emoticon (ms mb _me)
   (when (member ms '("(" ")"))
     (save-excursion
       (goto-char mb)

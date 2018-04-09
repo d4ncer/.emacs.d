@@ -1,16 +1,17 @@
-(require 'smartparens-ruby)
+(require 'crystal-mode)
+(require 'smartparens-crystal)
 
-(defun sp-ruby-eq-ignore-indent (a b)
+(defun sp-crystal-eq-ignore-indent (a b)
   (equal (replace-regexp-in-string "^ *" "" a)
          (replace-regexp-in-string "^ *" "" b)))
 
 
-(ert-deftest sp-test-ruby-delete-pair ()
+(ert-deftest sp-test-crystal-delete-pair ()
   (sp-test-with-temp-buffer "class Foo
   def foo_for|
   end
 end"
-      (ruby-mode)
+      (crystal-mode)
     (execute-kbd-macro (kbd "<backspace>|"))
     (should (equal (buffer-string) "class Foo
   def foo_fo|
@@ -19,10 +20,10 @@ end"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; basic pairs
-(defun sp-ruby-test-slurp-assert (n in _ expected)
+(defun sp-crystal-test-slurp-assert (n in _ expected)
   (shut-up
     (with-temp-buffer
-      (ruby-mode)
+      (crystal-mode)
       (smartparens-mode +1)
       (save-excursion
         (insert in))
@@ -31,10 +32,10 @@ end"))))
       (sp-forward-slurp-sexp n)
       (delete-trailing-whitespace)
       (should
-       (sp-ruby-eq-ignore-indent (buffer-string) expected)))))
+       (sp-crystal-eq-ignore-indent (buffer-string) expected)))))
 
-(ert-deftest sp-test-ruby-slurp-forward ()
-  (sp-ruby-test-slurp-assert 1 "
+(ert-deftest sp-test-crystal-slurp-forward ()
+  (sp-crystal-test-slurp-assert 1 "
 if teXst
 end
 foo
@@ -44,7 +45,7 @@ if test
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 if teXst
 end
 if test2
@@ -58,7 +59,7 @@ if test
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 if teXst
 end
 foo.bar
@@ -68,7 +69,7 @@ if test
 end.bar
 ")
 
-  (sp-ruby-test-slurp-assert 2 "
+  (sp-crystal-test-slurp-assert 2 "
 if teXst
 end
 foo.bar
@@ -78,7 +79,7 @@ if test
 end
 ")
 
-  (sp-ruby-test-slurp-assert 3 "
+  (sp-crystal-test-slurp-assert 3 "
 if teXst
 end
 foo.
@@ -92,7 +93,7 @@ if test
 end
 ")
 
-  (sp-ruby-test-slurp-assert 5 "
+  (sp-crystal-test-slurp-assert 5 "
 beginX
 end
 test(1).test[2].test
@@ -102,22 +103,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert
-   (cond
-    ((version< emacs-version "24.4") 5)
-    ((version< emacs-version "25.0") 4)
-    (t 3))
-   "
-beginX
-end
-test ? a : b
-" :=> "
-begin
-  test ? a : b
-end
-")
-
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 Module::Class
@@ -127,7 +113,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 foo_bar
@@ -137,7 +123,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 foo?
@@ -147,7 +133,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 foo!
@@ -157,7 +143,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 @foo
@@ -167,7 +153,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 @@foo
@@ -177,7 +163,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 $foo
@@ -187,7 +173,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 &foo
@@ -197,7 +183,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 &:foo
@@ -207,7 +193,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 ?x
@@ -217,7 +203,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 !x
@@ -227,7 +213,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 class_name
@@ -237,7 +223,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert 1 "
+  (sp-crystal-test-slurp-assert 1 "
 beginX
 end
 :foo
@@ -249,8 +235,8 @@ end
 
   )
 
-(ert-deftest sp-test-ruby-slurp-backward ()
-  (sp-ruby-test-slurp-assert -1 "
+(ert-deftest sp-test-crystal-slurp-backward ()
+  (sp-crystal-test-slurp-assert -1 "
 foo.bar
 begin X
 end
@@ -260,7 +246,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 foo.class
 begin X
 end
@@ -270,7 +256,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 @foo
 begin X
 end
@@ -280,7 +266,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 foo?
 begin X
 end
@@ -290,7 +276,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 foo!
 begin X
 end
@@ -300,7 +286,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 !foo
 begin X
 end
@@ -310,7 +296,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 ?f
 begin X
 end
@@ -320,7 +306,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 :foo
 begin X
 end
@@ -330,7 +316,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 @@foo
 begin X
 end
@@ -340,7 +326,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 &:foo
 begin X
 end
@@ -350,7 +336,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 ::Class
 beginX
 end
@@ -360,8 +346,8 @@ begin
 end
 ")
 
-  ;; Indentation is a bit off here, but it works great in Enhanced Ruby Mode.
-  (sp-ruby-test-slurp-assert -1 "
+  ;; Indentation is a bit off here.
+  (sp-crystal-test-slurp-assert -1 "
 foo.
   class.
   bar
@@ -375,7 +361,7 @@ begin
     end
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 if test
  foo.bar
 end
@@ -389,7 +375,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert -3 "
+  (sp-crystal-test-slurp-assert -3 "
 test(1).test[2].test
 beginX
 end
@@ -399,21 +385,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-slurp-assert
-   (cond
-    ((version< emacs-version "24.4") -5)
-    ((version< emacs-version "25.0") -4)
-    (t -3)) "
-test ? a : b
-beginX
-end
-" :=> "
-begin
-  test ? a : b
-end
-")
-
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 Module::Class
 beginX
 end
@@ -425,26 +397,26 @@ end
 
   )
 
-(ert-deftest sp-test-ruby-slurp-on-single-line ()
-  (sp-ruby-test-slurp-assert 1 "
+(ert-deftest sp-test-crystal-slurp-on-single-line ()
+  (sp-crystal-test-slurp-assert 1 "
 test {X} test
 " :=> "
 test { test }
 ")
 
-  (sp-ruby-test-slurp-assert 2 "
+  (sp-crystal-test-slurp-assert 2 "
 test {X} test; test
 " :=> "
 test { test; test }
 ")
 
-  (sp-ruby-test-slurp-assert -1 "
+  (sp-crystal-test-slurp-assert -1 "
 test test {X}
 " :=> "
 test { test }
 ")
 
-  (sp-ruby-test-slurp-assert -2 "
+  (sp-crystal-test-slurp-assert -2 "
 test test; test {X}
 " :=> "
 test { test; test }
@@ -452,8 +424,8 @@ test { test; test }
 
 )
 
-(ert-deftest sp-test-ruby-slurp-with-inline-blocks ()
-  (sp-ruby-test-slurp-assert 1 "
+(ert-deftest sp-test-crystal-slurp-with-inline-blocks ()
+  (sp-crystal-test-slurp-assert 1 "
 if teXst
 end
 foo if true
@@ -463,7 +435,7 @@ if test
 end if true
 ")
 
-  (sp-ruby-test-slurp-assert 3 "
+  (sp-crystal-test-slurp-assert 3 "
 if teXst
 end
 foo if true
@@ -473,7 +445,7 @@ if test
 end
 ")
 
-  (sp-ruby-test-slurp-assert 2 "
+  (sp-crystal-test-slurp-assert 2 "
 if teXst
 end
 foo = if true
@@ -488,10 +460,10 @@ end
 ")
   )
 
-(defun sp-ruby-test-barf-assert (n in _ expected)
+(defun sp-crystal-test-barf-assert (n in _ expected)
   (shut-up
     (with-temp-buffer
-      (ruby-mode)
+      (crystal-mode)
       (smartparens-mode +1)
       (save-excursion
         (insert in))
@@ -500,10 +472,10 @@ end
       (sp-forward-barf-sexp n)
       (delete-trailing-whitespace)
       (should
-       (sp-ruby-eq-ignore-indent (buffer-string) expected)))))
+       (sp-crystal-eq-ignore-indent (buffer-string) expected)))))
 
-(ert-deftest sp-test-ruby-barf-forward ()
-  (sp-ruby-test-barf-assert 1 "
+(ert-deftest sp-test-crystal-barf-forward ()
+  (sp-crystal-test-barf-assert 1 "
 if teXst
   foo
 end
@@ -513,7 +485,7 @@ end
 foo
 ")
 
-  (sp-ruby-test-barf-assert 1 "
+  (sp-crystal-test-barf-assert 1 "
 if teXst
   if test2
     foo
@@ -527,7 +499,7 @@ if test2
 end
 ")
 
-  (sp-ruby-test-barf-assert 1 "
+  (sp-crystal-test-barf-assert 1 "
 if teXst
   foo.bar
 end
@@ -537,7 +509,7 @@ if test
 end.bar
 ")
 
-  (sp-ruby-test-barf-assert 2 "
+  (sp-crystal-test-barf-assert 2 "
 if teXst
   foo.bar
 end
@@ -547,7 +519,7 @@ end
 foo.bar
 ")
 
-  (sp-ruby-test-barf-assert 3 "
+  (sp-crystal-test-barf-assert 3 "
 if teXst
   foo.
     bar.
@@ -561,7 +533,7 @@ foo.
   bar
 ")
 
-  (sp-ruby-test-barf-assert 5 "
+  (sp-crystal-test-barf-assert 5 "
 beginX
   test(1).test[2].test
 end
@@ -571,7 +543,7 @@ end
 test(1).test[2].test
 ")
 
-  (sp-ruby-test-barf-assert 5 "
+  (sp-crystal-test-barf-assert 5 "
 beginX
   test ? a : b
 end
@@ -581,7 +553,7 @@ end
 test ? a : b
 ")
 
-  (sp-ruby-test-barf-assert 1 "
+  (sp-crystal-test-barf-assert 1 "
 beginX
   ::Class
 end
@@ -591,7 +563,7 @@ end
 ::Class
 ")
 
-  (sp-ruby-test-barf-assert 1 "
+  (sp-crystal-test-barf-assert 1 "
 beginX
   Module::Class
 end
@@ -601,7 +573,7 @@ end
 Module::Class
 ")
 
-  (sp-ruby-test-barf-assert 1 "
+  (sp-crystal-test-barf-assert 1 "
 beginX
   ::Module::Class
 end
@@ -612,8 +584,8 @@ end
 ")
   )
 
-(ert-deftest sp-test-ruby-barf-backward ()
-  (sp-ruby-test-barf-assert -1 "
+(ert-deftest sp-test-crystal-barf-backward ()
+  (sp-crystal-test-barf-assert -1 "
 begin
   fooX
 end
@@ -623,7 +595,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   foo.barX
 end
@@ -633,7 +605,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   if test
     foo.bar
@@ -647,7 +619,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   test(1).test[2].testX
 end
@@ -657,7 +629,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert
+  (sp-crystal-test-barf-assert
    (cond
     ((version< emacs-version "24.4") -5)
     ((version< emacs-version "25.0") -4)
@@ -671,7 +643,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   ::ClassX
 end
@@ -681,7 +653,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   Module::ClassX
 end
@@ -691,7 +663,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 begin
   ::Module::ClassX
 end
@@ -702,34 +674,34 @@ end
 ")
   )
 
-(ert-deftest sp-test-ruby-barf-on-single-line ()
-  (sp-ruby-test-barf-assert 1 "
+(ert-deftest sp-test-crystal-barf-on-single-line ()
+  (sp-crystal-test-barf-assert 1 "
 test { Xtest }
 " :=> "
 test { } test
 ")
 
-  (sp-ruby-test-barf-assert 2 "
+  (sp-crystal-test-barf-assert 2 "
 test { Xtest; test }
 " :=> "
 test { } test; test
 ")
 
-  (sp-ruby-test-barf-assert -1 "
+  (sp-crystal-test-barf-assert -1 "
 test { Xtest }
 " :=> "
 test test { }
 ")
 
-  (sp-ruby-test-barf-assert -2 "
+  (sp-crystal-test-barf-assert -2 "
 test { test; testX }
 " :=> "
 test test; test { }
 ")
 
 )
-(ert-deftest sp-test-ruby-barf-with-inline-blocks ()
-;;   (sp-ruby-test-barf-assert 2 "
+(ert-deftest sp-test-crystal-barf-with-inline-blocks ()
+;;   (sp-crystal-test-barf-assert 2 "
 ;; if teXst
 ;;   foo if true
 ;; end
@@ -739,7 +711,7 @@ test test; test { }
 ;; foo if true
 ;; ")
 
-  (sp-ruby-test-barf-assert 2 "
+  (sp-crystal-test-barf-assert 2 "
 if teXst
   foo = if true
           bar
@@ -754,10 +726,10 @@ foo = if true
 ")
   )
 
-(defun sp-ruby-test-splice-assert (n in _ expected)
+(defun sp-crystal-test-splice-assert (n in _ expected)
   (shut-up
     (with-temp-buffer
-      (ruby-mode)
+      (crystal-mode)
       (smartparens-mode +1)
       (save-excursion
         (insert in))
@@ -766,17 +738,17 @@ foo = if true
       (sp-splice-sexp n)
       (delete-trailing-whitespace)
       (should
-       (sp-ruby-eq-ignore-indent (buffer-string) expected)))))
+       (sp-crystal-eq-ignore-indent (buffer-string) expected)))))
 
-(ert-deftest sp-test-ruby-splice ()
-  (sp-ruby-test-splice-assert 1 "
+(ert-deftest sp-test-crystal-splice ()
+  (sp-crystal-test-splice-assert 1 "
 if teXst
 end
 " :=> "
 test
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   bool = a | bX
 end
@@ -784,7 +756,7 @@ end
 bool = a | b
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   if baXr
   end
@@ -795,7 +767,7 @@ if foo
 end
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   begin
     barX
@@ -807,14 +779,14 @@ if foo
 end
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 def forX
 end
 " :=> "
 for
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   for_funX
 end
@@ -822,7 +794,7 @@ end
 for_fun
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   fun_forX
 end
@@ -830,7 +802,7 @@ end
 fun_for
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   @forX
 end
@@ -838,7 +810,7 @@ end
 @for
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   $forX
 end
@@ -846,7 +818,7 @@ end
 $for
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   test if baXr
 end
@@ -855,7 +827,7 @@ foo
 test if bar
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 beginX
   end_of_game
 end
@@ -863,7 +835,7 @@ end
 end_of_game
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   [] if baXr
 end
@@ -872,7 +844,7 @@ foo
 [] if bar
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   begin
   end if baXr
@@ -884,7 +856,7 @@ end if bar
 ")
 
   ;; TODO: should not leave two spaces after splice
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 if foo
   foo = if baXr
           v
@@ -897,13 +869,13 @@ if foo
 end
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 foo(ifX test; bar; end)
 " :=> "
 foo( test; bar; )
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   object.classX
 end
@@ -911,7 +883,7 @@ end
 object.class
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   object.
     classX
@@ -921,7 +893,7 @@ object.
   class
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   # object.
   classX
@@ -933,7 +905,7 @@ begin
 end
 ")
 
-  (sp-ruby-test-splice-assert 1 "
+  (sp-crystal-test-splice-assert 1 "
 begin
   foo.send(\"#{object}\").
     classX
@@ -945,13 +917,13 @@ foo.send(\"#{object}\").
 
   )
 
-(ert-deftest sp-test-ruby-kill-whole-line-t ()
+(ert-deftest sp-test-crystal-kill-whole-line-t ()
   "If the point it as bol we should kill the resulting empty line as well."
   (let ((kill-whole-line t))
     (sp-test-with-temp-buffer "begin
 |  foo
 end"
-        (ruby-mode)
+        (crystal-mode)
       (call-interactively 'sp-kill-hybrid-sexp)
       (sp-buffer-equals "begin
 |end"))
@@ -961,17 +933,17 @@ end"
     \"hello\"
   end
 end"
-        (ruby-mode)
+        (crystal-mode)
       (call-interactively 'sp-kill-hybrid-sexp)
       (sp-buffer-equals "begin
 |end"))))
 
-(ert-deftest sp-test-ruby-kill-whole-line-nil ()
+(ert-deftest sp-test-crystal-kill-whole-line-nil ()
   "Do not kill the resulting empty line and indent accordingly."
   (sp-test-with-temp-buffer "begin
 |  foo
 end"
-      (ruby-mode)
+      (crystal-mode)
     (call-interactively 'sp-kill-hybrid-sexp)
     (sp-buffer-equals "begin
   |
@@ -981,16 +953,16 @@ end"))
     \"hello\"
   end
 end"
-      (ruby-mode)
+      (crystal-mode)
     (call-interactively 'sp-kill-hybrid-sexp)
     (sp-buffer-equals "begin
   |
 end")))
 
 ;; #638
-(ert-deftest sp-test-ruby-parse-code-with-tabs ()
+(ert-deftest sp-test-crystal-parse-code-with-tabs ()
   (sp-test-with-temp-buffer "module Rfmt\n\tmodule Rewriters\n\t\tclass AlignEq < Parser::Rewriter\n\t\t\tdef on_begin(node)\n\t\t\t\teq_nodes = []\n\n\t\t\t\tnode.children.each do |child_node|\n\t\t\t\t\tif assignment?(child_node)\n\t\t\t\t\t\teq_nodes << child_node\n\t\t\t\t\telsif eq_nodes.any?\n\t\t\t\t\t\talign(eq_nodes)\n\t\t\t\t\t\teq_nodes = []\n\t\t\t\t\tend\n\t\t\t\tend\n\n\t\t\t\talign(eq_nodes)\n\n\t\t\t\tsuper\n\t\t\tend\n\n\t\t\tdef align(eq_nodes)\n\t\t\t\taligned_column = eq_nodes.\n\t\t\t\t\t  map { |node| node.loc.operator.column }.\n\t\t\t\t\t  max\n\n\t\t\t\teq_nodes.each do |node|\n\t\t\t\t\tif(column = node.loc.operator.column) < aligned_column\n\t\t\t\t\t\tinsert_before node.loc.operator, ' ' * (aligned_column - column)\n\t\t\t\t\tend\n\t\t\t\tend\n\t\t\tend\n\t\tend\n\tend\nend"
-      (ruby-mode)
+      (crystal-mode)
     (goto-char (point-max))
     (equal (sp-get-thing t) '(:beg 1 :end 642 :op "module" :cl "end" :prefix "" :suffix ""))
     (goto-char (point-min))
