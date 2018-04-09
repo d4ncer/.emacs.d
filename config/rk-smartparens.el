@@ -78,11 +78,7 @@
             (just-one-space)))))))
 
   :init
-  (progn
-    (add-hook 'prog-mode-hook #'smartparens-strict-mode)
-    (add-hook 'text-mode-hook #'smartparens-strict-mode)
-    (add-hook 'text-mode-hook #'smartparens-strict-mode)
-    (add-hook 'minibuffer-setup-hook #'rk-smartparens--sp-for-eval-expression))
+  (add-hook 'minibuffer-setup-hook #'rk-smartparens--sp-for-eval-expression)
 
   :config
   (progn
