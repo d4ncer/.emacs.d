@@ -1,4 +1,4 @@
-;;; smartparens-latex.el --- Additional configuration for (La)TeX based modes.
+;;; smartparens-latex.el --- Additional configuration for (La)TeX based modes.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2013-2016 Matus Goljer
 
@@ -37,12 +37,6 @@
 ;; into your configuration.  You can use this in conjunction with the
 ;; default config or your own configuration.
 
-;; It is advised that you add `latex-mode' to the list
-;; `sp-navigate-consider-stringlike-sexp'.  This will tell
-;; smartparens to treat the $$ math blocks as sexps, and enable you
-;; to use all the sexp-based commands on them (such as
-;; `sp-down-sexp', `sp-up-sexp' etc.)
-
 ;; If you have good ideas about what should be added please file an
 ;; issue on the github tracker.
 
@@ -53,7 +47,7 @@
 
 (require 'smartparens)
 
-(defun sp-latex-insert-spaces-inside-pair (id action context)
+(defun sp-latex-insert-spaces-inside-pair (_id action _context)
   "ID, ACTION, CONTEXT."
   (when (eq action 'insert)
     (insert "  ")
@@ -68,14 +62,14 @@
       (goto-char (sp-get sp-last-wrapped-region :beg-in))
       (insert " "))))
 
-(defun sp-latex-skip-match-apostrophe (ms mb me)
+(defun sp-latex-skip-match-apostrophe (ms _mb me)
   "MS, MB, ME."
   (when (equal ms "'")
     (save-excursion
       (goto-char me)
       (looking-at-p "\\sw"))))
 
-(defun sp-latex-skip-double-quote (id action context)
+(defun sp-latex-skip-double-quote (_id action _context)
   "ID, ACTION, CONTEXT."
   (when (eq action 'insert)
     (when (looking-at-p "''''")
@@ -83,19 +77,13 @@
       (delete-char 2)
       (forward-char 2))))
 
-(defun sp-latex-point-after-backslash (id action context)
+(defun sp-latex-point-after-backslash (id action _context)
   "Return t if point follows a backslash, nil otherwise.
 This predicate is only tested on \"insert\" action.
 ID, ACTION, CONTEXT."
   (when (eq action 'insert)
     (let ((trigger (sp-get-pair id :trigger)))
-      (looking-back (concat "\\\\" (regexp-quote (if trigger trigger id)))))))
-
-(defun sp-latex-point-before-word-p (id action context)
-  "Return t if point is before a word while in navigate action.
-ID, ACTION, CONTEXT."
-  (when (eq action 'navigate)
-    (looking-at-p "\\sw")))
+      (looking-back (concat "\\\\" (regexp-quote (if trigger trigger id))) nil))))
 
 (add-to-list 'sp-navigate-skip-match
              '((tex-mode plain-tex-mode latex-mode) . sp--backslash-skip-match))
@@ -109,8 +97,7 @@ ID, ACTION, CONTEXT."
   (sp-local-pair "`" "'"
                  :actions '(:rem autoskip)
                  :skip-match 'sp-latex-skip-match-apostrophe
-                 :unless '(sp-latex-point-after-backslash
-                           sp-latex-point-before-word-p))
+                 :unless '(sp-latex-point-after-backslash))
   ;; math modes, yay.  The :actions are provided automatically if
   ;; these pairs do not have global definitions.
   (sp-local-pair "$" "$")
@@ -186,7 +173,15 @@ ID, ACTION, CONTEXT."
                  :post-handlers '(sp-latex-insert-spaces-inside-pair))
   (sp-local-pair "\\langle" "\\rangle"
                  :post-handlers '(sp-latex-insert-spaces-inside-pair))
-
+  (sp-local-pair  "\\lVert" "\\rVert"
+		  :when '(sp-in-math-p)
+		  :trigger "\\lVert"
+		  :post-handlers '(sp-latex-insert-spaces-inside-pair))
+  (sp-local-pair  "\\lvert" "\\rvert"
+		  :when '(sp-in-math-p)
+		  :trigger "\\lvert"
+		  :post-handlers '(sp-latex-insert-spaces-inside-pair))
+  
   ;; some common wrappings
   (sp-local-tag "\"" "``" "''" :actions '(wrap))
   (sp-local-tag "\\b" "\\begin{_}" "\\end{_}")

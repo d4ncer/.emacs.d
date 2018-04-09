@@ -1,11 +1,13 @@
 # Smartparens
+
+[![Join the chat at https://gitter.im/smartparens/Lobby](https://badges.gitter.im/smartparens/Lobby.svg)](https://gitter.im/smartparens/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![MELPA](http://melpa.org/packages/smartparens-badge.svg)](http://melpa.org/#/smartparens)
 [![Documentation Status](https://readthedocs.org/projects/smartparens/badge/?version=latest)](http://smartparens.readthedocs.io/en/latest/?badge=latest)
 [![MELPA Stable](http://stable.melpa.org/packages/smartparens-badge.svg)](http://stable.melpa.org/#/smartparens)
 [![Documentation Status](https://readthedocs.org/projects/smartparens/badge/?version=stable)](http://smartparens.readthedocs.io/en/latest/?badge=stable)
 [![Build Status](https://travis-ci.org/Fuco1/smartparens.png?branch=master)](https://travis-ci.org/Fuco1/smartparens)
 [![Coverage Status](https://coveralls.io/repos/github/Fuco1/smartparens/badge.svg)](https://coveralls.io/github/Fuco1/smartparens)
-[![Paypal logo](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=CEYP5YVHDRX8C)
+[![Paypal logo](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A5PMGVKCQBT88)
 [![Patreon](https://c5.patreon.com/external/logo/logomarkOrange.svg)](https://www.patreon.com/user?u=3282358&ty=h)
 
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-generate-toc again -->
@@ -113,7 +115,7 @@ If you want to support this project, you can:
   on the tracker and submit your suggestion.
 
 * You can make a financial donation through
-  [PayPal](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=CEYP5YVHDRX8C)
+  [PayPal](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=A5PMGVKCQBT88)
   or [Patreon](https://www.patreon.com/user?u=3282358&ty=h).  If you
   like smartparens and can spare a modest amount on a donation, feel
   free to do so.  These donations are expressions of your gratitude

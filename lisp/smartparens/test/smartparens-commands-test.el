@@ -6,6 +6,7 @@
    ((eq mode 'elisp) (emacs-lisp-mode))
    ((eq mode 'racket) (racket-mode))
    ((eq mode 'c) (c-mode))
+   ((eq mode 'js) (js2-mode))
    ((eq mode 'python) (shut-up (python-mode))))
   (smartparens-mode 1))
 
@@ -405,25 +406,19 @@ be."
     ;; keep comment before the form from which we are splicing if it is on a separate line
     ("(\n    ;; foo bar\n |asd\n as\n ;; asds (asdasd asd hgujirjf) asd\n asd\n )" "|;; foo bar\nasd")
     ("(\n    ;; foo bar\n asd\n as\n ;; asds (asdasd asd hgujirjf) asd\n |asd\n )" "|;; asds (asdasd asd hgujirjf) asd\nasd")
-    )
-   ;; from #243
-   (((sp-navigate-consider-stringlike-sexp '(emacs-lisp-mode)))
+
+    ;; from #243
     (";; \"quote\" here\nand \"|here\"" ";; \"quote\" here\nand |here")
     (";; \"|quote\" here\nand here" ";; |quote here\nand here")
 
-    ;; from #580, should also work without sp-navigate-consider-stringlike-sexp
+    ;; from #580
     ("(foo \"|bar\")" "(foo |bar)")
 
     ;; from #569
     ("(\" \" f|oo)" "|foo")
     ("(\" \" |foo)" "|foo")
-    ("(\"x\" |foo)" "|foo"))
-   ;; TODO: this should also work without sp-navigate-consider-stringlike-sexp
-   ;; (nil
-   ;;  ("(\" \" f|oo)" "|foo")
-   ;;  ("(\" \" |foo)" "|foo")
-   ;;  ("(\"x\" |foo)" "|foo"))
-   ))
+    ("(\"x\" |foo)" "|foo")
+    )))
 
 (sp-test-command sp-split-sexp
   ((nil
@@ -541,7 +536,7 @@ be."
     ("(define-key smartparens-mode-map (kbd | \"C-{\") 'sp-beginning-of-next-sexp)" "(define-key smartparens-mode-map (|kbd  \"C-{\") 'sp-beginning-of-next-sexp)" ))))
 
 (sp-test-command backward-delete-char
-  ((((sp-navigate-consider-stringlike-sexp '(emacs-lisp-mode)))
+  ((nil
     (";;asdas'|\n'asdasd'" ";;asdas|\n'asdasd'")
     ("foo \"|\" bar" "foo | bar")
     ("foo [|] bar" "foo | bar")
@@ -685,9 +680,12 @@ be."
 (sp-test-command sp-kill-whole-line
   ((nil
     ("(progn (some |long sexp))" "|")
+    ("(progn (some |long sexp))\n" "|")
     ("(progn\n  (some |long sexp))" "(progn\n  |)")
     ("(progn\n | (some\nlong\nsexp))" "(progn\n  |)")
-    ("(progn\n  (so|me\nlong\nsexp))" "(progn\n  |)"))))
+    ("(progn\n  (so|me\nlong\nsexp))" "(progn\n  |)")
+    ("(progn\n  (line|1)\n  (line2))" "(progn\n|  (line2))")
+    ("  (indented |line)" "|"))))
 
 (sp-test-command sp-transpose-sexp
   ((nil
@@ -714,6 +712,12 @@ be."
    (((mode 'c))
     ("void f() {\n  int a[] = {\n    foo(1,2),|\n    bar(3,4)\n  };   \n}"
      "void f() {\n  int a[] = {\n    bar(3,4),\n    foo(1,2)\n  |};   \n}"))))
+
+(sp-test-command sp-change-inner
+  ((nil
+    ("(f|oo [bar] baz)" "(foo [|] baz)"))
+   (((mode 'js))
+    ("{|'foo': 'bar'}" "{'|': 'bar'}"))))
 
 (defun sp--test-sp-rewrap-sexp (initial pair expected &optional keep)
   (sp-test-with-temp-elisp-buffer initial
@@ -750,6 +754,17 @@ be."
   (sp--test-sp-rewrap-sexp-python "\"foo 'bar' b|az\"" '("'" . "'") "'foo \\'bar\\' b|az'")
   (sp--test-sp-rewrap-sexp-python "'foo \\'b|ar\\' baz'" '("\"" . "\"") "'foo \"b|ar\" baz'"))
 
+;; #841
+(ert-deftest sp-test-command-sp-rewrap-empty-pair-should-unwrap ()
+  (sp--test-sp-rewrap-sexp "[fo|o]" nil "fo|o"))
+
+;; #841
+(ert-deftest sp-test-command-sp-rewrap-empty-pair-should-unwrap-interactive-spec ()
+  (sp-test-with-temp-elisp-buffer "[fo|o]"
+    (let ((unread-command-events (list 'return)))
+      (call-interactively 'sp-rewrap-sexp)
+      (sp-buffer-equals "fo|o"))))
+
 (ert-deftest sp-test-command-sp-rewrap-sexp-invalid-pair ()
   (should-error
    (sp-test-with-temp-elisp-buffer "(fo|o)"
@@ -782,17 +797,18 @@ be."
     (sp-buffer-equals "|(foo) (bar)M (baz)")))
 
 (ert-deftest sp-test-command-sp-mark-sexp-multiple-invocations ()
-  (sp-test-with-temp-elisp-buffer "|(foo) (bar) (baz)"
-    (call-interactively 'sp-mark-sexp)
-    (call-interactively 'sp-mark-sexp)
-    (sp-buffer-equals "|(foo) (bar)M (baz)")))
+  (let ((smartparens-mode-map smartparens-mode-map))
+    (sp-test-with-temp-elisp-buffer "|(foo) (bar) (baz)"
+      (execute-kbd-macro "mm")
+      (sp-buffer-equals "|(foo) (bar)M (baz)"))))
 
 (ert-deftest sp-test-command-sp-mark-sexp-invalid ()
-  (should-error
-   (sp-test-with-temp-elisp-buffer "(progn (foo) |(bar)) (baz)"
-     (call-interactively 'sp-mark-sexp)
-     (call-interactively 'sp-mark-sexp))
-   :type 'user-error))
+  (let ((smartparens-mode-map smartparens-mode-map))
+    (should-error
+     (sp-test-with-temp-elisp-buffer "(progn (foo) |(bar)) (baz)"
+       (define-key smartparens-mode-map "m" 'sp-mark-sexp)
+       (execute-kbd-macro "mm"))
+     :type 'user-error)))
 
 (ert-deftest sp-test-command-sp-convolute-sexp-inside-symbol ()
   "Calling `sp-convolute-sexp' with point inside of symbol moves
@@ -831,15 +847,17 @@ This is the behavior of `paredit-convolute-sexp'."
 
 (ert-deftest sp-test-kill-region ()
   (sp-test-with-temp-elisp-buffer "[fo|o] bar [bMaz]"
-    (should-error
-     (call-interactively 'sp-kill-region)
-     :type 'user-error)))
+    (let ((sp-message-width 1000)) ; need this for sp-message to retrieve the text
+      (should-error
+       (call-interactively 'sp-kill-region)
+       :type 'user-error))))
 
 (ert-deftest sp-test-delete-region ()
   (sp-test-with-temp-elisp-buffer "[fo|o] bar [bMaz]"
-    (should-error
-     (call-interactively 'sp-delete-region)
-     :type 'user-error)))
+    (let ((sp-message-width 1000)) ; need this for sp-message to retrieve the text
+      (should-error
+       (call-interactively 'sp-delete-region)
+       :type 'user-error))))
 
 ;; test for #452
 (ert-deftest sp-test-sp-kill-hybrid-sexp-excessive-whitespace-nil nil

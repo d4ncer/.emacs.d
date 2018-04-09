@@ -1,4 +1,4 @@
-;;; smartparens-markdown.el --- Additional configuration for Markdown based modes.
+;;; smartparens-markdown.el --- Additional configuration for Markdown based modes.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Matus Goljer
 
@@ -54,6 +54,26 @@
   (and (eq action 'insert)
        markdown-gfm-use-electric-backquote
        (sp--looking-back-p "^```")))
+
+(defun sp--gfm-point-after-word-p (id action _context)
+  "Return t if point is after a word, nil otherwise.
+This predicate is only tested on \"insert\" action."
+  (when (eq action 'insert)
+    (sp--looking-back-p (concat "\\(\\sw\\)" (regexp-quote id)))))
+
+(defun sp--gfm-skip-asterisk (_ms mb _me)
+  "Non-nil if we should ignore this asterisk as a delimiter."
+  (save-excursion
+    (goto-char mb)
+    (save-match-data (looking-at "^\\* "))))
+
+(sp-with-modes '(markdown-mode gfm-mode)
+  (sp-local-pair "*" "*"
+                 :unless '(sp--gfm-point-after-word-p sp-point-at-bol-p)
+                 :post-handlers '(("[d1]" "SPC"))
+                 :skip-match 'sp--gfm-skip-asterisk)
+  (sp-local-pair "**" "**")
+  (sp-local-pair "_" "_" :unless '(sp-point-after-word-p)))
 
 (sp-with-modes 'markdown-mode
   (sp-local-pair "```" "```"))
