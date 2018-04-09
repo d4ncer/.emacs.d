@@ -14,6 +14,7 @@
 (require 'rk-theme-base)
 
 (autoload 'all-the-icons-icon-for-mode "all-the-icons")
+(autoload 'all-the-icons-icon-for-file "all-the-icons")
 (autoload 'all-the-icons-octicon "all-the-icons")
 (autoload 'all-the-icons-fileicon "all-the-icons")
 (autoload 'magit-get-current-branch "magit-git")
