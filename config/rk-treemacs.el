@@ -28,7 +28,7 @@
     (define-key treemacs-mode-map (kbd "SPC") spacemacs-keys-default-map))
   :init
   (spacemacs-keys-set-leader-keys
-    "f t" #'treemacs-toggle))
+    "f t" #'treemacs))
 
 (use-package treemacs-projectile
   :after treemacs
