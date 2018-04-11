@@ -57,9 +57,11 @@ If argument INTERACTIVE-P is set, log additional information."
       (add-to-list 'load-path (concat path "/elisp"))
       (add-to-list 'load-path (concat path "/lisp")))
 
+    ;; Custom load path dirs
     (add-to-list 'load-path (concat lisp-dir "/org-mode/contrib/lisp"))
     (add-to-list 'load-path (concat lisp-dir "/gocode/emacs-company"))
     (add-to-list 'load-path (concat lisp-dir "/hindent/elisp"))
+    (add-to-list 'load-path (concat lisp-dir "/treemacs/src/elisp"))
 
     (setq load-path (seq-filter #'file-directory-p load-path))
     (setq Info-default-directory-list (seq-filter #'file-directory-p Info-default-directory-list))
@@ -102,7 +104,8 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
-(use-package rk-neotree)
+;; (use-package rk-neotree)
+(use-package rk-treemacs)
 (use-package rk-php)
 (use-package rk-coffeescript)
 (use-package rk-haskell)
