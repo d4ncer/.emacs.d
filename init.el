@@ -104,7 +104,6 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
-;; (use-package rk-neotree)
 (use-package rk-treemacs)
 (use-package rk-php)
 (use-package rk-coffeescript)

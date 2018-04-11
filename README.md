@@ -114,7 +114,7 @@ packages of note:
 * Magit
 * Org
 * IBuffer
-* Neotree
+* Treemacs
 * Smartparens
 
 ## Language Modes
