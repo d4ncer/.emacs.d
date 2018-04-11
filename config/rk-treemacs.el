@@ -12,20 +12,28 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
+(autoload 'evil-set-initial-state "evil-core")
 
 (use-package treemacs
   :commands (treemacs
-             treemacs-toggle)
+             treemacs-toggle
+             treemacs-mode
+             treemacs-next-line
+             treemacs-previous-line)
   :config
+  (progn
+    (evil-set-initial-state 'treemacs-mode 'emacs)
+    (define-key treemacs-mode-map (kbd "j") #'treemacs-next-line)
+    (define-key treemacs-mode-map (kbd "k") #'treemacs-previous-line)
+    (define-key treemacs-mode-map (kbd "SPC") spacemacs-keys-default-map))
+  :init
   (spacemacs-keys-set-leader-keys
-    "f t" #'treemacs))
-
-(use-package treemacs-evil
-  :after treemacs)
+    "f t" #'treemacs-toggle))
 
 (use-package treemacs-projectile
+  :after treemacs
   :commands (treemacs-projectile)
-  :config
+  :init
   (spacemacs-keys-set-leader-keys
     "p t" #'treemacs-projectile))
 
