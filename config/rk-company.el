@@ -53,12 +53,15 @@
   :after company
   :defines company-lsp
   :preface
-  (defun rk-company--lsp-mode-p ()
-    (and (bound-and-true-p lsp-mode)
-         (bound-and-true-p company-mode)))
+  (progn
+    (defun rk-company--lsp-mode-p ()
+      (and (bound-and-true-p lsp-mode)
+           (bound-and-true-p company-mode)))
+    (defun rk-company--setup-lsp-backend ()
+      (when (rk-company--lsp-mode-p)
+        (set (make-local-variable 'company-backends) '(company-lsp)))))
   :config
-  (if (rk-company--lsp-mode-p)
-      (set (make-local-variable 'company-backends) '(company-lsp))))
+  (add-hook 'company-mode-hook #'rk-company--setup-lsp-backend))
 
 (provide 'rk-company)
 
