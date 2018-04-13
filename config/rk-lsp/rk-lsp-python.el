@@ -12,6 +12,8 @@
 (autoload 'projectile-project-root "projectile")
 (autoload 'lsp-define-stdio-client "lsp-mode")
 
+(defvar lsp-python nil "Name of Python LSP Client.")
+
 (defun rk-lsp-python--find-python-root ()
   "Return the current Python project root, if any.
 This is marked with setup.py or setup.cfg."
@@ -30,9 +32,9 @@ This is marked with setup.py or setup.cfg."
     (projectile-project-root)))
 
 (defun rk-lsp-python--find-root ()
-  (cond ((rk-lsp-python--find-git-root)
-         (rk-lsp-python--find-git-root)
-         (rk-lsp-python--find-projectile-root))))
+  (cond ((rk-lsp-python--find-python-root)
+         (rk-lsp-python--find-projectile-root)
+         (rk-lsp-python--find-git-root))))
 
 (defun rk-lsp-python--get-lsp-root ()
   (if (rk-lsp-python--find-root) (rk-lsp-python--find-root) default-directory))
