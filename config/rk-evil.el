@@ -37,6 +37,10 @@
     (define-key evil-normal-state-map (kbd "C-d") #'evil-scroll-page-down)
     (define-key evil-motion-state-map (kbd "C-d") #'evil-scroll-page-down)
 
+    ;; Bind g b to pop def stack
+
+    (define-key evil-motion-state-map "gb" 'xref-pop-marker-stack)
+
     ;; Configure cursors.
 
     (setq evil-motion-state-cursor '("plum3" box))
