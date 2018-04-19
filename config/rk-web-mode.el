@@ -297,43 +297,6 @@
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "." #'prettier-js)))
 
-(use-package tern
-  :defer t
-  :functions (tern-mode)
-  :commands (tern-find-definition
-             tern-pop-find-definition
-             tern-get-type
-             tern-get-docs)
-  :init
-  (add-hook 'rk-web-js-mode-hook #'tern-mode)
-  :config
-  (progn
-    (setq tern-command (add-to-list 'tern-command "--no-port-file" t))
-
-    (unless (getenv "NODE_PATH")
-      (let* ((node-version
-              (replace-regexp-in-string "\n\\'" ""
-                                        (shell-command-to-string "node --version")))
-             (node-path (format "~/.nvm/versions/node/%s/lib/node_modules" node-version)))
-        (setenv "NODE_PATH" node-path)))
-
-    (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m t" "tern")
-    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "tD" #'tern-find-definition
-      "tp" #'tern-pop-find-definition
-      "tt" #'tern-get-type
-      "td" #'tern-get-docs)))
-
-(use-package company-tern
-  :after rk-web-modes
-  :config
-  (progn
-    (setq company-tern-meta-as-single-line t)
-    (setq company-tern-property-marker " <p>")
-
-    (with-eval-after-load 'company
-      (add-to-list 'company-backends 'company-tern))))
-
 (use-package company-flow
   :after rk-web-modes
   :preface

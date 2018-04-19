@@ -54,13 +54,6 @@ go get -u -v golang.org/x/tools/cmd/goimports
 
 **JS setup**
 
-Tern setup:
-
-```bash
-cd lisp/tern
-npm install
-```
-
 Required binaries:
 
 ```bash
