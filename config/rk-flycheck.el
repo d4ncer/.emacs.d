@@ -43,8 +43,8 @@
       "Show or hide the error list."
       (interactive)
       (if-let (window (--first (equal flycheck-error-list-buffer
-                                      (buffer-name (window-buffer it)))
-                               (window-list)))
+                                     (buffer-name (window-buffer it)))
+                              (window-list)))
           (delete-window window)
         (flycheck-list-errors))))
 
@@ -55,6 +55,7 @@
     (setq flycheck-display-errors-function 'rk-flycheck-display-error-messages)
     (setq flycheck-display-errors-delay 0.5)
     (setq flycheck-emacs-lisp-load-path 'inherit)
+    (setq flycheck-check-syntax-automatically '(save))
 
     (spacemacs-keys-set-leader-keys
       "ec" 'flycheck-clear

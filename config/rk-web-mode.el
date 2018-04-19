@@ -86,7 +86,7 @@
 
 (use-package flycheck
   :defer t
-  :commands (flycheck-select-checker)
+  :commands (flycheck-select-checker flycheck-buffer)
   :functions (flycheck-add-next-checker flycheck-add-mode)
   :preface
   (progn
@@ -114,7 +114,10 @@
     (add-hook 'rk-web-typescript-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-css-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
+
+    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
+      "e" #'flycheck-buffer)))
 
 ;; TEMPORARY WHILE WE FIX ISSUES
 ;; (use-package rk-lsp-js
