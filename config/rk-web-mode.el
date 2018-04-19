@@ -13,7 +13,8 @@
 
 (require 'spacemacs-keys)
 (require 'dash)
-(autoload 'f-split "f")
+(require 'f)
+(require 's)
 
 (defconst rk-web--prettier-default-args
   (list "--single-quote" "true" "--trailing-comma" "es5")
@@ -113,6 +114,17 @@
     (add-hook 'rk-web-css-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)
     (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)))
+
+;; TEMPORARY WHILE WE FIX ISSUES
+;; (use-package rk-lsp-js
+;;   :after rk-web-modes
+;;   :commands (rk-lsp-js--setup)
+;;   :config
+;;   (progn
+;;     (autoload 'rk-web-js-mode-hook "rk-web-modes")
+;;     (rk-lsp-js--setup)
+;;     (add-hook 'rk-web-js-mode-hook #'lsp-js-flow-enable)
+;;     (add-hook 'lsp-js-flow-mode-hook 'flycheck-mode)))
 
 (use-package emmet-mode
   :defer t
