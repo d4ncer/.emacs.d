@@ -16,6 +16,7 @@
     sql-mode
     restclient-mode
     rk-web-js-mode
+    rk-web-php-mode
     rnc-mode
     scala-mode)
   "List of modes to be excluded from aggressive indent.")

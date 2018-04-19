@@ -105,7 +105,6 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
 (use-package rk-treemacs)
-(use-package rk-php)
 (use-package rk-coffeescript)
 (use-package rk-haskell)
 (use-package rk-elisp)

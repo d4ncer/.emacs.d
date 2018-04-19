@@ -64,7 +64,8 @@
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
-         ("\\.html\\'" . rk-web-html-mode))
+         ("\\.html\\'" . rk-web-html-mode)
+         ("\\.php\\'" . rk-web-php-mode))
   :defines (flycheck-html-tidy-executable)
   :config
   (progn
