@@ -157,16 +157,14 @@
   (file-name-directory (or load-file-name buffer-file-name))
   "Directory that yasnippet was loaded from.")
 
-(defvar yas-installed-snippets-dir nil)
-(setq yas-installed-snippets-dir
-      (expand-file-name "snippets" yas--loaddir))
+(defconst yas-installed-snippets-dir (expand-file-name "snippets" yas--loaddir))
+(make-obsolete-variable 'yas-installed-snippets-dir "\
+Yasnippet no longer comes with installed snippets" "0.13")
 
 (defconst yas--default-user-snippets-dir
   (expand-file-name "snippets" user-emacs-directory))
 
-(defcustom yas-snippet-dirs (remove nil
-                                    (list yas--default-user-snippets-dir
-                                          'yas-installed-snippets-dir))
+(defcustom yas-snippet-dirs (list yas--default-user-snippets-dir)
   "List of top-level snippet directories.
 
 Each element, a string or a symbol whose value is a string,
@@ -239,7 +237,7 @@ nil.
 - To signal that the user quit the prompting process, you can
 signal `quit' with
 
-  (signal \\='quit \"user quit!\")."
+    (signal \\='quit \"user quit!\")"
   :type '(repeat function))
 
 (defcustom yas-indent-line 'auto
@@ -398,18 +396,26 @@ It must be set to nil before loading yasnippet to take effect."
 
 ;;; User-visible variables
 
+(defconst yas-maybe-skip-and-clear-field
+  '(menu-item "" yas-skip-and-clear-field
+              :filter yas--maybe-clear-field-filter)
+  "A conditional key definition.
+This can be used as a key definition in keymaps to bind a key to
+`yas-skip-and-clear-field' only when at the beginning of an
+unmodified snippey field.")
+
 (defvar yas-keymap  (let ((map (make-sparse-keymap)))
                       (define-key map [(tab)]       'yas-next-field-or-maybe-expand)
                       (define-key map (kbd "TAB")   'yas-next-field-or-maybe-expand)
                       (define-key map [(shift tab)] 'yas-prev-field)
                       (define-key map [backtab]     'yas-prev-field)
                       (define-key map (kbd "C-g")   'yas-abort-snippet)
-                      (define-key map (kbd "C-d")   'yas-skip-and-clear-or-delete-char)
+                      (define-key map (kbd "C-d")   yas-maybe-skip-and-clear-field)
                       map)
   "The active keymap while a snippet expansion is in progress.")
 
-(defvar yas-key-syntaxes (list "w" "w_" "w_." "w_.()"
-                               #'yas-try-key-from-whitespace)
+(defvar yas-key-syntaxes (list #'yas-try-key-from-whitespace
+                               "w_.()" "w_." "w_" "w")
   "Syntaxes and functions to help look for trigger keys before point.
 
 Each element in this list specifies how to skip buffer positions
@@ -575,6 +581,34 @@ override bindings from other packages (e.g., `company-mode')."
 (defvar yas--original-auto-fill-function nil
   "The original value of `auto-fill-function'.")
 (make-variable-buffer-local 'yas--original-auto-fill-function)
+
+(defvar yas--watch-auto-fill-backtrace nil)
+
+(defun yas--watch-auto-fill (sym newval op _where)
+  (when (and (or (and (eq sym 'yas--original-auto-fill-function)
+                      (null newval)
+                      (eq auto-fill-function 'yas--auto-fill))
+                 (and (eq sym 'auto-fill-function)
+                      (eq newval 'yas--auto-fill)
+                      (null yas--original-auto-fill-function)))
+             (null yas--watch-auto-fill-backtrace)
+             (fboundp 'backtrace-frames) ; Suppress compiler warning.
+             ;; If we're about to change `auto-fill-function' too,
+             ;; it's okay (probably).
+             (not (and (eq op 'makunbound)
+                       (not (eq (default-value 'auto-fill-function) 'yas--auto-fill))
+                       (cl-member 'kill-all-local-variables
+                                  (backtrace-frames 'yas--watch-auto-fill)
+                                  :key (lambda (frame) (nth 1 frame))))))
+    (setq yas--watch-auto-fill-backtrace
+          (backtrace-frames 'yas--watch-auto-fill))))
+
+;; Try to get more info on #873/919 (this only works for Emacs 26+).
+(when (fboundp 'add-variable-watcher)
+  (add-variable-watcher 'yas--original-auto-fill-function
+                        #'yas--watch-auto-fill)
+  (add-variable-watcher 'auto-fill-function
+                        #'yas--watch-auto-fill))
 
 (defun yas--snippet-next-id ()
   (let ((id yas--snippet-id-seed))
@@ -953,25 +987,33 @@ Honour `yas-dont-activate-functions', which see."
   "The keymap used when `snippet-mode' is active.")
 
 
-;;;###autoload
-(define-derived-mode snippet-mode text-mode "Snippet"
-  "A mode for editing yasnippets"
-  (setq font-lock-defaults '(yas--font-lock-keywords))
-  (set (make-local-variable 'require-final-newline) nil)
-  (set (make-local-variable 'comment-start) "#")
-  (set (make-local-variable 'comment-start-skip) "#+[\t ]*")
-  (add-hook 'after-save-hook #'yas-maybe-load-snippet-buffer nil t))
+
+;;;###autoload(autoload 'snippet-mode "yasnippet" "A mode for editing yasnippets" t nil)
+(eval-and-compile
+  (if (fboundp 'prog-mode)
+      ;; `prog-mode' is new in 24.1.
+      (define-derived-mode snippet-mode prog-mode "Snippet"
+        "A mode for editing yasnippets"
+        (setq font-lock-defaults '(yas--font-lock-keywords))
+        (set (make-local-variable 'require-final-newline) nil)
+        (set (make-local-variable 'comment-start) "#")
+        (set (make-local-variable 'comment-start-skip) "#+[\t ]*")
+        (add-hook 'after-save-hook #'yas-maybe-load-snippet-buffer nil t))
+    (define-derived-mode snippet-mode fundamental-mode "Snippet"
+      "A mode for editing yasnippets"
+      (setq font-lock-defaults '(yas--font-lock-keywords))
+      (set (make-local-variable 'require-final-newline) nil)
+      (set (make-local-variable 'comment-start) "#")
+      (set (make-local-variable 'comment-start-skip) "#+[\t ]*")
+      (add-hook 'after-save-hook #'yas-maybe-load-snippet-buffer nil t))))
 
 (defun yas-snippet-mode-buffer-p ()
   "Return non-nil if current buffer should be in `snippet-mode'.
 Meaning it's visiting a file under one of the mode directories in
 `yas-snippet-dirs'."
   (when buffer-file-name
-    (member
-     (expand-file-name
-      ".."
-      (file-name-directory buffer-file-name))
-     (yas-snippet-dirs))))
+    (cl-member buffer-file-name (yas-snippet-dirs)
+               :test #'file-in-directory-p)))
 
 ;; We're abusing `magic-fallback-mode-alist' here because
 ;; `auto-mode-alist' doesn't support function matchers.
@@ -1370,15 +1412,51 @@ Returns (TEMPLATES START END). This function respects
 
 ;;; Internal functions and macros:
 
+(defun yas--remove-misc-free-from-undo (old-undo-list)
+  "Tries to work around Emacs Bug#30931.
+Helper function for `yas--save-restriction-and-widen'."
+  ;; If Bug#30931 is unfixed, we get (#<Lisp_Misc_Free> . INTEGER)
+  ;; entries in the undo list.  If we call `type-of' on the
+  ;; Lisp_Misc_Free object then Emacs aborts, so try to find it by
+  ;; checking that its type is none of the expected ones.
+  (when (consp buffer-undo-list)
+    (let* ((prev buffer-undo-list)
+           (undo-list prev))
+      (while (and (consp undo-list)
+                  ;; Only check new entries.
+                  (not (eq undo-list old-undo-list)))
+        (let ((entry (pop undo-list)))
+          (when (consp entry)
+            (let ((head (car entry)))
+              (unless (or (stringp head)
+                          (markerp head)
+                          (integerp head)
+                          (symbolp head)
+                          (not (integerp (cdr entry))))
+                ;; (message "removing misc free %S" entry)
+                (setcdr prev undo-list)))))
+        (setq prev undo-list)))))
+
+(defmacro yas--save-restriction-and-widen (&rest body)
+  "Equivalent to (save-restriction (widen) BODY).
+Also tries to work around Emacs Bug#30931."
+  (declare (debug (body)) (indent 0))
+  ;; Disable garbage collection, since it could cause an abort.
+  `(let ((gc-cons-threshold most-positive-fixnum)
+         (old-undo-list buffer-undo-list))
+     (prog1 (save-restriction
+              (widen)
+              ,@body)
+       (yas--remove-misc-free-from-undo old-undo-list))))
+
 (defun yas--eval-for-string (form)
   "Evaluate FORM and convert the result to string."
   (let ((debug-on-error (and (not (memq yas-good-grace '(t inline)))
                              debug-on-error)))
     (condition-case oops
         (save-excursion
-          (save-restriction
+          (yas--save-restriction-and-widen
             (save-match-data
-              (widen)
               (let ((result (eval form)))
                 (when result
                   (format "%s" result))))))
@@ -1493,7 +1571,7 @@ Here's a list of currently recognized directives:
          expand-env
          binding
          uuid)
-    (if (re-search-forward "^# --\n" nil t)
+    (if (re-search-forward "^# --\\s-*\n" nil t)
         (progn (setq template
                      (buffer-substring-no-properties (point)
                                                      (point-max)))
@@ -1938,12 +2016,19 @@ prefix argument."
       (yas-direct-keymaps-reload)
 
       (run-hooks 'yas-after-reload-hook)
-      (yas--message (if errors 2 3)
-                    (if no-jit "Snippets loaded %s."
-                      "Prepared just-in-time loading of snippets %s.")
-                    (if errors
-                        "with some errors. Check *Messages*"
-                      "successfully")))))
+      (let ((no-snippets
+             (cl-every (lambda (table) (= (hash-table-count table) 0))
+                       (list yas--scheduled-jit-loads
+                             yas--parents yas--tables))))
+        (yas--message (if (or no-snippets errors) 2 3)
+                      (if no-jit "Snippets loaded %s."
+                        "Prepared just-in-time loading of snippets %s.")
+                      (cond (errors
+                             "with some errors.  Check *Messages*")
+                            (no-snippets
+                             "(but no snippets found)")
+                            (t
+                             "successfully")))))))
 
 (defvar yas-after-reload-hook nil
   "Hooks run after `yas-reload-all'.")
@@ -2388,18 +2473,17 @@ Honours `yas-choose-tables-first', `yas-choose-keys-first' and
              :key #'yas--template-name :test #'string=)))
 
 (defun yas-lookup-snippet (name &optional mode noerror)
-  "Get the snippet content for the snippet NAME in MODE's tables.
+  "Get the snippet named NAME in MODE's tables.
 
 MODE defaults to the current buffer's `major-mode'.  If NOERROR
 is non-nil, then don't signal an error if there isn't any snippet
 called NAME.
 
 Honours `yas-buffer-local-condition'."
-  (let ((snippet (yas--lookup-snippet-1 name mode)))
-    (cond
-     (snippet (yas--template-content snippet))
-     (noerror nil)
-     (t (error "No snippet named: %s" name)))))
+  (cond
+   ((yas--lookup-snippet-1 name mode))
+   (noerror nil)
+   (t (error "No snippet named: %s" name))))
 
 (defun yas-insert-snippet (&optional no-condition)
   "Choose a snippet to expand, pop-up a list of choices according
@@ -2495,10 +2579,11 @@ where snippets of table might exist."
         (tables (if table (list table)
                   (yas--get-snippet-tables))))
     ;; HACK! the snippet table created here is actually registered!
-    ;;
-    (unless (or table (gethash major-mode yas--tables))
-      (push (yas--table-get-create major-mode)
-            tables))
+    (unless table
+      ;; The major mode is probably the best guess, put it first.
+      (let ((major-mode-table (yas--table-get-create major-mode)))
+        (cl-callf2 delq major-mode-table tables)
+        (push major-mode-table tables)))
 
     (mapcar #'(lambda (table)
                 (cons table
@@ -2689,8 +2774,11 @@ and `kill-buffer' instead."
         (save-buffer)))
     (quit-window kill)))
 
+(declare-function yas-debug-snippets "yasnippet-debug")
+
 (defun yas-tryout-snippet (&optional debug)
-  "Test current buffer's snippet template in other buffer."
+  "Test current buffer's snippet template in other buffer.
+DEBUG is for debugging the YASnippet engine itself."
   (interactive "P")
   (let* ((major-mode-and-parent (yas--compute-major-mode-and-parents buffer-file-name))
          (parsed (yas--parse-template))
@@ -2720,9 +2808,9 @@ and `kill-buffer' instead."
                                  (point-max)
                                  (yas--template-expand-env yas--current-template))
              (when (and debug
-                        (require 'yasnippet-debug nil t)
-                        (fboundp 'yas-debug-snippet-vars))
-               (add-hook 'post-command-hook #'yas-debug-snippet-vars nil t))))
+                        (require 'yasnippet-debug nil t))
+               (yas-debug-snippets "*YASnippet trace*" 'snippet-navigation)
+               (display-buffer "*YASnippet trace*"))))
           (t
            (yas--message 1 "Cannot test snippet for unknown major mode")))))
 
@@ -2922,7 +3010,8 @@ Otherwise signal `yas-exception'."
 (defun yas-field-value (number)
   "Get the string for field with NUMBER.
 
-Use this in primary and mirror transformations to tget."
+Use this in primary and mirror transformations to get the text of
+other fields."
   (let* ((snippet (car (yas-active-snippets)))
          (field (and snippet
                      (yas--snippet-find-field snippet number))))
@@ -3337,9 +3426,8 @@ This renders the snippet as ordinary text."
     ;;
     (yas--markers-to-points snippet)
 
-    ;; Take care of snippet revival
-    ;;
-    (if yas-snippet-revival
+    ;; Take care of snippet revival on undo.
+    (if (and yas-snippet-revival (listp buffer-undo-list))
         (push `(apply yas--snippet-revive ,yas-snippet-beg ,yas-snippet-end ,snippet)
               buffer-undo-list)
       ;; Dismember the snippet... this is useful if we get called
@@ -3527,22 +3615,37 @@ holds the keymap."
     (overlay-put overlay 'yas--snippet snippet)
     overlay))
 
+(defun yas-current-field ()
+  "Return the currently active field."
+  (and yas--active-field-overlay
+       (overlay-buffer yas--active-field-overlay)
+       (overlay-get yas--active-field-overlay 'yas--field)))
+
+(defun yas--maybe-clear-field-filter (cmd)
+  "Return CMD if at start of unmodified snippet field.
+Use as a `:filter' argument for a conditional keybinding."
+  (let ((field (yas-current-field)))
+    (when (and field
+               (not (yas--field-modified-p field))
+               (eq (point) (marker-position (yas--field-start field))))
+      cmd)))
+
+(defun yas-skip-and-clear-field (&optional field)
+  "Clears unmodified FIELD if at field start, skips to next tab."
+  (interactive)
+  (yas--skip-and-clear (or field (yas-current-field)))
+  (yas-next-field 1))
+
 (defun yas-skip-and-clear-or-delete-char (&optional field)
   "Clears unmodified field if at field start, skips to next tab.
 
 Otherwise deletes a character normally by calling `delete-char'."
   (interactive)
-  (let ((field (or field
-                   (and yas--active-field-overlay
-                        (overlay-buffer yas--active-field-overlay)
-                        (overlay-get yas--active-field-overlay 'yas--field)))))
-    (cond ((and field
-                (not (yas--field-modified-p field))
-                (eq (point) (marker-position (yas--field-start field))))
-           (yas--skip-and-clear field)
-           (yas-next-field 1))
-          (t
-           (call-interactively 'delete-char)))))
+  (declare (obsolete "Bind to `yas-maybe-skip-and-clear-field' instead." "0.13"))
+  (cond ((yas--maybe-clear-field-filter t)
+         (yas--skip-and-clear (or field (yas-current-field)))
+         (yas-next-field 1))
+        (t (call-interactively 'delete-char))))
 
 (defun yas--skip-and-clear (field &optional from)
   "Deletes the region of FIELD and sets it's modified state to t.
@@ -3643,7 +3746,44 @@ field start.  This hook does nothing if an undo is in progress."
             reoverlays))
     (goto-char orig-point)
     (let ((yas--inhibit-overlay-hooks t))
-      (funcall yas--original-auto-fill-function))
+      (if (null yas--original-auto-fill-function)
+          ;; Try to get more info on #873/919.
+          (let ((yas--fill-fun-values `((t ,(default-value 'yas--original-auto-fill-function))))
+                (fill-fun-values `((t ,(default-value 'auto-fill-function))))
+                ;; Listing 2 buffers with the same value is enough
+                (print-length 3))
+            (save-current-buffer
+              (dolist (buf (let ((bufs (buffer-list)))
+                             ;; List the current buffer first.
+                             (setq bufs (cons (current-buffer)
+                                              (remq (current-buffer) bufs)))))
+                (set-buffer buf)
+                (let* ((yf-cell (assq yas--original-auto-fill-function
+                                      yas--fill-fun-values))
+                       (af-cell (assq auto-fill-function fill-fun-values)))
+                  (when (local-variable-p 'yas--original-auto-fill-function)
+                    (if yf-cell (setcdr yf-cell (cons buf (cdr yf-cell)))
+                      (push (list yas--original-auto-fill-function buf) yas--fill-fun-values)))
+                  (when (local-variable-p 'auto-fill-function)
+                    (if af-cell (setcdr af-cell (cons buf (cdr af-cell)))
+                      (push (list auto-fill-function buf) fill-fun-values))))))
+                 (lwarn '(yasnippet auto-fill bug) :error
+                        "`yas--original-auto-fill-function' unexpectedly nil in %S!  Disabling auto-fill.
+  %S
+  `auto-fill-function': %S\n%s"
+                        (current-buffer) yas--fill-fun-values fill-fun-values
+                        (if (fboundp 'backtrace--print-frame)
+                            (with-output-to-string
+                              (mapc (lambda (frame)
+                                      (apply #'backtrace--print-frame frame))
+                                    yas--watch-auto-fill-backtrace))
+                          ""))
+                 ;; Try to avoid repeated triggering of this bug.
+                 (auto-fill-mode -1)
+                 ;; Don't pop up more than once in a session (still log though).
+                 (defvar warning-suppress-types) ; `warnings' is autoloaded by `lwarn'.
+                 (add-to-list 'warning-suppress-types '(yasnippet auto-fill bug)))
+        (funcall yas--original-auto-fill-function)))
     (save-excursion
       (setq end (progn (forward-paragraph) (point)))
       (setq beg (progn (backward-paragraph) (point))))
@@ -3740,124 +3880,100 @@ Move the overlays, or create them if they do not exit."
 ;; running, but if managed correctly (including overlay priorities)
 ;; they should account for all situations...
 
-(defvar yas--first-indent-undo nil
-  "Internal variable for indent undo entries.
-Used to pass info from `yas--indent-region' to `yas-expand-snippet'.")
-(defvar yas--get-indent-undo-pos nil
-  "Record undo info for line beginning at given position.
-We bind this when first creating a snippet.  See also
-`yas--first-indent-undo'.")
-
-(defun yas-expand-snippet (content &optional start end expand-env)
-  "Expand snippet CONTENT at current point.
+(defun yas-expand-snippet (snippet &optional start end expand-env)
+  "Expand SNIPPET at current point.
 
 Text between START and END will be deleted before inserting
-template.  EXPAND-ENV is a list of (SYM VALUE) let-style dynamic bindings
-considered when expanding the snippet."
+template.  EXPAND-ENV is a list of (SYM VALUE) let-style dynamic
+bindings considered when expanding the snippet.  If omitted, use
+SNIPPET's expand-env field.
+
+SNIPPET may be a snippet structure (e.g., as returned by
+`yas-lookup-snippet'), or just a snippet body (which is a string
+for normal snippets, and a list for command snippets)."
   (cl-assert (and yas-minor-mode
                   (memq 'yas--post-command-handler post-command-hook))
              nil
              "[yas] `yas-expand-snippet' needs properly setup `yas-minor-mode'")
   (run-hooks 'yas-before-expand-snippet-hook)
 
-  ;;
-  (let* ((yas-selected-text (or yas-selected-text
-                                (and (region-active-p)
-                                     (buffer-substring-no-properties (region-beginning)
-                                                                     (region-end)))))
-         (start (or start
-                    (and (region-active-p)
-                         (region-beginning))
-                    (point)))
-         (end (or end
-                  (and (region-active-p)
-                       (region-end))
-                  (point)))
-         (to-delete (and start
-                         end
+  (let* ((clear-field
+          (let ((field (and yas--active-field-overlay
+                            (overlay-buffer yas--active-field-overlay)
+                            (overlay-get yas--active-field-overlay 'yas--field))))
+            (and field (yas--skip-and-clear-field-p
+                        field (point) (point) 0)
+                 field)))
+         (start (cond (start)
+                      ((region-active-p)
+                       (region-beginning))
+                      (clear-field
+                       (yas--field-start clear-field))
+                      (t (point))))
+         (end (cond (end)
+                    ((region-active-p)
+                     (region-end))
+                    (clear-field
+                     (yas--field-end clear-field))
+                    (t (point))))
+         (to-delete (and (> end start)
                          (buffer-substring-no-properties start end)))
-         (yas--first-indent-undo nil)
-         snippet)
+         (yas-selected-text
+          (cond (yas-selected-text)
+                ((and (region-active-p)
+                      (not clear-field))
+                 to-delete))))
     (goto-char start)
     (setq yas--indent-original-column (current-column))
     ;; Delete the region to delete, this *does* get undo-recorded.
-    ;;
-    (when (and to-delete
-               (> end start))
+    (when to-delete
       (delete-region start end))
 
-    (cond ((listp content)
-           ;; x) This is a snippet-command
-           ;;
-           (yas--eval-for-effect content))
-          (t
-           ;; x) This is a snippet-snippet :-)
-           ;;
-           ;;    Narrow the region down to the content, shoosh the
-           ;;    `buffer-undo-list', and create the snippet, the new
-           ;;    snippet updates its mirrors once, so we are left with
-           ;;    some plain text.  The undo action for deleting this
-           ;;    plain text will get recorded at the end.
-           ;;
-           ;;    stacked expansion: also shoosh the overlay modification hooks
-           (let ((buffer-undo-list t)
-                 (yas--get-indent-undo-pos (line-beginning-position)))
-             ;; snippet creation might evaluate users elisp, which
-             ;; might generate errors, so we have to be ready to catch
-             ;; them mostly to make the undo information
-             ;;
+    (let ((content (if (yas--template-p snippet)
+                       (yas--template-content snippet)
+                     snippet)))
+      (when (and (not expand-env) (yas--template-p snippet))
+        (setq expand-env (yas--template-expand-env snippet)))
+      (cond ((listp content)
+             ;; x) This is a snippet-command.
+             (yas--eval-for-effect content))
+            (t
+             ;; x) This is a snippet-snippet :-)
              (setq yas--start-column (current-column))
+             ;; Stacked expansion: also shoosh the overlay modification hooks.
              (let ((yas--inhibit-overlay-hooks t))
-               (insert content)
                (setq snippet
-                     (yas--snippet-create expand-env start (point)))))
+                     (yas--snippet-create content expand-env start (point))))
 
-           ;; stacked-expansion: This checks for stacked expansion, save the
-           ;; `yas--previous-active-field' and advance its boundary.
-           ;;
-           (let ((existing-field (and yas--active-field-overlay
-                                      (overlay-buffer yas--active-field-overlay)
-                                      (overlay-get yas--active-field-overlay 'yas--field))))
-             (when existing-field
-               (setf (yas--snippet-previous-active-field snippet) existing-field)
-               (yas--advance-end-maybe existing-field (overlay-end yas--active-field-overlay))))
+             ;; Stacked-expansion: This checks for stacked expansion, save the
+             ;; `yas--previous-active-field' and advance its boundary.
+             (let ((existing-field (and yas--active-field-overlay
+                                        (overlay-buffer yas--active-field-overlay)
+                                        (overlay-get yas--active-field-overlay 'yas--field))))
+               (when existing-field
+                 (setf (yas--snippet-previous-active-field snippet) existing-field)
+                 (yas--advance-end-maybe existing-field (overlay-end yas--active-field-overlay))))
 
-           ;; Exit the snippet immediately if no fields
-           ;;
-           (unless (yas--snippet-fields snippet)
-             (yas-exit-snippet snippet))
+             ;; Exit the snippet immediately if no fields.
+             (unless (yas--snippet-fields snippet)
+               (yas-exit-snippet snippet))
 
-           ;; Undo actions from indent of snippet's 1st line.
-           (setq buffer-undo-list
-                 (nconc yas--first-indent-undo buffer-undo-list))
-           ;; Undo action for the expand snippet contents.
-           (push (cons (overlay-start (yas--snippet-control-overlay snippet))
-                       (overlay-end (yas--snippet-control-overlay snippet)))
-                 buffer-undo-list)
-           ;; Follow up with `yas--take-care-of-redo' on the newly
-           ;; inserted snippet boundaries.
-           (push `(apply yas--take-care-of-redo ,start
-                         ,(overlay-end (yas--snippet-control-overlay snippet))
-                         ,snippet)
-                 buffer-undo-list)
+             ;; Now, schedule a move to the first field.
+             (let ((first-field (car (yas--snippet-fields snippet))))
+               (when first-field
+                 (sit-for 0) ;; fix issue 125
+                 (yas--letenv (yas--snippet-expand-env snippet)
+                   (yas--move-to-field snippet first-field))
+                 (when (and (eq (yas--field-number first-field) 0)
+                            (> (length (yas--field-text-for-display
+                                        first-field))
+                               0))
+                   ;; Keep region for ${0:exit text}.
+                   (setq deactivate-mark nil))))
+             (yas--message 4 "snippet %d expanded." (yas--snippet-id snippet))
+             t)))))
 
-           ;; Now, schedule a move to the first field
-           ;;
-           (let ((first-field (car (yas--snippet-fields snippet))))
-             (when first-field
-               (sit-for 0) ;; fix issue 125
-               (yas--letenv (yas--snippet-expand-env snippet)
-                 (yas--move-to-field snippet first-field))
-               (when (and (eq (yas--field-number first-field) 0)
-                          (> (length (yas--field-text-for-display
-                                      first-field))
-                             0))
-                 ;; Keep region for ${0:exit text}.
-                 (setq deactivate-mark nil))))
-           (yas--message 4 "snippet %d expanded." (yas--snippet-id snippet))
-           t))))
-
-(defun yas--take-care-of-redo (_beg _end snippet)
+(defun yas--take-care-of-redo (snippet)
   "Commits SNIPPET, which in turn pushes an undo action for reviving it.
 
 Meant to exit in the `buffer-undo-list'."
@@ -3882,19 +3998,40 @@ After revival, push the `yas--take-care-of-redo' in the
   (when (yas--maybe-move-to-active-field snippet)
     (setf (yas--snippet-control-overlay snippet) (yas--make-control-overlay snippet beg end))
     (overlay-put (yas--snippet-control-overlay snippet) 'yas--snippet snippet)
-    (push `(apply yas--take-care-of-redo ,beg ,end ,snippet)
-          buffer-undo-list)))
+    (when (listp buffer-undo-list)
+      (push `(apply yas--take-care-of-redo ,snippet)
+            buffer-undo-list))))
 
-(defun yas--snippet-create (expand-env begin end)
+(defun yas--snippet-create (content expand-env begin end)
   "Create a snippet from a template inserted at BEGIN to END.
 
 Returns the newly created snippet."
   (save-restriction
-    (narrow-to-region begin end)
     (let ((snippet (yas--make-snippet expand-env)))
       (yas--letenv expand-env
-        (goto-char begin)
-        (yas--snippet-parse-create snippet)
+        ;; Put a single undo action for the expanded snippet's
+        ;; content.
+        (let ((buffer-undo-list t))
+          ;; Some versions of cc-mode fail when inserting snippet
+          ;; content in a narrowed buffer.
+          (goto-char begin)
+          (insert content)
+          (setq end (+ end (length content)))
+          (narrow-to-region begin end)
+          (goto-char (point-min))
+          (yas--snippet-parse-create snippet))
+        (when (listp buffer-undo-list)
+          (push (cons (point-min) (point-max))
+                buffer-undo-list))
+
+        ;; Indent, collecting undo information normally.
+        (yas--indent snippet)
+
+        ;; Follow up with `yas--take-care-of-redo' on the newly
+        ;; inserted snippet boundaries.
+        (when (listp buffer-undo-list)
+          (push `(apply yas--take-care-of-redo ,snippet)
+                buffer-undo-list))
 
         ;; Sort and link each field
         (yas--snippet-sort-fields snippet)
@@ -3991,22 +4128,27 @@ has to be called before the $-constructs are deleted."
       (when soup
         (cl-reduce link-foms soup)))))
 
-(defun yas--calculate-mirrors-in-fields (snippet mirror)
-  "Attempt to assign a parent field of SNIPPET to the mirror MIRROR.
+(defun yas--calculate-simple-fom-parentage (snippet fom)
+  "Discover if FOM is parented by some field in SNIPPET.
 
 Use the tightest containing field if more than one field contains
 the mirror.  Intended to be called *before* the dollar-regions are
 deleted."
   (let ((min (point-min))
         (max (point-max)))
-    (dolist (field (yas--snippet-fields snippet))
-      (when (and (<= (yas--field-start field) (yas--mirror-start mirror))
-                 (<= (yas--mirror-end mirror) (yas--field-end field))
+    (dolist (field (remq fom (yas--snippet-fields snippet)))
+      (when (and (<= (yas--field-start field) (yas--fom-start fom))
+                 (<= (yas--fom-end fom) (yas--field-end field))
                (< min (yas--field-start field))
                (< (yas--field-end field) max))
           (setq min (yas--field-start field)
                 max (yas--field-end field))
-          (setf (yas--mirror-parent-field mirror) field)))))
+          (cond ((yas--field-p fom)
+                 (setf (yas--field-parent-field fom) field))
+                ((yas--mirror-p fom)
+                 (setf (yas--mirror-parent-field fom) field))
+                (t ; it's an exit, so noop
+                 nil ))))))
 
 (defun yas--advance-end-maybe (fom newend)
   "Maybe advance FOM's end to NEWEND if it needs it.
@@ -4050,11 +4192,6 @@ next FOM.  Works its way up recursively for parents of parents."
   "When expanding the snippet the \"parse-create\" functions add
 cons cells to this var.")
 
-(defvar yas--backquote-markers-and-strings nil
-  "List of (MARKER . STRING) marking where the values from
-backquoted Lisp expressions should be inserted at the end of
-expansion.")
-
 (defvar yas--indent-markers nil
   "List of markers for manual indentation.")
 
@@ -4063,21 +4200,22 @@ expansion.")
 necessary fields, mirrors and exit points.
 
 Meant to be called in a narrowed buffer, does various passes"
-  (let ((parse-start (point)))
+  (let ((saved-quotes nil)
+        (parse-start (point)))
     ;; Avoid major-mode's syntax propertizing function, since we
     ;; change the syntax-table while calling `scan-sexps'.
     (let ((syntax-propertize-function nil))
       (setq yas--dollar-regions nil)  ; Reset the yas--dollar-regions.
       (yas--protect-escapes nil '(?`))  ; Protect just the backquotes.
       (goto-char parse-start)
-      (yas--save-backquotes)     ; Replace all backquoted expressions.
-      (yas--protect-escapes)     ; Protect escaped characters.
+      (setq saved-quotes (yas--save-backquotes)) ; `expressions`.
+      (yas--protect-escapes)            ; Protect escaped characters.
       (goto-char parse-start)
       (yas--indent-parse-create)        ; Parse indent markers: `$>'.
       (goto-char parse-start)
       (yas--field-parse-create snippet) ; Parse fields with {}.
       (goto-char parse-start)
-      (yas--simple-mirror-parse-create snippet) ; Parse simple mirrors & fields.
+      (yas--simple-fom-create snippet) ; Parse simple mirrors & fields.
       (goto-char parse-start)
       (yas--transform-mirror-parse-create snippet) ; Parse mirror transforms.
       ;; Invalidate any syntax-propertizing done while
@@ -4085,8 +4223,7 @@ Meant to be called in a narrowed buffer, does various passes"
       (syntax-ppss-flush-cache parse-start))
     ;; Set "next" links of fields & mirrors.
     (yas--calculate-adjacencies snippet)
-    (save-restriction
-      (widen)                           ; Delete $-constructs.
+    (yas--save-restriction-and-widen    ; Delete $-constructs.
       (yas--delete-regions yas--dollar-regions))
     ;; Make sure to do this insertion *after* deleting the dollar
     ;; regions, otherwise we invalidate the calculated positions of
@@ -4101,12 +4238,11 @@ Meant to be called in a narrowed buffer, does various passes"
                 (get-register yas-wrap-around-region))
            (insert (prog1 (get-register yas-wrap-around-region)
                      (set-register yas-wrap-around-region nil)))))
-    (yas--restore-backquotes)  ; Restore backquoted expression values.
+    (yas--restore-backquotes saved-quotes)  ; Restore `expression` values.
     (goto-char parse-start)
     (yas--restore-escapes)        ; Restore escapes.
     (yas--update-mirrors snippet) ; Update mirrors for the first time.
-    (goto-char parse-start))
-  (yas--indent snippet))                ; Indent the best we can.
+    (goto-char parse-start)))
 
 ;; HACK: Some implementations of `indent-line-function' (called via
 ;; `indent-according-to-mode') delete text before they insert (like
@@ -4228,8 +4364,7 @@ Buffer must be narrowed to BEG..END used to create the snapshot info."
   "Indent the lines between FROM and TO with `indent-according-to-mode'.
 The SNIPPET's markers are preserved."
   (save-excursion
-    (save-restriction
-      (widen)
+    (yas--save-restriction-and-widen
       (let* ((snippet-markers (yas--collect-snippet-markers snippet))
              (to (set-marker (make-marker) to)))
         (goto-char from)
@@ -4246,12 +4381,7 @@ The SNIPPET's markers are preserved."
                              remarkers)))
                    (unwind-protect
                        (progn (back-to-indentation)
-                              (if (eq yas--get-indent-undo-pos bol)
-                                  (let ((buffer-undo-list nil))
-                                    (indent-according-to-mode)
-                                    (setq yas--first-indent-undo
-                                          (delq nil buffer-undo-list)))
-                                (indent-according-to-mode)))
+                              (indent-according-to-mode))
                      (save-restriction
                        (narrow-to-region bol (line-end-position))
                        (mapc #'yas--restore-marker-location remarkers))))
@@ -4273,16 +4403,26 @@ The SNIPPET's markers are preserved."
     (setq yas--indent-markers nil))
   ;; Now do stuff for `fixed' and `auto'.
   (save-excursion
+    ;; We need to be at end of line, so that `forward-line' will only
+    ;; report 0 if it actually moves over a newline.
+    (end-of-line)
     (cond ((eq yas-indent-line 'fixed)
-           (while (and (zerop (forward-line))
-                       (zerop (current-column)))
-             (indent-to-column yas--indent-original-column)))
+           (when (= (forward-line 1) 0)
+             (let ((indent-line-function
+                    (lambda ()
+                      ;; We need to be at beginning of line in order to
+                      ;; indent existing whitespace correctly.
+                      (beginning-of-line)
+                      (indent-to-column yas--indent-original-column))))
+               (yas--indent-region (line-beginning-position)
+                                   (point-max)
+                                   snippet))))
           ((eq yas-indent-line 'auto)
-           (unless yas-also-auto-indent-first-line
-             (forward-line 1))
-           (yas--indent-region (line-beginning-position)
-                               (point-max)
-                               snippet)))))
+           (when (or yas-also-auto-indent-first-line
+                     (= (forward-line 1) 0))
+             (yas--indent-region (line-beginning-position)
+                                 (point-max)
+                                 snippet))))))
 
 (defun yas--collect-snippet-markers (snippet)
   "Make a list of all the markers used by SNIPPET."
@@ -4322,17 +4462,19 @@ With optional string TEXT do it in string instead of the buffer."
     changed-text))
 
 (defun yas--save-backquotes ()
-  "Save all the \"\\=`(lisp-expression)\\=`\"-style expressions
-with their evaluated value into `yas--backquote-markers-and-strings'."
-  (let* ((yas--snippet-buffer (current-buffer))
+  "Save all \"\\=`(lisp-expression)\\=`\"-style expressions.
+Return a list of (MARKER . STRING) entires for each backquoted
+Lisp expression."
+  (let* ((saved-quotes nil)
+         (yas--snippet-buffer (current-buffer))
          (yas--change-detected nil)
          (detect-change (lambda (_beg _end)
                           (when (eq (current-buffer) yas--snippet-buffer)
                             (setq yas--change-detected t)))))
     (while (re-search-forward yas--backquote-lisp-expression-regexp nil t)
       (let ((current-string (match-string-no-properties 1)) transformed)
-        (save-restriction (widen)
-                          (delete-region (match-beginning 0) (match-end 0)))
+        (yas--save-restriction-and-widen
+          (delete-region (match-beginning 0) (match-end 0)))
         (let ((before-change-functions
                (cons detect-change before-change-functions)))
           (setq transformed (yas--eval-for-string (yas--read-lisp
@@ -4342,34 +4484,31 @@ with their evaluated value into `yas--backquote-markers-and-strings'."
         (when transformed
           (let ((marker (make-marker))
                 (before-change-functions (cdr before-change-functions)))
-            (save-restriction
-              (widen)
+            (yas--save-restriction-and-widen
               (insert "Y") ;; quite horrendous, I love it :)
               (set-marker marker (point))
               (insert "Y"))
-            (push (cons marker transformed) yas--backquote-markers-and-strings)))))
+            (push (cons marker transformed) saved-quotes)))))
     (when yas--change-detected
       (lwarn '(yasnippet backquote-change) :warning
              "`%s' modified buffer in a backquote expression.
   To hide this warning, add (yasnippet backquote-change) to `warning-suppress-types'."
              (if yas--current-template
                  (yas--template-name yas--current-template)
-               "Snippet")))))
+               "Snippet")))
+    saved-quotes))
 
-(defun yas--restore-backquotes ()
-  "Replace markers in `yas--backquote-markers-and-strings' with their values."
-  (while yas--backquote-markers-and-strings
-    (let* ((marker-and-string (pop yas--backquote-markers-and-strings))
-           (marker (car marker-and-string))
-           (string (cdr marker-and-string)))
-      (save-excursion
-        (goto-char marker)
-        (save-restriction
-          (widen)
-          (delete-char -1)
-          (insert string)
-          (delete-char 1))
-        (set-marker marker nil)))))
+(defun yas--restore-backquotes (saved-quotes)
+  "Replace markers in SAVED-QUOTES with their values.
+SAVED-QUOTES is the in format returned by `yas--save-backquotes'."
+  (cl-loop for (marker . string) in saved-quotes do
+           (save-excursion
+             (goto-char marker)
+             (yas--save-restriction-and-widen
+               (delete-char -1)
+               (insert string)
+               (delete-char 1))
+             (set-marker marker nil))))
 
 (defun yas--scan-sexps (from count)
   (ignore-errors
@@ -4488,10 +4627,10 @@ When multiple expressions are found, only the last one counts."
       (when brand-new-mirror
         (push brand-new-mirror
               (yas--field-mirrors field))
-        (yas--calculate-mirrors-in-fields snippet brand-new-mirror)
+        (yas--calculate-simple-fom-parentage snippet brand-new-mirror)
         (push (cons (match-beginning 0) real-match-end-0) yas--dollar-regions)))))
 
-(defun yas--simple-mirror-parse-create (snippet)
+(defun yas--simple-fom-create (snippet)
   "Parse the simple \"$n\" fields/mirrors/exitmarkers in SNIPPET."
   (while (re-search-forward yas--simple-mirror-regexp nil t)
     (let ((number (string-to-number (match-string-no-properties 1))))
@@ -4501,20 +4640,22 @@ When multiple expressions are found, only the last one counts."
              (push (cons (match-beginning 0) (yas--exit-marker (yas--snippet-exit snippet)))
                    yas--dollar-regions))
             (t
-             (let ((field (yas--snippet-find-field snippet number)))
+             (let ((field (yas--snippet-find-field snippet number))
+                   (fom))
                (if field
-                   (let ((brand-new-mirror (yas--make-mirror
-                                            (yas--make-marker (match-beginning 0))
-                                            (yas--make-marker (match-beginning 0))
-                                            nil)))
-                     (push brand-new-mirror
-                           (yas--field-mirrors field))
-                     (yas--calculate-mirrors-in-fields snippet brand-new-mirror))
-                 (push (yas--make-field number
-                                       (yas--make-marker (match-beginning 0))
-                                       (yas--make-marker (match-beginning 0))
-                                       nil)
-                       (yas--snippet-fields snippet))))
+                   (push
+                    (setq fom (yas--make-mirror
+                               (yas--make-marker (match-beginning 0))
+                               (yas--make-marker (match-beginning 0))
+                               nil))
+                    (yas--field-mirrors field))
+                 (push
+                  (setq fom (yas--make-field number
+                                             (yas--make-marker (match-beginning 0))
+                                             (yas--make-marker (match-beginning 0))
+                                             nil))
+                  (yas--snippet-fields snippet)))
+               (yas--calculate-simple-fom-parentage snippet fom))
              (push (cons (match-beginning 0) (match-end 0))
                    yas--dollar-regions))))))
 
@@ -4544,8 +4685,7 @@ When multiple expressions are found, only the last one counts."
 
 (defun yas--update-mirrors (snippet)
   "Update all the mirrors of SNIPPET."
-  (save-restriction
-    (widen)
+  (yas--save-restriction-and-widen
     (save-excursion
       (cl-loop
        for (field . mirror)
@@ -4628,6 +4768,18 @@ When multiple expressions are found, only the last one counts."
 ;;
 (defun yas--post-command-handler ()
   "Handles various yasnippet conditions after each command."
+  (when (and yas--watch-auto-fill-backtrace
+             (fboundp 'backtrace--print-frame)
+             (null yas--original-auto-fill-function)
+             (eq auto-fill-function 'yas--auto-fill))
+    (lwarn '(yasnippet auto-fill bug) :error
+           "`yas--original-auto-fill-function' unexpectedly nil! Please report this backtrace\n%S"
+           (with-output-to-string
+             (mapc #'backtrace--print-frame
+                     yas--watch-auto-fill-backtrace)))
+    ;; Don't pop up more than once in a session (still log though).
+    (defvar warning-suppress-types) ; `warnings' is autoloaded by `lwarn'.
+    (add-to-list 'warning-suppress-types '(yasnippet auto-fill bug)))
   (condition-case err
       (progn (yas--finish-moving-snippets)
              (cond ((eq 'undo this-command)
@@ -4737,7 +4889,7 @@ object satisfying `yas--field-p' to restrict the expansion to.")))
   "Log level for `yas--message' 4 means trace most anything, 0 means nothing.")
 
 (defun yas--message (level message &rest args)
-  "When LEVEL is at or below `yas-verbosity-level', log MESSAGE and ARGS."
+  "When LEVEL is at or below `yas-verbosity', log MESSAGE and ARGS."
   (when (>= yas-verbosity level)
     (message "%s" (apply #'yas--format message args))))
 
@@ -4805,6 +4957,31 @@ and return the directory.  Return nil if not found."
                                          (directory-file-name file))))
                  (setq file nil))))
         root))))
+
+;;; Unloading
+
+(defvar unload-function-defs-list) ; loadhist.el
+
+(defun yasnippet-unload-function ()
+  "Disable minor modes when calling `unload-feature'."
+  ;; Disable `yas-minor-mode' everywhere it's enabled.
+  (yas-global-mode -1)
+  (save-current-buffer
+    (dolist (buffer (buffer-list))
+      (set-buffer buffer)
+      (when yas-minor-mode
+        (yas-minor-mode -1))))
+  ;; Remove symbol properties of all our functions, this avoids
+  ;; Bug#25088 in Emacs 25.1, where the compiler macro on
+  ;; `cl-defstruct' created functions hang around in the symbol plist
+  ;; and cause errors when loading again (we don't *need* to clean
+  ;; *all* symbol plists, but it's easier than being precise).
+  (dolist (def unload-function-defs-list)
+    (when (eq (car-safe def) 'defun)
+      (setplist (cdr def) nil)))
+  ;; Return nil so that `unload-feature' will take of undefining
+  ;; functions, and changing any buffers using `snippet-mode'.
+  nil)
 
 
 ;;; Backward compatibility to yasnippet <= 0.7

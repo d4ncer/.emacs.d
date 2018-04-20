@@ -274,8 +274,19 @@ attention to case differences."
     (ert-simulate-command '(yas-next-field-or-maybe-expand))
     (should (looking-at "testblable"))
     (ert-simulate-command '(yas-next-field-or-maybe-expand))
-    (ert-simulate-command '(yas-skip-and-clear-or-delete-char))
+    (ert-simulate-command '(yas-skip-and-clear-field))
     (should (looking-at "ble"))
+    (should (null (yas-active-snippets)))))
+
+(ert-deftest delete-nested-simple-field-issue-824 ()
+  "Test deleting a field with a nested simple field in it."
+  (with-temp-buffer
+    (yas-minor-mode 1)
+    (yas-expand-snippet "${3:so-$4and}$0${2:-so}")
+    (ert-simulate-command '(yas-next-field-or-maybe-expand))
+    (should (looking-at "so-and-so"))
+    (ert-simulate-command '(yas-skip-and-clear-or-delete-char))
+    (should (looking-at "-so"))
     (should (null (yas-active-snippets)))))
 
 (ert-deftest ignore-trailing-whitespace ()
@@ -297,40 +308,75 @@ attention to case differences."
 ;;     (should (string= (yas--buffer-contents)
 ;;                      "brother from another mother!"))))
 
-(ert-deftest undo-indentation ()
-  "Check undoing works when only line of snippet is indented."
-  (let ((yas-also-auto-indent-first-line t))
-    (yas-with-snippet-dirs
-     '((".emacs.d/snippets" ("emacs-lisp-mode" ("s" . "(setq $0)"))))
-     (with-temp-buffer
-       (emacs-lisp-mode)
-       (yas-reload-all)
-       (yas-minor-mode 1)
-       (insert "(let\n(while s")
+(ert-deftest undo-redo ()
+  "Check redoing of snippet undo."
+  (yas-with-snippet-dirs '((".emacs.d/snippets"
+                            ("emacs-lisp-mode" ("x" . "${1:one},and done"))))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (yas-reload-all)
+      (yas-minor-mode 1)
+      (yas-expand-snippet "x$0")
+      (let ((pre-expand-string (buffer-string)))
+        (setq buffer-undo-list nil)
+        (ert-simulate-command '(yas-expand))
+        (push nil buffer-undo-list)
+        (ert-simulate-command '(yas-next-field)) ; $1 -> exit snippet.
+        (should (string-match-p "\\`one,and done" (buffer-string)))
+        (push nil buffer-undo-list)
+        (ert-simulate-command '(undo))  ; Revive snippet.
+        (ert-simulate-command '(undo))  ; Undo expansion.
+        (should (string= (buffer-string) pre-expand-string))
+        (ert-simulate-command '(move-end-of-line 1))
+        (push nil buffer-undo-list)
+        (ert-simulate-command '(undo))  ; Redo (re-expand snippet).
+        (should (string-match-p "\\`one,and done" (buffer-string)))))))
+
+(defun yas-test-expand-and-undo (mode snippet-entry initial-contents)
+  (yas-with-snippet-dirs
+   `((".emacs.d/snippets" (,(symbol-name mode) ,snippet-entry)))
+   (with-temp-buffer
+     (funcall mode)
+     (yas-reload-all)
+     (yas-minor-mode 1)
+     (yas-expand-snippet initial-contents)
+     (let ((pre-expand-string (buffer-string)))
        (setq buffer-undo-list ())
        (ert-simulate-command '(yas-expand))
        ;; Need undo barrier, I think command loop puts it normally.
        (push nil buffer-undo-list)
-       (should (string= (buffer-string) "(let\n    (while (setq )"))
        (ert-simulate-command '(undo))
-       (should (string= (buffer-string) "(let\n(while s"))))))
+       (should (string= (buffer-string) pre-expand-string))))))
 
-(ert-deftest undo-indentation-multiline ()
-  "Check undoing works when first line of multi-line snippet is indented."
-  (yas-with-snippet-dirs
-    '((".emacs.d/snippets" ("js-mode" ("if" . "if ($1) {\n\n}\n"))))
-    (with-temp-buffer
-      (js-mode)
-      (yas-reload-all)
-      (yas-minor-mode 1)
-      (insert "if\nabc = 123456789 + abcdef;")
-      (setq buffer-undo-list ())
-      (goto-char (point-min))
-      (search-forward "if")
-      (ert-simulate-command '(yas-expand))
-      (push nil buffer-undo-list)       ; See test above.
-      (ert-simulate-command '(undo))
-      (should (string= (buffer-string) "if\nabc = 123456789 + abcdef;")))))
+(ert-deftest undo-indentation-1 ()
+  "Check undoing works when only line of snippet is indented."
+  (let ((yas-also-auto-indent-first-line t))
+    (yas-test-expand-and-undo
+     'emacs-lisp-mode '("s" . "(setq $0)") "(let\n(while s$0")))
+
+(ert-deftest undo-indentation-2 ()
+  "Check undoing works when only line of snippet is indented."
+  (let ((yas-also-auto-indent-first-line t)
+        (indent-tabs-mode nil))
+    (yas-test-expand-and-undo
+     'emacs-lisp-mode '("t" . "; TODO") "t$0")))
+
+(ert-deftest undo-indentation-multiline-1 ()
+  "Check undoing works when 1st line of multi-line snippet is indented."
+  (let ((yas-also-auto-indent-first-line t)
+        (indent-tabs-mode nil))
+    (yas-test-expand-and-undo
+     'js-mode '("if" . "if ($1) {\n\n}\n")
+     "if$0\nabc = 123456789 + abcdef;")))
+
+
+(ert-deftest undo-indentation-multiline-2 ()
+  "Check undoing works when 2nd line of multi-line snippet is indented."
+  (let ((yas-also-auto-indent-first-line t)
+        (indent-tabs-mode nil))
+    (yas-test-expand-and-undo
+     'js-mode '("if" . "if (true) {\n${1:foo};\n}\n")
+     "if$0\nabc = 123456789 + abcdef;")))
 
 (ert-deftest dont-clear-on-partial-deletion-issue-515 ()
   "Ensure fields are not cleared when user doesn't really mean to."
@@ -400,6 +446,30 @@ end" (buffer-string)))
     (erase-buffer)
     (yas-expand-snippet "def foo\n\nend")
     (should (string= "def foo\n  \nend" (buffer-string)))))
+
+(ert-deftest yas-indent-first-line ()
+  (with-temp-buffer
+    (ruby-mode)
+    (yas-minor-mode 1)
+    (set (make-local-variable 'yas-indent-line) 'auto)
+    (set (make-local-variable 'yas-also-auto-indent-first-line) nil)
+    (set (make-local-variable 'yas-also-indent-empty-lines) nil)
+    (yas-expand-snippet "def foo\n$0\nend\n")
+    ;; First (and only) line should not indent.
+    (yas-expand-snippet "#not indented")
+    (should (equal "def foo\n#not indented\nend\n" (buffer-string)))))
+
+(ert-deftest yas-indent-first-line-fixed ()
+  (with-temp-buffer
+    (ruby-mode)
+    (yas-minor-mode 1)
+    (set (make-local-variable 'yas-indent-line) 'fixed)
+    (set (make-local-variable 'yas-also-auto-indent-first-line) nil)
+    (set (make-local-variable 'yas-also-indent-empty-lines) nil)
+    (yas-expand-snippet "    def foo\n    $0\n    end\n")
+    ;; First (and only) line should not indent.
+    (yas-expand-snippet "#not more indented")
+    (should (equal "    def foo\n    #not more indented\n    end\n" (buffer-string)))))
 
 (ert-deftest indentation-markers ()
   "Test a snippet with indentation markers (`$<')."
@@ -614,6 +684,35 @@ mapconcat #'(lambda (arg)
     (yas-expand-snippet "${1:$$(if (not yas-modified-p) \"a\")}")
     (yas-expand-snippet "\\\\alpha")))
 
+(ert-deftest expand-with-unused-yas-selected-text ()
+  (with-temp-buffer
+    (yas-with-snippet-dirs
+      '((".emacs.d/snippets"
+         ("emacs-lisp-mode"
+          ("foo" . "expanded `yas-selected-text`foo"))))
+      (yas-reload-all)
+      (emacs-lisp-mode)
+      (yas-minor-mode +1)
+      (insert "foo")
+      (ert-simulate-command '(yas-expand))
+      (should (equal (buffer-string) "expanded foo")))))
+
+(ert-deftest yas-expand-command-snippet ()
+  (with-temp-buffer
+    (yas-with-snippet-dirs
+      '((".emacs.d/snippets"
+         ("emacs-lisp-mode"
+          ("foo" . "\
+# type: command
+# --
+\(insert \"expanded foo\")"))))
+      (yas-reload-all)
+      (emacs-lisp-mode)
+      (yas-minor-mode +1)
+      (insert "foo")
+      (ert-simulate-command '(yas-expand))
+      (should (equal (buffer-string) "expanded foo")))))
+
 (ert-deftest example-for-issue-271 ()
   (with-temp-buffer
     (yas-minor-mode 1)
@@ -623,6 +722,17 @@ mapconcat #'(lambda (arg)
       (yas-next-field)
       (yas-mock-insert "bbb")
       (should (string= (yas--buffer-contents) "if condition\naaa\nelse\nbbb\nend")))))
+
+(ert-deftest yas-no-memory-of-bad-snippet ()
+  "Expanding an incorrect snippet should not influence future expansions."
+  ;; See https://github.com/joaotavora/yasnippet/issues/800.
+  (with-temp-buffer
+    (yas-minor-mode 1)
+    (should-error (yas-expand-snippet "```foo\n\n```"))
+    (erase-buffer) ; Bad snippet may leave wrong text.
+    ;; But expanding the corrected snippet should work fine.
+    (yas-expand-snippet "\\`\\`\\`foo\n\n\\`\\`\\`")
+    (should (equal (buffer-string) "```foo\n\n```"))))
 
 (defmacro yas--with-font-locked-temp-buffer (&rest body)
   "Like `with-temp-buffer', but ensure `font-lock-mode'."
@@ -961,10 +1071,27 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
   "Test `yas-lookup-snippet'."
   (yas-with-some-interesting-snippet-dirs
    (yas-reload-all 'no-jit)
-   (should (equal (yas-lookup-snippet "printf" 'c-mode) "printf($1);"))
-   (should (equal (yas-lookup-snippet "def" 'c-mode) "# define"))
+   (should (equal (yas--template-content (yas-lookup-snippet "printf" 'c-mode))
+                  "printf($1);"))
+   (should (equal (yas--template-content (yas-lookup-snippet "def" 'c-mode))
+                  "# define"))
    (should-not (yas-lookup-snippet "no such snippet" nil 'noerror))
    (should-not (yas-lookup-snippet "printf" 'emacs-lisp-mode 'noerror))))
+
+(ert-deftest yas-lookup-snippet-with-env ()
+  (with-temp-buffer
+    (yas-with-snippet-dirs
+      '((".emacs.d/snippets"
+         ("emacs-lisp-mode"
+          ("foo" . "\
+# expand-env: ((foo \"bar\"))
+# --
+`foo`"))))
+      (yas-reload-all)
+      (emacs-lisp-mode)
+      (yas-minor-mode +1)
+      (yas-expand-snippet (yas-lookup-snippet "foo"))
+      (should (equal (buffer-string) "bar")))))
 
 (ert-deftest basic-jit-loading ()
   "Test basic loading and expansion of snippets"
@@ -993,13 +1120,15 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
    (with-temp-buffer
      (text-mode)
      (yas-minor-mode +1)
-     (should (equal (yas-lookup-snippet "one") "one"))
+     (should (equal (yas--template-content (yas-lookup-snippet "one"))
+                    "one"))
      (should (eq (yas--key-binding "\C-c1") 'yas-expand-from-keymap))
      (yas-define-snippets
       'text-mode '(("_1" "one!" "won" nil nil nil nil nil "uuid-1")))
      (should (null (yas-lookup-snippet "one" nil 'noerror)))
      (should (null (yas--key-binding "\C-c1")))
-     (should (equal (yas-lookup-snippet "won") "one!")))))
+     (should (equal (yas--template-content(yas-lookup-snippet "won"))
+                    "one!")))))
 
 (ert-deftest snippet-save ()
   "Make sure snippets can be saved correctly."
@@ -1066,7 +1195,7 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
                           yet-another-c-mode
                           and-also-this-one
                           and-that-one
-                          ;; prog-mode doesn't exist in emacs 24.3
+                          ;; prog-mode doesn't exist in emacs 23.4
                           ,@(if (fboundp 'prog-mode)
                                 '(prog-mode))
                           emacs-lisp-mode
@@ -1093,7 +1222,7 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
                                 c-mode
                                 ,major-mode))
               (expected-rest `(cc-mode
-                               ;; prog-mode doesn't exist in emacs 24.3
+                               ;; prog-mode doesn't exist in emacs 23.4
                                ,@(if (fboundp 'prog-mode)
                                      '(prog-mode))
                                emacs-lisp-mode
@@ -1164,6 +1293,34 @@ hello ${1:$(when (stringp yas-text) (funcall func yas-text))} foo${1:$$(concat \
     (yas-should-expand '(("printf" . "printf();")
                          ("def" . "# define")))
     (yas-should-not-expand '("sc" "dolist" "ert-deftest"))))
+
+
+;;; Unloading
+(ert-deftest yas-unload ()
+  "Test unloading and reloading."
+  (with-temp-buffer
+    (let ((status (call-process
+                   (concat invocation-directory invocation-name)
+                   nil '(t t) nil
+                   "-Q" "--batch" "-L" yas--loaddir "-l" "yasnippet"
+                   "--eval"
+                   (prin1-to-string
+                    '(condition-case err
+                         (progn
+                           (yas-minor-mode +1)
+                           (unload-feature 'yasnippet)
+                           ;; Unloading leaves `yas-minor-mode' bound,
+                           ;; harmless, though perhaps surprising.
+                           (when (bound-and-true-p yas-minor-mode)
+                             (error "`yas-minor-mode' still enabled"))
+                           (when (fboundp 'yas-minor-mode)
+                             (error "`yas-minor-mode' still fboundp"))
+                           (require 'yasnippet)
+                           (unless (fboundp 'yas-minor-mode)
+                             (error "Failed to reload")))
+                       (error (message "%S" (error-message-string err))
+                              (kill-emacs 1)))))))
+      (ert-info ((buffer-string)) (should (eq status 0))))))
 
 
 ;;; Menu
@@ -1340,7 +1497,7 @@ TODO: be meaner"
 
 (ert-deftest yas-org-native-tab-in-source-block ()
   "Test expansion of snippets in org source blocks."
-  :expected-result (if (fboundp 'org-in-src-block-p)
+  :expected-result (if (and (fboundp 'org-in-src-block-p) (version< (org-version) "9"))
                        :passed :failed)
   (yas-saving-variables
    (yas-with-snippet-dirs
@@ -1406,5 +1563,6 @@ add the snippets associated with the given mode."
 (provide 'yasnippet-tests)
 ;; Local Variables:
 ;; indent-tabs-mode: nil
+;; autoload-compute-prefixes: nil
 ;; End:
 ;;; yasnippet-tests.el ends here

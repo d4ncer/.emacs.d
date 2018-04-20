@@ -46,13 +46,19 @@
 (require 'color nil t)
 (require 'edebug)
 (eval-when-compile
-  (unless (and (require 'subr-x nil t) (fboundp 'when-let))
-    ;; Introduced in 25.1
-    (defmacro when-let (key-val &rest body)
-      (declare (indent 1) (debug ((symbolp form) body)))
-      `(let ((,(car key-val) ,(cadr key-val)))
-         (when ,(car key-val)
-           ,@body)))))
+  (require 'subr-x nil t)
+  (cond ((fboundp 'when-let*) nil) ; Introduced in 26.
+        ((fboundp 'when-let)       ; Introduced in 25.1,
+         (defalias 'when-let* 'when-let)) ; deprecated in 26.
+        (t (defmacro when-let* (key-vals &rest body)
+             (declare (indent 1) (debug ((symbolp form) body)))
+             (let ((key-val (pop key-vals)))
+               (if key-val
+                   `(let ((,(car key-val) ,(cadr key-val)))
+                      (if ,(car key-val)
+                        (when-let* ,key-vals
+                          ,@body)))
+                 `(progn ,@body)))))))
 
 (defvar yas-debug-live-indicators
   (make-hash-table :test #'eq))
@@ -73,7 +79,7 @@
         (setq beg (setq end (marker-position location)))
       (setq beg (yas-debug-ov-fom-start location)
             end (yas-debug-ov-fom-end location)))
-    (or (when-let (color-ov (gethash location yas-debug-live-indicators))
+    (or (when-let* ((color-ov (gethash location yas-debug-live-indicators)))
           (if (and beg end) (move-overlay (cdr color-ov) beg end)
             (delete-overlay (cdr color-ov)))
           color-ov)
@@ -170,18 +176,18 @@
 
 (defun yas-debug-snippet (snippet &optional outbuf)
   (yas-debug-with-tracebuf outbuf
-    (when-let (overlay (yas--snippet-control-overlay snippet))
+    (when-let* ((overlay (yas--snippet-control-overlay snippet)))
       (printf "\tsid: %d control overlay %s\n"
               (yas--snippet-id snippet)
               (yas-debug-live-range overlay)))
-    (when-let (active-field (yas--snippet-active-field snippet))
+    (when-let* ((active-field (yas--snippet-active-field snippet)))
       (unless (consp (yas--field-start active-field))
         (printf "\tactive field: #%d %s %s covering \"%s\"\n"
                 (or (yas--field-number active-field) -1)
                 (if (yas--field-modified-p active-field) "**" "--")
                 (yas-debug-live-range active-field)
                 (buffer-substring-no-properties (yas--field-start active-field) (yas--field-end active-field)))))
-    (when-let (exit (yas--snippet-exit snippet))
+    (when-let* ((exit (yas--snippet-exit snippet)))
       (printf "\tsnippet-exit: %s next: %s\n"
               (yas-debug-live-marker (yas--exit-marker exit))
               (yas--exit-next exit)))
@@ -193,7 +199,11 @@
                 (yas-debug-live-range field)
                 (buffer-substring-no-properties (yas--field-start field) (yas--field-end field))
                 (yas--debug-format-fom-concise (yas--field-next field))
-                (if (yas--field-parent-field field) "(has a parent)" "")))
+                (if (yas--field-parent-field field)
+                    (format " parent: %s"
+                            (yas--debug-format-fom-concise
+                             (yas--field-parent-field field)))
+                  "")))
       (dolist (mirror (yas--field-mirrors field))
         (unless (consp (yas--mirror-start mirror))
           (printf "\t\tmirror: %s covering \"%s\" next: %s\n"
@@ -224,6 +234,14 @@
   (clrhash yas-debug-live-indicators))
 
 (defun yas-debug-snippets (&optional outbuf hook)
+  "Print debug information on active snippets to buffer OUTBUF.
+If OUTBUF is nil, use a buffer named \"*YASsnippet trace*\".
+If HOOK is non-nil, install `yas-debug-snippets' in
+`post-command-hook' to update the information on every command
+after this one. If it is `snippet-navigation' then install hook
+buffer-locally, otherwise install it globally.  If HOOK is
+`edebug-create', also instrument the function
+`yas--snippet-parse-create' with `edebug' and show its source."
   (interactive (list nil t))
   (condition-case err
       (yas-debug-with-tracebuf outbuf
@@ -253,11 +271,12 @@
           (ad-activate 'yas--snippet-parse-create)
           (ad-enable-advice 'yas--commit-snippet 'after 'yas-debug-untarget-snippet)
           (ad-activate 'yas--commit-snippet)
-          (add-hook 'post-command-hook #'yas-debug-snippets)
+          (add-hook 'post-command-hook #'yas-debug-snippets
+                    nil (eq hook 'snippet-navigation))
           ;; Window management is slapped together, it does what I
           ;; want when the caller has a single window open.  Good
           ;; enough for now.
-          (when (eq hook 'create)
+          (when (eq hook 'edebug-create)
             (edebug-instrument-function 'yas--snippet-parse-create)
             (let ((buf-point (find-function-noselect 'yas--snippet-parse-create)))
               (with-current-buffer (car buf-point)
@@ -295,15 +314,15 @@
                              while (and opt (not (equal opt "--"))
                                         (string-prefix-p "-" opt))
                              collect opt)))
-    (when-let (mode (cl-member "-M:" options :test #'string-prefix-p))
+    (when-let* ((mode (cl-member "-M:" options :test #'string-prefix-p)))
       (setq snippet-mode (intern (concat (substring (car mode) 3) "-mode"))))
-    (when-let (mode (cl-member "-M." options :test #'string-prefix-p))
+    (when-let* ((mode (cl-member "-M." options :test #'string-prefix-p)))
       (setq snippet-mode
             (cdr (cl-assoc (substring (car mode) 2) auto-mode-alist
                            :test (lambda (ext regexp) (string-match-p regexp ext))))))
     (switch-to-buffer (get-buffer-create "*yas test*"))
     (funcall snippet-mode)
-    (when-let (snippet-file (cl-member "-S:" options :test #'string-prefix-p))
+    (when-let* ((snippet-file (cl-member "-S:" options :test #'string-prefix-p)))
       (setq snippet-file (substring (car snippet-file) 3))
       (if (file-exists-p snippet-file)
           (with-temp-buffer
@@ -318,26 +337,19 @@
             (error "No such snippet `%s'" snippet-file)))))
     (display-buffer (find-file-noselect
                      (expand-file-name "yasnippet.el" yas--loaddir)))
-    (when-let (verbosity (car (or (member "-v" options) (member "-vv" options))))
+    (when-let* ((verbosity (car (or (member "-v" options) (member "-vv" options)))))
       (set-window-buffer
        (split-window) (yas-debug-snippets
-                       nil (if (equal verbosity "-vv") 'create t))))
+                       nil (if (equal verbosity "-vv") 'edebug-create t))))
     (yas-minor-mode +1)
     (when snippet-key (insert snippet-key))))
 
 (when command-line-args-left
   (yas-debug-process-command-line))
 
-(defun yas-exterminate-package ()
-  (interactive)
-  (yas-global-mode -1)
-  (yas-minor-mode -1)
-  (mapatoms #'(lambda (atom)
-                (when (string-match "yas[-/]" (symbol-name atom))
-                  (unintern atom obarray)))))
-
 (provide 'yasnippet-debug)
 ;; Local Variables:
 ;; indent-tabs-mode: nil
+;; autoload-compute-prefixes: nil
 ;; End:
 ;;; yasnippet-debug.el ends here
