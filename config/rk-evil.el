@@ -233,22 +233,12 @@
     (add-hook 'after-change-major-mode-hook #'rk-evil--vi-tilde-fringe-off-if-readonly)
     (global-vi-tilde-fringe-mode)))
 
-(use-package evil-embrace
-  :after evil
-  :defines (evil-embrace-show-help-p)
-  :commands (evil-embrace-enable-evil-surround-integration)
-  :config
-  (progn
-    (setq evil-embrace-show-help-p nil)
-    (evil-embrace-enable-evil-surround-integration))
-
-
-  (use-package rk-evil-shift
-    :preface
-    (autoload 'evil-visual-state-map "evil-states")
-    :bind (:map evil-visual-state-map
-                ("<" . rk-evil-shift-left)
-                (">" . rk-evil-shift-right))))
+(use-package rk-evil-shift
+  :preface
+  (autoload 'evil-visual-state-map "evil-states")
+  :bind (:map evil-visual-state-map
+              ("<" . rk-evil-shift-left)
+              (">" . rk-evil-shift-right)))
 
 (provide 'rk-evil)
 
