@@ -134,7 +134,7 @@ Otherwise delete backwards."
 
     ;; Define key bindings for fancy snippet navigation.
 
-    (bind-key (kbd "C-,") #'yas-expand yas-minor-mode-map)
+    (bind-key (kbd "TAB") #'yas-expand yas-minor-mode-map)
     (evil-define-key 'insert yas-minor-mode-map (kbd "TAB") #'yas-expand)
 
     (evil-define-key 'insert yas-keymap (kbd "SPC") #'rk-yasnippet-space)

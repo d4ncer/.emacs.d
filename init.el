@@ -80,6 +80,7 @@ If argument INTERACTIVE-P is set, log additional information."
 
 (use-package rk-emacs)
 (use-package rk-basic-settings)
+(use-package rk-yasnippet)
 (use-package rk-faces)
 (use-package rk-modeline)
 (use-package rk-auto-save)
