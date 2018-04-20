@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: ert-deftest
+# key: ert
+# condition: (cb-yas/bol?)
+# --
+(ert-deftest `(or nameless-current-name "test")`-${1:feature} ()
+  (should (equal $0)))
