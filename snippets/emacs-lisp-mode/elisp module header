@@ -1,0 +1,20 @@
+# key: mhdr
+# name: elisp module header
+# --
+;;; `(file-name-nondirectory buffer-file-name)` --- $0  -*- lexical-binding: t; -*-
+
+;; Copyright (C) `(format-time-string "%Y")` `user-full-name`
+
+;; Author: `user-full-name` <`user-mail-address`>
+
+;;; Commentary:
+
+;; $1
+
+;;; Code:
+
+$2
+
+(provide '`(file-name-nondirectory buffer-file-name)`)
+
+;;; `(file-name-nondirectory buffer-file-name)` ends here
