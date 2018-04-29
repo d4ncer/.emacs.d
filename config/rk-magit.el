@@ -36,12 +36,11 @@
 Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     :on-enter (unless (bound-and-true-p magit-blame-mode)
                 (call-interactively 'magit-blame))
+    :on-exit (magit-blame-quit)
     :foreign-keys run
     :bindings
     ("b" magit-blame)
-    ("q" nil :exit (progn (when (bound-and-true-p magit-blame-mode)
-                            (magit-blame-quit))
-                          (not (bound-and-true-p magit-blame-mode)))))
+    ("q" nil :exit t))
   :init
   (progn
     (spacemacs-keys-set-leader-keys
