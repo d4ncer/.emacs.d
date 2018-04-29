@@ -12,7 +12,7 @@
   (require 'use-package))
 
 (use-package ag
-  :commands ag)
+  :commands (ag ag-dired))
 
 (use-package rg
   :commands rg)
