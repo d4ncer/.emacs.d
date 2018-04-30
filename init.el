@@ -75,6 +75,10 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst use-package-verbose t)
 (require 'use-package)
 
+;; Set up personal settings
+
+(setq user-full-name "Raghuvir Kasturi")
+(setq user-mail-address "raghuvir.kasturi@gmail.com")
 
 ;; Load features.
 
