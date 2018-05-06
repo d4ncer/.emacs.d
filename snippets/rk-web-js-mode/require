@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: require
+# key: req
+# --
+const ${1:Module} = require('${2:${1:$(cb-web-module-name-for-binding yas-text)}}');
