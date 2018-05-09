@@ -27,6 +27,12 @@
 
 (global-unset-key (kbd "C-z"))
 
+;; Ambient titlebar
+
+(when (eq system-type 'darwin)
+  (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
+  (add-to-list 'default-frame-alist '(ns-appearance . 'nil))
+  (setq frame-title-format nil))
 
 ;; Make <escape> quit as much as possible
 
