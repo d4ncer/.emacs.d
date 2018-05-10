@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: begin_quote
+# key: q
+# condition: (rk-yas/bol?)
+# --
+#+BEGIN_QUOTE
+$0
+#+END_QUOTE

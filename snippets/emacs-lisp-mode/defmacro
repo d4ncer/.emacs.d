@@ -1,6 +1,6 @@
 # key: dm
 # name: defmacro
-# condition: (cb-yas/bol?)
+# condition: (rk-yas/bol?)
 # --
 (defmacro `nameless-current-name`-${1:name} ($2)
   $0)

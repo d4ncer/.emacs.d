@@ -1,0 +1,7 @@
+# key: py
+# name: src ipython
+# condition: (rk-yas/bol?)
+# --
+#+begin_src ipython
+$0
+#+end_src

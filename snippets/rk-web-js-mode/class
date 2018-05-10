@@ -1,7 +1,7 @@
 # -*- mode: snippet -*-
 # name: class
 # key: cl
-# condition: (cb-yas/bol?)
+# condition: (rk-yas/bol?)
 # --
 class ${1:Name} {
   constructor($2) {

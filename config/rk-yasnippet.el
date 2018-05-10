@@ -99,6 +99,9 @@ Otherwise delete backwards."
   :config
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)))
 
+(use-package rk-yas-utils
+  :after yasnippet)
+
 (provide 'rk-yasnippet)
 
 ;;; rk-yasnippet.el ends here

@@ -1,6 +1,6 @@
 # key: d
 # name: defun
-# condition: (cb-yas/bol?)
+# condition: (rk-yas/bol?)
 # --
 (defun `nameless-current-name`-${1:name} ($2)
   $0)

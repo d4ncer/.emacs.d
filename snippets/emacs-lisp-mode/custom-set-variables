@@ -2,7 +2,7 @@
 # name: custom-set-variables
 # key: csv
 # binding: direct-keybinding
-# condition: (cb-yas/bol?)
+# condition: (rk-yas/bol?)
 # --
 (custom-set-variables
   '($0))

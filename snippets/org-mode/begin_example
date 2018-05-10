@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: begin_example
+# key: ex
+# condition: (rk-yas/bol?)
+# --
+#+BEGIN_EXAMPLE
+$0
+#+END_EXAMPLE
