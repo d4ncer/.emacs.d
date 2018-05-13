@@ -59,11 +59,68 @@
 (straight-use-package 'bind-map)
 
 (eval-when-compile
+  (require 'recentf)
   (require 'use-package))
 
 ;; Setup paths & features
 
-(require 'paths (expand-file-name "config/paths.el" user-emacs-directory))
+(require 'f)
+(require 'subr-x)
+(require 'seq)
+
+(defconst paths-cache-directory
+  (concat user-emacs-directory "var"))
+
+(defconst paths-etc-directory
+  (concat user-emacs-directory "etc"))
+
+(defconst paths-lisp-directory
+  (concat user-emacs-directory "lisp"))
+
+(defconst paths-elpa-directory
+  (concat user-emacs-directory "elpa"))
+
+(defconst paths-config-directory
+  (concat user-emacs-directory "config"))
+
+(defconst paths-themes-directory
+  (concat user-emacs-directory "themes"))
+
+(defun paths-initialise (&optional interactive-p)
+  "Add select subdirs of `user-emacs-directory' to the `load-path'.
+If argument INTERACTIVE-P is set, log additional information."
+  (interactive "p")
+  (let* ((before load-path)
+         (main-dirs
+          (list paths-lisp-directory
+                paths-config-directory
+                paths-themes-directory))
+         (subdirs
+          (f-directories paths-lisp-directory))
+         (config-subdirs
+          (f-directories paths-config-directory))
+         (updated-load-path
+          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs config-subdirs load-path)))))
+
+    (setq load-path updated-load-path)
+
+    (when interactive-p
+      (if-let* ((added (seq-difference load-path before)))
+          (message "Load path updated. Added: %S" added)
+        (message "No change to load-path")))))
+
+(use-package no-littering
+  :straight t
+  :demand t
+  :init
+  (progn
+    (setq no-littering-etc-directory paths-etc-directory)
+    (setq no-littering-var-directory paths-cache-directory))
+  :config
+  (with-eval-after-load 'recentf
+    (add-to-list 'recentf-exclude no-littering-etc-directory)
+    (add-to-list 'recentf-exclude no-littering-var-directory)))
+
 (paths-initialise)
 (add-to-list 'custom-theme-load-path paths-themes-directory)
 
