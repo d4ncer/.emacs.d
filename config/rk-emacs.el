@@ -30,19 +30,19 @@
 ;; Config Paths
 
 (defconst rk-emacs-cache-directory
-  (concat user-emacs-directory ".cache"))
+  paths-cache-directory)
 
 (defconst rk-emacs-autosave-directory
-  (concat user-emacs-directory "autosave"))
+  (concat rk-emacs-cache-directory "autosave"))
 
 (defconst rk-emacs-lisp-directory
-  (concat user-emacs-directory "lisp"))
+  paths-lisp-directory)
 
 (defconst rk-emacs-elpa-directory
-  (concat user-emacs-directory "elpa"))
+  paths-elpa-directory)
 
 (defconst rk-emacs-config-directory
-  (concat user-emacs-directory "config"))
+  paths-config-directory)
 
 ;; Commands for working with config subtrees
 
