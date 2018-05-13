@@ -47,7 +47,13 @@
 (when (file-exists-p custom-file)
   (load-file custom-file))
 
+;; Fix colour issues for Spaceline
+;; TODO: Enable this if we go back to Spaceline
+
+;; (setq ns-use-srgb-colorspace nil)
+
 ;; Scroll smoothly.
+
 (setq scroll-preserve-screen-position t)
 (setq scroll-margin 0)
 (setq scroll-conservatively 101)

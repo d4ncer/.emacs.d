@@ -33,7 +33,7 @@
 
 (defface rk-mode-line-format-nonemphased-element
   '((t
-     (:inherit mode-line)))
+     (:inherit mode-line-text)))
   "Face for non-emphasised elements in the header line."
   :group 'rk-mode-line-format)
 
@@ -45,19 +45,19 @@
 
 (defface rk-mode-line-format-project-name
   '((t
-     (:inherit mode-line)))
+     (:inherit mode-line-text)))
   "Face for project name in header line."
   :group 'rk-mode-line-format)
 
 (defface rk-mode-line-format-branch-name
   '((t
-     (:inherit mode-line)))
+     (:inherit mode-line-text)))
   "Face for git branch in header line."
   :group 'rk-mode-line-format)
 
 (defface rk-mode-line-format-host-name
   '((t
-     (:inherit mode-line)))
+     (:inherit mode-line-text)))
   "Face for host-name in header line."
   :group 'rk-mode-line-format)
 

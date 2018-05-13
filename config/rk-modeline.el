@@ -13,6 +13,17 @@
 
 (require 'spacemacs-keys)
 
+;;; TODO THIS NEEDS WORK WORK WORK WORK WORK (sung in a Rihanna voice)
+;; (use-package spaceline
+;;   :straight t)
+
+;; (use-package spaceline-config
+;;   :after spaceline
+;;   :config
+;;   (progn
+;;     (spaceline-toggle-minor-modes-off)
+;;     (spaceline-emacs-theme)))
+
 (use-package rk-mode-line-format
   :defines rk-mode-line-format
   :config

@@ -55,6 +55,10 @@
     (fringe
      ((t :background ,default-background)))
 
+    (mode-line-text
+     ((t
+       :foreground ,rk-theme-base-solarized-b2)))
+
     (mode-line
      ((((background dark))
        :background ,rk-theme-base-solarized-b02
@@ -70,9 +74,9 @@
        :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
 
     (mode-line-inactive
-     ((t :background ,rk-theme-base-solarized-b2
-         :height 0.7
-         )))
+     ((t :background ,rk-theme-base-solarized-b3
+         :height 140
+         :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
