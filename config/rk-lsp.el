@@ -12,8 +12,8 @@
   (require 'use-package))
 
 (use-package lsp-ui
+  :straight t
   :after lsp-mode
-  :commands (lsp-ui-mode)
   :config
   (progn
     (autoload 'lsp-mode-hook "lsp")
@@ -21,7 +21,6 @@
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
-  :commands (lsp-enable-imenu)
   :config
   (progn
     (setq lsp-ui-imenu-colors '("#e99ce8" "#bbbbff" "#ffbbff"))

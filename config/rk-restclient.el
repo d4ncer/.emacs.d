@@ -15,6 +15,7 @@
 (autoload 'evil-define-key "evil-core")
 
 (use-package restclient
+  :straight t
   :commands (restclient-mode
              restclient-http-send-current
              restclient-jump-next

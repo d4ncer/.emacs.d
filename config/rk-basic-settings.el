@@ -22,7 +22,6 @@
 (autoload 'ansi-color-apply-on-region "ansi-color")
 (autoload 'evil-define-key "evil-core")
 
-
 (defalias #'yes-or-no-p #'y-or-n-p)
 
 (global-unset-key (kbd "C-z"))
@@ -122,13 +121,7 @@ Optional arg JUSTIFY will justify comments and strings."
         (rk-indent-buffer)
         (progress-reporter-done progress))))))
 
-(define-key prog-mode-map (kbd "M-q") #'rk-indent-dwim)
-
-
-;; 2-window scrolling is never useful, but an emergency window switch command
-;; sure is.
-
-(global-set-key (kbd "<f2>") #'next-multiframe-window)
+(define-key prog-mode-map (kbd "C-`") #'rk-indent-dwim)
 
 ;; Window move hotkeys
 
@@ -164,7 +157,6 @@ Optional arg JUSTIFY will justify comments and strings."
 (put 'erase-buffer 'disabled nil)
 
 ;;; Core advice
-
 
 ;; Do not prompt for confirmation for active processes.
 
@@ -236,11 +228,8 @@ Optional arg JUSTIFY will justify comments and strings."
     (forward-line -1)
     (indent-according-to-mode)))
 
-(global-set-key (kbd "C-<up>") #'rk-transpose-line-up)
-(global-set-key (kbd "C-<down>") #'rk-transpose-line-down)
-
-(global-set-key (kbd "s-<up>") #'rk-transpose-line-up)
-(global-set-key (kbd "s-<down>") #'rk-transpose-line-down)
+(global-set-key (kbd "C-j") #'rk-transpose-line-down)
+(global-set-key (kbd "C-k") #'rk-transpose-line-up)
 
 ;;; Hide DOS EOL
 
@@ -286,7 +275,6 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (add-hook 'find-file-hook #'rk-basic-settings--prompt-to-open-large-files-in-fundamental-mode)
 
-
 ;;; General variables
 
 (setq-default fill-column 80)
@@ -303,7 +291,6 @@ Optional arg JUSTIFY will justify comments and strings."
 (setq initial-buffer-choice t)
 (setq ring-bell-function #'ignore)
 
-
 ;; Use conf mode for puppet templated conf files
 
 (add-to-list 'auto-mode-alist '("\\.env\\.erb\\'" . conf-mode))
@@ -312,7 +299,8 @@ Optional arg JUSTIFY will justify comments and strings."
 (add-to-list 'auto-mode-alist '("\\.kll\\'" . conf-mode))
 
 ;;; TODO: Move this into it's own package
-(use-package all-the-icons)
+(use-package all-the-icons
+  :straight t)
 
 (use-package abbrev
   :defer t
@@ -351,6 +339,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :bind (("M-SPC" . cycle-spacing)))
 
 (use-package tiny
+  :straight t
   :after iedit
   :config
   (progn
@@ -410,6 +399,7 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq bookmark-default-file (concat rk-emacs-cache-directory "/bookmarks"))))
 
 (use-package iedit
+  :straight t
   :preface
   (progn
     (autoload 'diff-hl-mode "diff-hl")
@@ -561,6 +551,7 @@ Optional arg JUSTIFY will justify comments and strings."
   (setq display-time-default-load-average nil))
 
 (use-package hydra
+  :straight t
   :defer t
   :preface
   (defun rk-basic-settings-set-up-hydra-buffer (&rest _)
@@ -580,7 +571,19 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
 
+(use-package info+
+  :straight t
+  :defer 3
+  :defines (Info-fontify-angle-bracketed-flag)
+  :init
+  (progn
+    (with-eval-after-load 'info
+      (require 'info+))
+    (setq Info-fontify-angle-bracketed-flag nil)))
+
 (use-package world-time-mode
+  :straight t
+  :defer 3
   :commands (world-time-list)
   :init
   (spacemacs-keys-set-leader-keys "a m w" 'world-time-list)

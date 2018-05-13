@@ -15,6 +15,7 @@
 (autoload 'evil-set-initial-state "evil-core")
 
 (use-package treemacs
+  :straight t
   :commands (treemacs
              treemacs-toggle
              treemacs-mode
@@ -36,14 +37,8 @@
     (add-hook 'buffer-list-update-hook #'rk-treemacs--setup-header-line))
   :init
   (spacemacs-keys-set-leader-keys
-    "f t" #'treemacs))
-
-(use-package treemacs-projectile
-  :after treemacs
-  :commands (treemacs-projectile)
-  :init
-  (spacemacs-keys-set-leader-keys
-    "p t" #'treemacs-projectile))
+    "f t" #'treemacs
+    "p t" #'treemacs-add-project))
 
 (provide 'rk-treemacs)
 

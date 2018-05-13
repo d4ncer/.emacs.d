@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (use-package rnc-mode
+  :straight t
   :mode ("\\.rnc\\'" . rnc-mode)
   :config
   (setq rnc-indent-level 2))

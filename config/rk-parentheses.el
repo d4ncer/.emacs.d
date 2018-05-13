@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (use-package paren-face
+  :straight t
   :demand t
   :commands (global-paren-face-mode)
   :config

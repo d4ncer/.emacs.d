@@ -6,12 +6,10 @@
 
 ;;; Commentary:
 
-;; Declares some variables and bootstraps the rest of the configuration.
-;;
-;; One main difference from other configurations out there is that I use git subtrees for
-;; many core packages, instead of relying on the Emacs package manager.
-
 ;;; Code:
+
+(when (version< emacs-version "26")
+  (error "This version of Emacs is not supported"))
 
 (setq gc-cons-threshold (* 800 1024))
 
@@ -20,72 +18,63 @@
 (unless noninteractive
   (message "Loading %s..." load-file-name))
 
-;; Initialize package.el
-;;
-;; Most packages are installed using git subtrees, but some packages (such as
-;; flycheck) break unless installed via package.el.
+;; Bootstrap straight
 
-(require 'package)
-(add-to-list 'package-archives '("MELPA Stable" . "https://stable.melpa.org/packages/"))
-(package-initialize)
-(unless package-archive-contents
-  (package-refresh-contents))
+(setq package-enable-at-startup nil)
 
+(eval-and-compile
+  (defvar bootstrap-version 3)
+  (defvar bootstrap-file (concat user-emacs-directory "straight/repos/straight.el/bootstrap.el")))
 
-;; Bootstrap use-package.
+(unless (file-exists-p bootstrap-file)
+  (with-current-buffer
+      (url-retrieve-synchronously
+       "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+       'silent 'inhibit-cookies)
+    (goto-char (point-max))
+    (eval-print-last-sexp)))
 
-(require 'seq)
-(require 'subr-x)
+(defconst straight-cache-autoloads t)
+(defconst straight-check-for-modifications 'live)
 
-(defun rk-init/init-load-path (&optional interactive-p)
-  "Add select subdirs of `user-emacs-directory' to the `load-path'.
-If argument INTERACTIVE-P is set, log additional information."
-  (interactive "p")
-  (let* ((before load-path)
-         (lisp-dir (expand-file-name "lisp" user-emacs-directory))
-         (config-dir (expand-file-name "config" user-emacs-directory))
-         (git-subtrees
-          (seq-filter #'file-directory-p
-                      (directory-files lisp-dir t "^[^.]")))
-         (config-subtrees
-          (seq-filter #'file-directory-p
-                      (directory-files config-dir t "^[^.]"))))
-    (dolist (path (append (list lisp-dir config-dir) config-subtrees git-subtrees))
-      (add-to-list 'load-path path)
-      (add-to-list 'Info-default-directory-list path)
-      (add-to-list 'load-path (concat path "/emacs"))
-      (add-to-list 'load-path (concat path "/elisp"))
-      (add-to-list 'load-path (concat path "/lisp")))
+(require 'straight bootstrap-file t)
 
-    ;; Custom load path dirs
-    (add-to-list 'load-path (concat lisp-dir "/org-mode/contrib/lisp"))
-    (add-to-list 'load-path (concat lisp-dir "/gocode/emacs-company"))
-    (add-to-list 'load-path (concat lisp-dir "/hindent/elisp"))
-    (add-to-list 'load-path (concat lisp-dir "/treemacs/src/elisp"))
+;; Install some basic packages
 
-    (setq load-path (seq-filter #'file-directory-p load-path))
-    (setq Info-default-directory-list (seq-filter #'file-directory-p Info-default-directory-list))
-
-    (when interactive-p
-      (if-let* ((added (seq-difference load-path before)))
-          (message "Load path updated. Added: %S" added)
-        (message "No change to load-path")))))
-
-(rk-init/init-load-path)
-(defconst use-package-verbose t)
-(require 'use-package)
+(straight-use-package 'dash)
+(straight-use-package 'dash-functional)
+(straight-use-package 'f)
+(straight-use-package 's)
+(straight-use-package 'noflet)
+(straight-use-package 'memoize)
 
 ;; Set up personal settings
 
 (setq user-full-name "Raghuvir Kasturi")
 (setq user-mail-address "raghuvir.kasturi@gmail.com")
 
+(defconst use-package-verbose t)
+
+(straight-use-package 'use-package)
+(straight-use-package 'bind-map)
+
+(eval-when-compile
+  (require 'use-package))
+
+;; Setup paths & features
+
+(require 'paths (expand-file-name "config/paths.el" user-emacs-directory))
+(paths-initialise)
+(add-to-list 'custom-theme-load-path paths-themes-directory)
+
+(use-package rk-themes
+  :config
+  (danc--themes/light-theme))
+
 ;; Load features.
 
 (use-package rk-emacs)
 (use-package rk-basic-settings)
-(use-package rk-yasnippet)
-(use-package rk-faces)
 (use-package rk-modeline)
 (use-package rk-auto-save)
 (use-package rk-leader-keys)
@@ -127,6 +116,13 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-python)
+(use-package rk-yasnippet)
+
+;;; Post init setup.
+
+(unless (file-directory-p org-directory)
+  (when (y-or-n-p (format "`org-directory' does not exist. Create at %s? " org-directory))
+    (mkdir org-directory)))
 
 ;;; Print overall startup time.
 

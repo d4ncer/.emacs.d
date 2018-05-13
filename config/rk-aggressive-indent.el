@@ -8,6 +8,9 @@
 
 ;;; Code:
 
+(eval-when-compile
+  (require 'use-package))
+
 (defconst rk-aggressive-indent-exclude-modes
   '(toml-mode
     haskell-mode
@@ -21,12 +24,10 @@
     scala-mode)
   "List of modes to be excluded from aggressive indent.")
 
-(eval-when-compile
-  (require 'use-package))
-
 (use-package aggressive-indent
+  :straight t
   :commands (global-aggressive-indent-mode)
-  :defer 1
+  :defer 3
   :preface
   (defun rk-extend-aggressive-indent-exclude-modes ()
     "Add select modes to be excluded by aggressive indent."

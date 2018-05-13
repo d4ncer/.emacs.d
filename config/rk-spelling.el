@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (use-package ispell
+  :straight t
   :config
   (progn
     (when (executable-find "aspell")

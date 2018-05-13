@@ -18,6 +18,7 @@
 (global-set-key (kbd "s-w") 'delete-frame)
 
 (use-package exec-path-from-shell
+  :straight t
   :if window-system
   :config
   (progn
@@ -32,6 +33,7 @@
   (exec-path-from-shell-initialize))
 
 (use-package osx-trash
+  :straight t
   :config
   (osx-trash-setup)
   :functions

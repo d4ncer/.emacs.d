@@ -14,6 +14,7 @@
 (require 'spacemacs-keys)
 
 (use-package smartparens
+  :straight t
   :defer t
 
   :preface

@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (use-package company
+  :straight t
   :commands (global-company-mode)
 
   :bind
@@ -50,6 +51,7 @@
     (setq company-dabbrev-downcase nil)))
 
 (use-package company-lsp
+  :straight t
   :after company
   :defines company-lsp
   :preface

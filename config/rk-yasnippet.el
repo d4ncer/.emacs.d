@@ -11,18 +11,19 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'evil-core)
 (require 'spacemacs-keys)
 (require 'subr-x)
 (require 'dash)
 (require 's)
 
 (use-package yasnippet
-  :defer 1
+  :straight t
+  :defer 3
 
   :preface
   (progn
     (autoload 'sp-backward-delete-char "smartparens")
+    (autoload 'evil-define-key "evil")
     (defun rk-yasnippet--current-field ()
       "Return the current active field."
       (and (boundp 'yas--active-field-overlay)
@@ -66,7 +67,6 @@ Otherwise delete backwards."
     (setq yas-wrap-around-region t)
     (setq yas-prompt-functions '(yas-completing-prompt))
     (setq yas-verbosity 0)
-    (setq yas-snippet-dirs (list (concat user-emacs-directory "snippets")))
 
     (yas-global-mode +1)
 
@@ -79,15 +79,6 @@ Otherwise delete backwards."
 
     (evil-define-key 'insert yas-keymap (kbd "SPC") #'rk-yasnippet-space)
     (bind-key (kbd "<backspace>") #'rk-yasnippet-backspace yas-keymap))
-
-  :commands
-  (yas-expand
-   yas-global-mode
-   yas-insert-snippet
-   yas-new-snippet
-   yas-next-field
-   yas-prev-field
-   yas-visit-snippet-file)
 
   :functions
   (yas--skip-and-clear

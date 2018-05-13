@@ -16,6 +16,7 @@
 (autoload 'evil-define-key "evil-core")
 
 (use-package haskell-mode
+  :straight t
   :mode
   (("\\.[gh]s\\'" . haskell-mode)
    ("\\.l[gh]s\\'" . literate-haskell-mode)
@@ -124,6 +125,7 @@
   (evil-define-key 'normal haskell-presentation-mode-map (kbd "q") #'quit-window))
 
 (use-package intero
+  :straight t
   :after haskell-mode
 
   :commands (intero-mode
@@ -199,6 +201,7 @@
       (evil-define-key 'normal intero-mode-map (kbd "M-,") #'pop-tag-mark))))
 
 (use-package hindent
+  :straight t
   :after haskell-mode
   :commands (hindent-mode hindent-reformat-decl-or-fill hindent-reformat-buffer)
   :config

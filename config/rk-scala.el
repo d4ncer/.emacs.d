@@ -9,8 +9,7 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package)
-  (autoload 'evil-define-key "evil-core"))
+  (require 'use-package))
 
 (require 'rk-emacs)
 (require 'dash)
@@ -20,6 +19,7 @@
 (require 'spacemacs-keys)
 (require 'subr-x)
 
+(autoload 'evil-define-key "evil-core")
 (autoload 'projectile-project-name "projectile")
 
 ;; Use conf mode for play routes files.
@@ -105,6 +105,7 @@
 ;; Load modes.
 
 (use-package scala-mode
+  :straight t
   :defer t
   :mode (("\\.scala\\'" . scala-mode))
   :interpreter
@@ -141,11 +142,8 @@
                                'self-insert-command
                                minibuffer-local-completion-map)))
 
-(eval-when-compile
-  (defconst rk-scala-ensime-load-path (concat rk-emacs-lisp-directory "/ensime-emacs")))
-
 (use-package ensime
-  :load-path rk-scala-ensime-load-path
+  :straight t
   :defer t
   :commands (ensime)
 
@@ -160,10 +158,10 @@
     (defun rk-scala-switch-to-source ()
       (interactive)
       (when-let* ((buf (--first (with-current-buffer it
-                                  (equal major-mode 'scala-mode))
-                                (buffer-list)))
+                                 (equal major-mode 'scala-mode))
+                               (buffer-list)))
                   (win (display-buffer buf)))
-                 (select-window win)))
+        (select-window win)))
 
     (defun rk-scala-send-as-paste (beg end)
       (interactive (if (region-active-p)

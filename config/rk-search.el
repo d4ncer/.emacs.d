@@ -12,12 +12,15 @@
   (require 'use-package))
 
 (use-package ag
+  :straight t
   :commands (ag ag-dired))
 
 (use-package rg
+  :straight t
   :commands rg)
 
 (use-package wgrep
+  :straight t
   :commands (wgrep-setup)
   :init
   (add-hook 'grep-setup-hook #'wgrep-stup)

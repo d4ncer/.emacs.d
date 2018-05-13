@@ -14,6 +14,7 @@
 (require 'spacemacs-keys)
 
 (use-package expand-region
+  :straight t
   :commands
   (er/expand-region)
 

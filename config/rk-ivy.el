@@ -15,6 +15,7 @@
 (require 'subr-x)
 
 (use-package swiper
+  :straight t
   :commands swiper
   :config
   (progn
@@ -63,8 +64,6 @@
 
   :config
   (progn
-    (require 'flx)
-
     (setq ivy-use-virtual-buffers t)
     (setq ivy-count-format "(%d/%d) ")
     (setq ivy-re-builders-alist '((t . ivy--regex-plus)))
@@ -87,12 +86,18 @@
     (define-key ivy-minibuffer-map (kbd "C-<return>") #'ivy-immediate-done)
     (define-key ivy-minibuffer-map (kbd "C-j") #'ivy-next-line)
     (define-key ivy-minibuffer-map (kbd "C-k") #'ivy-previous-line)
+    (setq ivy-flx-limit 2000)
 
     (ivy-mode))
 
   :defines (ivy-use-virtual-buffers ivy-count-format))
 
+(use-package flx
+  :straight t
+  :after ivy)
+
 (use-package ivy-hydra
+  :straight t
   :after ivy)
 
 (use-package counsel

@@ -17,6 +17,7 @@
 (autoload 'evil-define-key "evil-core")
 
 (use-package with-editor
+  :straight t
   :commands (with-editor-finish
              with-editor-cancel)
   :config
@@ -26,6 +27,7 @@
       "k" #'with-editor-cancel)))
 
 (use-package magit
+  :straight t
   :defer t
   :commands (magit-status magit-blame magit-branch-and-checkout)
   :functions (magit-display-buffer-fullframe-status-v1)
@@ -53,15 +55,16 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     (setq magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1)))
 
 (use-package git-commit-jira-prefix
-  :after git-commit
+  :after (magit git-commit)
   :commands git-commit-jira-prefix-init
   :config (git-commit-jira-prefix-init))
 
 (use-package evil-magit
-  :defer t
+  :straight t
   :after magit)
 
 (use-package git-timemachine
+  :straight t
   :defer t
   :commands
   (git-timemachine
@@ -78,9 +81,9 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     :doc "
 [_p_/_N_] previous [_n_] next [_c_] current [_g_] goto nth rev [_Y_] copy hash [_q_] quit"
     :on-enter (unless (bound-and-true-p git-timemachine-mode)
-                  (call-interactively 'git-timemachine))
+                (call-interactively 'git-timemachine))
     :on-exit (when (bound-and-true-p git-timemachine-mode)
-                (git-timemachine-quit))
+               (git-timemachine-quit))
     :foreign-keys run
     :bindings
     ("c" git-timemachine-show-current-revision)
@@ -95,6 +98,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     "gt" #'time-machine-transient-state/body))
 
 (use-package diff-hl
+  :straight t
   :after magit
   :commands (diff-hl-magit-post-refresh
              global-diff-hl-mode

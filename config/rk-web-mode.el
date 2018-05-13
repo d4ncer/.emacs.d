@@ -21,6 +21,7 @@
   "Default values for prettier.")
 
 (use-package web-mode
+  :straight t
   :defines (web-mode-markup-indent-offset
             web-mode-css-indent-offset)
 
@@ -131,6 +132,7 @@
 ;;     (add-hook 'lsp-js-flow-mode-hook 'flycheck-mode)))
 
 (use-package emmet-mode
+  :straight t
   :defer t
   :defines (emmet-expand-jsx-className?)
   :commands (emmet-mode emmet-expand-line)
@@ -162,12 +164,8 @@
     (define-key emmet-mode-keymap (kbd "TAB") #'emmet-expand-line)
     (add-hook 'rk-web-js-mode-hook #'rk-web--set-jsx-classname-on)))
 
-(use-package rk-flow-checker
-  :disabled t
-  :defer t
-  :after flycheck)
-
 (use-package flycheck-flow
+  :straight t
   :after flycheck
   :config
   (progn
@@ -192,6 +190,7 @@
     (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
 (use-package flow-minor-mode
+  :straight t
   :after rk-web-modes
   :commands (flow-minor-type-at-pos
              flow-minor-status
@@ -256,6 +255,7 @@
       "fd" #'flow-minor-jump-to-definition)))
 
 (use-package prettier-js
+  :straight t
   :after rk-web-modes
   :commands (prettier-js-mode
              prettier-js)
@@ -301,6 +301,7 @@
       "." #'prettier-js)))
 
 (use-package company-flow
+  :straight t
   :after rk-web-modes
   :preface
   (defun rk-web--setup-company-flow-if-flow-buffer ()
@@ -314,6 +315,7 @@
   (add-hook 'rk-web-js-mode-hook #'rk-web--setup-company-flow-if-flow-buffer))
 
 (use-package add-node-modules-path
+  :straight t
   :after rk-web-modes
   :commands (add-node-modules-path)
   :config
@@ -335,6 +337,7 @@
     (add-hook 'aggressive-indent-stop-here-hook #'rk-web--in-flow-strict-object-type?)))
 
 (use-package stylefmt
+  :straight t
   :after rk-web-modes
   :commands (stylefmt-enable-on-save stylefmt-format-buffer)
   :config
@@ -342,6 +345,7 @@
     "." #'stylefmt-format-buffer))
 
 (use-package nvm
+  :straight t
   :after rk-web-modes
   :functions (nvm-use-for-buffer)
   :preface

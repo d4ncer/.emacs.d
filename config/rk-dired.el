@@ -19,18 +19,13 @@
 (use-package dired
   :defer t
   :commands (dired dired-hide-details-mode)
+  :bind (:map spacemacs-keys-default-map ("d" . dired))
   :preface
   (progn
     (autoload 'diredp-next-line "dired+")
     (autoload 'diredp-previous-line "dired+")
     (autoload 'diredp-up-directory-reuse-dir-buffer "dired+")
     (autoload 'wdired-change-to-wdired-mode "wdired")
-
-    ;; HACK: Hide the cursor and use hl-line.
-    (defun rk-dired--hacky-show-line-only ()
-      (run-with-timer 0.01 nil (lambda ()
-                                 (setq cursor-type nil)
-                                 (hl-line-mode +1))))
 
     (defun rk-dired--sort-directories-first (&rest _)
       "Sort dired listings with directories first."
@@ -56,16 +51,13 @@
 
   :config
   (progn
-    (add-hook 'dired-mode-hook #'rk-dired--hacky-show-line-only t)
 
     (put 'dired-find-alternate-file 'disabled nil)
 
     (setq-default dired-listing-switches "-alhv")
     (setq dired-dwim-target t)
+    (setq dired-auto-revert-buffer t)
     (advice-add 'dired-readin :after #'rk-dired--sort-directories-first)
-
-    (unless (bound-and-true-p diredp-loaded-p)
-      (load-file (concat rk-emacs-lisp-directory "/dired-plus/dired+.el")))
 
     (evil-define-key 'normal dired-mode-map (kbd "C-;") #'diredp-up-directory-reuse-dir-buffer)
     (evil-define-key 'normal dired-mode-map (kbd "j") #'diredp-next-line)
@@ -89,17 +81,13 @@
     (setq dired-omit-files (rx bol (or (+ ".")
                                        (and "__pycache__" eol))))))
 
+(use-package dired+
+  :straight t
+  :after dired
+  :hook (dired-mode . dired-hide-details-mode))
+
 (use-package wdired
   :after dired)
-
-;;; TODO: Fix Hydra before using it
-
-;; (use-package rk-dired-hydra
-;;   :after dired
-;;   :commands (rk-dired-main-transient-state/body)
-;;   :init
-;;   (define-key dired-mode-map (kbd ".") #'rk-dired-main-transient-state/body))
-
 
 (provide 'rk-dired)
 

@@ -14,6 +14,7 @@
 (require 'spacemacs-keys)
 
 (use-package ivy-lobsters
+  :straight t
   :commands
   (ivy-lobsters)
 

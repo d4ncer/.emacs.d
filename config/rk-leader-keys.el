@@ -40,6 +40,7 @@
   (add-hook 'rk-delete-current-buffer-and-file-functions #'rk-leader-keys--invalidate-cache))
 
 (use-package which-key
+  :straight t
   :preface
   (progn
     (autoload 'which-key-mode "which-key")

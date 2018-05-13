@@ -15,6 +15,7 @@
 (require 'subr-x)
 
 (use-package highlight-thing
+  :straight t
   :commands (highlight-thing-mode)
   :init
   (add-hook 'prog-mode-hook #'highlight-thing-mode)

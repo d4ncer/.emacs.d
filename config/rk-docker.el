@@ -14,6 +14,7 @@
 (require 'spacemacs-keys)
 
 (use-package dockerfile-mode
+  :straight t
   :commands (dockerfile-mode
              dockerfile-build-buffer
              dockerfile-build-no-cache-buffer

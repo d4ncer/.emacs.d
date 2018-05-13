@@ -64,7 +64,7 @@
   (setq ibuffer-show-empty-filter-groups nil))
 
 (use-package ibuffer-projectile
-  :commands (ibuffer-projectile-set-filter-groups)
+  :straight t
   :functions (ibuffer-do-sort-by-alphabetic)
   :preface
   (defun rk-ibuffer--setup-buffer ()

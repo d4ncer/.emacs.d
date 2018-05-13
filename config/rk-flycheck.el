@@ -12,24 +12,30 @@
   (require 'use-package))
 
 (autoload 'evil-define-key "evil-core")
+(autoload 'evil-set-initial-state "evil-core")
 
 (require 'spacemacs-keys)
 
 (use-package flycheck
-  :ensure t ; load with package.el
-  :defer 1
-  :commands (global-flycheck-mode)
-
+  :straight t
+  :defer 3
+  :commands (global-flycheck-mode
+             flycheck-list-errors
+             flycheck-error-list-next-error
+             flycheck-error-list-previous-error
+             flycheck-error-list-goto-error)
   :init
   (spacemacs-keys-declare-prefix "e" "errors")
 
 
   :preface
   (progn
+    (autoload 'flycheck-buffer "flycheck")
     (autoload 'flycheck-error-format-message-and-id "flycheck")
     (autoload 'flycheck-get-error-list-window "flycheck")
-    (autoload 'flycheck-list-errors "flycheck")
     (autoload 'flycheck-may-use-echo-area-p "flycheck")
+    (autoload 'projectile-project-p "projectile")
+    (autoload 'projectile-process-current-project-buffers "projectile")
 
     (defun rk-flycheck-display-error-messages (errors)
       (unless (flycheck-get-error-list-window 'current-frame)
@@ -70,6 +76,7 @@
       "ev" 'flycheck-verify-setup)
 
     (with-eval-after-load 'evil
+      (evil-set-initial-state 'flycheck-error-list-mode 'motion)
       (evil-define-key 'normal flycheck-error-list-mode-map
         (kbd "n") #'flycheck-error-list-next-error
         (kbd "p") #'flycheck-error-list-previous-error

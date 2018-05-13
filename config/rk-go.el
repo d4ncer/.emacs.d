@@ -19,9 +19,8 @@
 (autoload 'projectile-project-p "projectile")
 
 (use-package go-mode
+  :straight t
   :mode ("\\.go\\'" . go-mode)
-
-  :commands (godef-jump)
 
   :init
   (progn
@@ -49,9 +48,9 @@
               (output (s-lines (s-trim (shell-command-to-string "go env"))))
               ((&alist "GOROOT" go-root)
                (--map (-let* (((var val) (s-split "=" it))
-                              ((_ val) (s-match (rx "\"" (group (*? nonl)) "\"") val)))
-                        (cons var val))
-                      output)))
+                             ((_ val) (s-match (rx "\"" (group (*? nonl)) "\"") val)))
+                       (cons var val))
+                     output)))
         go-root))
 
     (defun rk-go--set-local-vars ()
@@ -78,6 +77,7 @@
   :functions (gofmt-before-save godoc-at-point))
 
 (use-package company-go
+  :straight t
   :after go-mode
 
   :preface
@@ -95,6 +95,7 @@
     (add-hook 'go-mode-hook #'rk-go-company-setup)))
 
 (use-package go-eldoc
+  :straight t
   :after go-mode
   :config (add-hook 'go-mode-hook 'go-eldoc-setup))
 
@@ -120,20 +121,6 @@
                  (side            . bottom)
                  (slot            . 0)
                  (window-height   . 0.2))))
-
-(use-package autoinsert
-  :preface
-  (defconst rk-go-autoinsert-form
-    '((go-mode . "Go")
-      nil
-      "package " (s-lower-camel-case (f-no-ext (f-filename (buffer-file-name)))) \n \n
-      _ \n))
-
-  :config
-  (add-to-list 'auto-insert-alist rk-go-autoinsert-form))
-
-(use-package go-peg-mode
-  :mode ("\\.peg\\'" . go-peg-mode))
 
 (provide 'rk-go)
 

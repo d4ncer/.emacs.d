@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (use-package groovy-mode
+  :straight t
   :commands (groovy-mode)
   :mode ("\\.g\\(?:ant\\|roovy\\|radle\\)\\'" . groovy-mode)
   :interpreter ("groovy" . groovy-mode))

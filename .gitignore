@@ -1,5 +1,6 @@
 # Compiled
 *.elc
+.yas-compiled-snippets.el
 
 # Packaging
 .cask
@@ -9,4 +10,13 @@ elpa
 .cache
 auto-save-list
 /projectile-bookmarks.eld
+/magithub
+/custom.el
+/history
 smex-items
+
+# Straight
+/var
+/straight/*
+!/straight/versions/
+!/straight/versions/*

@@ -1,7 +1,0 @@
-.elpaignore
-.gitignore
-.travis.yml
-test-data
-sql-indent-test.el
-*~
-*.elc

@@ -12,9 +12,9 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
-(require 'counsel)
 
 (use-package help-fns+
+  :straight t
   :commands (describe-buffer
              describe-file
              describe-keymap)

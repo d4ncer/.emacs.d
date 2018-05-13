@@ -15,6 +15,7 @@
 (require 'spacemacs-keys)
 
 (use-package markdown-mode
+  :straight t
   :commands (markdown-mode
              gfm-mode
              markdown-fill-paragraph

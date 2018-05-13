@@ -15,6 +15,7 @@
 (require 'spacemacs-keys)
 
 (use-package projectile
+  :straight t
   :commands (projectile-compile-project
              projectile-invalidate-cache
              projectile-mode
@@ -70,8 +71,9 @@
 
 
 (use-package counsel-projectile
+  :straight t
   :defer t
-  :commands (counsel-projectile-on
+  :commands (counsel-projectile-mode
              counsel-projectile-find-file
              counsel-projectile-find-dir
              counsel-projectile-switch-project
@@ -86,7 +88,9 @@
     "/"  #'counsel-projectile-rg)
 
   :config
-  (counsel-projectile-on))
+  (progn
+    (setq counsel-projectile-switch-project-action 'magit-status)
+    (counsel-projectile-mode +1)))
 
 (provide 'rk-projectile)
 

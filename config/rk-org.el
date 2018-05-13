@@ -10,11 +10,13 @@
 
 (eval-when-compile
   (require 'use-package)
+  (require 'straight)
   (require 'rk-emacs)
   (autoload 'evil-define-key "evil-core")
   (defconst rk-org-load-path (concat rk-emacs-lisp-directory "/org-mode/lisp"))
   (defconst rk-org-contrib-load-path (concat rk-emacs-lisp-directory "/org-mode/contrib/lisp")))
 
+(require 'straight)
 (require 'spacemacs-keys)
 (require 'evilified-state)
 (require 'f)
@@ -29,8 +31,14 @@
 (defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 (defconst rk-org-consume-file (concat org-directory "/consume.org"))
 
+(straight-use-package 'org-plus-contrib)
+
+(with-eval-after-load 'which-key
+  (with-no-warnings
+    (push `(("," . ,(rx bos (? "evil-") "org-" (group (+ nonl)))) . (nil . "\\1"))
+          which-key-replacement-alist)))
+
 (use-package org
-  :load-path rk-org-load-path
   :defer t
 
   :bind
@@ -40,21 +48,18 @@
         ("M-n" . org-metadown)
         ("C-c c" . org-columns))
 
+  :defines (org-state org-log-states org-log-done)
+  :commands (org-entry-get
+             org-get-scheduled-time
+             org-get-todo-state
+             org-heading-components
+             org-todo
+             org-up-heading-safe)
+
   :preface
   (progn
-    (autoload 'org-entry-get "org")
-    (autoload 'org-get-scheduled-time "org")
-    (autoload 'org-get-todo-state "org")
-    (autoload 'org-heading-components "org")
-    (autoload 'org-todo "org")
-    (autoload 'org-up-heading-safe "org")
     (autoload 'outline-forward-same-level "outline")
     (autoload 's-matches? "s")
-
-    ;; KLUDGE: Pre-declare dynamic variables used by orgmode.
-    (defvar org-state)
-    (defvar org-log-states)
-    (defvar org-log-done)
 
     (defun rk-org--exit-minibuffer (&rest _)
       "Exit minibuffer before adding notes."
@@ -112,10 +117,6 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
     (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
-
-    ;; Not sure I need this
-    ;; (dolist (dir (f-directories "~/.org/lisp/"))
-    ;;   (add-to-list 'load-path (f-slash dir)))
 
     (spacemacs-keys-set-leader-keys
       "ok" #'org-capture
@@ -178,8 +179,53 @@ Do not scheduled items or repeating todos."
     (setq org-todo-keywords '((type "TODO(t)" "MAYBE(m)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
                               (type "SOMEDAY(s)" "|")))
 
+    (setq org-confirm-babel-evaluate nil)
+    (setq org-babel-load-languages '((emacs-lisp . t)
+                                     (restclient . t)
+                                     (gnuplot . t)
+                                     (python . t)
+                                     (javascript . t)
+                                     (scala . t)
+                                     (shell . t)
+                                     (shell . t)
+                                     (sql . t)))
+
+    (add-hook 'org-babel-after-execute-hook 'org-display-inline-images 'append)
+
     (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
     (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol)))
+
+(use-package ob-python
+  :after org
+  :preface
+  (defun cb-org-setup-python ()
+    (when (executable-find "ipython")
+      (setq-local org-babel-python-command "ipython")))
+  :config
+  (add-hook 'org-mode-hook #'cb-org-setup-python))
+
+(use-package gnuplot
+  :straight t
+  :defer t)
+
+(use-package ob-gnuplot
+  :after org)
+
+(use-package ob-restclient
+  :straight t
+  :after org)
+
+(use-package ob-javascript
+  :straight (:host github :repo "zweifisch/ob-javascript"
+                   :branch "master")
+  :after org
+  :defines (ob-javascript-path-to-lib)
+  :init
+  (setq ob-javascript-path-to-lib "/Users/raghuvirk/.emacs.d/straight/repos/ob-javascript/"))
+
+(use-package ob-shell :after org)
+
+(use-package ob-sql :after org)
 
 (use-package org-id
   :after org
@@ -204,13 +250,14 @@ Do not scheduled items or repeating todos."
   (setq org-attach-directory (f-join org-directory "data")))
 
 (use-package org-agenda
-  :load-path rk-org-load-path
   :after org
   :bind (:map org-agenda-mode-map ("J" . org-agenda-goto-date))
 
   :preface
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
+
+  :defines (org-duration-format)
 
   :config
   (progn
@@ -272,7 +319,7 @@ Do not scheduled items or repeating todos."
            :fileskip0 t
            :step 'week))
 
-    (setq org-time-clocksum-format
+    (setq org-duration-format
           (list :hours "%d" :require-hours t
                 :minutes ":%02d" :require-minutes t))
 
@@ -403,7 +450,6 @@ Do not scheduled items or repeating todos."
 
 (use-package org-archive
   :after org
-  :load-path rk-org-load-path
   :functions (org-archive-subtree)
   :preface
   (progn
@@ -432,7 +478,6 @@ Do not scheduled items or repeating todos."
 
 (use-package org-src
   :after org
-  :load-path rk-org-load-path
 
   :preface
   (progn
@@ -459,6 +504,7 @@ Do not scheduled items or repeating todos."
                                ("C++" . c++)
                                ("screen" . shell-script)
                                ("shell" . sh)
+                               ("javascript" . rk-web-js)
                                ("bash" . sh)))
     (setq org-src-fontify-natively t)
     (setq org-src-window-setup 'current-window)
@@ -467,7 +513,6 @@ Do not scheduled items or repeating todos."
 
 (use-package org-clock
   :after org
-  :load-path rk-org-load-path
 
   :preface
   (progn
@@ -492,44 +537,8 @@ Do not scheduled items or repeating todos."
     (org-clock-persistence-insinuate)
     (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t)))
 
-;;; TODO: Review if I need this
-;; (use-package org-drill
-;;   :after org
-;;   :commands (org-drill
-;;              org-drill-strip-all-data
-;;              org-drill-cram
-;;              org-drill-tree
-;;              org-drill-resume
-;;              org-drill-merge-buffers
-;;              org-drill-entry
-;;              org-drill-directory
-;;              org-drill-again)
-;;   :preface
-;;   (defconst rk-org-drill-files (f-files (concat org-directory "/drill")))
-
-;;   :defines
-;;   (org-drill-scope
-;;    org-drill-learn-fraction
-;;    org-drill-adjust-intervals-for-early-and-late-repetitions-p
-;;    org-drill-add-random-noise-to-intervals-p
-;;    org-drill-save-buffers-after-drill-sessions-p)
-
-;;   :config
-;;   (progn
-;;     (defconst rk-org-drill-file (f-join org-directory "drill" "drill.org"))
-
-;;     (setq org-drill-scope rk-org-drill-files)
-
-;;     (add-to-list 'org-refile-targets '(rk-org-drill-files :maxlevel . 3))
-
-;;     (setq org-drill-learn-fraction 0.25)
-;;     (setq org-drill-adjust-intervals-for-early-and-late-repetitions-p t)
-;;     (setq org-drill-add-random-noise-to-intervals-p t)
-;;     (setq org-drill-save-buffers-after-drill-sessions-p nil)))
-
 (use-package org-capture
   :after org
-  :load-path rk-org-load-path
   :preface
   (defun rk-org--capture-template-entry (key label form template &rest kws)
     (append
@@ -538,6 +547,9 @@ Do not scheduled items or repeating todos."
            :empty-lines 1
            :prepend t)
      kws))
+  :commands (org-capture-finalize
+             org-capture-kill
+             org-capture-refile)
   :config
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
@@ -602,8 +614,8 @@ Do not scheduled items or repeating todos."
             "* SOMEDAY  %?")))))
 
 (use-package org-download
+  :straight t
   :after org
-  :load-path rk-org-load-path
   :config
   (setq org-download-method 'attach))
 
@@ -654,9 +666,12 @@ Do not scheduled items or repeating todos."
   (defvar org-export-backends '(ascii html latex odt gfm koma-letter custom-confluence))
   :config
   (progn
-    (require 'ox-gfm)
     (setq org-export-exclude-tags '("noexport" "crypt"))
     (setq org-export-coding-system 'utf-8)))
+
+(use-package ox-gfm
+  :straight t
+  :after org)
 
 (use-package ox-confluence
   :after org
@@ -665,12 +680,6 @@ Do not scheduled items or repeating todos."
     :menu-entry
     '(?c "Export as Confluence markup"
          ((?c "To temporary buffer" org-confluence-export-as-confluence)))))
-
-
-(use-package ox-koma-letter
-  :after org
-  :config
-  (add-to-list 'org-latex-packages-alist '("AUTO" "babel" nil)))
 
 (use-package ox-html
   :after org
@@ -708,6 +717,7 @@ table tr.tr-even td {
   :init (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
 
 (use-package typopunct
+  :straight t
   :after org
   :commands (typopunct-change-language typopunct-mode)
   :preface
@@ -716,15 +726,6 @@ table tr.tr-even td {
     (typopunct-mode 1))
   :config
   (add-hook 'org-mode-hook #'rk-typopunct-init))
-
-(use-package rk-org-export-koma-letter
-  :after org
-  :functions (rk-org-export-koma-letter-init)
-  :config
-  (progn
-    (add-to-list 'org-latex-classes `("koma-letter" ,rk-org-export-koma-letter-latex-class))
-    (setq org-latex-hyperref-template "")
-    (add-hook 'org-ctrl-c-ctrl-c-hook #'rk-org-export-koma-letter--handler t)))
 
 (use-package rk-org-capture-url
   :after org)
@@ -772,6 +773,7 @@ table tr.tr-even td {
   :after org)
 
 (use-package evil-org
+  :straight t
   :after org
   :config
   (progn

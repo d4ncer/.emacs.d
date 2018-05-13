@@ -14,6 +14,7 @@
 (require 'spacemacs-keys)
 
 (use-package evil
+  :straight t
   :preface
   (defun rk-evil--sp-delete-and-join-compat (fn &rest args)
     (if (bound-and-true-p smartparens-strict-mode)
@@ -71,20 +72,27 @@
   :defines (evil-want-Y-yank-to-eol))
 
 (use-package evil-terminal-cursor-changer
+  :straight t
   :if (not (display-graphic-p))
   :commands (evil-terminal-cursor-changer-activate)
   :config (evil-terminal-cursor-changer-activate))
 
 (use-package evil-surround
+  :straight t
   :after evil
   :commands (global-evil-surround-mode
              evil-surround-region)
 
   :preface
-  (autoload 'evil-substitute "evil-commands")
+  (progn
+    (defun danc--elisp/init-evil-surround-pairs ()
+      (make-local-variable 'evil-surround-pairs-alist)
+      (push '(?\` . ("`" . "'")) evil-surround-pairs-alist))
+    (autoload 'evil-substitute "evil-commands"))
 
   :config
   (progn
+    (autoload emacs-lisp-mode-hook "emacs-lisp")
     (setq-default evil-surround-pairs-alist
                   '((?\( . ("(" . ")"))
                     (?\[ . ("[" . "]"))
@@ -102,12 +110,13 @@
                     (?t . evil-surround-read-tag)
                     (?< . evil-surround-read-tag)
                     (?f . evil-surround-function)))
-
+    (add-hook 'emacs-lisp-mode-hook #'danc--elisp/init-evil-surround-pairs)
     (global-evil-surround-mode)
     (evil-define-key 'visual evil-surround-mode-map "s" #'evil-surround-region)
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
 (use-package evil-iedit-state
+  :straight t
   :commands (evil-iedit-state evil-iedit-state/iedit-mode)
   :init
   (spacemacs-keys-set-leader-keys "se" #'evil-iedit-state/iedit-mode)
@@ -140,9 +149,11 @@
     (evil-ex-define-cmd "spell" #'rk-evil-flyspell-on)))
 
 (use-package evil-ediff
+  :straight t
   :after ediff)
 
 (use-package evil-args
+  :straight t
   :after evil
   :config
   (progn
@@ -150,6 +161,7 @@
     (define-key evil-outer-text-objects-map "a" 'evil-outer-arg)))
 
 (use-package evil-escape
+  :straight t
   :after evil
   :config
   (progn
@@ -157,11 +169,13 @@
     (evil-escape-mode)))
 
 (use-package evil-indent-plus
+  :straight t
   :after evil
   :commands (evil-indent-plus-default-bindings)
   :config (evil-indent-plus-default-bindings))
 
 (use-package evil-nerd-commenter
+  :straight t
   :commands (evilnc-comment-operator)
   :preface
   (require 'rk-evil-nerd-commenter)
@@ -184,9 +198,11 @@
       "cY" #'rk-evil-nerd-commenter/copy-and-comment-lines-inverse)))
 
 (use-package evil-matchit
+  :straight t
   :after evil)
 
 (use-package evil-numbers
+  :straight t
   :commands (evil-numbers/inc-at-pt
              evil-numbers/dec-at-pt)
 
@@ -196,6 +212,7 @@
     (evil-global-set-key 'normal (kbd "-") #'evil-numbers/dec-at-pt)))
 
 (use-package evil-search-highlight-persist
+  :straight t
   :after evil
   :commands (global-evil-search-highlight-persist
              evil-search-highlight-persist-remove-all)
@@ -208,13 +225,8 @@
     (global-evil-search-highlight-persist)
     (evil-ex-define-cmd "noh" #'evil-search-highlight-persist-remove-all)))
 
-(use-package evil-visual-mark-mode
-  :disabled t
-  :after evil
-  :commands (evil-visual-mark-mode)
-  :config (evil-visual-mark-mode))
-
 (use-package vi-tilde-fringe
+  :straight t
   :after evil
   :commands (vi-tilde-fringe-mode global-vi-tilde-fringe-mode)
 
