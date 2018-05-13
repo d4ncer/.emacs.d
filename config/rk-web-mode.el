@@ -258,8 +258,6 @@
 (use-package prettier-js
   :straight t
   :after rk-web-modes
-  :commands (prettier-js-mode
-             prettier-js)
   :preface
   (progn
     (autoload 'f-exists? "f")
@@ -326,12 +324,14 @@
 (use-package aggressive-indent
   :defer t
   :preface
-  (defun rk-web--in-flow-strict-object-type? ()
-    (when (derived-mode-p 'rk-web-js-mode)
-      (-let [(depth start) (syntax-ppss)]
-        (and (plusp depth)
-             (eq (char-after start) ?{)
-             (eq (char-after (1+ start)) ?|)))))
+  (progn
+    (autoload 'plusp "cl")
+    (defun rk-web--in-flow-strict-object-type? ()
+      (when (derived-mode-p 'rk-web-js-mode)
+        (-let [(depth start) (syntax-ppss)]
+          (and (plusp depth)
+               (eq (char-after start) ?{)
+               (eq (char-after (1+ start)) ?|))))))
   :config
   (progn
     (add-to-list 'aggressive-indent-dont-indent-if '(rk-web--in-flow-strict-object-type?))
