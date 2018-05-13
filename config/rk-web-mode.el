@@ -190,7 +190,8 @@
     (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
 (use-package flow-minor-mode
-  :straight t
+  :straight (:host github :repo "d4ncer/flow-minor-mode"
+                   :branch "master")
   :after rk-web-modes
   :commands (flow-minor-type-at-pos
              flow-minor-status
