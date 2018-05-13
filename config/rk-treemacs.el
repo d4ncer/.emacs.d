@@ -17,6 +17,7 @@
 (use-package treemacs
   :straight t
   :commands (treemacs
+             treemacs-add-project
              treemacs-toggle
              treemacs-mode
              treemacs-next-line

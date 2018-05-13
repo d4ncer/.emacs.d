@@ -16,7 +16,6 @@
 
 (use-package swiper
   :straight t
-  :commands swiper
   :config
   (progn
     (evil-global-set-key 'motion "/" #'swiper)
