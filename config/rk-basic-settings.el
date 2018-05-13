@@ -557,20 +557,7 @@ Optional arg JUSTIFY will justify comments and strings."
   (setq display-time-default-load-average nil))
 
 (use-package hydra
-  :straight t
-  :defer t
-  :preface
-  (defun rk-basic-settings-set-up-hydra-buffer (&rest _)
-    (when-let (buf (get-buffer " *LV*"))
-      (when (buffer-live-p buf)
-        (with-current-buffer buf
-          (setq-local mode-line-format nil)
-          (setq-local header-line-format nil)
-          (force-mode-line-update)))))
-  :config
-  (progn
-    (setq lv-use-separator t)
-    (advice-add 'lv-window :after #'rk-basic-settings-set-up-hydra-buffer)))
+  :straight t)
 
 (use-package sql-indent
   :after sql
@@ -610,6 +597,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :defines (display-time-world-list world-time-table-mode-map))
 
 (use-package smex
+  :straight t
   :commands (smex-initialize)
   :config
   (smex-initialize))

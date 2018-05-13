@@ -94,6 +94,7 @@
  ("rnc-mode" . "7364fab033c49ce58fe73e5d7c8d8050fe153626")
  ("s.el" . "03410e6a7a2b11e47e1fea3b7d9899c7df26435e")
  ("smartparens" . "b8c684709fee66ea1f46d4fb21beed8be29bc7e1")
+ ("smex" . "55aaebe3d793c2c990b39a302eb26c184281c42c")
  ("straight.el" . "ac4cfb80fc0ce59ee3a2e8d6aebf100731a44e0a")
  ("stylefmt.el" . "7a38f26bf8ff947215f34f0a064c7ca80575ccbc")
  ("swiper" . "3689c8f36dc55494b2eaa7f4c4404114d02c7c9f")
