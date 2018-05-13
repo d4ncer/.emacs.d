@@ -13,26 +13,26 @@
 
 (require 'spacemacs-keys)
 
-(use-package rk-header-line-format
-  :defines rk-header-line-format
+(use-package rk-mode-line-format
+  :defines rk-mode-line-format
   :config
-  (setq-default header-line-format rk-header-line-format))
+  (setq-default mode-line-format rk-mode-line-format))
 
-(use-package hidden-mode-line
-  :commands (hidden-mode-line-mode global-hidden-mode-line-mode)
-  :init
-  (setq-default mode-line-format " "))
+;; (use-package hidden-mode-line
+;;   :commands (hidden-mode-line-mode global-hidden-mode-line-mode)
+;;   :init
+;;   (setq-default mode-line-format " "))
 
-(use-package rk-header-line-mode
-  :commands (rk-header-line-global-mode rk-header-line-mode rk-header-line-mode-on)
-  :init
-  (progn
-    (spacemacs-keys-set-leader-keys
-      "TM" #'rk-header-line-mode
-      "Tm" #'rk-header-line-global-mode)
-    (add-hook 'after-init-hook #'rk-header-line-global-mode))
-  :config
-  (setq rk-header-line-function (lambda () rk-header-line-format)))
+;; (use-package rk-header-line-mode
+;;   :commands (rk-header-line-global-mode rk-header-line-mode rk-header-line-mode-on)
+;;   :init
+;;   (progn
+;;     (spacemacs-keys-set-leader-keys
+;;       "TM" #'rk-header-line-mode
+;;       "Tm" #'rk-header-line-global-mode)
+;;     (add-hook 'after-init-hook #'rk-header-line-global-mode))
+;;   :config
+;;   (setq rk-header-line-function (lambda () rk-header-line-format)))
 
 (provide 'rk-modeline)
 

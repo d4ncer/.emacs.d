@@ -49,23 +49,13 @@
         :family ,rk-theme-font-family
         :height 190)))
 
-    (mode-line
-     ((((background dark))
-       :foreground ,rk-theme-base-solarized-b01
-       :background ,rk-theme-base-solarized-b01
-       :height 20)
-      (((background light))
-       :foreground ,rk-theme-base-solarized-b1
-       :background ,rk-theme-base-solarized-b1
-       :height 20)))
-
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
 
     (fringe
      ((t :background ,default-background)))
 
-    (header-line
+    (mode-line
      ((((background dark))
        :background ,rk-theme-base-solarized-b02
        :foreground ,rk-theme-base-solarized-b2
@@ -78,6 +68,11 @@
        :weight bold
        :height 140
        :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
+
+    (mode-line-inactive
+     ((t :background ,rk-theme-base-solarized-b2
+         :height 0.7
+         )))
 
     (rk-header-line-format-nonemphased-element
      ((t :weight light)))
