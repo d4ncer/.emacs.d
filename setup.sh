@@ -12,6 +12,7 @@ go get -u -v github.com/kardianos/govendor
 go get -u -v golang.org/x/tools/cmd/guru
 go get -u -v golang.org/x/tools/cmd/gorename
 go get -u -v golang.org/x/tools/cmd/goimports
+go get -u -v github.com/sqs/goreturns
 
 # JS setup
 npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier \
