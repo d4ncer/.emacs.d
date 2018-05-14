@@ -92,7 +92,6 @@
 
   :config
   (progn
-    (autoload emacs-lisp-mode-hook "emacs-lisp")
     (setq-default evil-surround-pairs-alist
                   '((?\( . ("(" . ")"))
                     (?\[ . ("[" . "]"))

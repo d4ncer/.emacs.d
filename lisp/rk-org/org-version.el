@@ -1,8 +1,8 @@
-;;; rk-org-version.el --- -*- lexical-binding: t; -*-
+;;; org-version.el --- -*- lexical-binding: t; -*-
 ;;; Commentary:
 
 ;; Straight cannot install org correctly, since it does not run make and
-;; therefore does not create the rk-org-version file.
+;; therefore does not create the org-version file.
 
 ;;; Code:
 
@@ -34,4 +34,4 @@
 
 (provide 'org-version)
 
-;;; rk-org-version.el ends here
+;;; org-version.el ends here

@@ -68,6 +68,12 @@
 (paths-initialise)
 (add-to-list 'custom-theme-load-path paths-themes-directory)
 
+;; Aggressively load in org-plus-contrib to avoid shadowing
+
+(straight-use-package 'org-plus-contrib)
+
+;; Aggressively load themes
+
 (use-package rk-themes
   :config
   (danc--themes/light-theme))
@@ -138,7 +144,6 @@
                  (message "Loading %s...done (%.3fs) [after-init]"
                           ,load-file-name elapsed)))
             t))
-
 
 (provide 'init)
 

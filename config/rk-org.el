@@ -21,7 +21,6 @@
 (require 'subr-x)
 
 (autoload 'evil-define-key "evil")
-(autoload 'org-todo "org")
 
 (defvar org-directory "~/org")
 
@@ -99,6 +98,8 @@ Do not scheduled items or repeating todos."
 
   :init
   (progn
+    (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
+
     (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
     (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
@@ -110,7 +111,6 @@ Do not scheduled items or repeating todos."
 
   :config
   (progn
-    (load-file (expand-file-name "rk-org-version.el" (concat paths-lisp-directory "/rk-org")))
     (setq org-default-notes-file (f-join org-directory "notes.org"))
 
     (spacemacs-keys-set-leader-keys-for-major-mode
@@ -214,6 +214,7 @@ Do not scheduled items or repeating todos."
 
 (use-package org-id
   :after org
+  :defines (org-id-locations-file)
   :config
   (setq org-id-locations-file (f-join paths-cache-directory "org-id-locations")))
 
@@ -231,6 +232,7 @@ Do not scheduled items or repeating todos."
 
 (use-package org-attach
   :after org
+  :defines (org-attach-directory)
   :config
   (setq org-attach-directory (f-join org-directory "data")))
 
@@ -309,13 +311,6 @@ Do not scheduled items or repeating todos."
                 :minutes ":%02d" :require-minutes t))
 
     (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
-
-    (use-package rk-org-agenda-transient-state
-      :after org
-      :commands (rk-org-agenda-hydra-transient-state/body)
-      :config
-      (progn
-        (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra-transient-state/body)))
 
     (setq org-agenda-custom-commands
           '(("A" "Agenda and next actions"
@@ -425,6 +420,13 @@ Do not scheduled items or repeating todos."
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-drawer-properties '(effort appt))))))))
+
+(use-package rk-org-agenda-transient-state
+  :after (org org-agenda)
+  :commands (rk-org-agenda-hydra-transient-state/body)
+  :init
+  (progn
+    (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra-transient-state/body)))
 
 (use-package appt
   :defer t
