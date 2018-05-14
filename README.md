@@ -12,7 +12,6 @@ I would highly recommend you do not use it as-is. Here are a few reasons to hope
 * Not everyone likes Solarized Light as much as I do
 * My bindings are haphazard at best, and a chaotic mix between the Emacs & Vim philosophies
 * I don't support that one language mode that you can't live without
-* I don't use yasnippet
 
 If you're looking for a starting point, check out [Chris Barrett's](https://github.com/chrisbarrett "CB da bomb") [config for tips on getting started](https://github.com/chrisbarrett/.emacs.d#i-want-to-use-your-config "it's really good. you should use it")
 
@@ -99,16 +98,19 @@ your root folder. A sample:
 Most of my work is on the frontend, which is reflected in my setup. Some
 packages of note:
 
+* `straight.el`
 * Evil
-* Ivy (with `ripgrep`)
-* Spacemacs leader keys
+* Ivy / Counsel / Swiper (with `ripgrep`)
+* Spacemacs leader keys (built on top of `which-key`)
+* Hydra
 * Projectile
 * Flycheck
 * Magit
 * Org
-* IBuffer
+* Ibuffer
 * Treemacs
 * Smartparens
+* Yasnippet
 
 ## Language Modes
 
@@ -129,10 +131,12 @@ packages of note:
 * Groovy
 * RNC
 
-## Planned Modes
+## Planned enhancements
 
 **NB** In order of importance to me. If you're using my setup and want something
 supported not on this list, feel free to issue a PR.
+
+#### Languages
 
 * Python
 * Java
@@ -140,13 +144,18 @@ supported not on this list, feel free to issue a PR.
 * TypeScript
 * Racket
 
+#### Enhancements
+
+* A more informative modeline
+* Dark theme
+
 ## Misc notes
 
 * I use [Marked 2](http://marked2app.com/) to preview markdown files. If you
   don't have it, or you want to use something, set `markdown-open-command` to
   point to something else. If you are using Marked 2,
   [here](https://jblevins.org/log/marked-2-command "Running Marked 2 from the
-  Command Line") is how you set it up
+  Command Line") is how you set it up.
 * If you want to tweak the font settings look in `config/rk-faces/rk-theme-base.el`.
 * I put more effort into some modes than others, hence there are some modes
   with considered chordal bindings, and some with none. If you notice this,
