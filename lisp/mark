@@ -1,7 +1,0 @@
-## This should be moved to /usr/local/bin if Marked 2 is present.
-#!/bin/sh
-if [ $1 ]; then
-    open -a "Marked 2" $1;
-else
-    open -a "Marked 2";
-fi
