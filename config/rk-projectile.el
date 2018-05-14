@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'rk-emacs)
+(require 'paths)
 (require 'spacemacs-keys)
 
 (use-package projectile
@@ -46,7 +46,7 @@
   (progn
     (setq projectile-completion-system 'ivy)
     (setq projectile-switch-project-action 'magit-status)
-    (setq projectile-cache-file (concat rk-emacs-cache-directory "/projectile.cache"))
+    (setq projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
     (setq projectile-enable-caching t)
 
     (setq projectile-globally-ignored-files '("TAGS" ".DS_Store"))

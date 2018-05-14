@@ -15,7 +15,7 @@
 (require 's)
 (require 'noflet)
 
-(require 'rk-emacs)
+(require 'paths)
 (require 'spacemacs-keys)
 
 (autoload 'thing-at-point-looking-at "thingatpt")
@@ -311,7 +311,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package abbrev
   :defer t
   :config
-  (setq abbrev-file-name (concat rk-emacs-cache-directory "/abbrev_defs")))
+  (setq abbrev-file-name (concat paths-cache-directory "/abbrev_defs")))
 
 (use-package window-numbering
   :defer t
@@ -390,7 +390,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (progn
     (setq recentf-max-saved-items 1000)
-    (setq recentf-save-file (concat rk-emacs-cache-directory "/recentf"))
+    (setq recentf-save-file (concat paths-cache-directory "/recentf"))
     (setq recentf-exclude
           '(rk-basic-settings-boring-filename-p
             rk-basic-settings-boring-extension-p
@@ -402,7 +402,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (progn
     (setq bookmark-save-flag nil)
-    (setq bookmark-default-file (concat rk-emacs-cache-directory "/bookmarks"))))
+    (setq bookmark-default-file (concat paths-cache-directory "/bookmarks"))))
 
 (use-package iedit
   :straight t
@@ -428,7 +428,7 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq require-final-newline t)
     (setq delete-old-versions t)
     (setq confirm-nonexistent-file-or-buffer nil)
-    (setq backup-directory-alist `((".*" . ,rk-emacs-autosave-directory)))
+    (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
     (setq version-control t)))
 
 (use-package select
@@ -502,12 +502,12 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package saveplace
   :config
   (progn
-    (setq save-place-file (concat rk-emacs-cache-directory "/saveplace"))
+    (setq save-place-file (concat paths-cache-directory "/saveplace"))
     (save-place-mode +1)))
 
 (use-package savehist
   :init
-  (defconst savehist-file (concat rk-emacs-cache-directory "/savehist"))
+  (defconst savehist-file (concat paths-cache-directory "/savehist"))
   :config
   (progn
     (setq savehist-additional-variables '(kill-ring search-ring regexp-search-ring))
@@ -523,7 +523,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package tramp-cache
   :defer t
   :config
-  (setq tramp-persistency-file-name (concat rk-emacs-cache-directory "/tramp")))
+  (setq tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
 
 (use-package autorevert
   :config

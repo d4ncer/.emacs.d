@@ -24,32 +24,11 @@
 
 (defvar magit-process-raise-error)
 
-(defconst rk-emacs-pinned-subtree-versions
-  '((ensime-emacs . "v2.0.0")))
-
-
-;; Config Paths
-
-(defconst rk-emacs-cache-directory
-  paths-cache-directory)
-
-(defconst rk-emacs-autosave-directory
-  (concat rk-emacs-cache-directory "autosave"))
-
-(defconst rk-emacs-lisp-directory
-  paths-lisp-directory)
-
-(defconst rk-emacs-elpa-directory
-  paths-elpa-directory)
-
-(defconst rk-emacs-config-directory
-  paths-config-directory)
-
 ;; Commands for working with config subtrees
 
 (defun rk-emacs--find-subtree-remote (subtree)
   (--find (equal (-last-item (s-split "/" it)) subtree)
-          (magit-list-remotes)))
+         (magit-list-remotes)))
 
 (defmacro rk-emacs--with-signal-handlers (step &rest body)
   (declare (indent 1))
@@ -88,7 +67,7 @@
     (run-hooks 'magit-credential-hook)
 
     (let* ((prefix (format "lisp/%s" subtree))
-           (fullpath (f-join rk-emacs-lisp-directory subtree))
+           (fullpath (f-join paths-lisp-directory subtree))
            (commit-message (format "Add %s@master to %s" remote prefix)))
 
       (unless (y-or-n-p (format "%s at %s will merged to %s. Continue? " remote version fullpath))
@@ -115,7 +94,7 @@ prompt for REMOTE if it cannot be determined."
                   (rk-emacs--assert-tree-not-dirty)
                   (let ((subtree (completing-read
                                   "Select subtree to update: "
-                                  (-map #'f-filename (f-directories rk-emacs-lisp-directory))
+                                  (-map #'f-filename (f-directories paths-lisp-directory))
                                   t)))
                     (list subtree
                           (or (rk-emacs--find-subtree-remote subtree)
@@ -125,7 +104,7 @@ prompt for REMOTE if it cannot be determined."
     (rk-emacs--assert-tree-not-dirty)
 
     (let* ((prefix (format "lisp/%s" subtree))
-           (fullpath (f-join rk-emacs-lisp-directory subtree))
+           (fullpath (f-join paths-lisp-directory subtree))
            (version (alist-get (intern subtree) rk-emacs-pinned-subtree-versions "master"))
            (commit-message (format "Merge %s@%s into %s" remote version prefix)))
 
@@ -149,19 +128,19 @@ prompt for REMOTE if it cannot be determined."
   "Force the byte compilation of SUBTREE."
   (interactive (list
                 (completing-read "Select subtree to byte-recompile: "
-                                 (-map #'f-filename (f-directories rk-emacs-lisp-directory))
+                                 (-map #'f-filename (f-directories paths-lisp-directory))
                                  t)))
-  (byte-recompile-directory (f-join rk-emacs-lisp-directory subtree) 0 t))
+  (byte-recompile-directory (f-join paths-lisp-directory subtree) 0 t))
 
 (defun rk-emacs-compile-all-subtrees ()
   "Force the byte compilation all subtrees."
   (interactive)
-  (byte-recompile-directory rk-emacs-lisp-directory 0 t))
+  (byte-recompile-directory paths-lisp-directory 0 t))
 
 (defun rk-emacs-compile-elpa ()
   "Force the byte compilation ELPA directory."
   (interactive)
-  (byte-recompile-directory rk-emacs-elpa-directory 0 t))
+  (byte-recompile-directory paths-elpa-directory 0 t))
 
 (provide 'rk-emacs)
 

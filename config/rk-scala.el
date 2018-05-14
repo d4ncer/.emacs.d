@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'rk-emacs)
+(require 'paths)
 (require 'dash)
 (require 'dash-functional)
 (require 'f)
@@ -284,7 +284,7 @@
     (setq ensime-sem-high-faces
           `((deprecated . (:underline ,rk-theme-base-orange))))
     (setq ensime-sbt-perform-on-save "compile")
-    (setq ensime-startup-dirname (f-join rk-emacs-cache-directory "ensime"))
+    (setq ensime-startup-dirname (f-join paths-cache-directory "ensime"))
 
     (advice-add 'ensime :before #'rk-scala--delete-existing-ensime-process-buffer)
     (advice-add 'ensime :after #'rk-scala--display-ensime-process-buffer-on-error)

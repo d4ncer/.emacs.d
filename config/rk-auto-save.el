@@ -8,10 +8,10 @@
 
 ;;; Code:
 
-(require 'rk-emacs)
+(require 'paths)
 (autoload 'f-join "f")
 
-(defconst rk-auto-save-dir (concat rk-emacs-cache-directory "/auto-save"))
+(defconst rk-auto-save-dir (concat paths-cache-directory "/auto-save"))
 (defconst rk-auto-save-local-dir (concat rk-auto-save-dir "/local"))
 (defconst rk-auto-save-remotes-dir (concat rk-auto-save-dir "/remotes"))
 
