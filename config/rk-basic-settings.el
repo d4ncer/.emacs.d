@@ -600,8 +600,11 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package smex
   :straight t
   :commands (smex-initialize)
+  :defines (smex-save-file)
   :config
-  (smex-initialize))
+  (progn
+    (setq smex-save-file (concat paths-cache-directory "/smex-items"))
+    (smex-initialize)))
 
 (provide 'rk-basic-settings)
 

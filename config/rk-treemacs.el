@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
+(require 'paths)
 (autoload 'evil-set-initial-state "evil-core")
 
 (use-package treemacs
@@ -31,6 +32,7 @@
           (force-mode-line-update)))))
   :config
   (progn
+    (setq treemacs--persist-file (concat paths-cache-directory "/treemacs-persist"))
     (evil-set-initial-state 'treemacs-mode 'emacs)
     (define-key treemacs-mode-map (kbd "j") #'treemacs-next-line)
     (define-key treemacs-mode-map (kbd "k") #'treemacs-previous-line)

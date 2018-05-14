@@ -47,6 +47,7 @@
     (setq projectile-completion-system 'ivy)
     (setq projectile-switch-project-action 'magit-status)
     (setq projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
+    (setq projectile-known-projects-file (concat paths-cache-directory "/projectile-bookmarks.eld"))
     (setq projectile-enable-caching t)
 
     (setq projectile-globally-ignored-files '("TAGS" ".DS_Store"))
