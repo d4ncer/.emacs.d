@@ -202,7 +202,8 @@ Do not scheduled items or repeating todos."
 
 (use-package ob-javascript
   :straight (:host github :repo "zweifisch/ob-javascript"
-                   :branch "master")
+                   :branch "master"
+                   :files ("ob-javascript.el" "repl.js" "util.js"))
   :after org
   :defines (ob-javascript-path-to-lib)
   :init
