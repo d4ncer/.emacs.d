@@ -9,11 +9,7 @@
 elpa
 .cache
 auto-save-list
-/projectile-bookmarks.eld
-/magithub
-/custom.el
-/history
-smex-items
+custom.el
 
 # Straight
 /var
