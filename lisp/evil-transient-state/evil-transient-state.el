@@ -19,7 +19,7 @@
   :prefix "evil-transient-state-")
 
 (defface evil-transient-state-title-face
-  `((t :background ,rk-theme-base-yellow :foreground ,rk-theme-base-solarized-b3))
+  `((t :background ,rk-theme-base-violet :foreground ,rk-theme-base-offwhite))
   "Face for title of transient states."
   :group 'evil-transient-state)
 

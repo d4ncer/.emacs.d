@@ -55,18 +55,14 @@
     (fringe
      ((t :background ,default-background)))
 
+    ;; Mode & header line
+
     (mode-line-text
      ((t
        :foreground ,rk-theme-base-solarized-b2)))
 
     (mode-line
-     ((((background dark))
-       :background ,rk-theme-base-solarized-b02
-       :foreground ,rk-theme-base-solarized-b2
-       :weight bold
-       :height 140
-       :box (:line-width 8 :color ,rk-theme-base-solarized-b02))
-      (((background light))
+     ((t
        :background ,rk-theme-base-solarized-b2
        :foreground ,rk-theme-base-solarized-b02
        :weight bold
@@ -74,12 +70,20 @@
        :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
 
     (mode-line-inactive
-     ((t :background ,rk-theme-base-solarized-b3
+     ((t :background ,rk-theme-base-solarized-b2
          :height 140
          :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
 
-    (rk-header-line-format-nonemphased-element
+    (rk-mode-line-format-nonemphasised-element
      ((t :weight light)))
+
+    (header-line
+     ((t
+       :height 140
+       :weight bold
+       :background ,rk-theme-base-violet
+       :foreground ,rk-theme-base-offwhite
+       :box (:line-width 8 :color ,rk-theme-base-violet))))
 
     ;; General font-lock faces.
 
