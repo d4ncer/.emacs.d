@@ -9,20 +9,19 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package)
-  (require 'straight)
-  (require 'rk-emacs)
-  (autoload 'evil-define-key "evil-core")
-  (defconst rk-org-load-path (concat rk-emacs-lisp-directory "/org-mode/lisp"))
-  (defconst rk-org-contrib-load-path (concat rk-emacs-lisp-directory "/org-mode/contrib/lisp")))
+  (require 'use-package))
 
 (require 'straight)
+(require 'paths)
 (require 'spacemacs-keys)
 (require 'evilified-state)
 (require 'f)
 (require 's)
 (require 'dash)
 (require 'subr-x)
+
+(autoload 'evil-define-key "evil")
+(autoload 'org-todo "org")
 
 (defvar org-directory "~/org")
 
@@ -31,16 +30,13 @@
 (defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 (defconst rk-org-consume-file (concat org-directory "/consume.org"))
 
-(straight-use-package 'org-plus-contrib)
-
 (with-eval-after-load 'which-key
   (with-no-warnings
     (push `(("," . ,(rx bos (? "evil-") "org-" (group (+ nonl)))) . (nil . "\\1"))
           which-key-replacement-alist)))
 
 (use-package org
-  :defer t
-
+  :straight org-plus-contrib
   :bind
   (:map org-mode-map
         ("C-c C-." . org-time-stamp-inactive)
@@ -48,13 +44,10 @@
         ("M-n" . org-metadown)
         ("C-c c" . org-columns))
 
-  :defines (org-state org-log-states org-log-done)
-  :commands (org-entry-get
-             org-get-scheduled-time
-             org-get-todo-state
-             org-heading-components
-             org-todo
-             org-up-heading-safe)
+  :defines (org-state
+            org-log-states
+            org-log-done
+            org-tag-group-re)
 
   :preface
   (progn
@@ -104,14 +97,6 @@ Do not scheduled items or repeating todos."
       (let (org-log-done org-log-states) ; turn off logging
         (org-todo (if (zerop n-todo) "DONE" "TODO")))))
 
-  :commands (org-refile
-             org-deadline
-             org-ctrl-c-ctrl-c
-             org-fill-paragraph
-             org-insert-link
-             org-align-all-tags
-             org-schedule)
-
   :init
   (progn
     (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
@@ -125,12 +110,12 @@ Do not scheduled items or repeating todos."
 
   :config
   (progn
-
+    (load-file (expand-file-name "rk-org-version.el" (concat paths-lisp-directory "/rk-org")))
     (setq org-default-notes-file (f-join org-directory "notes.org"))
 
     (spacemacs-keys-set-leader-keys-for-major-mode
       'org-mode
-      "A" #'org-align-all-tags
+      "A" #'org-align-tags
       "r" #'org-refile
       "d" #'org-deadline
       "C" #'org-ctrl-c-ctrl-c
@@ -230,7 +215,7 @@ Do not scheduled items or repeating todos."
 (use-package org-id
   :after org
   :config
-  (setq org-id-locations-file (f-join rk-emacs-cache-directory "org-id-locations")))
+  (setq org-id-locations-file (f-join paths-cache-directory "org-id-locations")))
 
 (use-package org-table
   :after org
@@ -454,8 +439,8 @@ Do not scheduled items or repeating todos."
   :preface
   (progn
     (autoload 'org-map-entries "org")
-    (autoload 'org-set-tags-to "org")
-    (autoload 'org-get-tags-at "org")
+    (autoload 'org-set-tags "org")
+    (autoload 'org-get-tags "org")
 
     (defun rk-org--archive-done-tasks ()
       (interactive)
@@ -469,7 +454,7 @@ Do not scheduled items or repeating todos."
 
     (defun rk-org--apply-inherited-tags (&rest _)
       "Apply inherited tags when archiving."
-      (org-set-tags-to (org-get-tags-at))))
+      (org-set-tags (org-get-tags))))
 
   :config
   (progn
@@ -547,9 +532,6 @@ Do not scheduled items or repeating todos."
            :empty-lines 1
            :prepend t)
      kws))
-  :commands (org-capture-finalize
-             org-capture-kill
-             org-capture-refile)
   :config
   (progn
     (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
@@ -557,7 +539,7 @@ Do not scheduled items or repeating todos."
       "c" #'org-capture-finalize
       "k" #'org-capture-kill
       "r" #'org-capture-refile
-      "A" #'org-align-all-tags)
+      "A" #'org-align-tags)
     (setq org-capture-templates
           (list
            (rk-org--capture-template-entry
@@ -731,14 +713,6 @@ table tr.tr-even td {
   :after org)
 
 (use-package rk-org-goto
-  :commands (rk-org-goto-agenda
-             rk-org-goto-diary
-             rk-org-goto-notes
-             rk-org-goto-work
-             rk-org-goto-numero
-             rk-org-goto-recruitment
-             rk-org-goto-todo-list
-             rk-org-goto-tags-list)
   :init
   (spacemacs-keys-set-leader-keys
     "oa" #'rk-org-goto-agenda
@@ -759,7 +733,6 @@ table tr.tr-even td {
 
 (use-package rk-org-jira-url
   :after org
-  :commands (rk-org--create-jira-url)
   :config
   (spacemacs-keys-set-leader-keys-for-major-mode 'org-mode
     "j" #'rk-org--create-jira-url))
@@ -787,13 +760,11 @@ table tr.tr-even td {
 
 (use-package org-indent
   :after org
-  :commands (org-indent-mode)
   :init
   (add-hook 'org-mode-hook #'org-indent-mode))
 
 (use-package flyspell
   :after org
-  :commands (flyspell-mode)
   :init
   (add-hook 'org-mode-hook #'flyspell-mode))
 

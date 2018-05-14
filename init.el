@@ -64,63 +64,7 @@
 
 ;; Setup paths & features
 
-(require 'f)
-(require 'subr-x)
-(require 'seq)
-
-(defconst paths-cache-directory
-  (concat user-emacs-directory "var"))
-
-(defconst paths-etc-directory
-  (concat user-emacs-directory "etc"))
-
-(defconst paths-lisp-directory
-  (concat user-emacs-directory "lisp"))
-
-(defconst paths-elpa-directory
-  (concat user-emacs-directory "elpa"))
-
-(defconst paths-config-directory
-  (concat user-emacs-directory "config"))
-
-(defconst paths-themes-directory
-  (concat user-emacs-directory "themes"))
-
-(defun paths-initialise (&optional interactive-p)
-  "Add select subdirs of `user-emacs-directory' to the `load-path'.
-If argument INTERACTIVE-P is set, log additional information."
-  (interactive "p")
-  (let* ((before load-path)
-         (main-dirs
-          (list paths-lisp-directory
-                paths-config-directory
-                paths-themes-directory))
-         (subdirs
-          (f-directories paths-lisp-directory))
-         (config-subdirs
-          (f-directories paths-config-directory))
-         (updated-load-path
-          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs config-subdirs load-path)))))
-
-    (setq load-path updated-load-path)
-
-    (when interactive-p
-      (if-let* ((added (seq-difference load-path before)))
-          (message "Load path updated. Added: %S" added)
-        (message "No change to load-path")))))
-
-(use-package no-littering
-  :straight t
-  :demand t
-  :init
-  (progn
-    (setq no-littering-etc-directory paths-etc-directory)
-    (setq no-littering-var-directory paths-cache-directory))
-  :config
-  (with-eval-after-load 'recentf
-    (add-to-list 'recentf-exclude no-littering-etc-directory)
-    (add-to-list 'recentf-exclude no-littering-var-directory)))
-
+(require 'paths (expand-file-name "paths.el" (concat user-emacs-directory "/config")))
 (paths-initialise)
 (add-to-list 'custom-theme-load-path paths-themes-directory)
 
@@ -138,7 +82,6 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-evil)
 (use-package rk-ivy)
 (use-package rk-darwin :if (equal system-type 'darwin))
-(use-package rk-org)
 (use-package rk-search)
 (use-package rk-help)
 (use-package rk-projectile)
@@ -173,6 +116,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-python)
+(use-package rk-org)
 (use-package rk-yasnippet)
 
 ;;; Post init setup.

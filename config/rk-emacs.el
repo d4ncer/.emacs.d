@@ -11,6 +11,7 @@
 ;;; Code:
 
 (require 'dash)
+(require 'paths)
 (require 'f)
 (require 's)
 

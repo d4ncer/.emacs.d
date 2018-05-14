@@ -560,6 +560,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t)
 
 (use-package sql-indent
+  :straight t
   :after sql
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
