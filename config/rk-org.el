@@ -46,7 +46,39 @@
   :defines (org-state
             org-log-states
             org-log-done
-            org-tag-group-re)
+            org-tag-group-re
+            org-refile-targets
+            org-default-notes-file
+            org-tags-exclude-from-inheritance
+            org-link-frame-setup
+            org-mode-map
+            org-M-RET-may-split-line
+            org-catch-invisible-edits
+            org-cycle-separator-lines
+            org-enforce-todo-dependencies
+            org-footnote-auto-adjust
+            org-indirect-buffer-display
+            org-insert-heading-respect-content
+            org-link-abbrev-alist
+            org-use-sub-superscripts
+            org-log-into-drawer
+            org-hide-emphasis-markers
+            org-outline-path-complete-in-steps
+            org-pretty-entities
+            org-refile-allow-creating-parent-nodes
+            org-refile-target-verify-function
+            org-done-keywords
+            org-refile-use-outline-path
+            org-return-follows-link
+            org-reverse-note-order
+            org-confirm-elisp-link-function
+            org-startup-indented
+            org-startup-with-inline-images
+            org-hierarchical-todo-statistics
+            org-checkbox-hierarchical-statistics
+            org-log-repeat
+            org-blank-before-new-entry
+            org-todo-keywords)
 
   :preface
   (progn
@@ -245,7 +277,30 @@ Do not scheduled items or repeating todos."
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
 
-  :defines (org-duration-format)
+  :defines (org-duration-format
+            org-stuck-projects
+            org-agenda-mode-map
+            org-agenda-include-diary
+            org-agenda-start-on-weekday
+            org-agenda-auto-exclude-function
+            org-agenda-hide-tags-regexp
+            org-agenda-insert-diary-extract-time
+            org-agenda-span
+            org-agenda-search-view-always-boolean
+            org-agenda-show-all-dates
+            org-agenda-show-inherited-tags
+            org-agenda-skip-deadline-if-done
+            org-agenda-skip-deadline-prewarning-if-scheduled
+            org-agenda-skip-scheduled-if-done
+            org-agenda-sorting-strategy
+            org-agenda-text-search-extra-files
+            org-agenda-use-time-grid
+            org-agenda-inhibit-startup
+            org-agenda-tags-column
+            org-agenda-clockreport-parameter-plist
+            org-agenda-custom-commands
+            org-agenda-files
+            org-agenda-diary-file)
 
   :config
   (progn
