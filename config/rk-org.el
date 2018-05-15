@@ -514,6 +514,10 @@ Do not scheduled items or repeating todos."
       "Apply inherited tags when archiving."
       (org-set-tags (org-get-tags))))
 
+  :init
+  (spacemacs-keys-set-leader-keys-for-minor-mode 'org-mode
+    "c" #'org-archive-subtree)
+
   :config
   (progn
     (setq org-archive-default-command #'rk-org--archive-done-tasks)
@@ -808,13 +812,12 @@ table tr.tr-even td {
   :after org
   :config
   (progn
-    ;; Remove weird keybindings.
-    (evil-define-key 'normal org-mode-map (kbd "M-l") nil)
-    (evil-define-key 'normal org-mode-map (kbd "M-h") nil)
-    (evil-define-key 'insert org-mode-map (kbd "M-l") nil)
-    (evil-define-key 'insert org-mode-map (kbd "M-h") nil)
-    (evil-define-key 'normal evil-org-mode-map (kbd "J") nil)
-    (evil-define-key 'normal evil-org-mode-map (kbd "O") nil)))
+    (add-hook 'org-mode-hook 'evil-org-mode)
+    (add-hook 'evil-org-mode-hook
+              (lambda ()
+                (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))))
+    (require 'evil-org-agenda)
+    (evil-org-agenda-set-keys)))
 
 (use-package org-indent
   :after org
