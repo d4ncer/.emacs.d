@@ -55,9 +55,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     (setq magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1)))
 
 (use-package git-commit-jira-prefix
-  :after (magit git-commit)
-  :commands git-commit-jira-prefix-init
-  :config (git-commit-jira-prefix-init))
+  :hook (git-commit-setup . git-commit-jira-prefix-insert))
 
 (use-package evil-magit
   :straight t
@@ -100,12 +98,13 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
 (use-package diff-hl
   :straight t
   :after magit
-  :commands (diff-hl-magit-post-refresh
-             global-diff-hl-mode
-             diff-hl-next-hunk
-             diff-hl-previous-hunk
-             diff-hl-revert-hunk
-             diff-hl-diff-goto-hunk)
+  :preface
+  (progn
+    (defun rk-magit--diff-hl-mode-on ()
+      (diff-hl-mode -1))
+
+    (defun rk-magit--diff-hl-mode-off ()
+      (diff-hl-mode +1)))
   :init
   (progn
     (evil-transient-state-define git-hunks
@@ -124,6 +123,8 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     (spacemacs-keys-set-leader-keys "g." 'git-hunks-transient-state/body))
   :config
   (progn
+    (add-hook 'iedit-mode-hook #'rk-magit--diff-hl-mode-on)
+    (add-hook 'iedit-mode-end-hook #'rk-magit--diff-hl-mode-off)
     (add-hook 'magit-post-refresh-hook 'diff-hl-magit-post-refresh)
     (global-diff-hl-mode)))
 

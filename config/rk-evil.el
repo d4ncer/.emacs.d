@@ -80,15 +80,11 @@
 (use-package evil-surround
   :straight t
   :after evil
-  :commands (global-evil-surround-mode
-             evil-surround-region)
-
   :preface
   (progn
     (defun danc--elisp/init-evil-surround-pairs ()
       (make-local-variable 'evil-surround-pairs-alist)
-      (push '(?\` . ("`" . "'")) evil-surround-pairs-alist))
-    (autoload 'evil-substitute "evil-commands"))
+      (push '(?\` . ("`" . "'")) evil-surround-pairs-alist)))
 
   :config
   (progn
@@ -110,7 +106,7 @@
                     (?< . evil-surround-read-tag)
                     (?f . evil-surround-function)))
     (add-hook 'emacs-lisp-mode-hook #'danc--elisp/init-evil-surround-pairs)
-    (global-evil-surround-mode)
+    (global-evil-surround-mode +1)
     (evil-define-key 'visual evil-surround-mode-map "s" #'evil-surround-region)
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
@@ -129,7 +125,7 @@
 
 (use-package evil-ex
   :defer t
-  :functions (evil-ex-define-cmd)
+  :commands (evil-ex-define-cmd)
   :preface
   (progn
     (defun rk-evil-flyspell-on ()
