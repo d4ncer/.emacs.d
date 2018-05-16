@@ -57,25 +57,22 @@
 
     ;; Mode & header line
 
-    (mode-line-text
-     ((t
-       :foreground ,rk-theme-base-solarized-b2)))
-
     (mode-line
      ((t
        :background ,rk-theme-base-solarized-b2
-       :foreground ,rk-theme-base-solarized-b02
-       :weight bold
-       :height 140
-       :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
+       :foreground ,rk-theme-base-solarized-b02)))
 
     (mode-line-inactive
-     ((t :background ,rk-theme-base-solarized-b2
-         :height 140
-         :box (:line-width 8 :color ,rk-theme-base-solarized-b2))))
+     ((t :inherit mode-line)))
 
-    (rk-mode-line-format-nonemphasised-element
-     ((t :weight light)))
+    (mode-line-highlight
+     ((t
+       :background ,rk-theme-base-violet
+       :foreground ,rk-theme-base-offwhite
+       :box nil)))
+
+    (doom-modeline-bar
+     ((t :background ,rk-theme-base-violet)))
 
     (header-line
      ((t

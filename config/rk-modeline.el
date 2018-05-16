@@ -24,10 +24,14 @@
 ;;     (spaceline-toggle-minor-modes-off)
 ;;     (spaceline-emacs-theme)))
 
-(use-package rk-mode-line-format
-  :defines rk-mode-line-format
+;; (use-package rk-mode-line-format
+;;   :defines rk-mode-line-format
+;;   :config
+;;   (setq-default mode-line-format rk-mode-line-format))
+
+(use-package doom-modeline
   :config
-  (setq-default mode-line-format rk-mode-line-format))
+  (+doom-modeline|init))
 
 ;; (use-package hidden-mode-line
 ;;   :commands (hidden-mode-line-mode global-hidden-mode-line-mode)
