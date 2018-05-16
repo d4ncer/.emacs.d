@@ -15,6 +15,6 @@
 
 $2
 
-(provide '`(file-name-nondirectory buffer-file-name)`)
+(provide '`(s-chop-suffix ".el" (file-name-nondirectory buffer-file-name))`)
 
 ;;; `(file-name-nondirectory buffer-file-name)` ends here
