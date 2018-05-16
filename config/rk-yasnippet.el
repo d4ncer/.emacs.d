@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (require 'spacemacs-keys)
+(require 'paths)
 (require 'subr-x)
 (require 'dash)
 (require 's)
@@ -64,6 +65,7 @@ Otherwise delete backwards."
 
   :config
   (progn
+    (setq yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
     (setq yas-wrap-around-region t)
     (setq yas-prompt-functions '(yas-completing-prompt))
     (setq yas-verbosity 0)
