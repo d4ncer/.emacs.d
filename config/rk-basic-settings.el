@@ -33,6 +33,11 @@
   (add-to-list 'default-frame-alist '(ns-appearance . 'nil))
   (setq frame-title-format nil))
 
+;; Non-native fullscreen
+
+(when (eq system-type 'darwin)
+  (setq ns-use-native-fullscreen nil))
+
 ;; Make <escape> quit as much as possible
 
 (define-key minibuffer-local-map (kbd "<escape>") #'keyboard-escape-quit)
