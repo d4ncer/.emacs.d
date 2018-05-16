@@ -13,11 +13,8 @@
 
 (require 'dash)
 
-(use-package python)
-
 (use-package rk-lsp-python
   :after python
-  :commands (rk-lsp-python--setup)
   :config
   (progn
     (autoload 'flycheck-mode "flycheck")
