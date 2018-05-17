@@ -378,32 +378,34 @@ directory, the file name, and its state (modified, read-only or non-existent)."
       (let ((face    'mode-line-inactive)
             (active  (active))
             (all-the-icons-default-adjust -0.1))
-        (concat "  "
-                (cond ((memq state '(edited added))
-                       (if active (setq face 'doom-modeline-info))
-                       (all-the-icons-octicon
-                        "git-compare"
-                        :face face
-                        :v-adjust -0.05))
-                      ((eq state 'needs-merge)
-                       (if active (setq face 'doom-modeline-info))
-                       (all-the-icons-octicon "git-merge" :face face))
-                      ((eq state 'needs-update)
-                       (if active (setq face 'doom-modeline-warning))
-                       (all-the-icons-octicon "arrow-down" :face face))
-                      ((memq state '(removed conflict unregistered))
-                       (if active (setq face 'doom-modeline-urgent))
-                       (all-the-icons-octicon "alert" :face face))
-                      (t
-                       (if active (setq face 'font-lock-doc-face))
-                       (all-the-icons-octicon
-                        "git-compare"
-                        :face face
-                        :v-adjust -0.05)))
-                " "
-                (propertize (substring vc-mode (+ (if (eq backend 'Hg) 2 3) 2))
-                            'face (if active face))
-                " ")))))
+        (if (not active)
+            "  "
+          (concat "  "
+                  (cond ((memq state '(edited added))
+                         (if active (setq face 'doom-modeline-info))
+                         (all-the-icons-octicon
+                          "git-compare"
+                          :face face
+                          :v-adjust -0.05))
+                        ((eq state 'needs-merge)
+                         (if active (setq face 'doom-modeline-info))
+                         (all-the-icons-octicon "git-merge" :face face))
+                        ((eq state 'needs-update)
+                         (if active (setq face 'doom-modeline-warning))
+                         (all-the-icons-octicon "arrow-down" :face face))
+                        ((memq state '(removed conflict unregistered))
+                         (if active (setq face 'doom-modeline-urgent))
+                         (all-the-icons-octicon "alert" :face face))
+                        (t
+                         (if active (setq face 'font-lock-doc-face))
+                         (all-the-icons-octicon
+                          "git-compare"
+                          :face face
+                          :v-adjust -0.05)))
+                  " "
+                  (propertize (substring vc-mode (+ (if (eq backend 'Hg) 2 3) 2))
+                              'face (if active face))
+                  " "))))))
 
 ;;
 (defun +doom-ml-icon (icon &optional text face voffset)
@@ -421,20 +423,22 @@ directory, the file name, and its state (modified, read-only or non-existent)."
 (def-modeline-segment! flycheck
   "Displays color-coded flycheck error status in the current buffer with pretty
 icons."
-  (when (boundp 'flycheck-last-status-change)
-    (pcase flycheck-last-status-change
-      ('finished (if flycheck-current-errors
-                     (let-alist (flycheck-count-errors flycheck-current-errors)
-                       (let ((sum (+ (or .error 0) (or .warning 0))))
-                         (+doom-ml-icon "do_not_disturb_alt"
-                                        (number-to-string sum)
-                                        (if .error 'doom-modeline-urgent 'doom-modeline-warning)
-                                        -0.25)))
-                   (+doom-ml-icon "check" nil 'doom-modeline-info)))
-      ('running     (+doom-ml-icon "access_time" nil 'font-lock-doc-face -0.25))
-      ('no-checker  (+doom-ml-icon "sim_card_alert" "-" 'font-lock-doc-face))
-      ('errored     (+doom-ml-icon "sim_card_alert" "Error" 'doom-modeline-urgent))
-      ('interrupted (+doom-ml-icon "pause" "Interrupted" 'font-lock-doc-face)))))
+  (if (active)
+      (when (boundp 'flycheck-last-status-change)
+        (pcase flycheck-last-status-change
+          ('finished (if flycheck-current-errors
+                         (let-alist (flycheck-count-errors flycheck-current-errors)
+                           (let ((sum (+ (or .error 0) (or .warning 0))))
+                             (+doom-ml-icon "do_not_disturb_alt"
+                                            (number-to-string sum)
+                                            (if .error 'doom-modeline-urgent 'doom-modeline-warning)
+                                            -0.25)))
+                       (+doom-ml-icon "check" nil 'doom-modeline-info)))
+          ('running     (+doom-ml-icon "access_time" nil 'font-lock-doc-face -0.25))
+          ('no-checker  (+doom-ml-icon "sim_card_alert" "-" 'font-lock-doc-face))
+          ('errored     (+doom-ml-icon "sim_card_alert" "Error" 'doom-modeline-urgent))
+          ('interrupted (+doom-ml-icon "pause" "Interrupted" 'font-lock-doc-face))))
+    "  "))
 ;; ('interrupted (+doom-ml-icon "x" "Interrupted" 'font-lock-doc-face)))))
 
 ;;
@@ -526,7 +530,7 @@ with `evil-ex-substitute', and/or 4. The number of active `iedit' regions."
                       (+doom-modeline--evil-substitute)
                       (+doom-modeline--iedit))))
     (or (and (not (equal meta "")) meta)
-        (if buffer-file-name " %I "))))
+        (if buffer-file-name " %p "))))
 
 ;; TODO Include other information
 (def-modeline-segment! media-info
@@ -555,24 +559,19 @@ Returns \"\" to not break --no-window-system."
 ;;
 
 (def-modeline! main
-  (bar matches " " buffer-info "  %l:%c %p  " selection-info)
-  (buffer-encoding major-mode vcs flycheck))
+  (bar matches " " buffer-info vcs selection-info flycheck))
 
 (def-modeline! minimal
-  (bar matches " " buffer-info)
-  (media-info major-mode))
+  (bar matches " " buffer-info media-info))
 
 (def-modeline! special
-  (bar matches " " buffer-info-simple "  %l:%c %p  " selection-info)
-  (buffer-encoding major-mode flycheck))
+  (bar matches " " buffer-info-simple selection-info flycheck))
 
 (def-modeline! project
-  (bar buffer-default-directory)
-  (major-mode))
+  (bar buffer-default-directory))
 
 (def-modeline! media
-  (bar " %b  ")
-  (media-info major-mode))
+  (bar " %b  " media-info))
 
 
 ;;
