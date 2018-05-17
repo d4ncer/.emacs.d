@@ -59,6 +59,7 @@
 
     (mode-line
      ((t
+       :height 140
        :background ,rk-theme-base-solarized-b2
        :foreground ,rk-theme-base-solarized-b02)))
 
@@ -213,6 +214,11 @@
 
     (web-mode-json-key-face
      ((t :weight normal)))
+
+    ;; LSP
+
+    (lsp-ui-doc-background
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     ;; Pairs
 
