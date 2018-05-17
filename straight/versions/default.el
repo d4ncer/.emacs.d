@@ -14,6 +14,7 @@
  ("diff-hl" . "154c64affe7bdd16da814d198277d29bd1b6bb2a")
  ("dired-plus" . "b9d7d09e37cef5ab778def5c55ac8989cc4d0a4a")
  ("dockerfile-mode" . "818e6946fcf2d58438ab78ea06761a372cc5435a")
+ ("eldoc-eval" . "e87b89f89a2aed0bb3b31c014fc1b72f00413866")
  ("elisp-slime-nav" . "34938422929800839e2f935aca890cd4a229ca99")
  ("emacs-async" . "04e1a2c40bef305450389da540ffe7594964e430")
  ("emacs-bind-map" . "bf4181e3a41463684adfffc6c5c305b30480e30f")
