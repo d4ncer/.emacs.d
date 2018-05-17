@@ -73,7 +73,7 @@
   (propertize " " 'face 'variable-pitch)
   "TODO")
 
-(defvar +doom-modeline-buffer-file-name-style 'truncate-upto-root
+(defvar +doom-modeline-buffer-file-name-style 'relative-to-project
   "Determines the style used by `+doom-modeline-buffer-file-name'.
 Given ~/Projects/FOSS/emacs/lisp/comint.el
 truncate-upto-project => ~/P/F/emacs/lisp/comint.el
@@ -108,6 +108,11 @@ file-name => comint.el")
 (defface doom-modeline-buffer-file
   '((t (:inherit (mode-line-buffer-id bold))))
   "Face used for the filename part of the mode-line buffer path."
+  :group '+doom-modeline)
+
+(defface doom-modeline-project-root-dir
+  '((t (:weight light)))
+  "Face used for the dir part of the mode-line buffer path."
   :group '+doom-modeline)
 
 (defface doom-modeline-buffer-modified
