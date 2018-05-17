@@ -413,9 +413,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t
   :config
   (progn
-    (setq iedit-toggle-key-default nil)
-    (define-key iedit-occurrence-keymap-default (kbd "<tab>") #'iedit-toggle-selection)
-    (define-key iedit-mode-keymap (kbd "<tab>") #'iedit-toggle-selection)))
+    (setq iedit-toggle-key-default nil)))
 
 (use-package files
   :config
