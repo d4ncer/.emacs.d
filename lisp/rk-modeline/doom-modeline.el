@@ -63,7 +63,7 @@
 ;; Variables
 ;;
 
-(defvar +doom-modeline-height 39
+(defvar +doom-modeline-height 29
   "How tall the mode-line should be (only respected in GUI emacs).")
 
 (defvar +doom-modeline-bar-width 7
@@ -90,7 +90,6 @@ file-name => comint.el")
 (defvar iedit-mode nil)
 (defvar all-the-icons-scale-factor)
 (defvar all-the-icons-default-adjust)
-
 
 ;;
 ;; Custom faces
