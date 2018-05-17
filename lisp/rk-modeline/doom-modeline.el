@@ -599,8 +599,7 @@ Returns \"\" to not break --no-window-system."
 ;; Bootstrap
 ;;
 
-(add-hook '+doom-dashboard-mode-hook #'+doom-modeline|set-project-modeline)
-
+(add-hook 'magit-status-mode-hook #'+doom-modeline|set-project-modeline)
 (add-hook 'image-mode-hook   #'+doom-modeline|set-media-modeline)
 (add-hook 'org-src-mode-hook #'+doom-modeline|set-special-modeline)
 
