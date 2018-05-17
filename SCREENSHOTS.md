@@ -1,23 +1,17 @@
-## Magit (with leaderkeys)
-
-![magit-with-leaderkeys](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/magit-with-leaderkeys.png "It's Magi{t,c}!")
-
 ## Elisp
 
-![elisp](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/elisp.png "Elisp")
+![elisp](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/elisp-string.png "Elisp")
 
-## Golang
+## Iedit 
 
-![golang](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/golang.png "Golang")
+Occurence tracking / count in modeline.
 
-## IBuffer (with hydra)
-
-![ibuffer-with-transient-state](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/ibuffer-with-transient-state.png "IBuffer with hydra")
+![elisp](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/iedit.png "Iedit")
 
 ## JavaScript
 
-![javascript](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/javascript.png "JavaScript")
+![javascript](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/js.png "JavaScript")
 
 ## Org
 
-![org](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/org.png "Org")
+![org](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/org-elisp.png "Org")

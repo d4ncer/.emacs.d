@@ -1,6 +1,6 @@
 # My .emacs setup
 
-![web-mode-trifecta](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/web-mode-trifecta.png "JS + CSS + MD")
+![web-mode-trifecta](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/main.png "JS + CSS + MD")
 
 See more [here](SCREENSHOTS.md)
 
