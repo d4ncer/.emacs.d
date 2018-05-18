@@ -829,6 +829,11 @@ table tr.tr-even td {
   :init
   (add-hook 'org-mode-hook #'flyspell-mode))
 
+(use-package org-babel-hydra
+  :init
+  (spacemacs-keys-set-leader-keys-for-major-mode 'org-mode
+    "b" #'org-babel-transient-state/body))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
