@@ -551,7 +551,9 @@ Optional arg JUSTIFY will justify comments and strings."
   (setq display-time-default-load-average nil))
 
 (use-package hydra
-  :straight t)
+  :straight t
+  :config
+  (setq lv-use-separator t))
 
 (use-package sql-indent
   :straight t

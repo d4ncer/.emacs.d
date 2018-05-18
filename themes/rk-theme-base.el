@@ -83,6 +83,10 @@
        :foreground ,rk-theme-base-offwhite
        :box (:line-width 8 :color ,rk-theme-base-violet))))
 
+    (lv-separator
+     ((t
+       :background ,rk-theme-base-solarized-b2)))
+
     ;; General font-lock faces.
 
     (font-lock-keyword-face
