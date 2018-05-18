@@ -601,6 +601,14 @@ Optional arg JUSTIFY will justify comments and strings."
 
   :defines (display-time-world-list world-time-table-mode-map))
 
+(use-package popwin
+  :straight t
+  :config
+  (progn
+    (push '("*Cargo Build*" :noselect t) popwin:special-display-config)
+    (push '("*Cargo Check*" :noselect t) popwin:special-display-config)
+    (popwin-mode 1)))
+
 (use-package smex
   :straight t
   :commands (smex-initialize)
