@@ -125,6 +125,7 @@ packages of note:
 * Go
 * Scala
 * Haskell
+* Rust
 * YAML
 * Markdown
 * CoffeeScript
