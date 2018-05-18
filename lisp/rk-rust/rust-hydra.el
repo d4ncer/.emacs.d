@@ -19,15 +19,16 @@
  ^Project^           | ^Test^            | ^Misc^
 -^-------^------------+-^----^-------------+-^----^--------------------------
 _b_: build           | _t_: all tests    | _._: repeat last cargo command
-_c_: clean           | _o_: file tests   | _s_: search
+_C_: clean           | _o_: file tests   | _s_: search
 _u_: update          | _f_: current test | _x_: run
-_d_: docs            | _e_: benchmarks   |
+_d_: docs            | _e_: benchmarks   | _c_: check
 
 _q_: quit
 "
   :bindings
   ("b" cargo-process-build)
-  ("c" cargo-process-clean)
+  ("c" cargo-process-check)
+  ("C" cargo-process-clean)
   ("u" cargo-process-update)
   ("d" cargo-process-doc)
   ("t" cargo-process-test)
