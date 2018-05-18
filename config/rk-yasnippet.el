@@ -25,6 +25,11 @@
   (progn
     (autoload 'sp-backward-delete-char "smartparens")
     (autoload 'evil-define-key "evil")
+    (autoload 'ivy-completing-read "ivy")
+
+    (defun rk-yasnippet--ivy-yas-prompt (prompt choices &optional display-fn)
+      (yas-completing-prompt prompt choices display-fn #'ivy-completing-read))
+
     (defun rk-yasnippet--current-field ()
       "Return the current active field."
       (and (boundp 'yas--active-field-overlay)
@@ -54,8 +59,7 @@ Otherwise delete backwards."
     (spacemacs-keys-set-leader-keys
       "yf" #'yas-visit-snippet-file
       "ye" #'yas-expand
-      "yn" #'yas-new-snippet
-      "yy" #'yas-insert-snippet)
+      "yn" #'yas-new-snippet)
 
     ;; Fix malformed face decl
 
@@ -67,7 +71,7 @@ Otherwise delete backwards."
   (progn
     (setq yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
     (setq yas-wrap-around-region t)
-    (setq yas-prompt-functions '(yas-completing-prompt))
+    (setq yas-prompt-functions '(rk-yasnippet--ivy-yas-prompt))
     (setq yas-verbosity 0)
 
     (yas-global-mode +1)
@@ -94,6 +98,13 @@ Otherwise delete backwards."
 
 (use-package rk-yas-utils
   :after yasnippet)
+
+(use-package ivy-yasnippet
+  :straight t
+  :init
+  (progn
+    (spacemacs-keys-set-leader-keys
+      "yy" #'ivy-yasnippet)))
 
 (provide 'rk-yasnippet)
 
