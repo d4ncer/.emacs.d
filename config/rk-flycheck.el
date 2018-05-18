@@ -43,16 +43,7 @@
           (let ((messages (seq-map #'flycheck-error-format-message-and-id errors)))
             (display-message-or-buffer (string-join messages "\n\n")
                                        flycheck-error-message-buffer
-                                       'display-buffer-popup-window)))))
-
-    (defun rk-flycheck-toggle-error-list ()
-      "Show or hide the error list."
-      (interactive)
-      (if-let (window (--first (equal flycheck-error-list-buffer
-                                     (buffer-name (window-buffer it)))
-                              (window-list)))
-          (delete-window window)
-        (flycheck-list-errors))))
+                                       'display-buffer-popup-window))))))
 
   :config
   (progn
@@ -66,7 +57,6 @@
     (spacemacs-keys-set-leader-keys
       "ec" 'flycheck-clear
       "eh" 'flycheck-describe-checker
-      "el" 'rk-flycheck-toggle-error-list
       "ee" 'flycheck-explain-error-at-point
       "en" 'flycheck-next-error
       "eN" 'flycheck-next-error
@@ -94,7 +84,11 @@
                    (reusable-frames . visible)
                    (side            . bottom)
                    (slot            . 1)
-                   (window-height   . 0.33)))))
+                   (window-height   . 0.2)))))
+
+(use-package flycheck-transient-state
+  :config
+  (spacemacs-keys-set-leader-keys "el" #'rk-flycheck-ts-transient-state/body))
 
 (provide 'rk-flycheck)
 
