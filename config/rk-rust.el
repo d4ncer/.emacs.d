@@ -36,6 +36,9 @@
       (when (thing-at-point-looking-at (rx (not space) (* space) "."))
         (delete-horizontal-space))))
 
+  :init
+  (spacemacs-keys-set-leader-keys-for-major-mode 'rust-mode
+    "." #'rust-format-buffer)
   :config
   (progn
     ;; Enable backtraces in rust programs run from Emacs.
