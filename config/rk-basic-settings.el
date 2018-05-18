@@ -205,6 +205,14 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (advice-add #'display-message-or-buffer :before #'rk-basic-settings--display-ansi-codes)
 
+;; Process ANSI color codes in compilation buffers.
+
+(defun rk-basic-settings--ansi-colorize-buffer ()
+  (let ((buffer-read-only nil))
+    (ansi-color-apply-on-region (point-min) (point-max))))
+
+(add-hook 'compilation-filter-hook #'rk-basic-settings--ansi-colorize-buffer)
+
 ;; Generate random passwords.
 
 (defun rk-generate-password ()
