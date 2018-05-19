@@ -21,9 +21,19 @@ Fine, but you were warned.
 
 ### Things you need
 
+**Required**
+
 * Emacs 26+
 * [Fira Code](https://github.com/tonsky/FiraCode)
-* [Fira Code Symbol](https://github.com/tonsky/FiraCode/files/412440/FiraCode-Regular-Symbol.zip) (this is for ligatures in all `prog-mode` buffers)
+* [Fira Code Symbol](https://github.com/tonsky/FiraCode/files/412440/FiraCode-Regular-Symbol.zip) (this is for ligatures in all `prog-mode` buffers**
+
+**Optional**
+
+These binaries are required for specific language mode support.
+
+* Go (`go`)
+* Rust (`rustup` & `cargo`)
+* Node / NPM (`node` & `npm`)
 
 ### Quick install (recommended)
 
@@ -49,6 +59,16 @@ go get -u -v github.com/kardianos/govendor
 go get -u -v golang.org/x/tools/cmd/guru
 go get -u -v golang.org/x/tools/cmd/gorename
 go get -u -v golang.org/x/tools/cmd/goimports
+```
+
+**Rust setup**
+
+Rust setup assumes you have [rustup](https://rustup.rs/ "The Rust toolchain
+installer"). Packages to install for Rust config:
+
+```bash
+rustup component add rust-src
+cargo install racer
 ```
 
 **JS setup**
