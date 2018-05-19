@@ -24,6 +24,7 @@
   (progn
     (setq exec-path-from-shell-check-startup-files nil)
     (exec-path-from-shell-copy-env "GOPATH")
+    (exec-path-from-shell-copy-env "RUST_SRC_PATH")
     (exec-path-from-shell-initialize)
 
     ;;; Use gls instead of ls on OS X (if available)
