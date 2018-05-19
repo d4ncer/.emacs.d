@@ -57,7 +57,7 @@
     (spacemacs-keys-set-leader-keys
       "ec" 'flycheck-clear
       "eh" 'flycheck-describe-checker
-      "ee" 'flycheck-explain-error-at-point
+      "ee" 'flycheck-buffer
       "en" 'flycheck-next-error
       "eN" 'flycheck-next-error
       "ep" 'flycheck-previous-error
