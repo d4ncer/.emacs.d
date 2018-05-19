@@ -609,6 +609,11 @@ Optional arg JUSTIFY will justify comments and strings."
     (push '("*Cargo Check*" :noselect t) popwin:special-display-config)
     (popwin-mode 1)))
 
+(use-package keychain-environment
+  :straight t
+  :config
+  (keychain-refresh-environment))
+
 (use-package smex
   :straight t
   :commands (smex-initialize)
