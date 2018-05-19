@@ -98,27 +98,14 @@
       (-when-let* ((root (projectile-project-p))
                    (rules-dir (f-join root "rules"))
                    (rules-dir-p (f-exists-p rules-dir)))
-        (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
-
-    (defun rk-web--add-node-modules-bin-to-path ()
-      "Use binaries from node_modules, where available."
-      (when-let (root (projectile-project-p))
-        (make-local-variable 'exec-path)
-        (add-to-list 'exec-path (f-join root "node_modules" ".bin")))))
+        (setq-local flycheck-eslint-rules-directories (-list rules-dir)))))
 
   :config
   (progn
     (add-to-list 'flycheck-disabled-checkers 'javascript-jshint)
     (add-to-list 'flycheck-disabled-checkers 'json-jsonlint)
     (add-to-list 'flycheck-disabled-checkers 'css-csslint)
-
-    (add-hook 'rk-web-typescript-mode-hook #'rk-web--add-node-modules-bin-to-path)
-    (add-hook 'rk-web-css-mode-hook #'rk-web--add-node-modules-bin-to-path)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-node-modules-bin-to-path)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
-
-    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "e" #'flycheck-buffer)))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)))
 
 ;; TEMPORARY WHILE WE FIX ISSUES
 ;; (use-package rk-lsp-js
@@ -316,9 +303,10 @@
 (use-package add-node-modules-path
   :straight t
   :after rk-web-modes
-  :commands (add-node-modules-path)
   :config
   (progn
+    (add-hook 'rk-web-typescript-mode-hook #'add-node-modules-path)
+    (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
     (add-hook 'rk-web-js-mode-hook #'add-node-modules-path)))
 
 (use-package aggressive-indent
