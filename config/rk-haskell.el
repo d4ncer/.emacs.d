@@ -169,6 +169,7 @@
 
   :config
   (progn
+    (evil-define-key 'normal haskell-mode-map (kbd "gd") #'intero-goto-definition)
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m r" "repl")
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m i" "intero")
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m g" "goto")
