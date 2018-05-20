@@ -569,6 +569,37 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
 
+(use-package pixel-scroll
+  :demand t
+  :config (pixel-scroll-mode +1))
+
+(use-package autoinsert
+  :preface
+  (defvar auto-insert-alist nil)
+  :init
+  (auto-insert-mode +1)
+  :config
+  (setq auto-insert-query nil))
+
+(use-package autoinsert-funcs
+  :after autoinsert
+  :defines (autoinsert-funcs-forms)
+  :config
+  (dolist (form autoinsert-funcs-forms)
+    (push form auto-insert-alist)))
+
+(use-package calc
+  :commands (quick-calc calc)
+  :config
+  (config-hydras-insinuate calc-mode-map))
+
+(use-package man
+  :defer t
+  :bind (:map
+         Man-mode-map
+         ("M-n" . Man-next-section)
+         ("M-p" . Man-previous-section)))
+
 (use-package info+
   :straight t
   :defer 3
