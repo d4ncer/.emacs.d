@@ -149,16 +149,6 @@
                   (equal (get major-mode 'mode-class) 'special))
         (intero-mode +1)))
 
-    (defun rk-haskell--insert-module-annotation ()
-      "Insert the module annotation for the current module."
-      (interactive)
-      (let ((file-name (f-filename (buffer-file-name)))
-            (module-name (s-titleize (f-base (buffer-file-name)))))
-        (save-excursion
-          (goto-char (point-min))
-          (insert (s-lex-format "-- ${file-name}\nmodule ${module-name} where\n\n"))
-          (message "Inserted module annotation."))))
-
     (defun rk-haskell--insert-intero-type ()
       "Insert Intero type above decl."
       (interactive)
@@ -184,7 +174,6 @@
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m g" "goto")
 
     (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "a" #'rk-haskell--insert-module-annotation
       "rr" #'intero-repl
       "rl" #'intero-repl-load
       "it" #'intero-targets
