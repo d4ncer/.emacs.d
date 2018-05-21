@@ -89,8 +89,6 @@
 
 (use-package flycheck
   :defer t
-  :commands (flycheck-select-checker flycheck-buffer)
-  :functions (flycheck-add-next-checker flycheck-add-mode)
   :preface
   (progn
     (autoload 'projectile-project-p "projectile")
@@ -339,7 +337,6 @@
 (use-package nvm
   :straight t
   :after rk-web-modes
-  :functions (nvm-use-for-buffer)
   :preface
   (defun rk-web--maybe-use-nvm ()
     (when (locate-dominating-file default-directory ".nvmrc")
