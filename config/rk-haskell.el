@@ -193,7 +193,6 @@
 (use-package hindent
   :straight t
   :after haskell-mode
-  :commands (hindent-mode hindent-reformat-decl-or-fill hindent-reformat-buffer)
   :config
   (progn
     (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m f" "format")
