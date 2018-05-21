@@ -234,6 +234,7 @@
     (add-hook 'rk-web-js-mode 'flow-minor-enable-automatically))
   :init
   (progn
+    (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)
     (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fi" #'rk-flow-insert-flow-annotation
