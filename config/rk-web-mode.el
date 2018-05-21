@@ -71,6 +71,8 @@
   :config
   (progn
 
+    (add-hook 'rk-web-php-mode-hook #'(lambda () (setq-local web-mode-code-indent-offset 4)))
+
     (dolist (name (list "node" "nodejs" "gjs" "rhino"))
       (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
 
