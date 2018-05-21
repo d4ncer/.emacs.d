@@ -479,7 +479,6 @@ Do not scheduled items or repeating todos."
 
 (use-package rk-org-agenda-transient-state
   :after (org org-agenda)
-  :commands (rk-org-agenda-hydra-transient-state/body)
   :init
   (progn
     (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra-transient-state/body)))
@@ -763,7 +762,6 @@ table tr.tr-even td {
 (use-package typopunct
   :straight t
   :after org
-  :commands (typopunct-change-language typopunct-mode)
   :preface
   (defun rk-typopunct-init ()
     (typopunct-change-language 'english)
