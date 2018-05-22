@@ -569,10 +569,6 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
 
-(use-package pixel-scroll
-  :demand t
-  :config (pixel-scroll-mode +1))
-
 (use-package autoinsert
   :preface
   (defvar auto-insert-alist nil)
