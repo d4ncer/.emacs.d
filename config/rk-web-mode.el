@@ -154,10 +154,15 @@
 (use-package flycheck-flow
   :straight t
   :after flycheck
+  :preface
+  (defun rk-web--setup-flycheck-flow-if-flow-buffer ()
+    "Setup company-flow if buffer if applicable."
+    (when (rk-in-flow-buffer-p)
+      (progn
+        (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
+        (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))))
   :config
-  (progn
-    (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
-    (flycheck-add-next-checker 'javascript-flow 'javascript-eslint)))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--setup-flycheck-flow-if-flow-buffer))
 
 (use-package rk-flycheck-stylelint
   :after flycheck
@@ -180,11 +185,6 @@
   :straight (:host github :repo "d4ncer/flow-minor-mode"
                    :branch "master")
   :after rk-web-modes
-  :commands (flow-minor-type-at-pos
-             flow-minor-status
-             flow-minor-suggest
-             flow-minor-coverage
-             flow-minor-jump-to-definition)
   :preface
   (progn
     (autoload 's-matches? "s")
@@ -196,6 +196,10 @@
                           (and "/*" (* space) "@flow" (* space) "*/")))
                   (buffer-substring (or beg (point-min))
                                     (or end (point-max)))))
+
+    (defun rk-flow-set-goto-def-binding ()
+      (when (rk-in-flow-buffer-p)
+        (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)))
 
     (defun rk-flow-toggle-sealed-object ()
       "Toggle between a sealed & unsealed object type."
@@ -225,14 +229,19 @@
       (save-excursion
         (goto-char (point-min))
         (insert "// @flow\n")
-        (message "Inserted @flow annotation."))))
+        (message "Inserted @flow annotation.")))
+
+    (defun rk-flow-setup ()
+      (progn
+        (flow-minor-enable-automatically)
+        (rk-flow-set-goto-def-binding))))
 
   :config
   (progn
-    (add-hook 'rk-web-js-mode 'flow-minor-enable-automatically))
+    (add-hook 'rk-web-js-mode-hook #'rk-flow-setup))
   :init
   (progn
-    (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)
+
     (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "fi" #'rk-flow-insert-flow-annotation
