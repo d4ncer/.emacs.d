@@ -123,6 +123,7 @@
 (use-package rk-expand-region)
 (use-package rk-python)
 (use-package rk-rust)
+(use-package rk-nim)
 (use-package rk-puppet)
 (use-package rk-org)
 (use-package rk-yasnippet)
