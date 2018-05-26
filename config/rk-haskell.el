@@ -38,14 +38,14 @@
 
   :config
   (progn
-    ;; Use 4 space indentation style.
+    ;; Use 2 space indentation style.
 
-    (setq haskell-indentation-layout-offset 4)
+    (setq haskell-indentation-layout-offset 2)
     (setq haskell-indentation-starter-offset 2)
     (setq haskell-indentation-where-pre-offset 2)
     (setq haskell-indentation-where-post-offset 2)
-    (setq haskell-indentation-left-offset 4)
-    (setq haskell-indent-spaces 4)
+    (setq haskell-indentation-left-offset 2)
+    (setq haskell-indent-spaces 2)
 
     (add-hook 'haskell-mode-hook #'rk-haskell--set-indentation-step)
 
