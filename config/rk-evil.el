@@ -111,10 +111,13 @@
     (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
 
 (use-package evil-multiedit
+  :after evil
   :straight t
   :commands (evil-multiedit-match-all)
   :init
-  (spacemacs-keys-set-leader-keys "se" #'evil-multiedit-match-all)
+  (spacemacs-keys-set-leader-keys
+    "se" #'evil-multiedit-match-all
+    "sp" #'evil-multiedit-match-symbol-and-next)
   :config
   (progn
     (define-key evil-multiedit-state-map (kbd "RET") 'evil-multiedit-toggle-or-restrict-region)
@@ -122,10 +125,10 @@
 
     (define-key evil-multiedit-state-map (kbd "C") nil)
     (define-key evil-multiedit-state-map (kbd "S") #'evil-multiedit--substitute)
-    (define-key evil-multiedit-state-map (kbd "C-n") #'evil-multiedit-next)
-    (define-key evil-multiedit-state-map (kbd "C-p") #'evil-multiedit-prev)
-    (define-key evil-multiedit-insert-state-map (kbd "C-n") #'evil-multiedit-next)
-    (define-key evil-multiedit-insert-state-map (kbd "C-p") #'evil-multiedit-prev)))
+    (define-key evil-multiedit-state-map (kbd "C-j") #'evil-multiedit-match-and-next)
+    (define-key evil-multiedit-state-map (kbd "C-k") #'evil-multiedit-match-and-prev)
+    (define-key evil-multiedit-insert-state-map (kbd "C-j") #'evil-multiedit-match-and-next)
+    (define-key evil-multiedit-insert-state-map (kbd "C-k") #'evil-multiedit-match-and-prev)))
 
 (use-package evil-ex
   :defer t
