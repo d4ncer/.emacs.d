@@ -20,6 +20,14 @@
   (list "--single-quote" "true" "--trailing-comma" "es5")
   "Default values for prettier.")
 
+(defun rk-in-flow-buffer-p (&optional beg end)
+  "Check if the buffer has a Flow annotation.
+If BEG & END are defined, checks the selection defined."
+  (s-matches? (rx (or (and "//" (* space) "@flow")
+                      (and "/*" (* space) "@flow" (* space) "*/")))
+              (buffer-substring (or beg (point-min))
+                                (or end (point-max)))))
+
 (use-package web-mode
   :straight t
   :defines (web-mode-markup-indent-offset
@@ -189,13 +197,6 @@
   (progn
     (autoload 's-matches? "s")
     (autoload 'sp-get-enclosing-sexp "smartparens")
-
-    (defun rk-in-flow-buffer-p (&optional beg end)
-      "Checks if the buffer has a Flow annotation."
-      (s-matches? (rx (or (and "//" (* space) "@flow")
-                          (and "/*" (* space) "@flow" (* space) "*/")))
-                  (buffer-substring (or beg (point-min))
-                                    (or end (point-max)))))
 
     (defun rk-flow-set-goto-def-binding ()
       (when (rk-in-flow-buffer-p)
