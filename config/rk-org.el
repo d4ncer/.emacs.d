@@ -25,6 +25,7 @@
 (defvar org-directory "~/org")
 
 (defconst rk-org-work-file (concat org-directory "/work_movio.org"))
+(defconst rk-org-diary-file (concat org-directory "/diary.org"))
 (defconst rk-org-numero-file (concat org-directory "/numero.org"))
 (defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 (defconst rk-org-consume-file (concat org-directory "/consume.org"))
@@ -160,7 +161,7 @@ Do not scheduled items or repeating todos."
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
     (add-to-list 'org-refile-targets '(org-default-notes-file :maxlevel . 3))
     (add-to-list 'org-refile-targets '(rk-org-consume-file :maxlevel . 3))
-    (add-to-list 'org-refile-targets `(,org-directory :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-diary-file :maxlevel . 3))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
     (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file-other-window)
