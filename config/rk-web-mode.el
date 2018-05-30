@@ -17,7 +17,7 @@
 (require 's)
 
 (defconst rk-web--prettier-default-args
-  (list "--single-quote" "true" "--trailing-comma" "es5")
+  (list "--single-quote" "true" "--trailing-comma" "es5" "--print-width" "80")
   "Default values for prettier.")
 
 (defun rk-in-flow-buffer-p (&optional beg end)
