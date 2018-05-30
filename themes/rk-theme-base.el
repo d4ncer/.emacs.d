@@ -302,6 +302,9 @@
     (magit-diff-context-highlight
      ((t :background ,rk-theme-base-solarized-b2)))
 
+    (magit-signature-good
+     ((t :foreground ,rk-theme-base-green)))
+
     ;; Outline, Org
 
     (org-link
