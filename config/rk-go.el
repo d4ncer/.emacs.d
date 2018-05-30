@@ -29,6 +29,7 @@
     (spacemacs-keys-declare-prefix-for-mode 'go-mode "mh" "help")
     (spacemacs-keys-declare-prefix-for-mode 'go-mode "mi" "imports")
 
+
     (spacemacs-keys-set-leader-keys-for-major-mode 'go-mode
       "hh" 'godoc-at-point
       "ig" 'go-goto-imports
@@ -67,8 +68,7 @@
     (setq gofmt-command "goreturns")
     (setq gofmt-show-errors nil)
     (evil-define-key 'normal go-mode-map (kbd "K") #'godoc-at-point)
-
-    (evil-define-key 'normal go-mode-map (kbd "M-.") #'godef-jump)
+    (evil-define-key 'normal go-mode-map (kbd "gd") #'godef-jump)
     (evil-define-key 'insert go-mode-map (kbd "M-.") #'godef-jump)
 
     (add-hook 'go-mode-hook #'rk-go--set-local-vars)
