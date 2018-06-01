@@ -25,7 +25,7 @@ Fine, but you were warned.
 
 * Emacs 26+
 * [Fira Code](https://github.com/tonsky/FiraCode)
-* [Fira Code Symbol](https://github.com/tonsky/FiraCode/files/412440/FiraCode-Regular-Symbol.zip) (this is for ligatures in all `prog-mode` buffers**
+* [Fira Code Symbol](https://github.com/tonsky/FiraCode/files/412440/FiraCode-Regular-Symbol.zip) (this is for ligatures in all `prog-mode` buffers)
 
 **Optional**
 
