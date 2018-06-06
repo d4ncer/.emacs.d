@@ -76,6 +76,13 @@
 
   :functions (gofmt-before-save godoc-at-point))
 
+(use-package go-rename
+  :straight t
+  :after go-mode
+  :init
+  (spacemacs-keys-set-leader-keys-for-major-mode 'go-mode
+    "r" #'go-rename))
+
 (use-package company-go
   :straight t
   :after go-mode
