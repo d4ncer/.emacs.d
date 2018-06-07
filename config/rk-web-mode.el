@@ -73,14 +73,10 @@ If BEG & END are defined, checks the selection defined."
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
-         ("\\.html\\'" . rk-web-html-mode)
-         ("\\.php\\'" . rk-web-php-mode))
+         ("\\.html\\'" . rk-web-html-mode))
   :defines (flycheck-html-tidy-executable)
   :config
   (progn
-
-    (add-hook 'rk-web-php-mode-hook #'(lambda () (setq-local web-mode-code-indent-offset 4)))
-
     (dolist (name (list "node" "nodejs" "gjs" "rhino"))
       (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
 

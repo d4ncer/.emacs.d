@@ -122,6 +122,7 @@
 (use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-python)
+(use-package rk-php)
 (use-package rk-rust)
 (use-package rk-nim)
 (use-package rk-puppet)
