@@ -60,7 +60,7 @@
  ("flycheck-nimsuggest" . "dc9a5de1cb3ee05db5794d824610959a1f603bc9")
  ("flycheck-rust" . "a722204cff5bffe26b8f127c7003cfc9ed00e34b")
  ("ghub" . "4831933da059ee084a16016558b9ccd8c581a8ff")
- ("git-timemachine" . "dbcb92ffaa5f8350d47f4fbd74512f4000b8c043")
+ ("git-timemachine" . "90a980578249c102da3e904fccdc9a2a5a0e7bcc")
  ("git.el" . "a3396a7027a7d986598c6a2d6d5599bac918f3da")
  ("gnuplot-mode" . "21f9046e3f5caad41b750b5c9cee02fa4fd20fb9")
  ("go-mode.el" . "ff87a1e80945d958d9c348ce4d2e65a797b38a4b")

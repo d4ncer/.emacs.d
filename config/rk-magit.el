@@ -62,7 +62,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
   :after magit)
 
 (use-package git-timemachine
-  :straight t
+  :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
   :defer t
   :commands
   (git-timemachine
