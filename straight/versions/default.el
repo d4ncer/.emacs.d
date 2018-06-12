@@ -56,7 +56,7 @@
  ("f.el" . "de6d4d40ddc844eee643e92d47b9d6a63fbebb48")
  ("flow-minor-mode" . "c693f5b7d53d9c7eab91e36920b02cbc7514dda9")
  ("flx" . "46040d0b096a0340d91235561f27a959a61d0fef")
- ("flycheck" . "325d5cce1135d86832439f0d542dd27feacb9498")
+ ("flycheck" . "2b8308c71df4c0946399c5a69b380e65d7f36b7f")
  ("flycheck-nimsuggest" . "dc9a5de1cb3ee05db5794d824610959a1f603bc9")
  ("flycheck-rust" . "a722204cff5bffe26b8f127c7003cfc9ed00e34b")
  ("ghub" . "4831933da059ee084a16016558b9ccd8c581a8ff")
