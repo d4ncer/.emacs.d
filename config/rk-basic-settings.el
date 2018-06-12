@@ -564,7 +564,8 @@ Optional arg JUSTIFY will justify comments and strings."
   (setq lv-use-separator t))
 
 (use-package sql-indent
-  :straight t
+  :straight (:host github :repo "alex-hhh/emacs-sql-indent"
+                   :branch "master")
   :after sql
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
