@@ -182,6 +182,7 @@ Do not scheduled items or repeating todos."
     (setq org-pretty-entities t)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
     (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
+    (setq org-agenda-diary-file (f-join org-directory "diary.org"))
 
     (setq org-refile-use-outline-path t)
     (setq org-return-follows-link t)
@@ -336,7 +337,6 @@ Do not scheduled items or repeating todos."
     (setq org-agenda-start-on-weekday nil)
     (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
     (setq org-agenda-files (f-files org-directory (lambda (f) (f-ext? f "org"))))
-    (setq org-agenda-diary-file (f-join org-directory "diary.org"))
     (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
     (setq org-agenda-insert-diary-extract-time t)
     (setq org-agenda-span 'week)
