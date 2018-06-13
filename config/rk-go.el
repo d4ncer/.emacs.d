@@ -66,6 +66,7 @@
   :config
   (progn
     (setq gofmt-command "goreturns")
+    (setq godoc-at-point-function 'godoc-gogetdoc)
     (setq gofmt-show-errors nil)
     (evil-define-key 'normal go-mode-map (kbd "K") #'godoc-at-point)
     (evil-define-key 'normal go-mode-map (kbd "gd") #'godef-jump)
