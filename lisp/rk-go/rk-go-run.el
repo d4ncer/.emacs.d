@@ -13,7 +13,7 @@
   :group 'languages
   :prefix "rk-go-run-")
 
-(defcustom rk-go-run-use-gocheck? t
+(defcustom rk-go-run-use-gocheck? nil
   "Whether to use gocheck. If nil, fall back to `-run`."
   :group 'rk-go-run
   :type 'boolean)
