@@ -526,7 +526,8 @@ lines are selected, or the NxM dimensions of a block selection."
 current search term (with anzu), 3. The number of substitutions being conducted
 with `evil-ex-substitute', and/or 4. The number of active `iedit' regions."
   (let ((meta (concat (+doom-modeline--macro-recording)
-                      (+doom-modeline--evil-substitute))))
+                      (+doom-modeline--evil-substitute)
+                      (+doom-modeline--iedit))))
     (or (and (not (equal meta "")) meta)
         (if buffer-file-name " %p  %l:%c "))))
 
