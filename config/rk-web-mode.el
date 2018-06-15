@@ -20,20 +20,23 @@
   (list "--single-quote" "true" "--trailing-comma" "es5" "--print-width" "80")
   "Default values for prettier.")
 
+(defconst rk-web--flow-buffer-regexp
+  (rx (or (and "//" (* space) "@flow")
+          (and "/*" (* space) "@flow" (* space) "*/")))
+  "Regex to determine if a buffer is Flow-enabled.")
+
 (defun rk-in-flow-buffer-p (&optional beg end)
   "Check if the buffer has a Flow annotation.
 If BEG & END are defined, checks the selection defined."
-  (s-matches? (rx (or (and "//" (* space) "@flow")
-                      (and "/*" (* space) "@flow" (* space) "*/")))
-              (buffer-substring (or beg (point-min))
-                                (or end (point-max)))))
+  (and (eq major-mode 'rk-web-js-mode)
+       (s-matches? rk-web--flow-buffer-regexp
+                   (buffer-substring (or beg (point-min))
+                                     (or end (point-max))))))
 
 (use-package web-mode
   :straight t
   :defines (web-mode-markup-indent-offset
             web-mode-css-indent-offset)
-
-  :defer t
 
   :preface
   (autoload 'sp-local-pair "smartparens")
@@ -155,19 +158,6 @@ If BEG & END are defined, checks the selection defined."
     (define-key emmet-mode-keymap (kbd "TAB") #'emmet-expand-line)
     (add-hook 'rk-web-js-mode-hook #'rk-web--set-jsx-classname-on)))
 
-(use-package flycheck-flow
-  :straight t
-  :after flycheck
-  :preface
-  (defun rk-web--setup-flycheck-flow-if-flow-buffer ()
-    "Setup company-flow if buffer if applicable."
-    (when (rk-in-flow-buffer-p)
-      (progn
-        (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
-        (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--setup-flycheck-flow-if-flow-buffer))
-
 (use-package rk-flycheck-stylelint
   :after flycheck
   :preface
@@ -185,6 +175,8 @@ If BEG & END are defined, checks the selection defined."
     (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
     (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
+;; Flow
+
 (use-package flow-minor-mode
   :straight (:host github :repo "d4ncer/flow-minor-mode"
                    :branch "master")
@@ -195,8 +187,9 @@ If BEG & END are defined, checks the selection defined."
     (autoload 'sp-get-enclosing-sexp "smartparens")
 
     (defun rk-flow-set-goto-def-binding ()
-      (when (rk-in-flow-buffer-p)
-        (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)))
+      (if (rk-in-flow-buffer-p)
+          (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)
+        (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'evil-goto-definition)))
 
     (defun rk-flow-toggle-sealed-object ()
       "Toggle between a sealed & unsealed object type."
@@ -228,26 +221,61 @@ If BEG & END are defined, checks the selection defined."
         (insert "// @flow\n")
         (message "Inserted @flow annotation.")))
 
+    (defun rk-flow-setup-bindings ()
+      (if (rk-in-flow-buffer-p)
+          (progn
+            (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
+            (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
+              "fi" #'rk-flow-insert-flow-annotation
+              "ft" #'flow-minor-type-at-pos
+              "fs" #'flow-minor-suggest
+              "fS" #'flow-minor-status
+              "fc" #'flow-minor-coverage
+              "fo" #'rk-flow-toggle-sealed-object
+              "fd" #'flow-minor-jump-to-definition))
+        (define-key spacemacs-keys-rk-web-js-mode-map (kbd "f") nil)))
+
     (defun rk-flow-setup ()
       (progn
         (flow-minor-enable-automatically)
+        (rk-flow-setup-bindings)
         (rk-flow-set-goto-def-binding))))
 
   :config
   (progn
-    (add-hook 'rk-web-js-mode-hook #'rk-flow-setup))
-  :init
-  (progn
+    (add-hook 'find-file-hook #'rk-flow-setup)))
 
-    (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
-    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "fi" #'rk-flow-insert-flow-annotation
-      "ft" #'flow-minor-type-at-pos
-      "fs" #'flow-minor-suggest
-      "fS" #'flow-minor-status
-      "fc" #'flow-minor-coverage
-      "fo" #'rk-flow-toggle-sealed-object
-      "fd" #'flow-minor-jump-to-definition)))
+(use-package flycheck-flow
+  :straight t
+  :after flycheck
+  :preface
+  (defun rk-web--maybe-setup-flycheck-flow ()
+    "Setup company-flow if buffer if applicable."
+    (if (rk-in-flow-buffer-p)
+        (progn
+          (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
+          (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))
+      (setq-local flycheck-disabled-checkers '(javascript-flow))))
+  :config
+  (progn
+    (add-hook 'find-file-hook #'rk-web--maybe-setup-flycheck-flow)))
+
+(use-package company-flow
+  :straight t
+  :after rk-web-modes
+  :preface
+  (defun rk-web--maybe-setup-company-flow ()
+    "Setup company-flow if buffer if applicable."
+    (if (rk-in-flow-buffer-p)
+        (progn
+          (setq-local company-flow-modes '(rk-web-js-mode))
+          (with-eval-after-load 'company
+            (add-to-list 'company-backends 'company-flow)))
+      (let ((rk-web--non-flow-backends (-remove (lambda (backend) (eq backend 'company-flow)) company-backends)))
+        (setq-local company-backends rk-web--non-flow-backends))))
+  :config
+  (progn
+    (add-hook 'find-file-hook #'rk-web--maybe-setup-company-flow)))
 
 (use-package prettier-js
   :straight t
@@ -292,20 +320,6 @@ If BEG & END are defined, checks the selection defined."
   (progn
     (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
       "." #'prettier-js)))
-
-(use-package company-flow
-  :straight t
-  :after rk-web-modes
-  :preface
-  (defun rk-web--setup-company-flow-if-flow-buffer ()
-    "Setup company-flow if buffer if applicable."
-    (when (rk-in-flow-buffer-p)
-      (progn
-        (setq company-flow-modes '(rk-web-js-mode))
-        (with-eval-after-load 'company
-          (add-to-list 'company-backends 'company-flow)))))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--setup-company-flow-if-flow-buffer))
 
 (use-package add-node-modules-path
   :straight t
