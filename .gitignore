@@ -11,6 +11,7 @@ elpa
 projectile-bookmarks.eld
 auto-save-list
 custom.el
+eshell/
 
 # Straight
 /var
