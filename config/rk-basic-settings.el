@@ -588,10 +588,7 @@ Optional arg JUSTIFY will justify comments and strings."
   (dolist (form autoinsert-funcs-forms)
     (push form auto-insert-alist)))
 
-(use-package calc
-  :commands (quick-calc calc)
-  :config
-  (config-hydras-insinuate calc-mode-map))
+(use-package calc)
 
 (use-package man
   :defer t
