@@ -222,7 +222,13 @@
     ;; LSP
 
     (lsp-ui-doc-background
-     ((t :background ,rk-theme-base-solarized-b2)))
+     ((t :background ,rk-theme-base-solarized-b00)))
+
+    (lsp-face-highlight-read
+     ((t :background nil :weight demibold :foreground ,rk-theme-base-blue)))
+
+    (lsp-face-highlight-write
+     ((t :background nil :weight demibold :foreground ,rk-theme-base-magenta)))
 
     ;; Pairs
 
