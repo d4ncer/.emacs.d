@@ -23,6 +23,9 @@
   :mode ("\\.rs\\'" . rust-mode)
   :preface
   (progn
+    (defun rk-rust--set-local-vars ()
+      (setq-local compile-command (concat "rustc " buffer-file-name)))
+
     (autoload 'company-indent-or-complete-common "company")
     (autoload 'thing-at-point-looking-at "thingatpt")
     (autoload 'evil-join "evil-commands")
@@ -48,7 +51,8 @@
     (evil-define-key 'insert rust-mode-map (kbd "TAB") #'company-indent-or-complete-common)
     (evil-define-key 'normal rust-mode-map (kbd "TAB") #'company-indent-or-complete-common)
 
-    (evil-define-key 'normal rust-mode-map (kbd "J") #'config-rust-join-line)))
+    (evil-define-key 'normal rust-mode-map (kbd "J") #'config-rust-join-line)
+    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)))
 
 (use-package flycheck-rust
   :straight t
