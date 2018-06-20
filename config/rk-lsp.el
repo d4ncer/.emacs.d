@@ -14,10 +14,14 @@
 (use-package lsp-ui
   :straight t
   :after lsp-mode
+  :preface
+  (defun rk-lsp-ui--disable-highlight-thing ()
+    (highlight-thing-mode -1))
   :config
   (progn
     (autoload 'lsp-mode-hook "lsp")
-    (add-hook 'lsp-mode-hook #'lsp-ui-mode)))
+    (add-hook 'lsp-mode-hook #'lsp-ui-mode)
+    (add-hook 'lsp-mode-hook #'rk-lsp-ui--disable-highlight-thing)))
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
