@@ -59,7 +59,13 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
 
 (use-package evil-magit
   :straight t
-  :after magit)
+  :after magit
+  :config
+  (progn
+    (evil-define-key 'normal magit-mode-map (kbd "C-u") #'evil-scroll-page-up)
+    (evil-define-key 'visual magit-mode-map (kbd "C-u") #'evil-scroll-page-up)
+    (evil-define-key 'normal magit-mode-map (kbd "C-d") #'evil-scroll-page-down)
+    (evil-define-key 'normal magit-mode-map (kbd "C-d") #'evil-scroll-page-down)))
 
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
