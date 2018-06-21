@@ -241,6 +241,8 @@ If BEG & END are defined, checks the selection defined."
         (rk-flow-setup-bindings)
         (rk-flow-set-goto-def-binding))))
 
+  :init
+  (setq flow-minor-use-eldoc-p nil)
   :config
   (progn
     (add-hook 'find-file-hook #'rk-flow-setup)))
