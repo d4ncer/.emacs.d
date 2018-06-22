@@ -33,6 +33,10 @@
   (add-to-list 'default-frame-alist '(ns-appearance . 'nil))
   (setq frame-title-format nil))
 
+;; Disable lockfiles
+
+(setq create-lockfiles nil)
+
 ;; Non-native fullscreen
 
 (when (eq system-type 'darwin)
