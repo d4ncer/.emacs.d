@@ -222,13 +222,25 @@
     ;; LSP
 
     (lsp-ui-doc-background
-     ((t :background ,rk-theme-base-solarized-b00)))
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     (lsp-face-highlight-read
      ((t :background nil :weight demibold :foreground ,rk-theme-base-blue)))
 
     (lsp-face-highlight-write
      ((t :background nil :weight demibold :foreground ,rk-theme-base-magenta)))
+
+    (lsp-face-highlight-textual
+     ((t :background nil :weight demibold :foreground ,rk-theme-base-cyan)))
+
+    (lsp-ui-sideline-current-symbol
+     ((t :height 0.99 :weight demibold :foreground ,rk-theme-base-yellow :box (:line-width -1 :color ,rk-theme-base-yellow))))
+
+    (lsp-ui-sideline-code-action
+     ((t :foreground ,rk-theme-base-yellow)))
+
+    (lsp-ui-sideline-symbol
+     ((t :height 0.99 :weight normal :foreground ,rk-theme-base-dark-grey :box (:line-width -1 :color ,rk-theme-base-dark-grey))))
 
     ;; Pairs
 
