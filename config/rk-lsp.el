@@ -16,6 +16,7 @@
   :after lsp-mode
   :preface
   (defun rk-lsp-ui--disable-highlight-thing ()
+    (setq-local lsp-ui-flycheck-live-reporting nil)
     (highlight-thing-mode -1))
   :config
   (progn
