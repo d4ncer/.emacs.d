@@ -15,8 +15,8 @@
   "Derived mode for editing JavaScript files.")
 
 ;;;###autoload
-(define-derived-mode rk-web-typescript-mode web-mode "TS"
-  "Derived mode for editing TypeScript files.")
+(define-derived-mode rk-web-flow-mode web-mode "Flow"
+  "Derived mode for editing Flow-enabled JavaScript files.")
 
 ;;;###autoload
 (define-derived-mode rk-web-json-mode web-mode "JSON"
