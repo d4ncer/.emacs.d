@@ -26,10 +26,6 @@
     "B" #'dockerfile-build-no-cache-buffer
     "t" #'dockerfile-test-function))
 
-;; TODO: Needs keybinds + setup (maybe a hydra?)
-(use-package docker
-  :straight t)
-
 (provide 'rk-docker)
 
 ;;; rk-docker.el ends here
