@@ -30,8 +30,7 @@
 
 (when (eq system-type 'darwin)
   (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
-  (add-to-list 'default-frame-alist '(ns-appearance . 'nil))
-  (setq frame-title-format nil))
+  (add-to-list 'default-frame-alist '(ns-appearance . 'nil)))
 
 ;; Disable lockfiles
 
