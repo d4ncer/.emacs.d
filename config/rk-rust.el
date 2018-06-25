@@ -54,6 +54,17 @@
     (evil-define-key 'normal rust-mode-map (kbd "J") #'config-rust-join-line)
     (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)))
 
+;; Similar to JS, need to set this up right. As of now, it seems lackluster :(
+;; (use-package lsp-rust
+;;   :straight t
+;;   :after rust-mode
+;;   :config
+;;   (progn
+;;     (autoload 'flycheck-mode "flycheck")
+;;     (autoload 'rust-mode-hook "rust-mode")
+;;     (add-hook 'rust-mode-hook #'lsp-rust-enable)
+;;     (add-hook 'rust-mode-hook #'flycheck-mode)))
+
 (use-package flycheck-rust
   :straight t
   :hook (flycheck-mode . flycheck-rust-setup))
