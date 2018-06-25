@@ -636,8 +636,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t
   :config
   (progn
-    (push (list (rx "*Cargo" space (group (one-or-more anything)) "*") :noselect t :regexp t) popwin:special-display-config)
-    (push (list (rx "*go" space (group (one-or-more anything)) "*") :noselect t :regexp t) popwin:special-display-config)
+    (push (list (rx (or "*Cargo" "*go" "*Racer") space (group (one-or-more anything)) "*") :noselect t :regexp t) popwin:special-display-config)
     (popwin-mode 1)))
 
 (use-package keychain-environment
