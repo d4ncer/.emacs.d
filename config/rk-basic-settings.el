@@ -612,25 +612,20 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (use-package world-time-mode
   :straight t
-  :defer 3
-  :commands (world-time-list)
+  :defer t
   :init
   (spacemacs-keys-set-leader-keys "a m w" 'world-time-list)
   :config
   (progn
     (setq display-time-world-list '(("Pacific/Auckland" "NZT")
+                                    ("Asia/Kolkata" "India")
                                     ("UTC" "UTC")
                                     ("Europe/Berlin" "Germany")
                                     ("America/Los_Angeles" "Los Angeles")
-                                    ("America/New_York" "New York")
-                                    ("America/Denver" "Mountain Time")
-                                    ("Australia/Sydney" "Sydney")))
+                                    ("America/New_York" "New York")))
     (with-eval-after-load 'evil
       (evil-define-key 'normal world-time-table-mode-map (kbd "q") #'quit-window))
-
-    (add-hook 'world-time-table-mode-hook 'hl-line-mode))
-
-  :defines (display-time-world-list world-time-table-mode-map))
+    (add-hook 'world-time-table-mode-hook 'hl-line-mode)))
 
 (use-package popwin
   :straight t
