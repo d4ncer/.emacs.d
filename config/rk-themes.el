@@ -29,6 +29,21 @@
   (rk-ligatures--set-kwds
    '((rk-ligatures--fira-font prog-mode-hook))))
 
+(use-package doom-themes
+  :straight t
+  :config
+  (progn
+    (setq doom-themes-enable-bold t    ; if nil, bold is universally disabled
+          doom-themes-enable-italic t) ; if nil, italics is universally disabled
+    ;; Enable flashing mode-line on errors
+    (doom-themes-visual-bell-config)
+
+    ;; Enable custom neotree theme
+    (doom-themes-neotree-config)  ; all-the-icons fonts must be installed!
+
+    ;; Corrects (and improves) org-mode's native fontification.
+    (doom-themes-org-config)))
+
 (provide 'rk-themes)
 
 ;;; rk-themes.el ends here
