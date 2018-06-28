@@ -44,6 +44,9 @@
     ;; Corrects (and improves) org-mode's native fontification.
     (doom-themes-org-config)))
 
+(use-package tao-theme
+  :straight t)
+
 (provide 'rk-themes)
 
 ;;; rk-themes.el ends here
