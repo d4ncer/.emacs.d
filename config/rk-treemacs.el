@@ -23,23 +23,15 @@
              treemacs-mode
              treemacs-next-line
              treemacs-previous-line)
-  :preface
-  (defun rk-treemacs--setup-header-line ()
-    (-when-let- [b (treemacs-buffer-exists?)]
-      (when (buffer-live-p b)
-        (with-current-buffer b
-          (setq-local header-line-format "Tree you later")
-          (force-mode-line-update)))))
   :config
   (progn
     (evil-set-initial-state 'treemacs-mode 'emacs)
     (define-key treemacs-mode-map (kbd "j") #'treemacs-next-line)
     (define-key treemacs-mode-map (kbd "k") #'treemacs-previous-line)
-    (define-key treemacs-mode-map (kbd "SPC") spacemacs-keys-default-map)
-    (add-hook 'buffer-list-update-hook #'rk-treemacs--setup-header-line))
+    (define-key treemacs-mode-map (kbd "SPC") spacemacs-keys-default-map))
   :init
   (progn
-    (setq treemacs--persist-file (concat paths-cache-directory "/treemacs-persist"))
+    (setq treemacs-persist-file (concat paths-cache-directory "/treemacs-persist"))
     (spacemacs-keys-set-leader-keys
       "f t" #'treemacs
       "p t" #'treemacs-add-project)))
