@@ -125,6 +125,7 @@
 (use-package rk-php)
 (use-package rk-rust)
 (use-package rk-nim)
+(use-package rk-racket)
 (use-package rk-puppet)
 (use-package rk-org)
 (use-package rk-yasnippet)
