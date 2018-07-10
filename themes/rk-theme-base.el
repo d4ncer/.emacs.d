@@ -206,10 +206,19 @@
     (info-double-quoted-name
      ((t :weight normal)))
 
-    ;; Info
-
     (makefile-space
      ((t :background ,rk-theme-base-violet)))
+
+    ;; diff-hl
+
+    (diff-hl-change
+     ((t :foreground ,rk-theme-base-blue :background ,rk-theme-base-blue)))
+
+    (diff-hl-delete
+     ((t :foreground ,rk-theme-base-red :background ,rk-theme-base-red)))
+
+    (diff-hl-insert
+     ((t :foreground ,rk-theme-base-green :background ,rk-theme-base-green)))
 
     ;; web-mode
 
