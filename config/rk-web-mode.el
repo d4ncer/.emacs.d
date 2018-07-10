@@ -15,6 +15,7 @@
 (require 'dash)
 (require 'f)
 (require 's)
+(require 'flycheck)
 
 (defconst rk-web--prettier-default-args
   (list "--single-quote" "true" "--trailing-comma" "es5")
@@ -221,12 +222,15 @@ If BEG & END are defined, checks the selection defined."
         (insert "// @flow\n")
         (message "Inserted @flow annotation.")))
 
+    (defun rk-flow-add-annotation-binding ()
+      (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
+        "a" #'rk-flow-insert-flow-annotation))
+
     (defun rk-flow-setup-bindings ()
       (if (rk-in-flow-buffer-p)
           (progn
             (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
             (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-              "fi" #'rk-flow-insert-flow-annotation
               "ft" #'flow-minor-type-at-pos
               "fs" #'flow-minor-suggest
               "fS" #'flow-minor-status
@@ -242,7 +246,9 @@ If BEG & END are defined, checks the selection defined."
         (rk-flow-set-goto-def-binding))))
 
   :init
-  (setq flow-minor-use-eldoc-p nil)
+  (progn
+    (rk-flow-add-annotation-binding)
+    (setq flow-minor-use-eldoc-p nil))
   :config
   (progn
     (add-hook 'find-file-hook #'rk-flow-setup)))
