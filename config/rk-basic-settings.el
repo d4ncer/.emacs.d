@@ -30,7 +30,8 @@
 
 (when (eq system-type 'darwin)
   (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
-  (add-to-list 'default-frame-alist '(ns-appearance . 'nil)))
+  (add-to-list 'default-frame-alist '(ns-appearance . 'nil))
+  (setq frame-title-format nil))
 
 ;; Disable lockfiles
 
@@ -86,16 +87,6 @@
 ;; Make files executable on save.
 
 (add-hook 'after-save-hook 'executable-make-buffer-file-executable-if-script-p)
-
-;; Show file or buffer name in the title bar.
-
-(defun rk-basic-settings--frame-title-string ()
-  (if (buffer-file-name)
-      (abbreviate-file-name (buffer-file-name))
-    (buffer-name)))
-
-(setq frame-title-format `(:eval (rk-basic-settings--frame-title-string)))
-
 
 ;; Copy system clipboard to the kill-ring if an Emacs kill would overwrite it.
 (setq save-interprogram-paste-before-kill t)
