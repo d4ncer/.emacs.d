@@ -20,7 +20,8 @@
     (if (bound-and-true-p smartparens-strict-mode)
         (call-interactively 'sp-backward-delete-char)
       (apply fn args)))
-
+  :init
+  (setq evil-want-integration nil)
   :config
   (progn
     (evil-mode +1)
@@ -255,6 +256,12 @@
   :bind (:map evil-visual-state-map
               ("<" . rk-evil-shift-left)
               (">" . rk-evil-shift-right)))
+
+(use-package evil-collection
+  :straight t
+  :after evil
+  :config
+  (evil-collection-init))
 
 (provide 'rk-evil)
 
