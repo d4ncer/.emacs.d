@@ -261,6 +261,7 @@
   :straight t
   :after evil
   :config
+  (setq evil-collection-mode-list '(ivy company racer git-timemachine ibuffer help info))
   (evil-collection-init))
 
 (provide 'rk-evil)
