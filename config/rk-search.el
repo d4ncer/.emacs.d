@@ -40,9 +40,6 @@
     (setq wgrep-auto-save-buffer t)
     (define-key wgrep-mode-map [remap wgrep-finish-edit] #'rk-search-wgrep-finish-edit-kill-buffer)))
 
-(use-package wgrep-ag
-  :after ag)
-
 (provide 'rk-search)
 
 ;;; rk-search.el ends here
