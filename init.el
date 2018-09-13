@@ -47,6 +47,7 @@
 (straight-use-package 's)
 (straight-use-package 'noflet)
 (straight-use-package 'memoize)
+(straight-use-package 'general)
 
 ;; Set up personal settings
 
