@@ -53,7 +53,7 @@ git clone git@github.com:d4ncer/.emacs.d.git ~/.emacs.d
 Packages to install for Go config:
 
 ```bash
-go get -u -v github.com/nsf/gocode
+go get -u -v github.com/mdempsky/gocode
 go get -u -v github.com/rogpeppe/godef
 go get -u -v github.com/kardianos/govendor
 go get -u -v golang.org/x/tools/cmd/guru
