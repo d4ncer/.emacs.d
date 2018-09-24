@@ -264,8 +264,9 @@
       "a m t" #'rk-insert-iso-timestamp
       "a e f" #'straight-freeze-versions
 
-      "b d" #'kill-this-buffer
       "b b" #'bury-buffer
+      "b d" #'kill-this-buffer
+      "b e" #'erase-buffer
       "b Y" #'rk-copy-whole-buffer-to-clipboard
       "b P" #'rk-copy-clipboard-to-whole-buffer
 
