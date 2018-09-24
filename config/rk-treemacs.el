@@ -18,7 +18,7 @@
 (use-package treemacs
   :straight t
   :commands (treemacs
-             treemacs-add-project
+             treemacs-add-project-to-workspace
              treemacs-toggle
              treemacs-mode
              treemacs-next-line
@@ -34,7 +34,7 @@
     (setq treemacs-persist-file (concat paths-cache-directory "/treemacs-persist"))
     (spacemacs-keys-set-leader-keys
       "f t" #'treemacs
-      "p t" #'treemacs-add-project)))
+      "p t" #'treemacs-add-project-to-workspace)))
 
 (provide 'rk-treemacs)
 
