@@ -42,6 +42,13 @@ $0
 (defconst autoinsert-funcs-sh-form
   '((sh-mode . "Shell Script") . autoinsert-funcs--sh-template-string))
 
+;;; Python
+
+(defconst autoinsert-funcs-py-form
+  '((python-mode . "Python")
+    nil
+    "# -*- coding: utf-8 -*-\n\n"))
+
 ;;; Haskell
 
 (defun autoinsert-funcs-hs-module-name ()
@@ -104,6 +111,7 @@ $0
 (defconst autoinsert-funcs-forms
   (list autoinsert-funcs-sh-form
         autoinsert-funcs-el-form
+        autoinsert-funcs-py-form
         autoinsert-funcs-hs-src-form
         autoinsert-funcs-hs-test-form
         autoinsert-funcs-html-form))
