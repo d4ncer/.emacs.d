@@ -21,7 +21,9 @@
         (call-interactively 'sp-backward-delete-char)
       (apply fn args)))
   :init
-  (setq evil-want-integration nil)
+  (progn
+    (setq evil-want-integration nil)
+    (setq evil-want-keybinding nil))
   :config
   (progn
     (evil-mode +1)
