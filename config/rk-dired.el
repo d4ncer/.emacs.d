@@ -12,20 +12,19 @@
   (require 'use-package))
 
 (require 'rk-emacs)
-(require 'spacemacs-keys)
-
-(autoload 'evil-define-key "evil-core")
+(require 'general)
+(require 'definers)
 
 (use-package dired
   :defer t
   :commands (dired dired-hide-details-mode)
-  :bind (:map spacemacs-keys-default-map ("d" . dired))
   :preface
   (progn
     (autoload 'diredp-next-line "dired+")
     (autoload 'diredp-previous-line "dired+")
     (autoload 'diredp-up-directory-reuse-dir-buffer "dired+")
     (autoload 'wdired-change-to-wdired-mode "wdired")
+    (autoload 'diff-hl-dired-mode-unless-remote "diff-hl-dired")
 
     (defun rk-dired--sort-directories-first (&rest _)
       "Sort dired listings with directories first."
@@ -37,45 +36,40 @@
 
   :init
   (progn
-    (autoload 'diff-hl-dired-mode-unless-remote "diff-hl-dired")
-    (spacemacs-keys-declare-prefix-for-mode 'dired-mode "s" "subdir")
-    (spacemacs-keys-set-leader-keys "d" #'dired)
-    (spacemacs-keys-set-leader-keys-for-major-mode 'dired-mode
-      "d"  #'dired-hide-details-mode
-      "si" #'dired-insert-subdir
-      "sd" #'dired-kill-subdir
-      "w"  #'wdired-change-to-wdired-mode)
-
+    (rk-leader-def
+      "d" '(dired :wk "dired"))
     (add-hook 'dired-mode-hook #'diff-hl-dired-mode-unless-remote)
     (add-hook 'dired-mode-hook #'dired-hide-details-mode))
 
   :config
   (progn
-
+    (rk-local-leader-def :keymaps 'dired-mode-map
+      "s" '(nil :ignore t :wk "subdir")
+      "d" '(dired-hide-details-mode :wk "toggle details")
+      "si" '(dired-insert-subdir :wk "make subdir")
+      "sd" '(dired-kill-subdir :wk "kill subdir")
+      "w" '(wdired-change-to-wdired-mode :wk "edit as buffer"))
     (put 'dired-find-alternate-file 'disabled nil)
-
     (setq-default dired-listing-switches "-alhv")
     (setq dired-dwim-target t)
     (setq dired-auto-revert-buffer t)
     (advice-add 'dired-readin :after #'rk-dired--sort-directories-first)
-
-    (evil-define-key 'normal dired-mode-map (kbd "C-;") #'diredp-up-directory-reuse-dir-buffer)
-    (evil-define-key 'normal dired-mode-map (kbd "j") #'diredp-next-line)
-    (evil-define-key 'normal dired-mode-map (kbd "k") #'diredp-previous-line)))
+    (general-def 'normal dired-mode-map
+      "C-;" #'diredp-up-directory-reuse-dir-buffer
+      "j" #'diredp-next-line
+      "k" #'diredp-previous-line)))
 
 (use-package dired-x
   :commands (dired-omit-mode)
   :init
   (progn
     (add-hook 'dired-load-hook (lambda () (load "dired-x")))
-    (spacemacs-keys-set-leader-keys-for-major-mode
-      'dired-mode
-      "h" #'dired-omit-mode)
-
     (add-hook 'dired-mode-hook #'dired-omit-mode))
   :config
   (progn
-    (evil-define-key 'normal dired-mode-map (kbd "h") #'dired-omit-mode)
+    (rk-local-leader-def :keymaps 'dired-mode-map
+      "h" '(dired-omit-mode :wk "switch to omit mode"))
+    (general-def 'normal dired-mode-map "h" #'dired-omit-mode)
     (setq dired-omit-verbose nil)
     (setq dired-clean-up-buffers-too t)
     (setq dired-omit-files (rx bol (or (+ ".")
@@ -87,7 +81,11 @@
   :hook (dired-mode . dired-hide-details-mode))
 
 (use-package wdired
-  :after dired)
+  :after dired
+  :config
+  (rk-local-leader-def :keymaps 'wdired-mode-map
+    "c" '(wdired-finish-edit :wk "commit changes")
+    "k" '(wdired-abort-changes :wk "abort edit")))
 
 (provide 'rk-dired)
 

@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 
 (use-package help-fns+
   :straight t
@@ -20,10 +20,10 @@
              describe-keymap)
   :init
   (progn
-    (spacemacs-keys-set-leader-keys
-      "h d K" #'describe-keymap
-      "h d F" #'describe-file
-      "h d B" #'describe-buffer)))
+    (rk-leader-def
+      "h d K" '(describe-keymap :wk "describe keymap")
+      "h d F" '(describe-file :wk "describe file")
+      "h d B" '(describe-buffer :wk "describe buffer"))))
 
 (provide 'rk-help)
 

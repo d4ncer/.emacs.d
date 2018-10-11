@@ -16,91 +16,74 @@
 (require 'dash-functional)
 (require 'f)
 (require 's)
-(require 'spacemacs-keys)
 (require 'subr-x)
 
-(autoload 'evil-define-key "evil-core")
 (autoload 'projectile-project-name "projectile")
 
 ;; Use conf mode for play routes files.
 
 (add-to-list 'auto-mode-alist (cons "/routes\\'" #'conf-unix-mode))
 
+;;; TODO: Keybinds will be setup at some point in the future.
+
 ;; Keybindings are separated into those that are loaded before and after ensime.
 
-(defconst rk-scala--initial-leader-keys
-  '(("n s" . ensime)))
+;; (defconst rk-scala--initial-leader-keys
+;;   '(("n s" . ensime)))
 
-(defconst rk-scala--ensime-leader-keys
-  '(("/" . ensime-search)
-    ("'" . ensime-inf-switch)
-    ("b c" . ensime-sbt-do-clean)
-    ("b b" . ensime-sbt-do-compile)
-    ("b i" . ensime-sbt-switch)
-    ("b p" . ensime-sbt-do-package)
-    ("b r" . ensime-sbt-do-run)
-    ("c a" . ensime-typecheck-all)
-    ("c c" . ensime-typecheck-current-buffer)
-    ("e e" . ensime-print-errors-at-point)
-    ("e l" . ensime-show-all-errors-and-warnings)
-    ("e s" . ensime-stacktrace-switch)
-    ("g g" . ensime-edit-definition)
-    ("g i" . ensime-goto-impl)
-    ("g p" . ensime-pop-find-definition-stack)
-    ("g t" . ensime-goto-test)
-    ("h T" . ensime-type-at-point-full-name)
-    ("h h" . ensime-show-doc-for-symbol-at-point)
-    ("h t" . ensime-type-at-point)
-    ("h u" . ensime-show-uses-of-symbol-at-point)
-    ("i i" . ensime-import-type-at-point)
-    ("i p" . ensime-inspect-project-package)
-    ("l"  . rk-scala-send-file)
-    ("n F" . ensime-reload-open-files)
-    ("n s" . ensime)
-    ("p" . rk-scala-send-as-paste)
-    ("r D" . ensime-undo-peek)
-    ("r a" . ensime-refactor-add-type-annotation)
-    ("r f" . ensime-format-source)
-    ("r i" . ensime-refactor-diff-organize-imports)
-    ("r l" . ensime-refactor-diff-inline-local)
-    ("r m" . ensime-refactor-diff-extract-method)
-    ("r r" . ensime-refactor-diff-rename)
-    ("r t" . ensime-import-type-at-point)
-    ("r v" . ensime-refactor-diff-extract-local)
-    ("t a" . ensime-sbt-do-test-dwim)
-    ("t r" . ensime-sbt-do-test-quick-dwim)
-    ("t t" . ensime-sbt-do-test-only-dwim)))
+;; (defconst rk-scala--ensime-leader-keys
+;;   '(("/" . ensime-search)
+;;     ("'" . ensime-inf-switch)
+;;     ("b c" . ensime-sbt-do-clean)
+;;     ("b b" . ensime-sbt-do-compile)
+;;     ("b i" . ensime-sbt-switch)
+;;     ("b p" . ensime-sbt-do-package)
+;;     ("b r" . ensime-sbt-do-run)
+;;     ("c a" . ensime-typecheck-all)
+;;     ("c c" . ensime-typecheck-current-buffer)
+;;     ("e e" . ensime-print-errors-at-point)
+;;     ("e l" . ensime-show-all-errors-and-warnings)
+;;     ("e s" . ensime-stacktrace-switch)
+;;     ("g g" . ensime-edit-definition)
+;;     ("g i" . ensime-goto-impl)
+;;     ("g p" . ensime-pop-find-definition-stack)
+;;     ("g t" . ensime-goto-test)
+;;     ("h T" . ensime-type-at-point-full-name)
+;;     ("h h" . ensime-show-doc-for-symbol-at-point)
+;;     ("h t" . ensime-type-at-point)
+;;     ("h u" . ensime-show-uses-of-symbol-at-point)
+;;     ("i i" . ensime-import-type-at-point)
+;;     ("i p" . ensime-inspect-project-package)
+;;     ("l"  . rk-scala-send-file)
+;;     ("n F" . ensime-reload-open-files)
+;;     ("n s" . ensime)
+;;     ("p" . rk-scala-send-as-paste)
+;;     ("r D" . ensime-undo-peek)
+;;     ("r a" . ensime-refactor-add-type-annotation)
+;;     ("r f" . ensime-format-source)
+;;     ("r i" . ensime-refactor-diff-organize-imports)
+;;     ("r l" . ensime-refactor-diff-inline-local)
+;;     ("r m" . ensime-refactor-diff-extract-method)
+;;     ("r r" . ensime-refactor-diff-rename)
+;;     ("r t" . ensime-import-type-at-point)
+;;     ("r v" . ensime-refactor-diff-extract-local)
+;;     ("t a" . ensime-sbt-do-test-dwim)
+;;     ("t r" . ensime-sbt-do-test-quick-dwim)
+;;     ("t t" . ensime-sbt-do-test-only-dwim)))
 
-(defconst rk-scala--prefix-keys
-  '(("m b" . "build")
-    ("m c" . "check")
-    ("m d" . "debug")
-    ("m e" . "errors")
-    ("m g" . "goto")
-    ("m h" . "docs")
-    ("m i" . "inspect")
-    ("m n" . "ensime")
-    ("m r" . "refactor")
-    ("m t" . "test")
-    ("m s" . "repl")
-    ("m y" . "yank")))
-
-(use-package which-key
-  :config
-  (progn
-
-    (defconst rk-scala--boring-prefixes
-      '("rk-scala-"
-        "ensime-sbt-do-"
-        "ensime-sbt-"
-        "ensime-refactor-diff-"
-        "ensime-refactor-"
-        "ensime-"))
-
-    (let ((match-suffix (rx-to-string `(and bos (or ,@rk-scala--boring-prefixes) (group (+ nonl)))
-                                      t)))
-      (push `((nil . ,match-suffix) . (nil . "\\1"))
-            which-key-replacement-alist))))
+;; (defconst rk-scala--prefix-keys
+;;   '(("m b" . "build")
+;;     ("m c" . "check")
+;;     ("m d" . "debug")
+;;     ("m e" . "errors")
+;;     ("m g" . "goto")
+;;     ("m h" . "docs")
+;;     ("m i" . "inspect")
+;;     ("m n" . "ensime")
+;;     ("m r" . "refactor")
+;;     ("m t" . "test")
+;;     ("m s" . "repl")
+;;     ("m y" . "yank")))
 
 ;; Load modes.
 
@@ -110,6 +93,37 @@
   :mode (("\\.scala\\'" . scala-mode))
   :interpreter
   ("scala" . scala-mode)
+  :general
+  (:keymaps 'ensime-inspector-mode-map :states 'normal
+            "M-." #'ensime-inspector-browse-source
+            "K" #'ensime-inspector-browse-doc
+            "q" #'ensime-popup-buffer-quit-function
+            "s-." #'ensime-inspector-forward-page
+            "s-," #'ensime-inspector-backward-page)
+  (:keymaps 'ensime-refactor-info-map :states 'normal
+            "k" #'rk-scala/ensime-refactor-cancel
+            "q" #'rk-scala/ensime-refactor-cancel
+            "c" #'rk-scala/ensime-refactor-accept
+            "RET" #'rk-scala/ensime-refactor-accept)
+  (:keymaps 'ensime-compile-result-map :states 'normal
+            "g" #'ensime-show-all-errors-and-warnings
+            "TAB" #'forward-button
+            "<backtab>" #'backward-buton
+            "n" #'forward-button
+            "N" #'backward-button)
+  (:keymaps 'ensime-mode-map :states '(normal insert)
+            "C-c C-l" #'rk-scala-send-as-paste
+            "M-." #'ensime-edit-definition
+            "M-," #'ensime-pop-find-definition-stack
+            "C-c C-z" #'ensime-inf-switch)
+  (:keymaps 'ensime-mode-map :states 'normal
+            "K" #'ensime-type-at-point
+            "gd" #'ensime-edit-definition
+            "gb" #'ensime-pop-find-definition-stack)
+  (:keymaps 'ensime-popup-buffer-map :states 'normal
+            "q" #'ensime-popup-buffer-quit-function)
+  (:keymaps 'ensime-inf-mode-map :states '(normal insert)
+            "C-c C-z" #'rk-scala-switch-to-source)
   :config
   (progn
     (setq scala-indent:align-forms t)
@@ -126,6 +140,8 @@
 
 (use-package sbt-mode
   :commands (sbt-start sbt-command)
+  :defines (sbt:buffer-project-root)
+  :functions (sbt:find-root-impl)
   :preface
   (defun rk-set-sbt-root ()
     "Sets sbt root for the given project."
@@ -153,8 +169,38 @@
     (autoload 'comint-send-eof "comint")
     (autoload 'comint-send-string "comint")
     (autoload 'ensime-inf-load-file "ensime-inf")
+    (autoload 'ensime--refresh-config-sentinel "ensime-config")
 
-    ;; Define commands for working with the repl.
+    (defun rk-scala--display-ensime-process-buffer-on-error (&rest _)
+      (let* ((bufname (format "*ENSIME-%s*" (projectile-project-name)))
+             (buf (get-buffer-create bufname)))
+        (when-let (proc (get-buffer-process buf))
+          (set-process-sentinel proc
+                                (lambda (p _)
+                                  (when (and (/= 0 (process-exit-status p))
+                                             (buffer-live-p buf))
+                                    (display-buffer buf)))))))
+
+    (defun rk-scala--delete-existing-ensime-process-buffer (&rest _)
+      (let ((bufname (format "*ENSIME-%s*" (projectile-project-name))))
+        (when (get-buffer bufname)
+          (kill-buffer bufname))))
+
+    (defconst rk-scala--ensime-gen-config-buffer "*ensime-gen-config*")
+
+    (defun rk-scala--refresh-config-sbt (project-root task on-success-fn)
+      (let ((default-directory (file-name-as-directory project-root))
+            (compilation-buffer-name-function (lambda (_) rk-scala--ensime-gen-config-buffer)))
+        (unless (executable-find ensime-sbt-command) (error "SBT command not found"))
+
+        (compile (format "%s -Dsbt.log.noformat=true %s" ensime-sbt-command task))
+
+        (with-current-buffer (get-buffer rk-scala--ensime-gen-config-buffer)
+          (display-buffer (current-buffer))
+          (set-process-sentinel (get-buffer-process (current-buffer))
+                                (lambda (process event)
+                                  (ensime--refresh-config-sentinel process event on-success-fn))))
+        (message "Updating ENSIME config...")))
 
     (defun rk-scala-switch-to-source ()
       (interactive)
@@ -163,6 +209,7 @@
                                (buffer-list)))
                   (win (display-buffer buf)))
         (select-window win)))
+
 
     (defun rk-scala-send-as-paste (beg end)
       (interactive (if (region-active-p)
@@ -181,99 +228,6 @@
       (interactive (list (buffer-file-name)))
       (save-buffer)
       (ensime-inf-load-file file)))
-
-  :init
-  (progn
-    (-each rk-scala--prefix-keys
-      (-lambda ((prefix . name))
-        (spacemacs-keys-declare-prefix-for-mode 'scala-mode prefix name)))
-
-    (-each rk-scala--initial-leader-keys
-      (-lambda ((key . command))
-        (spacemacs-keys-set-leader-keys-for-major-mode 'scala-mode key command))))
-
-  :config
-  (progn
-    (-each rk-scala--ensime-leader-keys
-      (-lambda ((key . command))
-        (spacemacs-keys-set-leader-keys-for-major-mode 'scala-mode key command)))
-
-    (dolist (state '(normal insert))
-      (eval `(evil-define-key ',state ensime-mode-map (kbd "C-c C-l") 'rk-scala-send-as-paste)))
-
-    (dolist (state '(normal insert))
-      (eval `(evil-define-key ',state ensime-inf-mode-map (kbd "C-c C-z") 'rk-scala-switch-to-source)))
-
-    (dolist (state '(normal insert))
-      (eval `(evil-define-key ',state ensime-mode-map
-               (kbd "M-.") 'ensime-edit-definition
-               (kbd "M-,") 'ensime-pop-find-definition-stack
-               (kbd "C-c C-z") 'ensime-inf-switch)))
-
-    (evil-define-key 'normal ensime-popup-buffer-map
-      (kbd "q") 'ensime-popup-buffer-quit-function)
-
-    (evil-define-key 'normal ensime-mode-map
-      (kbd "K") 'ensime-inspect-type-at-point)
-
-    (evil-define-key 'normal ensime-inspector-mode-map
-      (kbd "M-.") 'ensime-inspector-browse-source
-      (kbd "K") 'ensime-inspector-browse-doc
-      (kbd "q") 'ensime-popup-buffer-quit-function
-      (kbd ",") 'ensime-inspector-backward-page
-      (kbd ".") 'ensime-inspector-forward-page
-      (kbd "^") 'ensime-inspector-backward-page)
-
-    (evil-define-key 'normal ensime-refactor-info-map
-      (kbd "q") 'rk-scala/ensime-refactor-cancel
-      (kbd "c") 'rk-scala/ensime-refactor-accept
-      (kbd "RET") 'rk-scala/ensime-refactor-accept)
-
-    (evil-define-key 'normal ensime-compile-result-map
-      (kbd "g") 'ensime-show-all-errors-and-warnings
-      (kbd "TAB") 'forward-button
-      (kbd "<backtab>") 'backward-button
-      (kbd "M-n") 'forward-button
-      (kbd "M-p") 'backward-button
-      (kbd "n") 'forward-button
-      (kbd "N") 'backward-button))
-
-  :preface
-  (progn
-    (defun rk-scala--delete-existing-ensime-process-buffer (&rest _)
-      (let ((bufname (format "*ENSIME-%s*" (projectile-project-name))))
-        (when (get-buffer bufname)
-          (kill-buffer bufname))))
-
-    (defun rk-scala--display-ensime-process-buffer-on-error (&rest _)
-      (let* ((bufname (format "*ENSIME-%s*" (projectile-project-name)))
-             (buf (get-buffer-create bufname)))
-        (when-let (proc (get-buffer-process buf))
-          (set-process-sentinel proc
-                                (lambda (p _)
-                                  (when (and (/= 0 (process-exit-status p))
-                                             (buffer-live-p buf))
-                                    (display-buffer buf)))))))
-
-    ;; Use compilation mode for ensime config generation buffers.
-
-    (autoload 'ensime--refresh-config-sentinel "ensime-config")
-
-    (defconst rk-scala--ensime-gen-config-buffer "*ensime-gen-config*")
-
-    (defun rk-scala--refresh-config-sbt (project-root task on-success-fn)
-      (let ((default-directory (file-name-as-directory project-root))
-            (compilation-buffer-name-function (lambda (_) rk-scala--ensime-gen-config-buffer)))
-        (unless (executable-find ensime-sbt-command) (error "SBT command not found"))
-
-        (compile (format "%s -Dsbt.log.noformat=true %s" ensime-sbt-command task))
-
-        (with-current-buffer (get-buffer rk-scala--ensime-gen-config-buffer)
-          (display-buffer (current-buffer))
-          (set-process-sentinel (get-buffer-process (current-buffer))
-                                (lambda (process event)
-                                  (ensime--refresh-config-sentinel process event on-success-fn))))
-        (message "Updating ENSIME config..."))))
 
   :config
   (progn
@@ -329,6 +283,7 @@
 
 (use-package ensime-company
   :after ensime
+  :defines (company-backends company-idle-delay)
   :preface
   (progn
     (autoload 'company-mode "company")
@@ -353,38 +308,40 @@
   :config
   (add-hook 'ensime-mode-hook #'rk-scala--disable-flycheck-scala))
 
+;; TODO: Setup snippets at some point
+
 ;; Snippet utilities
 
 
 ;; Slick table mapping template
 
-(defun rk-scala-yasnippet-slick-star-fields (attrs)
-  (let ((names (--map (plist-get it :name) (rk-scala-yasnippet--parse-attrs attrs))))
-    (s-join ", " names)))
+;; (defun rk-scala-yasnippet-slick-star-fields (attrs)
+;;   (let ((names (--map (plist-get it :name) (rk-scala-yasnippet--parse-attrs attrs))))
+;;     (s-join ", " names)))
 
-(defun rk-scala-yasnippet-slick-column-defs (attrs)
-  (let ((defs (-map 'scala-yasnippet--slick-attr-to-def (rk-scala-yasnippet--parse-attrs attrs)))
-        (indent (current-indentation)))
-    (s-join (concat "\n" (s-repeat indent " ")) defs)))
+;; (defun rk-scala-yasnippet-slick-column-defs (attrs)
+;;   (let ((defs (-map 'scala-yasnippet--slick-attr-to-def (rk-scala-yasnippet--parse-attrs attrs)))
+;;         (indent (current-indentation)))
+;;     (s-join (concat "\n" (s-repeat indent " ")) defs)))
 
-(defun rk-scala-yasnippet--slick-attr-to-def (attr)
-  (-let [(&plist :name name :type type) attr]
-    (format "def %s = column[%s](\"%s\")" name type name)))
+;; (defun rk-scala-yasnippet--slick-attr-to-def (attr)
+;;   (-let [(&plist :name name :type type) attr]
+;;     (format "def %s = column[%s](\"%s\")" name type name)))
 
-(defun rk-scala-yasnippet--parse-attrs (attrs)
-  (let ((ctor-args (s-split (rx (* space) "," (* space)) attrs)))
-    (--map (-let [(_ name type) (s-match (rx (group (*? nonl))
-                                             (* space) ":" (* space)
-                                             (group (* nonl)))
-                                         (s-trim it))]
-             (list :name (or name "x") :type (or type "T")))
-           ctor-args)))
+;; (defun rk-scala-yasnippet--parse-attrs (attrs)
+;;   (let ((ctor-args (s-split (rx (* space) "," (* space)) attrs)))
+;;     (--map (-let [(_ name type) (s-match (rx (group (*? nonl))
+;;                                              (* space) ":" (* space)
+;;                                              (group (* nonl)))
+;;                                          (s-trim it))]
+;;              (list :name (or name "x") :type (or type "T")))
+;;            ctor-args)))
 
-;; Test fixtures
+;; ;; Test fixtures
 
-(defun rk-scala-yasnippet-test-fixture-name ()
-  (or (ignore-errors (f-filename (f-no-ext (buffer-file-name))))
-      "TestFixture"))
+;; (defun rk-scala-yasnippet-test-fixture-name ()
+;;   (or (ignore-errors (f-filename (f-no-ext (buffer-file-name))))
+;;       "TestFixture"))
 
 
 (provide 'rk-scala)

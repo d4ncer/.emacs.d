@@ -9,99 +9,69 @@
 ;;; Code:
 
 (eval-when-compile
-  (autoload 'evil-define-key "evil-core")
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'general)
+(require 'definers)
 
 (use-package markdown-mode
   :straight t
   :mode (("README\\.md\\'" . gfm-mode)
          ("\\.md\\'" . markdown-mode)
          ("\\.markdown\\'" . markdown-mode))
+  :general
+  (:keymaps 'markdown-mode-map :states '(normal motion insert visual)
+            "s-b" #'markdown-insert-bold
+            "s-i" #'markdown-insert-italic
+            "s-s" #'markdown-insert-strike-through
+            "M-j" #'markdown-move-list-item-down
+            "M-k" #'markdown-move-list-item-up
+            "M-h" #'markdown-promote-list-item
+            "M-l" #'markdown-demote-list-item)
+  (:keymaps 'gfm-mode-map :states '(normal motion insert visual)
+            "s-b" #'markdown-insert-bold
+            "s-i" #'markdown-insert-italic
+            "s-s" #'markdown-insert-strike-through
+            "M-j" #'markdown-move-list-item-down
+            "M-k" #'markdown-move-list-item-up
+            "M-h" #'markdown-promote-list-item
+            "M-l" #'markdown-demote-list-item)
   :init
   (progn
-    (evil-define-key 'normal markdown-mode-map (kbd "M-j") #'markdown-move-list-item-down)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-k") #'markdown-move-list-item-up)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-h") #'markdown-promote-list-item)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-l") #'markdown-demote-list-item)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-J") #'markdown-move-subtree-down)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-K") #'markdown-move-subtree-up)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-H") #'markdown-promote-subtree)
-    (evil-define-key 'normal markdown-mode-map (kbd "M-L") #'markdown-demote-subtree)
+    (rk-local-leader-def :keymaps 'markdown-mode-map
+      "f" '(markdown-fill-paragraph :wk "wrap")
 
-    (spacemacs-keys-declare-prefix-for-mode 'markdown-mode "m i" "insert")
-    (spacemacs-keys-declare-prefix-for-mode 'markdown-mode "m h" "header")
-    (spacemacs-keys-declare-prefix-for-mode 'markdown-mode "m o" "open")
-    (spacemacs-keys-set-leader-keys-for-major-mode 'markdown-mode
-      "." #'markdown-complete
-      "f" #'markdown-fill-paragraph
-      "if" #'markdown-insert-footnote
-      "il" #'markdown-insert-link
-      "ii" #'markdown-insert-image
-      "ic" #'markdown-insert-gfm-code-block
-      "i-" #'markdown-insert-hr
+      "b" '(markdown-insert-bold :wk "bold")
+      "t" '(markdown-insert-italic :wk "italic")
+      "s" '(markdown-insert-strike-through :wk "strike through")
 
-      "b" #'markdown-insert-bold
-      "t" #'markdown-insert-italic
-      "s" #'markdown-insert-strike-through
+      "i"  '(:ignore t :wk "insert")
+      "il" '(markdown-insert-link :wk "link")
+      "ii" '(markdown-insert-image :wk "image")
+      "ic" '(markdown-insert-gfm-code-block :wk "code block")
+      "i-" '(markdown-insert-hr)
 
-      "1" #'markdown-insert-header-atx-1
-      "2" #'markdown-insert-header-atx-2
-      "3" #'markdown-insert-header-atx-3
-      "4" #'markdown-insert-header-atx-4
-      "5" #'markdown-insert-header-atx-5
-      "!" #'markdown-insert-header-setext-1
-      "@" #'markdown-insert-header-setext-2
+      "o"  '(:ignore t :wk "open")
+      "oo" '(markdown-open :wk "open with Marked")
+      "of" '(markdown-follow-thing-at-point "follow thing"))
 
-      "hh" #'markdown-insert-header-dwim
-      "hH" #'markdown-insert-header-setext-dwim
-      "hp" #'markdown-promote
-      "hd" #'markdown-demote
+    (rk-local-leader-def :keymaps 'gfm-mode-map
+      "f" '(markdown-fill-paragraph :wk "wrap")
 
-      "oo" #'markdown-open
-      "of" #'markdown-follow-thing-at-point)
+      "b" '(markdown-insert-bold :wk "bold")
+      "t" '(markdown-insert-italic :wk "italic")
+      "s" '(markdown-insert-strike-through :wk "strike through")
 
-    (evil-define-key 'normal gfm-mode-map (kbd "M-j") #'markdown-move-list-item-down)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-k") #'markdown-move-list-item-up)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-h") #'markdown-promote-list-item)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-l") #'markdown-demote-list-item)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-J") #'markdown-move-subtree-down)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-K") #'markdown-move-subtree-up)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-H") #'markdown-promote-subtree)
-    (evil-define-key 'normal gfm-mode-map (kbd "M-L") #'markdown-demote-subtree)
+      "i"  '(:ignore t :wk "insert")
+      "il" '(markdown-insert-link :wk "link")
+      "ii" '(markdown-insert-image :wk "image")
+      "ic" '(markdown-insert-gfm-code-block :wk "code block")
+      "i-" '(markdown-insert-hr)
 
-    (spacemacs-keys-declare-prefix-for-mode 'gfm-mode "m i" "insert")
-    (spacemacs-keys-declare-prefix-for-mode 'gfm-mode "m h" "header")
-    (spacemacs-keys-declare-prefix-for-mode 'gfm-mode "m o" "open")
-    (spacemacs-keys-set-leader-keys-for-major-mode 'gfm-mode
-      "." #'markdown-complete
-      "f" #'markdown-fill-paragraph
-      "if" #'markdown-insert-footnote
-      "il" #'markdown-insert-link
-      "ii" #'markdown-insert-image
-      "ic" #'markdown-insert-gfm-code-block
-      "i-" #'markdown-insert-hr
+      "o"  '(:ignore t :wk "open")
+      "oo" '(markdown-open :wk "open with Marked")
+      "of" '(markdown-follow-thing-at-point "follow thing"))
 
-      "b" #'markdown-insert-bold
-      "t" #'markdown-insert-italic
-      "s" #'markdown-insert-strike-through
-
-      "1" #'markdown-insert-header-atx-1
-      "2" #'markdown-insert-header-atx-2
-      "3" #'markdown-insert-header-atx-3
-      "4" #'markdown-insert-header-atx-4
-      "5" #'markdown-insert-header-atx-5
-      "!" #'markdown-insert-header-setext-1
-      "@" #'markdown-insert-header-setext-2
-
-      "hh" #'markdown-insert-header-dwim
-      "hH" #'markdown-insert-header-setext-dwim
-      "hp" #'markdown-promote
-      "hd" #'markdown-demote
-
-      "oo" #'markdown-open
-      "of" #'markdown-follow-thing-at-point)
     (setq markdown-open-command "/usr/local/bin/mark")
     (setq markdown-command "multimarkdown")))
 

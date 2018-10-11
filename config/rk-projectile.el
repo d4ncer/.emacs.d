@@ -11,8 +11,9 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'definers)
+(require 'general)
 (require 'paths)
-(require 'spacemacs-keys)
 
 (use-package projectile
   :straight t
@@ -32,15 +33,15 @@
 
   :init
   (progn
-    (spacemacs-keys-set-leader-keys
-      "p!" #'projectile-run-shell-command-in-root
-      "p&" #'projectile-run-async-shell-command-in-root
-      "pI" #'projectile-invalidate-cache
-      "pc" #'projectile-compile-project
-      "pC" #'projectile-cleanup-known-projects
-      "pr" #'projectile-replace
-      "pt" #'projectile-test-project
-      "pu" #'projectile-run-project))
+    (rk-leader-def
+      "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
+      "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
+      "pI" '(projectile-invalidate-cache :wk "invalidate cache")
+      "pc" '(projectile-compile-project :wk "compile project")
+      "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
+      "pr" '(projectile-replace :wk "replace (project)")
+      "pt" '(projectile-test-project :wk "test (project)")
+      "pu" '(projectile-run-project :wk "run (project)")))
 
   :config
   (progn
@@ -80,12 +81,12 @@
              counsel-projectile-switch-to-buffer
              counsel-projectile-rg)
   :init
-  (spacemacs-keys-set-leader-keys
-    "pf" #'counsel-projectile-find-file
-    "pd" #'counsel-projectile-find-dir
-    "pb" #'counsel-projectile-switch-to-buffer
-    "pp" #'counsel-projectile-switch-project
-    "/"  #'counsel-projectile-rg)
+  (rk-leader-def
+    "pf" '(counsel-projectile-find-file :wk "find file (project)")
+    "pd" '(counsel-projectile-find-dir :wk "find dir (project)")
+    "pb" '(counsel-projectile-switch-to-buffer :wk "switch buffer (project)")
+    "pp" '(counsel-projectile-switch-project :wk "switch project")
+    "/"  '(counsel-projectile-rg :wk "search (project)"))
 
   :config
   (progn

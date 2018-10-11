@@ -11,6 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
+;; TODO: Need to add bindings
 (use-package lsp-ui
   :straight t
   :after lsp-mode

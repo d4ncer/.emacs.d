@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 
 (use-package rk-string-fns
   :commands
@@ -21,11 +21,11 @@
    rk-word-or-region-to-dashed)
 
   :init
-  (spacemacs-keys-set-leader-keys
-    "t l" #'rk-word-or-region-to-camel-lower
-    "t u" #'rk-word-or-region-to-camel-upper
-    "t s" #'rk-word-or-region-to-snake
-    "t d" #'rk-word-or-region-to-dashed))
+  (rk-leader-def
+    "t l" '(rk-word-or-region-to-camel-lower :wk "to lower camel")
+    "t u" '(rk-word-or-region-to-camel-upper :wk "to upper camel")
+    "t s" '(rk-word-or-region-to-snake :wk "to snake")
+    "t d" '(rk-word-or-region-to-dashed :wk "to dashed")))
 
 (provide 'rk-string)
 

@@ -14,9 +14,9 @@
 (require 'f)
 (require 's)
 (require 'noflet)
+(require 'definers)
 
 (require 'paths)
-(require 'spacemacs-keys)
 
 (autoload 'thing-at-point-looking-at "thingatpt")
 (autoload 'ansi-color-apply-on-region "ansi-color")
@@ -130,11 +130,11 @@ Optional arg JUSTIFY will justify comments and strings."
 
 ;; Window move hotkeys
 
-(spacemacs-keys-set-leader-keys
-  "wh" #'windmove-left
-  "wl" #'windmove-right
-  "wk" #'windmove-up
-  "wj" #'windmove-down)
+(rk-leader-def
+  "wh" '(windmove-left :wk "move left")
+  "wl" '(windmove-right :wk "move right")
+  "wk" '(windmove-up :wk "move up")
+  "wj" '(windmove-down :wk "move down"))
 
 ;; Unlimited print length for eval-expression.
 (setq eval-expression-print-length nil)
@@ -605,7 +605,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t
   :defer t
   :init
-  (spacemacs-keys-set-leader-keys "a m w" 'world-time-list)
+  (rk-leader-def "a m w" '(world-time-list :wk "world time"))
   :config
   (progn
     (setq display-time-world-list '(("Pacific/Auckland" "NZT")
@@ -622,7 +622,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t
   :config
   (progn
-    (push (list (rx (or "*Cargo" "*go" "*Racer") space (group (one-or-more anything)) "*") :noselect t :regexp t) popwin:special-display-config)
+    (push (list (rx (or "*Cargo" "*go" "*Racer" "*godoc") space (group (one-or-more anything)) "*") :noselect t :regexp t) popwin:special-display-config)
     (popwin-mode 1)))
 
 (use-package keychain-environment

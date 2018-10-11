@@ -11,9 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
-
-(autoload 'evil-define-key "evil-core")
+(require 'definers)
 
 (use-package haskell-mode
   :straight t
@@ -70,6 +68,10 @@
 
 (use-package haskell-customize
   :after haskell-mode
+
+  :defines (haskell-stylish-on-save
+            haskell-completing-read-function
+            haskell-interactive-popup-errors)
   :config
   (progn
     (setq haskell-stylish-on-save t)
@@ -80,10 +82,12 @@
 (use-package haskell-compile
   :after haskell-mode
   :commands (haskell-compile)
+  :defines (haskell-compile-command
+            haskell-compile-cabal-build-command)
   :config
   (progn
-    (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "c" #'haskell-compile)
+    (rk-local-leader-def :keymaps 'haskell-mode-map
+      "c" '(haskell-compile :wk "compile"))
 
     (setq haskell-compile-command "stack exec -- ghc -Wall -ferror-spans -fforce-recomp -c %s")
     (setq haskell-compile-cabal-build-command "stack build --ghc-options -ferror-spans")))
@@ -91,13 +95,13 @@
 
 (use-package haskell-cabal
   :after haskell-mode
-  :config
-  (define-key haskell-cabal-mode-map (kbd "C-c C-c") 'haskell-compile))
+  :general
+  (:keymaps 'haskell-cabal-mode-map
+            "C-c C-c" #'haskell-compile))
 
 
 (use-package haskell-doc
   :after haskell-mode)
-
 
 (use-package haskell-interactive-mode
   :after haskell-mode
@@ -108,21 +112,18 @@
 
 (use-package haskell-debug
   :after haskell-mode
-  :config
-  (with-no-warnings
-    (evilified-state-evilify-map haskell-debug-mode-map
-      :mode haskell-debug-mode
-      :bindings
-      (kbd "n") #'haskell-debug/next
-      (kbd "N") #'haskell-debug/previous
-      (kbd "p") #'haskell-debug/previous
-      (kbd "q") #'quit-window)))
+  :general
+  (:keymaps 'haskell-debug-mode-map :states '(normal motion visual emacs)
+            "n" #'haskell-debug/next
+            "p" #'haskell-debug/previous
+            "q" #'quit-window))
 
 
 (use-package haskell-presentation-mode
   :after haskell-mode
-  :config
-  (evil-define-key 'normal haskell-presentation-mode-map (kbd "q") #'quit-window))
+  :general
+  (:keymaps 'haskell-presentation-mode-map :states '(normal motion)
+            "q" #'quit-window))
 
 (use-package intero
   :straight t
@@ -157,48 +158,38 @@
   :init
   (add-hook 'haskell-mode-hook #'rk-haskell--maybe-intero-mode)
 
-  :bind
-  (:map
-   intero-mode-map
-   ("M-." . intero-goto-definition)
-   ("M-," . pop-tag-mark)
-   :map
-   intero-repl-mode-map
-   ("C-." . intero-repl-switch-back)
-   ("C-d" . delete-window))
+  :general
+  (:keymaps 'intero-mode-map :states '(normal insert)
+            "C-." #'intero-repl)
+  (:keymaps 'intero-repl-mode-map
+            "C-." #'intero-goto-defintion
+            "C-d" #'kill-buffer-and-window)
+  (:keymaps 'haskell-mode-map :states '(normal motion)
+            "gd" #'intero-goto-definition)
 
   :config
   (progn
-    (evil-define-key 'normal haskell-mode-map (kbd "gd") #'intero-goto-definition)
-    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m r" "repl")
-    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m i" "intero")
-    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m g" "goto")
+    (rk-local-leader-def :keymaps 'haskell-mode-map
+      "i"   '(:ignore t :wk "intero")
+      "i i" '(rk-haskell--insert-intero-type :wk "insert type")
+      "i t" '(intero-targets :wk "targets")
 
-    (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "rr" #'intero-repl
-      "rl" #'intero-repl-load
-      "it" #'intero-targets
-      "gg" #'intero-goto-definition
-      "ii" #'rk-haskell--insert-intero-type)
+      "r"   '(:ignore t :wk "repl")
+      "r r" '(intero-repl :wk "repl")
+      "r l" '(intero-repl-load :wk "load repl"))
 
     (with-eval-after-load 'flycheck
-      (flycheck-add-next-checker 'intero 'haskell-hlint))
-
-    (with-no-warnings
-      (evil-define-key 'normal intero-mode-map (kbd "C-.") #'intero-repl)
-      (evil-define-key 'insert intero-mode-map (kbd "C-.") #'intero-repl)
-      (evil-define-key 'normal intero-mode-map (kbd "M-.") #'intero-goto-definition)
-      (evil-define-key 'normal intero-mode-map (kbd "M-,") #'pop-tag-mark))))
+      (flycheck-add-next-checker 'intero 'haskell-hlint))))
 
 (use-package hindent
   :straight t
   :after haskell-mode
   :config
   (progn
-    (spacemacs-keys-declare-prefix-for-mode 'haskell-mode "m f" "format")
-    (spacemacs-keys-set-leader-keys-for-major-mode 'haskell-mode
-      "f." #'hindent-reformat-buffer
-      "ff" #'hindent-reformat-decl-or-fill)
+    (rk-local-leader-def :keymaps 'haskell-mode-map
+      "f"   '(:ignore t :wk "format")
+      "f ." '(intero-repl :wk "format buffer")
+      "f f" '(intero-repl-load :wk "format declaration"))
     (setq hindent-reformat-buffer-on-save t)
     (add-hook 'haskell-mode-hook #'hindent-mode)))
 

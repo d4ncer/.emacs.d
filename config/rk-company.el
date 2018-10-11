@@ -11,12 +11,15 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'general)
+
 (use-package company
   :straight t
   :commands (global-company-mode)
 
-  :bind
-  (("S-<return>" . company-complete))
+  :general
+  (:keymaps 'company-mode-map
+            "S-<return>" #'company-complete)
 
   :preface
   (defun rk-company--set-company-vars ()
@@ -36,10 +39,10 @@
     (setq company-require-match nil)
 
     (dolist (map (list company-active-map company-search-map company-filter-map))
-      (define-key map (kbd "C-j") #'company-select-next)
-      (define-key map (kbd "C-k") #'company-select-previous)
-      (define-key map (kbd "C-h") #'company-show-doc-buffer)
-      (define-key map (kbd "C-w") nil))
+      (general-def map "C-j" #'company-select-next)
+      (general-def map "C-k" #'company-select-previous)
+      (general-def map "C-h" #'company-show-doc-buffer)
+      (general-def map "C-w" nil))
 
     (add-hook 'company-mode-hook #'rk-company--set-company-vars)))
 

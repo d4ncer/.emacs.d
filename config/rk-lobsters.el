@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 
 (use-package ivy-lobsters
   :straight t
@@ -19,8 +19,8 @@
   (ivy-lobsters)
 
   :init
-  (spacemacs-keys-set-leader-keys
-    "a m l" #'ivy-lobsters))
+  (rk-leader-def
+    "a m l" '(ivy-lobsters :wk "lobsters")))
 
 (provide 'rk-lobsters)
 

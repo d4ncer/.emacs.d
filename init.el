@@ -49,6 +49,10 @@
 (straight-use-package 'memoize)
 (straight-use-package 'general)
 
+;; Set up general to auto unbind keys (override everything)
+
+(general-auto-unbind-keys)
+
 ;; Set up personal settings
 
 (setq user-full-name "Raghuvir Kasturi")
@@ -77,51 +81,60 @@
 
 (use-package rk-themes
   :config
-  (danc--themes/light-theme))
+  (rk/themes/light-theme))
 
 ;; Load features.
 
-(use-package rk-emacs)
-(use-package rk-basic-settings)
-(use-package rk-modeline)
-(use-package rk-auto-save)
+;; Base setup
+
 (use-package rk-leader-keys)
+(use-package rk-basic-settings)
+(use-package rk-darwin :if (equal system-type 'darwin))
+
+;; Editor capabilities
+
+(use-package rk-modeline)
+(use-package rk-highlight-thing)
+(use-package rk-auto-save)
 (use-package rk-evil)
 (use-package rk-ivy)
-(use-package rk-darwin :if (equal system-type 'darwin))
 (use-package rk-search)
 (use-package rk-help)
 (use-package rk-projectile)
+(use-package rk-magit)
+(use-package rk-parentheses)
+(use-package rk-smartparens)
+(use-package rk-company)
 (use-package rk-restclient)
 (use-package rk-dired)
 (use-package rk-hl-todo)
-(use-package rk-magit)
-(use-package rk-smartparens)
 (use-package rk-lsp)
-(use-package rk-company)
 (use-package rk-undo-tree)
 (use-package rk-ws-butler)
-(use-package rk-parentheses)
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
 (use-package rk-treemacs)
-(use-package rk-coffeescript)
-(use-package rk-haskell)
+(use-package rk-org)
+(use-package rk-spelling)
+(use-package rk-string)
+(use-package rk-lobsters)
+(use-package rk-expand-region)
+(use-package rk-yasnippet)
+
+;; Programming language support
+
 (use-package rk-elisp)
 (use-package rk-web-mode)
+(use-package rk-coffeescript)
+(use-package rk-haskell)
 (use-package rk-go)
 (use-package rk-scala)
 (use-package rk-markdown)
 (use-package rk-yaml)
 (use-package rk-rnc)
-(use-package rk-highlight-thing)
-(use-package rk-spelling)
-(use-package rk-string)
 (use-package rk-docker)
 (use-package rk-groovy)
-(use-package rk-lobsters)
-(use-package rk-expand-region)
 (use-package rk-python)
 (use-package rk-php)
 (use-package rk-rust)
@@ -129,8 +142,6 @@
 (use-package rk-racket)
 (use-package rk-protobuf)
 (use-package rk-puppet)
-(use-package rk-org)
-(use-package rk-yasnippet)
 
 ;;; Post init setup.
 

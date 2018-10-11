@@ -13,34 +13,20 @@
 
 (require 'dash)
 (require 's)
-(require 'spacemacs-keys)
+(require 'definers)
 
-(autoload 'evil-define-key "evil-core")
 (autoload 'projectile-project-p "projectile")
 
 (use-package go-mode
   :straight t
   :mode ("\\.go\\'" . go-mode)
 
-  :init
-  (progn
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "me" "playground")
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "mg" "goto")
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "mh" "help")
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "mi" "imports")
-
-
-    (spacemacs-keys-set-leader-keys-for-major-mode 'go-mode
-      "hh" 'godoc-at-point
-      "ig" 'go-goto-imports
-      "ia" 'go-import-add
-      "ir" 'go-remove-unused-imports
-      "er" 'go-play-region
-      "ed" 'go-download-play
-      "gg" 'godef-jump
-      "gd" 'godef-describe
-      "gw" 'godef-jump-other-window
-      "gc" 'go-coverage))
+  :general
+  (:keymaps 'go-mode-map :states 'normal
+            "gd" #'godef-jump
+            "K" #'godoc-at-point)
+  (:keymaps 'go-mode-map :states 'insert
+            "M-." #'godef-jump)
 
   :preface
   (progn
@@ -68,9 +54,17 @@
     (setq gofmt-command "goreturns")
     (setq godoc-at-point-function 'godoc-gogetdoc)
     (setq gofmt-show-errors nil)
-    (evil-define-key 'normal go-mode-map (kbd "K") #'godoc-at-point)
-    (evil-define-key 'normal go-mode-map (kbd "gd") #'godef-jump)
-    (evil-define-key 'insert go-mode-map (kbd "M-.") #'godef-jump)
+    (rk-local-leader-def :keymaps 'go-mode-map
+      "g" '(:ignore t :wk "goto")
+      "g g" '(godef-jump :wk "jump to def")
+      "g d" '(godef-describe :wk "describe")
+      "g w" '(godef-jump-other-window :wk "jump to def (other window)")
+      "g c" '(go-coverage :wk "coverage")
+
+      "i" '(:ignore t :wk "imports")
+      "i g" '(go-goto-imports :wk "go to imports")
+      "i a" '(go-import-add :wk "add import")
+      "i r" '(go-remove-unused-imports :wk "remove unused"))
 
     (add-hook 'go-mode-hook #'rk-go--set-local-vars)
     (add-hook 'before-save-hook #'gofmt-before-save))
@@ -80,9 +74,9 @@
 (use-package go-rename
   :straight t
   :after go-mode
-  :init
-  (spacemacs-keys-set-leader-keys-for-major-mode 'go-mode
-    "r" #'go-rename))
+  :config
+  (rk-local-leader-def :keymaps 'go-mode-map
+    "r" '(go-rename :wk "rename")))
 
 (use-package company-go
   :straight t
@@ -109,26 +103,23 @@
 
 (use-package rk-go-run
   :after go-mode
-  :init
-  (progn
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "mt" "test")
-    (spacemacs-keys-declare-prefix-for-mode 'go-mode "mx" "execute")
-    (spacemacs-keys-set-leader-keys-for-major-mode
-      'go-mode
-      "tt" 'rk-go-run-test-current-function
-      "ts" 'rk-go-run-test-current-suite
-      "tp" 'rk-go-run-package-tests
-      "tP" 'rk-go-run-package-tests-nested
-      "x" 'rk-go-run-main))
   :config
-  (add-to-list 'display-buffer-alist
-               `(,(rx bos "*go " (or "test" "run") "*" eos)
-                 (display-buffer-reuse-window
-                  display-buffer-in-side-window)
-                 (reusable-frames . visible)
-                 (side            . bottom)
-                 (slot            . 0)
-                 (window-height   . 0.2))))
+  (progn
+    (rk-local-leader-def :keymaps 'go-mode-map
+      "t"   '(:ignore t :wk "test")
+      "t t" '(rk-go-run-test-current-function :wk "current fn")
+      "t s" '(rk-go-run-test-current-suite :wk "current suite")
+      "t p" '(rk-go-run-package-tests :wk "package")
+      "t P" '(rk-go-run-package-tests-nested :wk "package (nested)")
+      "x"   '(rk-go-run-main :wk "run"))
+    (add-to-list 'display-buffer-alist
+                 `(,(rx bos "*go " (or "test" "run") "*" eos)
+                   (display-buffer-reuse-window
+                    display-buffer-in-side-window)
+                   (reusable-frames . visible)
+                   (side            . bottom)
+                   (slot            . 0)
+                   (window-height   . 0.2)))))
 
 (provide 'rk-go)
 

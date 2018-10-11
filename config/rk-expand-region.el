@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 
 (use-package expand-region
   :straight t
@@ -19,7 +19,7 @@
   (er/expand-region)
 
   :init
-  (spacemacs-keys-set-leader-keys "v" #'er/expand-region)
+  (rk-leader-def "v" '(er/expand-region :wk "expand"))
 
   :config
   (setq expand-region-contract-fast-key "V"
