@@ -11,7 +11,8 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'general)
+(require 'definers)
 (require 'paths)
 (require 'subr-x)
 (require 'dash)
@@ -19,12 +20,10 @@
 
 (use-package yasnippet
   :straight t
-  :defer 3
-
+  :defer t
   :preface
   (progn
     (autoload 'sp-backward-delete-char "smartparens")
-    (autoload 'evil-define-key "evil")
     (autoload 'ivy-completing-read "ivy")
 
     (defun rk-yasnippet--ivy-yas-prompt (prompt choices &optional display-fn)
@@ -55,14 +54,12 @@ Otherwise delete backwards."
 
   :init
   (progn
-    (spacemacs-keys-declare-prefix "y" "yasnippet")
-    (spacemacs-keys-set-leader-keys
-      "yf" #'yas-visit-snippet-file
-      "ye" #'yas-expand
-      "yn" #'yas-new-snippet)
+    (rk-leader-def
+      "yf" '(yas-visit-snippet-file :wk "visit snippet file")
+      "ye" '(yas-expand :wk "expand snippet")
+      "yn" '(yas-new-snippet :wk "new snippet"))
 
     ;; Fix malformed face decl
-
     (defface yas-field-highlight-face
       '((t (:inherit region)))
       "The face used to highlight the currently active field of a snippet"))
@@ -77,14 +74,15 @@ Otherwise delete backwards."
     (yas-global-mode +1)
 
     (add-to-list 'yas-dont-activate-functions (lambda () (derived-mode-p 'term-mode)))
-
     ;; Define key bindings for fancy snippet navigation.
 
-    (bind-key (kbd "C-,") #'yas-expand yas-minor-mode-map)
-    (evil-define-key 'insert yas-minor-mode-map (kbd "C-,") #'yas-expand)
+    (general-def :keymaps 'yas-minor-mode-map :states '(insert normal motion)
+      "C-," #'yas-expand)
 
-    (evil-define-key 'insert yas-keymap (kbd "SPC") #'rk-yasnippet-space)
-    (bind-key (kbd "<backspace>") #'rk-yasnippet-backspace yas-keymap))
+    (general-def :keymaps 'yas-keymap :states 'insert
+      "SPC" #'rk-yasnippet-space)
+    (general-def :keyamps 'yas-keymap :states '(insert normal motion)
+      "<backspace>" #'rk-yasnippet-backspace))
 
   :functions
   (yas--skip-and-clear
@@ -103,8 +101,8 @@ Otherwise delete backwards."
   :straight t
   :init
   (progn
-    (spacemacs-keys-set-leader-keys
-      "yy" #'ivy-yasnippet)))
+    (rk-leader-def
+      "yy" '(ivy-yasnippet :wk "list snippets"))))
 
 (provide 'rk-yasnippet)
 

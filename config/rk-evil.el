@@ -11,18 +11,36 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'general)
+(require 'definers)
 
 (use-package evil
   :straight t
+  :demand t
   :preface
   (defun rk-evil--sp-delete-and-join-compat (fn &rest args)
     (if (bound-and-true-p smartparens-strict-mode)
         (call-interactively 'sp-backward-delete-char)
       (apply fn args)))
+  :general
+  (:states '(normal motion)
+           "C-u" #'evil-scroll-page-up
+           "C-d" #'evil-scroll-page-down)
+  (:states 'motion
+           "gb" #'xref-pop-marker-stack)
+  (:keymaps 'help-mode-map
+            :states 'motion
+            "<escape>" #'quit-window
+            "<tab>" #'forward-button
+            "S-<tab>" #'backward-button
+            "]" #'help-go-forward
+            "[" #'help-go-back
+            "gf" #'help-go-forward
+            "gb" #'help-go-back
+            "gh" #'help-follow-symbol)
   :init
   (progn
-    (setq evil-want-integration nil)
+    (setq evil-want-integration t)
     (setq evil-want-keybinding nil))
   :config
   (progn
@@ -30,40 +48,16 @@
     (setq-default evil-shift-width 2)
     (setq-default evil-symbol-word-search t)
 
-    (setq evil-want-visual-char-semi-exclusive t)
-    (setq evil-want-Y-yank-to-eol t)
-
-    ;;; Rebind C-u to scroll up
-
-    (define-key evil-normal-state-map (kbd "C-u") #'evil-scroll-page-up)
-    (define-key evil-motion-state-map (kbd "C-u") #'evil-scroll-page-up)
-
-    (define-key evil-normal-state-map (kbd "C-d") #'evil-scroll-page-down)
-    (define-key evil-motion-state-map (kbd "C-d") #'evil-scroll-page-down)
-
-    ;; Bind g b to pop def stack
-
-    (define-key evil-motion-state-map "gb" 'xref-pop-marker-stack)
+    (general-setq evil-want-visual-char-semi-exclusive t
+                  evil-want-Y-yank-to-eol t)
 
     ;; Configure cursors.
 
-    (setq evil-motion-state-cursor '("plum3" box))
-    (setq evil-visual-state-cursor '("gray" (hbar . 2)))
-    (setq evil-normal-state-cursor '("DarkGoldenrod2" box))
-    (setq evil-insert-state-cursor '("chartreuse3" (bar . 2)))
-    (setq evil-emacs-state-cursor  '("SkyBlue2" hbar))
-
-    ;; Motion keys for help buffers.
-
-    (evil-define-key 'motion help-mode-map (kbd "<escape>") #'quit-window)
-    (evil-define-key 'motion help-mode-map (kbd "<tab>") #'forward-button)
-    (evil-define-key 'motion help-mode-map (kbd "S-<tab>") #'backward-button)
-    (evil-define-key 'motion help-mode-map (kbd "]") #'help-go-forward)
-    (evil-define-key 'motion help-mode-map (kbd "gf") #'help-go-forward)
-    (evil-define-key 'motion help-mode-map (kbd "^") #'help-go-back)
-    (evil-define-key 'motion help-mode-map (kbd "[") #'help-go-back)
-    (evil-define-key 'motion help-mode-map (kbd "gb") #'help-go-back)
-    (evil-define-key 'motion help-mode-map (kbd "gh") #'help-follow-symbol)
+    (general-setq evil-motion-state-cursor '("plum3" box)
+                  evil-visual-state-cursor '("gray" (hbar . 2))
+                  evil-normal-state-cursor '("DarkGoldenrod2" box)
+                  evil-insert-state-cursor '("chartreuse3" (bar . 2))
+                  evil-emacs-state-cursor  '("SkyBlue2" hbar))
 
     ;; Better compat with smartparens-strict mode.
     ;; TODO: Move to SP config.
@@ -83,13 +77,22 @@
 (use-package evil-surround
   :straight t
   :after evil
+  :commands (evil-surround-region
+             evil-substitute)
   :preface
   (progn
-    (defun danc--elisp/init-evil-surround-pairs ()
+    (defun rk/elisp/init-evil-surround-pairs ()
       (make-local-variable 'evil-surround-pairs-alist)
       (push '(?\` . ("`" . "'")) evil-surround-pairs-alist)))
 
-  :config
+  :general
+  (:keymaps 'evil-surround-mode-map
+   :states '(visual)
+   "s" #'evil-surround-region
+   "S" #'evil-substitute)
+  :hook
+  (emacs-lisp-mode-hook . rk/elisp/init-evil-surround-pairs)
+  :init
   (progn
     (setq-default evil-surround-pairs-alist
                   '((?\( . ("(" . ")"))
@@ -108,30 +111,28 @@
                     (?t . evil-surround-read-tag)
                     (?< . evil-surround-read-tag)
                     (?f . evil-surround-function)))
-    (add-hook 'emacs-lisp-mode-hook #'danc--elisp/init-evil-surround-pairs)
-    (global-evil-surround-mode +1)
-    (evil-define-key 'visual evil-surround-mode-map "s" #'evil-surround-region)
-    (evil-define-key 'visual evil-surround-mode-map "S" #'evil-substitute)))
+    (global-evil-surround-mode +1)))
 
 (use-package evil-multiedit
   :after evil
   :straight t
   :commands (evil-multiedit-match-all)
+  :general
+  (:keymaps 'evil-multiedit-state-map
+            "RET" #'evil-multiedit-toggle-or-restrict-region
+            "C" nil
+            "S" #'evil-multiedit--substitute
+            "C-j" #'evil-multiedit-match-symbol-and-next
+            "C-k" #'evil-multiedit-match-symbol-and-prev)
+  (:states 'motion
+           "RET" #'evil-multiedit-toggle-or-restrict-region)
+  (:keymaps 'evil-multiedit-insert-state-map
+            "C-j" #'evil-multiedit-match-symbol-and-next
+            "C-k" #'evil-multiedit-match-symbol-and-prev)
   :init
-  (spacemacs-keys-set-leader-keys
-    "se" #'evil-multiedit-match-all
-    "sp" #'evil-multiedit-match-symbol-and-next)
-  :config
-  (progn
-    (define-key evil-multiedit-state-map (kbd "RET") 'evil-multiedit-toggle-or-restrict-region)
-    (define-key evil-motion-state-map (kbd "RET") 'evil-multiedit-toggle-or-restrict-region)
-
-    (define-key evil-multiedit-state-map (kbd "C") nil)
-    (define-key evil-multiedit-state-map (kbd "S") #'evil-multiedit--substitute)
-    (define-key evil-multiedit-state-map (kbd "C-j") #'evil-multiedit-match-and-next)
-    (define-key evil-multiedit-state-map (kbd "C-k") #'evil-multiedit-match-and-prev)
-    (define-key evil-multiedit-insert-state-map (kbd "C-j") #'evil-multiedit-match-and-next)
-    (define-key evil-multiedit-insert-state-map (kbd "C-k") #'evil-multiedit-match-and-prev)))
+  (rk-leader-def
+    "se" '(evil-multiedit-match-all :wk "iedit - all matches")
+    "sp" '(evil-multiedit-match-symbol-and-next :wk "iedit - match current / next")))
 
 (use-package evil-ex
   :defer t
@@ -160,10 +161,9 @@
 (use-package evil-args
   :straight t
   :after evil
-  :config
-  (progn
-    (define-key evil-inner-text-objects-map "a" 'evil-inner-arg)
-    (define-key evil-outer-text-objects-map "a" 'evil-outer-arg)))
+  :general
+  (:keymaps 'evil-inner-text-objects-map "a" #'evil-inner-arg)
+  (:keymaps 'evil-outer-text-objects-map "a" #'evil-outer-arg))
 
 (use-package evil-escape
   :straight t
@@ -188,21 +188,16 @@
   (require 'rk-evil-nerd-commenter)
   :init
   (progn
-    ;; Double all the commenting functions so that the inverse operations
-    ;; can be called without setting a flag
-    (define-key evil-normal-state-map "gc" 'evilnc-comment-operator)
-    (define-key evil-normal-state-map "gy" 'spacemacs/copy-and-comment-lines)
-
-    (spacemacs-keys-set-leader-keys
-      ";"  #'evilnc-comment-operator
-      "cl" #'rk-evil-nerd-commenter/comment-or-uncomment-lines
-      "cL" #'rk-evil-nerd-commenter/comment-or-uncomment-lines-inverse
-      "cp" #'rk-evil-nerd-commenter/comment-or-uncomment-paragraphs
-      "cP" #'rk-evil-nerd-commenter/comment-or-uncomment-paragraphs-inverse
-      "ct" #'rk-evil-nerd-commenter/quick-comment-or-uncomment-to-the-line
-      "cT" #'rk-evil-nerd-commenter/quick-comment-or-uncomment-to-the-line-inverse
-      "cy" #'rk-evil-nerd-commenter/copy-and-comment-lines
-      "cY" #'rk-evil-nerd-commenter/copy-and-comment-lines-inverse)))
+    (rk-leader-def
+      ";"  '(evilnc-comment-operator :wk "comment")
+      "cl" '(rk-evil-nerd-commenter/comment-or-uncomment-lines :wk "comment/uncomment lines")
+      "cL" '(rk-evil-nerd-commenter/comment-or-uncomment-lines-inverse :wk "comment/uncomment lines (inverse)")
+      "cp" '(rk-evil-nerd-commenter/comment-or-uncomment-paragraphs :wk "comment/uncomment paragraphs")
+      "cP" '(rk-evil-nerd-commenter/comment-or-uncomment-paragraphs-inverse :wk "comment/uncomment paragraphs (inverse)")
+      "ct" '(rk-evil-nerd-commenter/quick-comment-or-uncomment-to-the-line :wk "comment/uncomment to the line")
+      "cT" '(rk-evil-nerd-commenter/quick-comment-or-uncomment-to-the-line-inverse :wk "comment/uncomment to the line (inverse)")
+      "cy" '(rk-evil-nerd-commenter/copy-and-comment-lines :wk "copy & comment lines")
+      "cY" '(rk-evil-nerd-commenter/copy-and-comment-lines-inverse :wk "copy & comment lines (inverse)"))))
 
 (use-package evil-matchit
   :straight t
@@ -210,13 +205,12 @@
 
 (use-package evil-numbers
   :straight t
+  :general
+  (:states '(normal)
+    "+" #'evil-numbers/inc-at-pt
+    "-" #'evil-numbers/dec-at-pt)
   :commands (evil-numbers/inc-at-pt
-             evil-numbers/dec-at-pt)
-
-  :init
-  (progn
-    (evil-global-set-key 'normal (kbd "+") #'evil-numbers/inc-at-pt)
-    (evil-global-set-key 'normal (kbd "-") #'evil-numbers/dec-at-pt)))
+             evil-numbers/dec-at-pt))
 
 (use-package evil-search-highlight-persist
   :straight t
@@ -253,11 +247,25 @@
     (global-vi-tilde-fringe-mode)))
 
 (use-package rk-evil-shift
-  :preface
-  (autoload 'evil-visual-state-map "evil-states")
-  :bind (:map evil-visual-state-map
-              ("<" . rk-evil-shift-left)
-              (">" . rk-evil-shift-right)))
+  :after evil
+  :general
+  (:states '(visual)
+           "<" #'rk-evil-shift-left
+           ">" #'rk-evil-shift-right))
+
+(use-package evil-commands
+  :after evil
+  :commands (evil-window-next
+             evil-window-split
+             evil-window-vsplit
+             evil-window-rotate-downwards)
+  :config
+  (progn
+    (rk-leader-def
+      "w w" '(evil-window-next :wk "next window")
+      "w r" '(evil-window-rotate-downwards :wk "rotate windows")
+      "w -" '(evil-window-split :wk "split windows -")
+      "w /" '(evil-window-vsplit :wk "split windows |"))))
 
 (use-package evil-collection
   :straight t

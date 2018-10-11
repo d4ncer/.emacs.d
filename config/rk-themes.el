@@ -14,9 +14,9 @@
   (require 'use-package))
 
 (require 'dash)
-(require 'spacemacs-keys)
+(require 'general)
 
-(defun danc--themes/light-theme ()
+(defun rk/themes/light-theme ()
   "Load light theme."
   (interactive)
   (load-theme 'rk-light t))

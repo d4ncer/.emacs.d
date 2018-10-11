@@ -11,7 +11,8 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
+(require 'general)
 
 (use-package smartparens
   :straight t
@@ -103,7 +104,7 @@
     (bind-key [remap c-electric-backspace] 'sp-backward-delete-char smartparens-strict-mode-map)
 
     (with-eval-after-load 'evil
-      (define-key (with-no-warnings evil-insert-state-map) ")" #'sp-up-sexp))
+      (general-def (with-no-warnings evil-insert-state-map) ")" #'sp-up-sexp))
 
     ;; Configure global pairs.
 
@@ -167,37 +168,37 @@
       (sp-local-pair "«" "»"))
 
     ;; Keybindings
-    (spacemacs-keys-set-leader-keys
-      ",A" #'sp-add-to-previous-sexp
-      ",a" #'sp-add-to-next-sexp
-      ",B" #'sp-backward-barf-sexp
-      ",b" #'sp-forward-barf-sexp
-      ",M" #'sp-backward-slurp-sexp
-      ",m" #'sp-forward-slurp-sexp
-      ",c" #'sp-convolute-sexp
-      ",D" #'sp-backward-kill-sexp
-      ",d" #'sp-kill-sexp
-      ",e" #'sp-emit-sexp
-      ",l" #'sp-end-of-sexp
-      ",h" #'sp-beginning-of-sexp
-      ",j" #'sp-join-sexp
-      ",K" #'sp-splice-sexp-killing-backward
-      ",k" #'sp-splice-sexp-killing-forward
-      ",n" #'sp-next-sexp
-      ",p" #'sp-previous-sexp
-      ",r" #'sp-raise-sexp
-      ",s" #'sp-splice-sexp-killing-around
-      ",t" #'sp-transpose-sexp
-      ",U" #'sp-backward-unwrap-sexp
-      ",u" #'sp-unwrap-sexp
-      ",w" #'sp-rewrap-sexp
-      ",x" #'sp-split-sexp
-      ",Y" #'sp-backward-copy-sexp
-      ",y" #'sp-copy-sexp
-      ",," #'sp-previous-sexp
-      ",." #'sp-next-sexp
-      ",<" #'sp-backward-down-sexp
-      ",>" #'sp-down-sexp)
+    (rk-leader-def
+      ",A" '(sp-add-to-previous-sexp :wk "add to previous sexp")
+      ",a" '(sp-add-to-next-sexp :wk "add to next sexp")
+      ",B" '(sp-backward-barf-sexp :wk "backward barf")
+      ",b" '(sp-forward-barf-sexp :wk "forward barf")
+      ",M" '(sp-backward-slurp-sexp :wk "backward slurp")
+      ",m" '(sp-forward-slurp-sexp :wk "forward slurp")
+      ",c" '(sp-convolute-sexp :wk "convolute")
+      ",D" '(sp-backward-kill-sexp :wk "kill backwards")
+      ",d" '(sp-kill-sexp :wk "kill")
+      ",e" '(sp-emit-sexp :wk "emit")
+      ",l" '(sp-end-of-sexp :wk "goto end of sexp")
+      ",h" '(sp-beginning-of-sexp :wk "goto beginning of sexp")
+      ",j" '(sp-join-sexp :wk "join")
+      ",K" '(sp-splice-sexp-killing-backward :wk "splice killing backwards")
+      ",k" '(sp-splice-sexp-killing-forward :wk "splice killing forwards")
+      ",n" '(sp-next-sexp :wk "next")
+      ",p" '(sp-previous-sexp :wk "prev")
+      ",r" '(sp-raise-sexp :wk "raise")
+      ",s" '(sp-splice-sexp-killing-around :wk "splice killing around")
+      ",t" '(sp-transpose-sexp :wk "transpose")
+      ",U" '(sp-backward-unwrap-sexp :wk "backward unwrap")
+      ",u" '(sp-unwrap-sexp :wk "unwrap")
+      ",w" '(sp-rewrap-sexp :wk "rewrap")
+      ",x" '(sp-split-sexp :wk "split")
+      ",Y" '(sp-backward-copy-sexp :wk "copy backwards")
+      ",y" '(sp-copy-sexp :wk "copy")
+      ",," '(sp-previous-sexp :wk "prev")
+      ",." '(sp-next-sexp :wk "next")
+      ",<" '(sp-backward-down-sexp :wk "go down backwards")
+      ",>" '(sp-down-sexp :wk "go down"))
 
     ;; Enable modes.
 

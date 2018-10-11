@@ -11,6 +11,9 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'general)
+(require 'rk-misc-utils)
+
 (use-package ag
   :straight t
   :commands (ag ag-dired))
@@ -24,21 +27,14 @@
   :commands (wgrep-setup)
   :init
   (add-hook 'grep-setup-hook #'wgrep-stup)
-  :preface
-  (progn
-    (autoload 'wgrep-finish-edit "wgrep")
-
-    (defun rk-search-wgrep-finish-edit-kill-buffer ()
-      "Finish the current wgrep edit and kill the wgrep buffer."
-      (interactive)
-      (let ((buf (current-buffer)))
-        (prog1 (wgrep-finish-edit)
-          (kill-buffer buf)))))
-
+  :general
+  (:keymaps 'wgrep-mode-map
+   :states '(normal motion visual emacs)
+   ", c" #'rk-search-wgrep-finish-edit-kill-buffer
+   ", k" #'rk-search-wgrep-abort-changes-kill-buffer)
   :config
   (progn
-    (setq wgrep-auto-save-buffer t)
-    (define-key wgrep-mode-map [remap wgrep-finish-edit] #'rk-search-wgrep-finish-edit-kill-buffer)))
+    (setq wgrep-auto-save-buffer t)))
 
 (provide 'rk-search)
 

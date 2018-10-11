@@ -11,22 +11,18 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 (require 'subr-x)
+(require 'rk-misc-utils)
 
-(autoload 'evil-window-rotate-downwards "evil-commands")
-(autoload 'rk/alternate-buffer "rk-alternate-buffer")
-(autoload 'rk/copy-buffer-path "rk-copy-buffer-path")
-(autoload 'rk/rename-file-and-buffer "rk-rename-file-and-buffer")
-(autoload 'rk/sudo-edit "rk-sudo-edit")
-(autoload 'rk/toggle-window-split "rk-toggle-window-split")
-(autoload 'rk-goto-init-file "rk-goto")
-(autoload 'rk-goto-messages "rk-goto")
-(autoload 'rk-goto-personal-config "rk-goto")
 (autoload 'org-narrow-to-subtree "org")
 
+;;; Misc functions
+
+;;; Key definers
+
 (use-package rk-delete-current-buffer-and-file
-  :commands (rk/delete-current-buffer-and-file)
+  :commands (rk-delete-current-buffer-and-file)
   :preface
   (progn
     (autoload 'projectile-invalidate-cache "projectile")
@@ -55,292 +51,127 @@
             (force-mode-line-update))))))
   :config
   (progn
-    (setq which-key-special-keys nil)
-    (setq which-key-use-C-h-commands t)
-    (setq which-key-echo-keystrokes 0.02)
-    (setq which-key-max-description-length 32)
-    (setq which-key-sort-order 'which-key-key-order-alpha)
-    (setq which-key-idle-delay 0.4)
-    (setq which-key-allow-evil-operators t)
+    (general-setq which-key-special-keys nil)
+    (general-setq which-key-use-C-h-commands t)
+    (general-setq which-key-echo-keystrokes 0.02)
+    (general-setq which-key-max-description-length 32)
+    (general-setq which-key-sort-order 'which-key-key-order-alpha)
+    (general-setq which-key-idle-delay 0.4)
+    (general-setq which-key-allow-evil-operators t)
 
     (advice-add 'which-key--create-buffer-and-show
                 :after #'rk-leader-keys-set-up-which-key-buffer)
 
-    ;; Rename functions shown by which-key for legibility.
-
-    (push `((nil . ,(rx bos "rk" (*? nonl) "-" (group (+ nonl))))
-            .
-            (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up errors entries
-
-    (push `(("SPC e" . ,(rx (? "rk-") "flycheck-" (group (+? nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up goto and git
-
-    (push `(("SPC g" . ,(rx (? "rk-") "magit-" (group (+? nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `(("SPC g" . ,(rx "rk-" (group "goto-" (+? nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `(("SPC g" . "time-machine-transient-state/body") . (nil . "git-time-machine"))
-          which-key-replacement-alist)
-
-    ;; Clean up help
-
-    (push `(("SPC h d" . ,(rx bos (? "counsel-") "describe-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `(("SPC h f" . ,(rx bos "find-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up navigation
-
-    (push `(("SPC j" . ,(rx bos (? "evil-") "avy-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up kill
-
-    (push `(("SPC k" . "kill-this-buffer") . (nil . "buffer"))
-          which-key-replacement-alist)
-
-    (push `(("SPC k" . "delete-window") . (nil . "window"))
-          which-key-replacement-alist)
-
-    (push `(("SPC k" . "counsel-yank-pop") . (nil . "kill-ring"))
-          which-key-replacement-alist)
-
-    ;; Clean up narrowing
-
-    (push `(("SPC n" . ,(rx bos (? "org-") "narrow-to-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up org
-
-    (push `(("SPC o" . ,(rx bos (? "rk-") (or "org-" "ledger-") (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up projectile
-
-    (push `((nil . ,(rx bos (? "rk-") (? "counsel-") "projectile-" (group (+? nonl)) (? "-project") eos)) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `((nil . "projectile-dired") . (nil . "root (dired)"))
-          which-key-replacement-alist)
-
-    (push `((nil . "rk-neotree-find-project-root") . (nil . "root (neotree)"))
-          which-key-replacement-alist)
-
-    (push `(("SPC p" . ,(rx bos (*? nonl) "shell-command" (* nonl))) . (nil . "shell-command"))
-          which-key-replacement-alist)
-
-    (push `(("SPC p" . ,(rx bos (*? nonl) "async-shell-command" (* nonl))) . (nil . "shell-command (async)"))
-          which-key-replacement-alist)
-
-    ;; Clean up symbols
-
-    (push `(("SPC s" . "evil-iedit-state/iedit-mode") . (nil . "iedit"))
-          which-key-replacement-alist)
-
-    ;; Clean up toggles
-
-    (push `(("SPC t" . ,(rx bos "rk-" (? "faces/") (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up windows
-
-    (push `(("SPC w" . ,(rx bos (? "rk-") (? "evil-") "window-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `(("SPC w" . "balance-windows") . (nil . "balance"))
-          which-key-replacement-alist)
-
-    (push `(("SPC w" . "delete-window") . (nil . "delete"))
-          which-key-replacement-alist)
-
-    (push `(("SPC w" . "delete-other-windows") . (nil . "delete-others"))
-          which-key-replacement-alist)
-
-    ;; Clean up links
-
-    (push `(("SPC x" . ,(rx bos "link-hint-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    ;; Clean up yasnippet
-
-    (push `(("SPC y" . ,(rx bos (? "rk-") "yas" (any "-/") (group (+? nonl)) "-snippet" eos)) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (push `(("SPC y" . "yas-visit-snippet-file") . (nil . "visit-file"))
-          which-key-replacement-alist)
-
-    ;; Clean up transient states
-
-    (push `((nil . ,(rx bos (group (+? nonl)) "-transient-state/body" eos)) . (nil . "\\1"))
-          which-key-replacement-alist)
-
-    (which-key-add-key-based-replacements
-      "SPC ,"   "smartparens"
-      "SPC a"   "applications"
-      "SPC a e" "emacs"
-      "SPC a m" "misc"
-      "SPC b"   "buffers"
-      "SPC c"   "comments"
-      "SPC f"   "files"
-      "SPC g"   "git/goto"
-      "SPC h"   "help"
-      "SPC h d" "describe"
-      "SPC i"   "info"
-      "SPC h f" "find"
-      "SPC k"   "kill"
-      "SPC n"   "narrow"
-      "SPC o"   "org"
-      "SPC p"   "project"
-      "SPC q"   "quit"
-      "SPC w"   "window"
-      "SPC s"   "search/edit"
-      "SPC t"   "text"
-      "SPC T"   "toggles"
-      "SPC SPC" "M-x"
-      "SPC m"   '("major-mode-cmd" . "Major mode commands"))
-
     (which-key-mode +1)))
 
-(use-package spacemacs-keys
-  :preface
-  (progn
-    (autoload 'evil-window-next "evil-commands")
-    (autoload 'evil-window-split "evil-commands")
-    (autoload 'evil-window-vsplit "evil-commands")
-    ;; TODO: Add a hydra for using straight
-    (autoload 'straight-freeze-versions "straight")
-    (autoload 'counsel-git-log "counsel")
+(rk-leader-def
+  "u"     '(universal-argument :wk "universal arg.")
+  "SPC"   '(execute-extended-command :wk "M-x")
+  "TAB"   '(rk-alternate-buffer :wk "last buffer")
+  "|"     '(rk-toggle-window-split :wk "transpose windows")
+  "!"     '(shell-command :wk "shell cmd")
 
-    (defun rk-insert-iso-timestamp ()
-      "Insert current ISO timestamp at position."
-      (interactive)
-      (insert (format-time-string "%FT%T.%3NZ")))
+  ","     '(:ignore t :wk "sparens")
 
-    (defun rk-get-face-at-point  (pos)
-      "Get the font face at POS."
-      (interactive "d")
-      (let ((face (or (get-char-property (point) 'read-face-name)
-                      (get-char-property (point) 'face))))
-        (if face (message "Face: %s" face) (message "No face at %d" pos))))
+  "a"     '(:ignore t :wk "applications")
+  "a m"   '(:ignore t :wk "misc")
+  "a m t" '(rk-insert-iso-timestamp :wk "insert ISO timestap")
 
-    (defun rk-copy-whole-buffer-to-clipboard ()
-      "Copy entire buffer to clipboard"
-      (interactive)
-      (clipboard-kill-ring-save (point-min) (point-max)))
+  "b"     '(:ignore t :wk "buffer")
+  "b b"   '(bury-buffer :wk "bury buffer")
+  "b d"   '(kill-this-buffer :wk "kill buffer")
+  "b e"   '(erase-buffer :wk "erase buffer")
+  "b Y"   '(rk-copy-whole-buffer-to-clipboard :wk "copy buffer")
+  "b P"   '(rk-copy-clipboard-to-whole-buffer :wk "replace buffer with clipboard")
 
-    (defun rk-copy-clipboard-to-whole-buffer ()
-      "Copy clipboard and replace buffer"
-      (interactive)
-      (delete-region (point-min) (point-max))
-      (clipboard-yank)
-      (deactivate-mark))
+  "C"     '(compile :wk "compile")
+  "c"     '(:ignore t :wk "comments")
+  "c r"   '(comment-or-uncomment-region :wk "toggle region comments")
 
-    (defun rk-reload-file ()
-      "Revisit the current file."
-      (interactive)
-      (when-let (path (buffer-file-name))
-        (find-alternate-file path))))
+  "e"     '(:ignore t :wk "errors")
 
-  :config
-  (progn
-    (define-key universal-argument-map (kbd (concat "SPC u")) #'universal-argument-more)
+  "f"     '(:ignore t :wk "file")
+  "f d"   '(dired :wk "dired")
+  "f D"   '(rk-delete-current-buffer-and-file :wk "delete file & buffer")
+  "f F"   '(find-file-other-window :wk "open file (new window)")
+  "f R"   '(rk-rename-file-and-buffer :wk "rename file")
+  "f e"   '(rk-sudo-edit :wk "edit w/ sudo")
+  "f f"   '(find-file :wk "find file")
+  "f m"   '(mkdir :wk "create dir")
+  "f s"   '(save-buffer :wk "save buffer")
+  "f S"   '(save-some-buffers :wk "save buffers")
+  "f W"   '(write-file :wk "write file")
+  "f v"   '(rk-reload-file :wk "reload file")
+  "f y"   '(rk-copy-buffer-path :wk "copy buffer path")
 
-    (spacemacs-keys-set-leader-keys
-      "u"   #'universal-argument
-      "SPC" #'execute-extended-command
-      "TAB" #'rk/alternate-buffer
-      "|"   #'rk/toggle-window-split
+  "g"     '(:ignore t :wk "goto/git")
+  "g m"   '(rk-goto-messages :wk "switch to Messages")
 
-      "!"   #'shell-command
+  "h"     '(:ignore t :wk "help/info")
+  "h d"   '(:ignore t :wk "describe")
+  "h d C" '(rk-get-face-at-point :wk "face at point")
+  "h d c" '(describe-face :wk "describe face")
+  "h d k" '(describe-key :wk "describe key")
+  "h d m" '(describe-mode :wk "describe mode")
+  "h d v" '(describe-variable :wk "describe variable")
+  "h f"   '(:ignore t :wk "find")
+  "h f c" '(find-face-definition :wk "find face def")
+  "h f f" '(find-function :wk "find function")
+  "h f l" '(find-library :wk "find library")
+  "h f v" '(find-variable :wk "find variable")
+  "h i"   '(info :wk "info")
 
-      "a m t" #'rk-insert-iso-timestamp
-      "a e f" #'straight-freeze-versions
+  "i"     '(:ignore t :wk "info")
 
-      "b b" #'bury-buffer
-      "b d" #'kill-this-buffer
-      "b e" #'erase-buffer
-      "b Y" #'rk-copy-whole-buffer-to-clipboard
-      "b P" #'rk-copy-clipboard-to-whole-buffer
+  "k"     '(:ignore t :wk "kill")
+  "k b"   '(kill-this-buffer :wk "kill buffer")
+  "k w"   '(delete-window :wk "kill window")
 
-      "C" #'compile
+  "n"     '(:ignore t :wk "narrow/widen")
+  "n f"   '(narrow-to-defun :wk "narrow to function")
+  "n r"   '(narrow-to-region :wk "narrow to region")
+  "n s"   '(org-narrow-to-subtree :wk "narrow to subtree")
+  "n w"   '(widen :wk "widen")
 
-      "c r" #'comment-or-uncomment-region
+  "o"     '(:ignore t :wk "org")
 
-      "f d" #'dired
-      "f D" #'rk/delete-current-buffer-and-file
-      "f F" #'find-file-other-window
-      "f R" #'rk/rename-file-and-buffer
-      "f e" #'rk/sudo-edit
-      "f f" #'find-file
-      "f m" #'mkdir
-      "f s" #'save-buffer
-      "f S" #'save-some-buffers
-      "f W" #'write-file
-      "f v" #'rk-reload-file
-      "f y" #'rk/copy-buffer-path
+  "p"     '(:ignore t :wk "project")
 
-      "g i" #'rk-goto-init-file
-      "g m" #'rk-goto-messages
-      "g p" #'rk-goto-personal-config
-      "g l" #'counsel-git-log
+  "q"     '(:ignore t :wk "quit")
+  "q q"   '(save-buffers-kill-emacs :wk "quit emacs")
 
-      "h d C" #'rk-get-face-at-point
-      "h d c" #'describe-face
-      "h d k" #'describe-key
-      "h d m" #'describe-mode
-      "h d v" #'describe-variable
-      "h f c" #'find-face-definition
-      "h f f" #'find-function
-      "h f l" #'find-library
-      "h f v" #'find-variable
-      "h i"   #'info
+  "s"     '(:ignore t :wk "search")
 
-      "k b" #'kill-this-buffer
-      "k w" #'delete-window
+  "t"     '(:ignore t :wk "text")
 
-      "n d" #'narrow-to-defun
-      "n f" #'narrow-to-defun
-      "n r" #'narrow-to-region
-      "n s" #'org-narrow-to-subtree
-      "n w" #'widen
+  "T"     '(:ignore t :wk "toggle")
+  "T F"   '(toggle-frame-fullscreen :wk "FULLSCREEN")
+  "T f"   '(toggle-frame-maximized :wk "fullscreen")
 
-      "q w" #'delete-window
-      "q q" #'save-buffers-kill-emacs
+  "w"     '(:ignore t :wk "window")
+  "w ="   '(balance-windows :wk "balance windows")
+  "w o"   '(delete-other-windows :wk "kill other windows")
+  "w q"   '(delete-window :wk "kill window")
 
-      "T F" #'toggle-frame-fullscreen
-      "T f" #'toggle-frame-maximized
+  "y"     '(:ignore t :wk "yasnippet")
 
-      "w =" #'balance-windows
-      "w w" #'evil-window-next
-      "w o" #'delete-other-windows
-      "w q" #'delete-window
-      "w r" #'evil-window-rotate-downwards
-      "w -" #'evil-window-split
-      "w /" #'evil-window-vsplit)))
+  "z"     '(:ignore t :wk "scale"))
 
 (use-package rk-scale-font-transient-state
   :commands (rk-scale-font-transient-state/body)
   :init
-  (spacemacs-keys-set-leader-keys
-    "zx" #'rk-scale-font-transient-state/body))
+  (rk-leader-def
+    "zx" '(rk-scale-font-transient-state/body :wk "font scale hydra")))
 
 (use-package rk-buffer-transient-state
   :commands (rk-buffer-transient-state/body
              rk-buffer-transient-state/next-buffer
              rk-buffer-transient-state/previous-buffer)
   :init
-  (spacemacs-keys-set-leader-keys
-    "bn" #'rk-buffer-transient-state/next-buffer
-    "bN" #'rk-buffer-transient-state/previous-buffer
-    "bp" #'rk-buffer-transient-state/previous-buffer))
+  (rk-leader-def
+    "bn" '(rk-buffer-transient-state/next-buffer :wk "next buffer")
+    "bN" '(rk-buffer-transient-state/previous-buffer :wk "prev buffer")
+    "bp" '(rk-buffer-transient-state/previous-buffer :wk "prev buffer")))
 
 
 (provide 'rk-leader-keys)

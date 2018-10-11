@@ -11,6 +11,8 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'general)
+
 (use-package ispell
   :straight t
   :config
@@ -26,17 +28,16 @@
              rk-evil-ispell-mark-word-as-locally-good
              rk-evil-ispell-correct-word)
   :preface
-  (progn
-    (autoload 'evil-global-set-key "evil-core")
-    (autoload 'flyspell-auto-correct-word "flyspell"))
+  (autoload 'flyspell-auto-correct-word "flyspell")
   :init
   (with-eval-after-load 'evil
-    (evil-global-set-key 'normal (kbd "z u") #'flyspell-auto-correct-word)
-    (evil-global-set-key 'normal (kbd "z p") #'rk-evil-ispell-previous-spelling-error)
-    (evil-global-set-key 'normal (kbd "z n") #'rk-evil-ispell-next-spelling-error)
-    (evil-global-set-key 'normal (kbd "z g") #'rk-evil-ispell-mark-word-as-good)
-    (evil-global-set-key 'normal (kbd "z G") #'rk-evil-ispell-mark-word-as-locally-good)
-    (evil-global-set-key 'normal (kbd "z =") #'rk-evil-ispell-correct-word)))
+    (general-def :states 'normal
+      "z u" #'flyspell-auto-correct-word
+      "z p" #'rk-evil-ispell-previous-spelling-error
+      "z n" #'rk-evil-ispell-next-spelling-error
+      "z g" #'rk-evil-ispell-mark-word-as-good
+      "z G" #'rk-evil-ispell-mark-word-as-locally-good
+      "z =" #'rk-evil-ispell-correct-word)))
 
 (provide 'rk-spelling)
 

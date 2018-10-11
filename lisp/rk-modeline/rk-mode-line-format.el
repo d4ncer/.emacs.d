@@ -21,7 +21,7 @@
 (autoload 'projectile-project-p "projectile")
 
 (defconst rk-mode-line-format--derived-modes
-  '(rk-web-js-mode rk-web-css-mode rk-web-typescript-mode rk-web-html-mode rk-web-json-mode gfm-mode)
+  '(rk-web-js-mode rk-web-css-mode rk-web-html-mode rk-web-json-mode gfm-mode)
   "Derived modes.")
 
 ;;; Faces

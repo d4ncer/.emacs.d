@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (require 'dash)
+(require 'definers)
 
 (use-package rk-lsp-python
   :after python
@@ -77,9 +78,9 @@ Return the first non-nil result of evalutating PRED."
            (progress-reporter-done reporter))
           (_
            (message "%sFAILED" (aref (cdr reporter) 3)))))))
-  :init
-  (spacemacs-keys-set-leader-keys-for-major-mode 'python-mode
-    "e" #'rk-py/pyvenv-init))
+  :config
+  (rk-local-leader-def :keymaps 'python-mode-map
+    "e" '(rk-py/pyvenv-init :wk "init pyvenv")))
 
 (provide 'rk-python)
 

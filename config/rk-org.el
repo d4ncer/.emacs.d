@@ -13,8 +13,8 @@
 
 (require 'straight)
 (require 'paths)
-(require 'spacemacs-keys)
-(require 'evilified-state)
+(require 'general)
+(require 'definers)
 (require 'f)
 (require 's)
 (require 'dash)
@@ -30,20 +30,14 @@
 (defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 (defconst rk-org-consume-file (concat org-directory "/consume.org"))
 
-(with-eval-after-load 'which-key
-  (with-no-warnings
-    (push `(("," . ,(rx bos (? "evil-") "org-" (group (+ nonl)))) . (nil . "\\1"))
-          which-key-replacement-alist)))
-
 (use-package org
   :straight org-plus-contrib
-  :bind
-  (:map org-mode-map
-        ("C-c C-." . org-time-stamp-inactive)
-        ("M-p" . org-metaup)
-        ("M-n" . org-metadown)
-        ("C-c c" . org-columns))
-
+  :general
+  (:keymaps 'org-mode-map
+            "C-c C-." #'org-time-stamp-inactive
+            "M-p" #'org-metaup
+            "M-n" #'org-metadown
+            "C-c c" #'org-columns)
   :defines (org-state
             org-log-states
             org-log-done
@@ -137,26 +131,25 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
     (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
 
-    (spacemacs-keys-set-leader-keys
-      "ok" #'org-capture
-      "ol" #'org-store-link
-      "os" #'org-search-view))
+    (rk-leader-def
+      "ok" '(org-capture :wk "capture")
+      "ol" '(org-store-link :wk "store link")
+      "os" '(org-search-view :wk "search")))
 
   :config
   (progn
     (setq org-default-notes-file (f-join org-directory "notes.org"))
+    (rk-local-leader-def :keymaps 'org-mode-map
+      "A" '(org-align-tags :wk "align tags")
+      "r" '(org-refile :wk "refile")
+      "d" '(org-deadline :wk "add deadline")
+      "C" '(org-ctrl-c-ctrl-c :wk "magic C")
+      "f" '(org-fill-paragraph :wk "wrap text")
+      "L" '(org-insert-link :wk "insert link")
+      "s" '(org-schedule :wk "schedule"))
 
-    (spacemacs-keys-set-leader-keys-for-major-mode
-      'org-mode
-      "A" #'org-align-tags
-      "r" #'org-refile
-      "d" #'org-deadline
-      "C" #'org-ctrl-c-ctrl-c
-      "f" #'org-fill-paragraph
-      "L" #'org-insert-link
-      "s" #'org-schedule)
-
-    (evil-define-key 'normal org-mode-map (kbd "RET") #'org-return)
+    (general-def :keymaps 'org-mode-map :states 'normal
+      "RET" #'org-return)
 
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
     (add-to-list 'org-refile-targets '(org-default-notes-file :maxlevel . 3))
@@ -217,11 +210,11 @@ Do not scheduled items or repeating todos."
 (use-package ob-python
   :after org
   :preface
-  (defun cb-org-setup-python ()
+  (defun rk-org-setup-python ()
     (when (executable-find "ipython")
       (setq-local org-babel-python-command "ipython")))
   :config
-  (add-hook 'org-mode-hook #'cb-org-setup-python))
+  (add-hook 'org-mode-hook #'rk-org-setup-python))
 
 (use-package gnuplot
   :straight t
@@ -241,7 +234,7 @@ Do not scheduled items or repeating todos."
   :after org
   :defines (ob-javascript-path-to-lib)
   :init
-  (setq ob-javascript-path-to-lib "/Users/raghuvirk/.emacs.d/straight/repos/ob-javascript/"))
+  (setq ob-javascript-path-to-lib (f-join user-emacs-directory "straight/repos/ob-javascript/")))
 
 (use-package ob-shell :after org)
 
@@ -273,8 +266,6 @@ Do not scheduled items or repeating todos."
 
 (use-package org-agenda
   :after org
-  :bind (:map org-agenda-mode-map ("J" . org-agenda-goto-date))
-
   :preface
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
@@ -306,32 +297,13 @@ Do not scheduled items or repeating todos."
 
   :config
   (progn
-    (evilified-state-evilify-map org-agenda-mode-map
-      :mode org-agenda-mode
-      :bindings
-      "j" 'org-agenda-next-line
-      "k" 'org-agenda-previous-line
-      (kbd "M-j") 'org-agenda-next-item
-      (kbd "M-k") 'org-agenda-previous-item
-      (kbd "M-h") 'org-agenda-earlier
-      (kbd "M-l") 'org-agenda-later
-      (kbd "gd") 'org-agenda-toggle-time-grid
-      (kbd "gr") 'org-agenda-redo
-      (kbd "M-RET") 'org-agenda-show-and-scroll-up)
-
-    (spacemacs-keys-set-leader-keys
-      "oA" #'org-agenda)
-
-    (define-key org-agenda-mode-map (kbd "C-f" ) #'evil-scroll-page-down)
-    (define-key org-agenda-mode-map (kbd "C-b") #'evil-scroll-page-up)
+    (rk-leader-def
+      "oA" '(org-agenda :wk "agenda"))
 
     ;; Match projects that do not have a scheduled action or NEXT action.
     (setq org-stuck-projects '("+project-ignore-maybe-done"
                                ("NEXT") nil
                                "SCHEDULED:"))
-
-    ;; Enable leader key in agenda.
-    (define-key org-agenda-mode-map (kbd "SPC") spacemacs-keys-default-map)
 
     (setq org-agenda-include-diary nil)
     (setq org-agenda-start-on-weekday nil)
@@ -419,27 +391,6 @@ Do not scheduled items or repeating todos."
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))
 
-            ("s" "Standup "
-             ((tags "+standup/!-DONE"
-                    ((org-agenda-overriding-header
-                      (concatenate 'string
-                                   "Standup "
-                                   (org-make-link-string "https://moviohq.atlassian.net/secure/RapidBoard.jspa?rapidView=134&selectedIssue=GREEN-60&quickFilter=523" "JIRA Board")
-                                   " "
-                                   (org-make-link-string "https://github.com/movio/mc-wysiwyg/issues" "WYSIWYG")
-                                   " "
-                                   (org-make-link-string "https://github.com/movio/green/issues" "Green")
-                                   " "
-                                   (org-make-link-string "https://gogs.movio.co/movio/kube-mc-green/issues" "Gogs")
-                                   " "
-                                   (org-make-link-string "https://github.com/movio/reporting-ui-components" "Reporting UI Components"))))))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-use-tag-inheritance nil)
-              (org-agenda-files (list rk-org-work-file org-agenda-diary-file))
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-drawer-properties '(effort appt))))
-
             ("p" "Personal actions"
              ((tags-todo "-someday-media-study-@consume/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
@@ -480,9 +431,9 @@ Do not scheduled items or repeating todos."
 
 (use-package rk-org-agenda-transient-state
   :after (org org-agenda)
-  :init
-  (progn
-    (define-key org-agenda-mode-map (kbd "C-.") #'rk-org-agenda-hydra-transient-state/body)))
+  :general
+  (:keymaps 'org-agenda-mode-map
+            "C-." #'rk-org-agenda-hydra-transient-state/body))
 
 (use-package appt
   :defer t
@@ -514,12 +465,10 @@ Do not scheduled items or repeating todos."
       "Apply inherited tags when archiving."
       (org-set-tags (org-get-tags))))
 
-  :init
-  (spacemacs-keys-set-leader-keys-for-minor-mode 'org-mode
-    "c" #'org-archive-subtree)
-
   :config
   (progn
+    (rk-local-leader-def :keymaps 'org-mode-map
+      "c" #'org-archive-subtree)
     (setq org-archive-default-command #'rk-org--archive-done-tasks)
     (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags)))
 
@@ -596,12 +545,12 @@ Do not scheduled items or repeating todos."
      kws))
   :config
   (progn
-    (spacemacs-keys-set-leader-keys-for-minor-mode 'org-capture-mode
-      "d" #'org-deadline
-      "c" #'org-capture-finalize
-      "k" #'org-capture-kill
-      "r" #'org-capture-refile
-      "A" #'org-align-tags)
+    (rk-local-leader-def :keymaps 'org-capture-mode-map
+      "d" '(org-deadline :wk "add deadline")
+      "c" '(org-capture-finalize :wk "commit entry")
+      "k" '(org-capture-kill :wk "abort")
+      "r" '(org-capture-refile :wk "refile entry")
+      "A" '(org-align-tags :wk "align tags"))
     (setq org-capture-templates
           (list
            (rk-org--capture-template-entry
@@ -665,6 +614,9 @@ Do not scheduled items or repeating todos."
 
 (use-package evil
   :defer t
+  :general
+  (:keymaps 'evil-org-mode-map :states '(insert normal)
+            "M-o" #'org-insert-subheading)
   :preface
   (progn
     (autoload 'org-at-heading-p "org")
@@ -699,10 +651,7 @@ Do not scheduled items or repeating todos."
     (advice-add 'org-insert-subheading :after #'rk-org--add-blank-line-after-heading)
     (advice-add 'org-insert-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
     (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading)
-
-    (evil-define-key 'normal evil-org-mode-map (kbd "M-o") #'org-insert-subheading)
-    (evil-define-key 'insert evil-org-mode-map (kbd "M-o") #'org-insert-subheading)))
+    (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading)))
 
 (use-package ox
   :after org
@@ -774,34 +723,34 @@ table tr.tr-even td {
   :after org)
 
 (use-package rk-org-goto
-  :init
-  (spacemacs-keys-set-leader-keys
-    "oa" #'rk-org-goto-agenda
-    "od" #'rk-org-goto-diary
-    "on" #'rk-org-goto-notes
-    "ow" #'rk-org-goto-work
-    "oN" #'rk-org-goto-numero
-    "or" #'rk-org-goto-recruitment
-    "ot" #'rk-org-goto-todo-list
-    "ov" #'rk-org-goto-tags-list))
+  :config
+  (rk-leader-def
+    "oa" '(rk-org-goto-agenda :wk "agenda")
+    "od" '(rk-org-goto-diary :wk "diary")
+    "on" '(rk-org-goto-notes :wk "notes")
+    "ow" '(rk-org-goto-work :wk "work")
+    "oN" '(rk-org-goto-numero :wk "numero")
+    "or" '(rk-org-goto-recruitment :wk "recruitment")
+    "ot" '(rk-org-goto-todo-list :wk "todos")
+    "ov" '(rk-org-goto-tags-list :wk "tags")))
 
 (use-package rk-org-ctrl-c-ret
   :after org
-  :config
-  (progn
-    (evil-define-key 'normal org-mode-map (kbd "C-c <return>") #'rk-org-ctrl-c-ret)
-    (evil-define-key 'emacs org-mode-map (kbd "C-c <return>") #'rk-org-ctrl-c-ret)))
+  :general
+  (:keymaps 'org-mode-map :states '(normal emacs)
+            "C-c <return>" #'rk-org-ctrl-c-ret))
 
 (use-package rk-org-jira-url
   :after org
   :config
-  (spacemacs-keys-set-leader-keys-for-major-mode 'org-mode
-    "j" #'rk-org--create-jira-url))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "j" '(rk-org--create-jira-url :wk "create JIRA link")))
 
 (use-package rk-org-ctrl-c-ctrl-k
   :after org
-  :config
-  (evil-define-key 'normal org-mode-map (kbd "C-c C-k") #'rk-org-ctrl-c-ctrl-k))
+  :general
+  (:keymaps 'org-mode-map :states 'normal
+            "C-c C-k" #'rk-org-ctrl-c-ctrl-k))
 
 (use-package rk-diary-utils
   :after org)
@@ -809,14 +758,28 @@ table tr.tr-even td {
 (use-package evil-org
   :straight t
   :after org
+  :demand t
+  :general
+  (:keymaps 'org-agenda-mode-map :states 'motion
+            "j" #'org-agenda-next-line
+            "k" #'org-agenda-previous-line
+            "M-j" #'org-agenda-next-item
+            "M-k" #'org-agenda-previous-item
+            "M-h" #'org-agenda-earlier
+            "M-l" #'org-agenda-later
+            "gd" #'org-agenda-toggle-time-grid
+            "gr" #'org-agenda-redo
+            "C-f" #'evil-scroll-page-down
+            "C-b" #'evil-scroll-page-up
+            "M-RET" #'org-agenda-show-and-scroll-up
+            "J" #'org-agenda-goto-date)
   :config
-  (progn
-    (add-hook 'org-mode-hook 'evil-org-mode)
-    (add-hook 'evil-org-mode-hook
-              (lambda ()
-                (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))))
-    (require 'evil-org-agenda)
-    (evil-org-agenda-set-keys)))
+  (add-hook 'org-mode-hook 'evil-org-mode)
+  (add-hook 'evil-org-mode-hook
+            (lambda ()
+              (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))))
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
 
 (use-package org-indent
   :after org
@@ -830,8 +793,8 @@ table tr.tr-even td {
 
 (use-package org-babel-hydra
   :init
-  (spacemacs-keys-set-leader-keys-for-major-mode 'org-mode
-    "b" #'org-babel-transient-state/body))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "b" '(org-babel-transient-state/body :wk "babel hydra")))
 
 (provide 'rk-org)
 

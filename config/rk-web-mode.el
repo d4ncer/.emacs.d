@@ -11,34 +11,34 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'general)
+(require 'definers)
 (require 'dash)
 (require 'f)
 (require 's)
 (require 'flycheck)
 
+(autoload 'flow-minor-tag-present-p "flow-minor-mode")
+(autoload 'flow-minor-configured-p "flow-minor-mode")
+
 (defconst rk-web--prettier-default-args
   (list "--single-quote" "true" "--trailing-comma" "es5")
   "Default values for prettier.")
 
-(defconst rk-web--flow-buffer-regexp
-  (rx (or (and "//" (* space) "@flow")
-          (and "/*" (* space) "@flow" (* space) "*/")))
-  "Regex to determine if a buffer is Flow-enabled.")
-
-(defun rk-in-flow-buffer-p (&optional beg end)
-  "Check if the buffer has a Flow annotation.
-If BEG & END are defined, checks the selection defined."
+(defun rk-in-flow-buffer-p ()
+  "Check if the buffer is a valid Flow buffer."
   (and (eq major-mode 'rk-web-js-mode)
-       (s-matches? rk-web--flow-buffer-regexp
-                   (buffer-substring (or beg (point-min))
-                                     (or end (point-max))))))
+       (flow-minor-configured-p)
+       (flow-minor-tag-present-p)))
 
 (use-package web-mode
   :straight t
   :defines (web-mode-markup-indent-offset
             web-mode-css-indent-offset)
 
+  :general
+  (:keymaps 'web-mode-map
+            "C-c C-r" nil)
   :preface
   (autoload 'sp-local-pair "smartparens")
 
@@ -48,9 +48,6 @@ If BEG & END are defined, checks the selection defined."
     (setq web-mode-css-indent-offset 2)
     (setq web-mode-markup-indent-offset 2)
     (setq web-mode-enable-auto-quoting nil)
-
-    ;; Disable web-mode-reload binding
-    (define-key web-mode-map (kbd "C-c C-r") nil)
 
     ;; Use line comments when commenting in JS.
 
@@ -73,7 +70,6 @@ If BEG & END are defined, checks the selection defined."
          ("\\.eslintrc\\'" . rk-web-json-mode)
          ("\\.babelrc\\'" . rk-web-json-mode)
          ("\\.es6\\'"  . rk-web-js-mode)
-         ("\\.tsx?\\'"  . rk-web-typescript-mode)
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
@@ -89,7 +85,6 @@ If BEG & END are defined, checks the selection defined."
         (when (file-exists-p tidy-bin)
           (setq flycheck-html-tidy-executable tidy-bin)))
 
-      (flycheck-add-mode 'typescript-tslint 'rk-web-typescript-mode)
       (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
       (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
       (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
@@ -133,7 +128,7 @@ If BEG & END are defined, checks the selection defined."
   :commands (emmet-mode emmet-expand-line)
   :preface
   (progn
-    (defun buffer-contains-react ()
+    (defun rk-web--buffer-contains-react ()
       (save-excursion
         (save-match-data
           (goto-char (point-min))
@@ -148,15 +143,17 @@ If BEG & END are defined, checks the selection defined."
         (emmet-mode +1))
 
        ((and (derived-mode-p 'rk-web-js-mode)
-             (buffer-contains-react))
+             (rk-web--buffer-contains-react))
         (emmet-mode +1)))))
 
+  :general
+  (:keymaps 'emmet-mode-map
+            "C-/" #'emmet-expand-line)
   :init
   (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)
   :config
   (progn
     (setq emmet-move-cursor-between-quotes t)
-    (define-key emmet-mode-keymap (kbd "TAB") #'emmet-expand-line)
     (add-hook 'rk-web-js-mode-hook #'rk-web--set-jsx-classname-on)))
 
 (use-package rk-flycheck-stylelint
@@ -181,22 +178,19 @@ If BEG & END are defined, checks the selection defined."
 (use-package flow-minor-mode
   :straight (:host github :repo "d4ncer/flow-minor-mode"
                    :branch "master")
+  :general
+  (:keymaps 'flow-minor-mode-map :states 'normal
+            "gd" #'flow-minor-jump-to-definition
+            "K"  #'flow-minor-type-at-pos)
   :after rk-web-modes
   :preface
   (progn
     (autoload 's-matches? "s")
     (autoload 'sp-get-enclosing-sexp "smartparens")
 
-    (defun rk-flow-set-goto-def-binding ()
-      (if (rk-in-flow-buffer-p)
-          (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'flow-minor-jump-to-definition)
-        (evil-define-key 'normal rk-web-js-mode-map (kbd "gd") #'evil-goto-definition)))
-
     (defun rk-flow-toggle-sealed-object ()
       "Toggle between a sealed & unsealed object type."
       (interactive)
-      (unless (rk-in-flow-buffer-p)
-        (user-error "Not in a flow buffer"))
       (-let [(&plist :beg beg :end end :op op) (sp-get-enclosing-sexp)]
         (save-excursion
           (cond ((equal op "{")
@@ -222,36 +216,26 @@ If BEG & END are defined, checks the selection defined."
         (insert "// @flow\n")
         (message "Inserted @flow annotation.")))
 
-    (defun rk-flow-add-annotation-binding ()
-      (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-        "a" #'rk-flow-insert-flow-annotation))
-
     (defun rk-flow-setup-bindings ()
-      (if (rk-in-flow-buffer-p)
-          (progn
-            (spacemacs-keys-declare-prefix-for-mode 'rk-web-js-mode "m f" "flow")
-            (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-              "ft" #'flow-minor-type-at-pos
-              "fs" #'flow-minor-suggest
-              "fS" #'flow-minor-status
-              "fc" #'flow-minor-coverage
-              "fo" #'rk-flow-toggle-sealed-object
-              "fd" #'flow-minor-jump-to-definition))
-        (define-key spacemacs-keys-rk-web-js-mode-map (kbd "f") nil)))
+      (rk-local-leader-def :keymaps 'rk-web-js-mode-map
+        "f" '(:ignore t :wk "flow")
+        "fs" '(flow-minor-suggest :wk "suggest")
+        "fS" '(flow-minor-status :wk "status")
+        "fc" '(flow-minor-coverage :wk "coverage")
+        "fo" '(rk-flow-toggle-sealed-object :wk "toggle object seal")))
 
     (defun rk-flow-setup ()
       (progn
         (flow-minor-enable-automatically)
-        (rk-flow-setup-bindings)
-        (rk-flow-set-goto-def-binding))))
+        (rk-flow-setup-bindings))))
 
   :init
-  (progn
-    (rk-flow-add-annotation-binding)
-    (setq flow-minor-use-eldoc-p nil))
+  (setq flow-minor-use-eldoc-p nil)
   :config
   (progn
-    (add-hook 'find-file-hook #'rk-flow-setup)))
+    (rk-local-leader-def :keymaps 'rk-web-js-mode-map
+      "a" '(rk-flow-insert-flow-annotation :wk "insert @flow"))
+    (add-hook 'rk-web-js-mode-hook #'rk-flow-setup)))
 
 (use-package flycheck-flow
   :straight t
@@ -266,7 +250,7 @@ If BEG & END are defined, checks the selection defined."
       (setq-local flycheck-disabled-checkers '(javascript-flow))))
   :config
   (progn
-    (add-hook 'find-file-hook #'rk-web--maybe-setup-flycheck-flow)))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flycheck-flow)))
 
 (use-package company-flow
   :straight t
@@ -283,7 +267,7 @@ If BEG & END are defined, checks the selection defined."
         (setq-local company-backends rk-web--non-flow-backends))))
   :config
   (progn
-    (add-hook 'find-file-hook #'rk-web--maybe-setup-company-flow)))
+    (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-company-flow)))
 
 (use-package prettier-js
   :straight t
@@ -312,29 +296,24 @@ If BEG & END are defined, checks the selection defined."
     (defun rk-web--setup-prettier ()
       (when (rk-web--prettier-enable-p)
         (progn
+          (rk-local-leader-def :keymaps 'rk-web-js-mode-map
+            "." '(prettier-js :wk "format"))
           (rk-web--setup-prettier-local-binary-and-config)
           (prettier-js-mode +1))))
 
-    (defun rk-web--enable-prettier-on-find-file ()
+    (defun rk-web--maybe-setup-prettier ()
       (when (and (derived-mode-p 'web-mode)
                  (-contains-p '("javascript" "jsx") web-mode-content-type))
         (rk-web--setup-prettier))))
 
   :config
-  (progn
-    (add-hook 'find-file-hook #'rk-web--enable-prettier-on-find-file))
-
-  :init
-  (progn
-    (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-js-mode
-      "." #'prettier-js)))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier))
 
 (use-package add-node-modules-path
   :straight t
   :after rk-web-modes
   :config
   (progn
-    (add-hook 'rk-web-typescript-mode-hook #'add-node-modules-path)
     (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
     (add-hook 'rk-web-js-mode-hook #'add-node-modules-path)))
 
@@ -359,8 +338,8 @@ If BEG & END are defined, checks the selection defined."
   :after rk-web-modes
   :commands (stylefmt-enable-on-save stylefmt-format-buffer)
   :config
-  (spacemacs-keys-set-leader-keys-for-major-mode 'rk-web-css-mode
-    "." #'stylefmt-format-buffer))
+  (rk-local-leader-def :keymaps 'rk-web-css-mode-map
+    "." '(stylefmt-format-buffer :wk "format")))
 
 (use-package nvm
   :straight t

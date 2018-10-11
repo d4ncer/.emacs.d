@@ -11,26 +11,29 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
 (require 'evil-transient-state)
-
-(autoload 'evil-define-key "evil-core")
+(require 'definers)
+(require 'general)
 
 (use-package with-editor
   :straight t
   :commands (with-editor-finish
              with-editor-cancel)
-  :config
-  (progn
-    (spacemacs-keys-set-leader-keys-for-minor-mode 'with-editor-mode
-      "c" #'with-editor-finish
-      "k" #'with-editor-cancel)))
+  :general
+  (:keymaps 'with-editor-mode-map
+   :states '(normal motion visual emacs)
+   ", c" #'with-editor-finish
+   ", k" #'with-editor-cancel))
 
 (use-package magit
   :straight t
   :defer t
   :commands (magit-status magit-blame magit-branch-and-checkout)
   :functions (magit-display-buffer-fullframe-status-v1)
+  :general
+  (:keymaps 'magit-refs-mode-map
+   :states '(normal)
+   "." #'magit-branch-and-checkout)
   :preface
   (evil-transient-state-define git-blame
     :title "Git Blame Transient State"
@@ -44,15 +47,12 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     ("b" magit-blame)
     ("q" nil :exit t))
   :init
-  (progn
-    (spacemacs-keys-set-leader-keys
-      "gs" #'magit-status
-      "gb" #'git-blame-transient-state/body))
+  (rk-leader-def
+    "gs" #'magit-status
+    "gb" #'git-blame-transient-state/body)
   :config
-  (progn
-    (evil-define-key 'normal magit-refs-mode-map (kbd ".") #'magit-branch-and-checkout)
-    (setq magit-log-section-commit-count 0)
-    (setq magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1)))
+  (general-setq magit-log-section-commit-count 0
+                magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1))
 
 (use-package git-commit-jira-prefix
   :hook (git-commit-setup . git-commit-jira-prefix-insert))
@@ -60,12 +60,13 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
 (use-package evil-magit
   :straight t
   :after magit
-  :config
-  (progn
-    (evil-define-key 'normal magit-mode-map (kbd "C-u") #'evil-scroll-page-up)
-    (evil-define-key 'visual magit-mode-map (kbd "C-u") #'evil-scroll-page-up)
-    (evil-define-key 'normal magit-mode-map (kbd "C-d") #'evil-scroll-page-down)
-    (evil-define-key 'normal magit-mode-map (kbd "C-d") #'evil-scroll-page-down)))
+  :general
+  (:keymaps 'magit-mode-map
+   :states '(normal visual)
+     "C-u" #'evil-scroll-page-up
+     "C-d" #'evil-scroll-page-down)
+  :init
+  (evil-magit-init))
 
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
@@ -98,7 +99,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     ("Y" git-timemachine-kill-revision)
     ("q" nil :exit t))
   :init
-  (spacemacs-keys-set-leader-keys
+  (rk-leader-def
     "gt" #'time-machine-transient-state/body))
 
 (use-package diff-hl
@@ -126,7 +127,8 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
       ("x" diff-hl-revert-hunk)
       ("q" nil :exit t))
 
-    (spacemacs-keys-set-leader-keys "g." 'git-hunks-transient-state/body))
+    (rk-leader-def
+      "g." 'git-hunks-transient-state/body))
   :config
   (progn
     (add-hook 'iedit-mode-hook #'rk-magit--diff-hl-mode-on)

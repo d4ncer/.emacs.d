@@ -11,8 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
-(autoload 'evil-define-key "evil-core")
+(require 'definers)
 
 (use-package restclient
   :straight t
@@ -21,22 +20,17 @@
              restclient-jump-next
              restclient-jump-prev
              restclient-http-send-current-stay-in-window)
+  :general
+  (:keymaps 'restclient-mode-map :states '(normal)
+            "C-n" #'restclient-jump-next
+            "C-p" #'restclient-jump-prev)
   :config
   (progn
-    (spacemacs-keys-set-leader-keys-for-major-mode 'restclient-mode
-      "c" #'restclient-http-send-current
-      "o" #'restclient-http-send-current-stay-in-window)
+    (rk-local-leader-def :keymaps 'restclient-mode-map
+      "c" '(restclient-http-send-current :wk "execute current")
+      "o" '(restclient-http-send-current-stay-in-window :wk "execute current (stay)"))
 
     (setq restclient-same-buffer-response-name "*restclient*")
-
-    (evil-define-key 'normal restclient-mode-map
-      (kbd "C-n") #'restclient-jump-next
-      (kbd "C-p") #'restclient-jump-prev)
-
-    (with-eval-after-load 'which-key
-      (with-no-warnings
-        (push `((nil . ,(rx bos "restclient-http-" (group (+ nonl)))) . (nil . "\\1"))
-              which-key-replacement-alist)))
 
     (add-to-list 'display-buffer-alist
                  `(,(rx bos "*restclient*" eos)

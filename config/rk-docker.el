@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 
 (use-package dockerfile-mode
   :straight t
@@ -21,10 +21,10 @@
              dockerfile-test-function)
   :mode (("Dockerfile\\'" . dockerfile-mode))
   :config
-  (spacemacs-keys-set-leader-keys-for-major-mode 'dockerfile-mode
-    "b" #'dockerfile-build-buffer
-    "B" #'dockerfile-build-no-cache-buffer
-    "t" #'dockerfile-test-function))
+  (rk-local-leader-def :keymaps 'dockerfile-mode-map
+    "b" '(dockerfile-build-buffer :wk "build")
+    "B" '(dockerfile-build-no-cache-buffer :wk "build w/o cache")
+    "t" '(dockerfile-test-function :wk "test")))
 
 (provide 'rk-docker)
 

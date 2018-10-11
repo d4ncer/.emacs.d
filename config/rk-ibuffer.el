@@ -11,26 +11,27 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
-(require 'evil-transient-state)
-(require 'evilified-state)
+(require 'definers)
+(require 'general)
 
 (use-package ibuffer
   :commands (ibuffer-forward-line
              ibuffer-backward-line)
   :defines (ibuffer-show-empty-filter-groups
             ibuffer-never-show-predicates)
-  :bind ("C-x C-b" . ibuffer-other-window)
+  :general
+  (:keymaps 'ibuffer-mode-map
+            "j" #'ibuffer-forward-line
+            "k" #'ibuffer-backward-line)
   :init
-  (spacemacs-keys-set-leader-keys "." #'ibuffer)
+
 
   :preface
   ;; HACK: Hide the cursor and use hl-line.
-  (progn
-    (defun rk-ibuffer--hacky-show-line-only ()
-      (run-with-timer 0.01 nil (lambda ()
-                                 (setq cursor-type nil)
-                                 (hl-line-mode +1)))))
+  (defun rk-ibuffer--hacky-show-line-only ()
+    (run-with-timer 0.01 nil (lambda ()
+                               (setq cursor-type nil)
+                               (hl-line-mode +1))))
   :config
   (progn
     (setq ibuffer-expert t)
@@ -45,16 +46,17 @@
                         "*Org"
                         "*Flycheck error messages*"
                         "*Help*"))))
-    (add-hook 'ibuffer-hook #'rk-ibuffer--hacky-show-line-only t)
-    (define-key ibuffer-mode-map (kbd "SPC") spacemacs-keys-default-map)
-    (define-key ibuffer-mode-map (kbd "j") #'ibuffer-forward-line)
-    (define-key ibuffer-mode-map (kbd "k") #'ibuffer-backward-line)))
+    (rk-local-leader-def :keymaps 'ibuffer-mode-map
+      "o" '(ibuffer-other-window :wk "ib other window"))
+    (rk-leader-def "." '(ibuffer :wk "ib"))
+    (add-hook 'ibuffer-hook #'rk-ibuffer--hacky-show-line-only t)))
 
 (use-package rk-ibuffer-transient-state
   :after ibuffer
   :commands (rk-ibuffer-main-transient-state/body)
-  :config
-  (define-key ibuffer-mode-map (kbd ".") #'rk-ibuffer-main-transient-state/body))
+  :general
+  (:keymaps 'ibuffer-mode-map :states '(normal motion visual emacs)
+            "." #'rk-ibuffer-main-transient-state/body))
 
 (use-package ibuf-ext
   :commands (ibuffer-auto-mode)

@@ -11,7 +11,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
+(require 'definers)
 (require 'paths)
 (autoload 'evil-set-initial-state "evil-core")
 
@@ -23,18 +23,19 @@
              treemacs-mode
              treemacs-next-line
              treemacs-previous-line)
+  :general
+  (:keymaps 'treemacs-mode-map :states 'emacs
+            "j" #'treemacs-next-line
+            "k" #'treemacs-previous-line)
   :config
   (progn
-    (evil-set-initial-state 'treemacs-mode 'emacs)
-    (define-key treemacs-mode-map (kbd "j") #'treemacs-next-line)
-    (define-key treemacs-mode-map (kbd "k") #'treemacs-previous-line)
-    (define-key treemacs-mode-map (kbd "SPC") spacemacs-keys-default-map))
+    (evil-set-initial-state 'treemacs-mode 'emacs))
   :init
   (progn
     (setq treemacs-persist-file (concat paths-cache-directory "/treemacs-persist"))
-    (spacemacs-keys-set-leader-keys
-      "f t" #'treemacs
-      "p t" #'treemacs-add-project-to-workspace)))
+    (rk-leader-def
+      "f t" '(treemacs :wk "tree")
+      "p t" '(treemacs-add-project-to-workspace :wk "add to tree"))))
 
 (provide 'rk-treemacs)
 

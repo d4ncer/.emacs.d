@@ -11,17 +11,20 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
 (require 'subr-x)
+(require 'definers)
+(require 'rk-misc-utils)
 
 (use-package swiper
   :straight t
-  :config
-  (progn
-    (evil-global-set-key 'motion "/" #'swiper)
-    (evil-global-set-key 'normal "/" #'swiper)))
+  :demand t
+  :general
+  (:states '(motion normal)
+           "/" #'swiper))
 
 (use-package ivy
+  :straight t
+  :demand t
   :commands (ivy-dispatching-done
              ivy-help
              ivy-immediate-done
@@ -32,6 +35,12 @@
              ivy-resume
              ivy-switch-buffer
              ivy-wgrep-change-to-wgrep-mode)
+  :general
+  (:keymaps 'ivy-occur-grep-mode-map
+   :states '(normal motion visual emacs)
+   ", c" #'rk-search-wgrep-finish-edit-kill-buffer
+   ", k" #'rk-search-wgrep-abort-changes-kill-buffer
+   ", w" #'ivy-wgrep-change-to-wgrep-mode)
 
   :preface
   (progn
@@ -53,13 +62,9 @@
         (apply f args))))
 
   :init
-  (progn
-    (spacemacs-keys-set-leader-keys
-      "r" #'ivy-resume
-      "b s" #'ivy-switch-buffer)
-
-    (bind-key "C-c C-r" #'ivy-resume)
-    (bind-key "C-x b" #'ivy-switch-buffer))
+  (rk-leader-def
+    "r" '(ivy-resume :wk "ivy resume")
+    "b s" '(ivy-switch-buffer :wk "switch buffer"))
 
   :config
   (progn
@@ -68,23 +73,16 @@
     (setq ivy-re-builders-alist '((t . ivy--regex-plus)))
 
     ;; Do not show extra directories when finding files.
+
     (setq ivy-extra-directories '("."))
     (advice-add #'counsel-find-file :around #'rk-ivy-with-empty-ivy-extra-directories)
 
-    (define-key ivy-occur-mode-map (kbd "C-x C-w") #'ivy-wgrep-change-to-wgrep-mode)
-
-    (spacemacs-keys-set-leader-keys-for-major-mode 'ivy-occur-grep-mode
-      "w" #'ivy-wgrep-change-to-wgrep-mode
-      "c" #'wgrep-finish-edit
-      "k" #'wgrep-abort-changes)
-
-    (define-key ivy-minibuffer-map (kbd "<f1>") #'rk-ivy-help)
-    (define-key ivy-minibuffer-map (kbd "C-z") #'ivy-dispatching-done)
-    (define-key ivy-minibuffer-map (kbd "<escape>") 'minibuffer-keyboard-quit)
-    (define-key ivy-minibuffer-map (kbd "C-l") #'ivy-partial-or-done)
-    (define-key ivy-minibuffer-map (kbd "C-<return>") #'ivy-immediate-done)
-    (define-key ivy-minibuffer-map (kbd "C-j") #'ivy-next-line)
-    (define-key ivy-minibuffer-map (kbd "C-k") #'ivy-previous-line)
+    (general-def ivy-minibuffer-map "C-z" #'ivy-dispatching-done)
+    (general-def ivy-minibuffer-map "<escape>" 'minibuffer-keyboard-quit)
+    (general-def ivy-minibuffer-map "C-l" #'ivy-partial-or-done)
+    (general-def ivy-minibuffer-map "C-<return>" #'ivy-immediate-done)
+    (general-def ivy-minibuffer-map "C-j" #'ivy-next-line)
+    (general-def ivy-minibuffer-map "C-k" #'ivy-previous-line)
     (setq ivy-flx-limit 2000)
 
     (ivy-mode))
@@ -100,7 +98,8 @@
   :after ivy)
 
 (use-package counsel
-  :after swiper
+  :straight t
+  :demand t
   :commands (counsel-M-x
              counsel-descbinds
              counsel-describe-face
@@ -128,36 +127,35 @@
 
   :init
   (progn
-    (spacemacs-keys-set-leader-keys
-      "SPC" #'counsel-M-x
-      "?"   #'counsel-descbinds
-      "f f" #'counsel-find-file
-      "f j" #'counsel-file-jump
-      "f r" #'counsel-recentf
-      "k r" #'counsel-yank-pop
-      "i i" #'counsel-imenu
-      "i f" #'counsel-faces
-      "i e" #'counsel-colors-emacs
-      "i w" #'counsel-colors-web
-      "i c" #'counsel-command-history
-      "i m" #'counsel-minibuffer-history
-      "i p" #'counsel-list-processes
-      "i t" #'counsel-load-theme
-      "h d f" #'counsel-describe-function
-      "h d v" #'counsel-describe-variable
-      "h d c" #'counsel-describe-face)
+    (rk-leader-def
+      "SPC"   '(counsel-M-x :wk "M-x")
+      "?"     '(counsel-descbinds :wk "describe bindings")
+      "f f"   '(counsel-find-file :wk "find file")
+      "f j"   '(counsel-file-jump :wk "find file in subdirs")
+      "f r"   '(counsel-recentf :wk "recent files")
+      "k r"   '(counsel-yank-pop :wk "kill ring")
+      "i i"   '(counsel-imenu :wk "imenu")
+      "i f"   '(counsel-faces :wk "list faces")
+      "i e"   '(counsel-colors-emacs :wk "colors (emacs)")
+      "i w"   '(counsel-colors-web :wk "colors (web)")
+      "i c"   '(counsel-command-history :wk "history (commands)")
+      "i m"   '(counsel-minibuffer-history :wk "history (minibuffer)")
+      "i p"   '(counsel-list-processes :wk "list processes")
+      "i t"   '(counsel-load-theme :wk "load theme")
+      "h d f" '(counsel-describe-function :wk "describe function")
+      "h d v" '(counsel-describe-variable :wk "describe variable")
+      "h d c" '(counsel-describe-face :wk "describe face"))
 
-    (bind-key "M-x" #'counsel-M-x)
-    (bind-key "C-x C-f" #'counsel-find-file)
-    (bind-key "C-h v" #'counsel-describe-variable)
-    (bind-key "C-h f" #'counsel-describe-function))
+    (general-def "M-x" #'counsel-M-x)
+    (general-def "C-h v" #'counsel-describe-variable)
+    (general-def "C-h f" #'counsel-describe-function))
 
   :config
   (progn
-    (define-key counsel-find-file-map (kbd "C-h") 'counsel-up-directory)
-    (define-key counsel-find-file-map (kbd "C-M-j") #'ivy-immediate-done)
-    (define-key counsel-find-file-map (kbd "C-h") #'counsel-up-directory)
-    (define-key ivy-minibuffer-map (kbd "C-h") #'counsel-up-directory)
+    (general-def counsel-find-file-map "C-h" 'counsel-up-directory)
+    (general-def counsel-find-file-map "C-M-j" #'ivy-immediate-done)
+    (general-def counsel-find-file-map "C-h" #'counsel-up-directory)
+    (general-def ivy-minibuffer-map "C-h" #'counsel-up-directory)
 
     (setq counsel-git-cmd "rg --files")
     (setq counsel-rg-base-command "rg -i -g '!.git/*' --no-heading --line-number --hidden --max-columns 120 --color never %s .")
@@ -166,15 +164,15 @@
     (counsel-mode +1)))
 
 (use-package rk-ivy-commands
-  :after swiper
+  :after ivy
   :commands (rk-swiper-region-or-symbol
              rk-counsel-project-region-or-symbol
              rk-counsel-region-or-symbol)
   :init
-  (spacemacs-keys-set-leader-keys
-    "sS" #'rk-swiper-region-or-symbol
-    "sP" #'rk-counsel-project-region-or-symbol
-    "sF" #'rk-counsel-region-or-symbol))
+  (rk-leader-def
+    "sS" '(rk-swiper-region-or-symbol :wk "search in buffer")
+    "sP" '(rk-counsel-project-region-or-symbol :wk "search in project")
+    "sF" '(rk-counsel-region-or-symbol :wk "search in dir")))
 
 (provide 'rk-ivy)
 

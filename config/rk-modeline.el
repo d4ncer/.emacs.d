@@ -11,8 +11,6 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'spacemacs-keys)
-
 (use-package doom-modeline
   :config
   (+doom-modeline|init))
