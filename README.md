@@ -123,7 +123,7 @@ packages of note:
 * `straight.el`
 * Evil
 * Ivy / Counsel / Swiper (with `ripgrep`)
-* Spacemacs leader keys (built on top of `which-key`)
+* General
 * Hydra
 * Projectile
 * Flycheck
