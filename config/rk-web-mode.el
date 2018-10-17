@@ -33,6 +33,7 @@
 
 (use-package web-mode
   :straight t
+  :demand t
   :defines (web-mode-markup-indent-offset
             web-mode-css-indent-offset)
 
@@ -176,6 +177,7 @@
 ;; Flow
 
 (use-package flow-minor-mode
+  :demand t
   :straight (:host github :repo "d4ncer/flow-minor-mode"
                    :branch "master")
   :general
@@ -214,20 +216,7 @@
       (save-excursion
         (goto-char (point-min))
         (insert "// @flow\n")
-        (message "Inserted @flow annotation.")))
-
-    (defun rk-flow-setup-bindings ()
-      (rk-local-leader-def :keymaps 'rk-web-js-mode-map
-        "f" '(:ignore t :wk "flow")
-        "fs" '(flow-minor-suggest :wk "suggest")
-        "fS" '(flow-minor-status :wk "status")
-        "fc" '(flow-minor-coverage :wk "coverage")
-        "fo" '(rk-flow-toggle-sealed-object :wk "toggle object seal")))
-
-    (defun rk-flow-setup ()
-      (progn
-        (flow-minor-enable-automatically)
-        (rk-flow-setup-bindings))))
+        (message "Inserted @flow annotation."))))
 
   :init
   (setq flow-minor-use-eldoc-p nil)
@@ -235,7 +224,13 @@
   (progn
     (rk-local-leader-def :keymaps 'rk-web-js-mode-map
       "a" '(rk-flow-insert-flow-annotation :wk "insert @flow"))
-    (add-hook 'rk-web-js-mode-hook #'rk-flow-setup)))
+    (rk-local-leader-def :keymaps 'flow-minor-mode-map
+      "f" '(:ignore t :wk "flow")
+      "fs" '(flow-minor-suggest :wk "suggest")
+      "fS" '(flow-minor-status :wk "status")
+      "fc" '(flow-minor-coverage :wk "coverage")
+      "fo" '(rk-flow-toggle-sealed-object :wk "toggle object seal"))
+    (add-hook 'rk-web-js-mode-hook #'flow-minor-enable-automatically)))
 
 (use-package flycheck-flow
   :straight t
