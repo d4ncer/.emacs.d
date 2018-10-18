@@ -14,6 +14,8 @@
   :demand t
   :commands (prodigy)
   :general
+  (:keymaps 'prodigy-view-mode-map :states '(normal motion)
+            "C-l" #'prodigy-view-clear-buffer)
   (:keymaps 'prodigy-mode-map :states '(normal motion)
             "C-g" #'kill-buffer-and-window
             "$" #'prodigy-display-process
