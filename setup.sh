@@ -35,6 +35,7 @@ if exists go; then
     go get -u -v golang.org/x/tools/cmd/goimports
     go get -u -v github.com/sqs/goreturns
     go get -u -v github.com/zmb3/gogetdoc
+    go get -u -v github.com/fatih/gomodifytags
     echo '--> Done!'
 else
     echo '--> It looks like you do not have go installed.'

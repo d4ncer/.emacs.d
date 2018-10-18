@@ -101,6 +101,19 @@
   :after go-mode
   :config (add-hook 'go-mode-hook 'go-eldoc-setup))
 
+(use-package go-tag
+  :straight t
+  :commands (go-tag-add
+             go-tag-remove)
+  :after go-mode
+  :config
+  (progn
+    (setq go-tag-args (list "-transform" "camelcase"))
+    (rk-local-leader-def :keymaps 'go-mode-map
+      "T"   '(:ignore t :wk "tags")
+      "T a" '(go-tag-add :wk "add")
+      "T r" '(go-tag-remove :wk "remove"))))
+
 (use-package rk-go-run
   :after go-mode
   :config
