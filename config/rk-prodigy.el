@@ -7,6 +7,8 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'definers)
+
 (use-package prodigy
   :straight t
   :demand t
