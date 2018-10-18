@@ -144,6 +144,9 @@
 (use-package rk-protobuf)
 (use-package rk-puppet)
 
+(use-package private-config
+  :load-path "~/private")
+
 ;;; Post init setup.
 
 (unless (file-directory-p org-directory)
