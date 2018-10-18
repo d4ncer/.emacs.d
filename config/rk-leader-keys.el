@@ -153,6 +153,8 @@
   "w o"   '(delete-other-windows :wk "kill other windows")
   "w q"   '(delete-window :wk "kill window")
 
+  "x"     '(:ignore t :wk "processes")
+
   "y"     '(:ignore t :wk "yasnippet")
 
   "z"     '(:ignore t :wk "scale"))

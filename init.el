@@ -121,6 +121,7 @@
 (use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-yasnippet)
+(use-package rk-prodigy)
 
 ;; Programming language support
 
