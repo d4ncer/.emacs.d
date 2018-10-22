@@ -26,7 +26,6 @@
 
 (defconst rk-org-work-file (concat org-directory "/work_movio.org"))
 (defconst rk-org-diary-file (concat org-directory "/diary.org"))
-(defconst rk-org-numero-file (concat org-directory "/numero.org"))
 (defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
 (defconst rk-org-consume-file (concat org-directory "/consume.org"))
 
@@ -387,7 +386,7 @@ Do not scheduled items or repeating todos."
              ((org-agenda-tag-filter-preset
                '("-drill" "-gtd" "-ignore"))
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list org-default-notes-file rk-org-numero-file rk-org-work-file org-agenda-diary-file))
+              (org-agenda-files (list org-default-notes-file rk-org-work-file org-agenda-diary-file))
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))
 
@@ -729,7 +728,6 @@ table tr.tr-even td {
     "od" '(rk-org-goto-diary :wk "diary")
     "on" '(rk-org-goto-notes :wk "notes")
     "ow" '(rk-org-goto-work :wk "work")
-    "oN" '(rk-org-goto-numero :wk "numero")
     "or" '(rk-org-goto-recruitment :wk "recruitment")
     "ot" '(rk-org-goto-todo-list :wk "todos")
     "ov" '(rk-org-goto-tags-list :wk "tags")))

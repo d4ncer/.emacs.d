@@ -32,12 +32,6 @@
   (find-file rk-org-work-file))
 
 ;;;###autoload
-(defun rk-org-goto-numero ()
-  "Switch to the Numero file."
-  (interactive)
-  (find-file rk-org-numero-file))
-
-;;;###autoload
 (defun rk-org-goto-recruitment ()
   "Switch to the recruitment file."
   (interactive)
