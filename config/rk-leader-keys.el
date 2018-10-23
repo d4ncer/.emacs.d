@@ -78,6 +78,7 @@
   "a m t" '(rk-insert-iso-timestamp :wk "insert ISO timestap")
 
   "b"     '(:ignore t :wk "buffer")
+  "b a"   '(mark-whole-buffer :wk "select all")
   "b b"   '(bury-buffer :wk "bury buffer")
   "b d"   '(kill-this-buffer :wk "kill buffer")
   "b e"   '(erase-buffer :wk "erase buffer")
