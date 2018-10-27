@@ -17,6 +17,7 @@
 (defconst rk-org--jira-project-alist
   '(("Green" . "GREEN")
     ("Support" . "MCSUP")
+    ("Red" . "RED")
     ("Blue" . "BLUE")
     ("Yellow" . "YE")
     ("Cinema" . "MC"))
