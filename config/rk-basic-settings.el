@@ -404,6 +404,10 @@ Optional arg JUSTIFY will justify comments and strings."
             rk-basic-settings-child-of-boring-relative-dir-p
             rk-basic-settings-child-of-boring-abs-dir-p))))
 
+(use-package calendar
+  :config
+  (setq diary-file (f-join "~/org" "diary")))
+
 (use-package bookmark
   :defer t
   :config
