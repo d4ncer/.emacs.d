@@ -122,6 +122,7 @@
 (use-package rk-expand-region)
 (use-package rk-yasnippet)
 (use-package rk-prodigy)
+(use-package rk-ledger)
 
 ;; Programming language support
 
