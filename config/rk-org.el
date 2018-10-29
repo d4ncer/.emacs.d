@@ -24,10 +24,16 @@
 
 (defvar org-directory "~/org")
 
-(defconst rk-org-work-file (concat org-directory "/work_movio.org"))
-(defconst rk-org-diary-file (concat org-directory "/diary.org"))
-(defconst rk-org-recruitment-file (concat org-directory "/recruitment.org"))
-(defconst rk-org-consume-file (concat org-directory "/consume.org"))
+(defconst rk-org-gtd-dir (f-join org-directory "gtd"))
+(defconst rk-org-work-file (f-join org-directory "work_movio.org"))
+(defconst rk-org-inbox-file (f-join rk-org-gtd-dir "inbox.org"))
+(defconst rk-org-tickler-file (f-join rk-org-gtd-dir "tickler.org"))
+(defconst rk-org-someday-file (f-join rk-org-gtd-dir "someday.org"))
+(defconst rk-org-projects-file (f-join rk-org-gtd-dir "projects.org"))
+(defconst rk-org-reference-file (f-join rk-org-gtd-dir "reference.org"))
+(defconst rk-org-diary-file (f-join org-directory "diary.org"))
+(defconst rk-org-recruitment-file (f-join org-directory "recruitment.org"))
+(defconst rk-org-consume-file (f-join org-directory "consume.org"))
 
 (use-package org
   :straight org-plus-contrib
@@ -96,7 +102,7 @@
                              (nth 2 (org-heading-components))))
         (save-excursion
           (while (org-up-heading-safe)
-            (when (-contains? '("NEXT" "WAITING" "MAYBE")
+            (when (-contains? '("NEXT" "WAITING")
                               (nth 2 (org-heading-components)))
               (org-todo "TODO"))))))
 
@@ -151,8 +157,11 @@ Do not scheduled items or repeating todos."
       "RET" #'org-return)
 
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(org-default-notes-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-someday-file :maxlevel . 3))
     (add-to-list 'org-refile-targets '(rk-org-consume-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-projects-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-reference-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-tickler-file :maxlevel . 3))
     (add-to-list 'org-refile-targets '(rk-org-diary-file :maxlevel . 3))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
@@ -174,7 +183,7 @@ Do not scheduled items or repeating todos."
     (setq org-pretty-entities t)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
     (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
-    (setq org-agenda-diary-file (f-join org-directory "diary.org"))
+    (setq org-agenda-diary-file rk-org-inbox-file)
 
     (setq org-refile-use-outline-path t)
     (setq org-return-follows-link t)
@@ -187,7 +196,7 @@ Do not scheduled items or repeating todos."
     (setq org-log-repeat nil)
     (setq org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
 
-    (setq org-todo-keywords '((type "TODO(t)" "MAYBE(m)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
+    (setq org-todo-keywords '((type "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
                               (type "SOMEDAY(s)" "|")))
 
     (setq org-confirm-babel-evaluate nil)
@@ -299,6 +308,9 @@ Do not scheduled items or repeating todos."
     (rk-leader-def
       "oA" '(org-agenda :wk "agenda"))
 
+    (rk-local-leader-def :keymaps 'org-agenda-mode-map
+      "r" '(org-agenda-refile :wk "refile"))
+
     ;; Match projects that do not have a scheduled action or NEXT action.
     (setq org-stuck-projects '("+project-ignore-maybe-done"
                                ("NEXT") nil
@@ -307,7 +319,7 @@ Do not scheduled items or repeating todos."
     (setq org-agenda-include-diary nil)
     (setq org-agenda-start-on-weekday nil)
     (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
-    (setq org-agenda-files (f-files org-directory (lambda (f) (f-ext? f "org"))))
+    (setq org-agenda-files (f-files rk-org-gtd-dir (lambda (f) (f-ext? f "org"))))
     (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
     (setq org-agenda-insert-diary-extract-time t)
     (setq org-agenda-span 'week)
@@ -334,27 +346,42 @@ Do not scheduled items or repeating todos."
            :fileskip0 t
            :step 'week))
 
-    (setq org-duration-format
-          (list :hours "%d" :require-hours t
-                :minutes ":%02d" :require-minutes t))
-
     (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
 
     (setq org-agenda-custom-commands
-          '(("A" "Agenda and next actions"
-             ((tags-todo "-someday/NEXT"
+          '(("A" "All"
+             ((tags-todo "inbox"
+                         ((org-agenda-overriding-header "To Refile")))
+              (tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (agenda "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
               (stuck ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-files (list org-default-notes-file org-agenda-diary-file))
+              (org-agenda-include-inactive-timestamps t)
+              (org-agenda-files (list rk-org-projects-file rk-org-inbox-file rk-org-consume-file))
+              (org-agenda-dim-blocked-tasks nil)
+              (org-agenda-archives-mode nil)
+              (org-agenda-ignore-properties '(effort appt))))
+
+            ("w" "Work"
+             ((tags-todo "inbox"
+                         ((org-agenda-overriding-header "To Refile")))
+              (tags-todo "-someday-media-study/NEXT"
+                         ((org-agenda-overriding-header "Next Actions")))
+              (agenda "")
+              (todo "WAITING"
+                    ((org-agenda-overriding-header "Waiting")))
+              (stuck ""))
+             ((org-agenda-tag-filter-preset '("-ignore"))
+              (org-agenda-include-inactive-timestamps t)
+              (org-agenda-show-inherited-tags nil)
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-drawer-properties '(effort appt))))
 
-            ("n" "Next actions"
+            ("n" "Next"
              ((tags-todo "-someday/NEXT"))
              ((org-agenda-overriding-header "Next Actions")))
 
@@ -370,63 +397,23 @@ Do not scheduled items or repeating todos."
                      ((org-agenda-overriding-header "Review Stuck Projects")))
               (todo "WAITING"
                     ((org-agenda-overriding-header "Review Tasks on Hold")))
-
               (tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
-              (tags-todo "+goals+3_months+project/NEXT"
+              (tags-todo "+goals+3m+project"
                          ((org-agenda-overriding-header "Review 3 Month Goals")))
-              (tags-todo "+goals+1_year+project/NEXT"
+              (tags-todo "+goals+1y+project"
                          ((org-agenda-overriding-header "Review 1 Year Goals")))
-              (tags-todo "+goals+3_years+project/MAYBE|SOMEDAY|NEXT"
+              (tags-todo "+goals+3y+project"
                          ((org-agenda-overriding-header "Review 3 Year Goals")))
-              (tags-todo "someday-skill/MAYBE|NEXT"
-                         ((org-agenda-overriding-header "Decide whether to promote any SOMEDAY items to NEXT actions")))
-              (tags-todo "someday&skill"
-                         ((org-agenda-overriding-header "Decide whether to promote any learning tasks to NEXT actions"))))
+              (tags-todo "someday"
+                         ((org-agenda-overriding-header "Someday"))))
              ((org-agenda-tag-filter-preset
-               '("-drill" "-gtd" "-ignore"))
+               '("-ignore"))
+              (org-agenda-show-log t)
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list org-default-notes-file rk-org-work-file org-agenda-diary-file))
+              (org-agenda-files (list rk-org-consume-file rk-org-projects-file rk-org-inbox-file rk-org-someday-file))
               (org-agenda-archives-mode nil)
-              (org-agenda-dim-blocked-tasks nil)))
-
-            ("p" "Personal actions"
-             ((tags-todo "-someday-media-study-@consume/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")))
-              (tags-todo "+@consume+@read/NEXT"
-                         ((org-agenda-overriding-header "Read next")))
-              (tags-todo "+@consume+@watch/NEXT"
-                         ((org-agenda-overriding-header "Watch next")))
-              (tags-todo "+@consume+@eat/NEXT"
-                         ((org-agenda-overriding-header "Eat next")))
-              (tags-todo "+@consume+@listen/NEXT"
-                         ((org-agenda-overriding-header "Listen next")))
-              (tags-todo "+@consume+@experience/NEXT"
-                         ((org-agenda-overriding-header "Experience next")))
-              (agenda "")
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Waiting")))
-              (stuck ""))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-use-tag-inheritance nil)
-              (org-agenda-files (list org-agenda-diary-file rk-org-consume-file))
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-drawer-properties '(effort appt))))
-
-            ("w" "Work actions"
-             ((tags-todo "-someday-media-study/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")))
-              (agenda "")
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Waiting")))
-              (stuck ""))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-use-tag-inheritance nil)
-              (org-agenda-files (list rk-org-work-file))
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-drawer-properties '(effort appt))))))))
+              (org-agenda-dim-blocked-tasks nil)))))))
 
 (use-package rk-org-agenda-transient-state
   :after (org org-agenda)
@@ -444,6 +431,7 @@ Do not scheduled items or repeating todos."
 (use-package org-archive
   :after org
   :functions (org-archive-subtree)
+  :defines (org-archive-default-command)
   :preface
   (progn
     (autoload 'org-map-entries "org")
@@ -467,12 +455,13 @@ Do not scheduled items or repeating todos."
   :config
   (progn
     (rk-local-leader-def :keymaps 'org-mode-map
-      "c" #'org-archive-subtree)
+      "c" '(org-archive-subtree :wk "archive"))
     (setq org-archive-default-command #'rk-org--archive-done-tasks)
     (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags)))
 
 (use-package org-src
   :after org
+  :defines (org-src-fontify-natively)
 
   :preface
   (progn
@@ -508,6 +497,13 @@ Do not scheduled items or repeating todos."
 
 (use-package org-clock
   :after org
+  :defines (org-clock-persist
+            org-clock-persist-query-resume
+            org-clock-history-length
+            org-clock-in-resume
+            org-clock-report-include-clocking-task
+            org-clock-out-remove-zero-time-clocks
+            org-clock-persist-file)
 
   :preface
   (progn
@@ -542,67 +538,26 @@ Do not scheduled items or repeating todos."
            :empty-lines 1
            :prepend t)
      kws))
+  :defines (org-capture-templates)
   :config
   (progn
-    (rk-local-leader-def :keymaps 'org-capture-mode-map
-      "d" '(org-deadline :wk "add deadline")
-      "c" '(org-capture-finalize :wk "commit entry")
-      "k" '(org-capture-kill :wk "abort")
-      "r" '(org-capture-refile :wk "refile entry")
-      "A" '(org-align-tags :wk "align tags"))
     (setq org-capture-templates
           (list
            (rk-org--capture-template-entry
-            "d" "Diary"
-            '(file+datetree org-agenda-diary-file) "*  %?\n%^T")
+            "t" "Add to [inbox]"
+            '(file rk-org-inbox-file) "* TODO %i%?")
 
            (rk-org--capture-template-entry
-            "D" "Diary (work)"
-            `(file+datetree rk-org-work-file) "*  %?\n%^T")
+            "T" "Add to [tickler]"
+            '(file rk-org-tickler-file) "* %i%? \n %U")
 
            (rk-org--capture-template-entry
-            "r" "Reporting"
-            '(file+olp rk-org-work-file "Reporting") "*  %?")
+            "p" "Create [project]"
+            '(file rk-org-projects-file) "* %i%? [%] :project:\n:PROPERTIES:\n:CATEGORY:<ADD-CATEGORY-HERE>\n:END:")
 
            (rk-org--capture-template-entry
-            "e" "Editors"
-            '(file+olp rk-org-work-file "Editors") "*  %?")
-
-           (rk-org--capture-template-entry
-            "o" "Operations"
-            '(file+olp rk-org-work-file "Operations") "*  %?")
-
-           (rk-org--capture-template-entry
-            "y" "Design System"
-            '(file+olp rk-org-work-file "Design System") "*  %?")
-
-           (rk-org--capture-template-entry
-            "i" "Infra"
-            '(file+olp rk-org-work-file "Infra") "*  %?")
-
-           (rk-org--capture-template-entry
-            "E" "ETL"
-            '(file+olp rk-org-work-file "ETL") "*  %?")
-
-           (rk-org--capture-template-entry
-            "l" "Legacy"
-            '(file+olp rk-org-work-file "Legacy") "*  %?")
-
-           (rk-org--capture-template-entry
-            "R" "Recruitment"
-            '(file+olp rk-org-work-file "Recruitment") "*  %?")
-
-           (rk-org--capture-template-entry
-            "t" "Team Lead"
-            '(file+olp rk-org-work-file "Team Lead") "*  %?")
-
-           (rk-org--capture-template-entry
-            "S" "Standup"
-            `(file+datetree rk-org-work-file) "* TODO %? :standup:\n%^t")
-
-           (rk-org--capture-template-entry
-            "s" "Someday"
-            '(file+olp org-agenda-diary-file "Side projects")
+            "s" "Add task to do [someday]"
+            '(file+olp rk-org-someday-file "Side projects")
             "* SOMEDAY  %?")))))
 
 (use-package org-download
@@ -619,6 +574,7 @@ Do not scheduled items or repeating todos."
   :preface
   (progn
     (autoload 'org-at-heading-p "org")
+    (autoload 'evil-insert-state "evil-states")
 
     (defun rk-org--evil-insert-state (&rest _)
       "Enter evil insert state when creating new headings."
@@ -654,6 +610,8 @@ Do not scheduled items or repeating todos."
 
 (use-package ox
   :after org
+  :defines (org-export-exclude-tags
+            org-export-coding-system)
   :init
   (defvar org-export-backends '(ascii html latex odt gfm koma-letter custom-confluence))
   :config
@@ -667,6 +625,8 @@ Do not scheduled items or repeating todos."
 
 (use-package ox-confluence
   :after org
+  :preface
+  (autoload 'org-export-define-derived-backend "ox")
   :config
   (org-export-define-derived-backend 'custom-confluence 'confluence
     :menu-entry
@@ -675,6 +635,10 @@ Do not scheduled items or repeating todos."
 
 (use-package ox-html
   :after org
+  :defines (org-html-html5-fancy
+            org-html-postamble
+            org-html-table-row-open-tag
+            org-html-head-extra)
   :preface
   (defun rk-org-html-open-tags-setup
       (number _group-number _start-group-p _end-group-p topp bottomp)
@@ -718,40 +682,23 @@ table tr.tr-even td {
   :config
   (add-hook 'org-mode-hook #'rk-typopunct-init))
 
-(use-package rk-org-capture-url
-  :after org)
-
 (use-package rk-org-goto
   :config
   (rk-leader-def
     "oa" '(rk-org-goto-agenda :wk "agenda")
     "od" '(rk-org-goto-diary :wk "diary")
-    "on" '(rk-org-goto-notes :wk "notes")
+    "oi" '(rk-org-goto-inbox :wk "inbox")
     "ow" '(rk-org-goto-work :wk "work")
-    "or" '(rk-org-goto-recruitment :wk "recruitment")
+    "or" '(rk-org-goto-reference :wk "reference")
+    "op" '(rk-org-goto-projects :wk "projects")
     "ot" '(rk-org-goto-todo-list :wk "todos")
     "ov" '(rk-org-goto-tags-list :wk "tags")))
-
-(use-package rk-org-ctrl-c-ret
-  :after org
-  :general
-  (:keymaps 'org-mode-map :states '(normal emacs)
-            "C-c <return>" #'rk-org-ctrl-c-ret))
 
 (use-package rk-org-jira-url
   :after org
   :config
   (rk-local-leader-def :keymaps 'org-mode-map
     "j" '(rk-org--create-jira-url :wk "create JIRA link")))
-
-(use-package rk-org-ctrl-c-ctrl-k
-  :after org
-  :general
-  (:keymaps 'org-mode-map :states 'normal
-            "C-c C-k" #'rk-org-ctrl-c-ctrl-k))
-
-(use-package rk-diary-utils
-  :after org)
 
 (use-package evil-org
   :straight t
@@ -781,13 +728,11 @@ table tr.tr-even td {
 
 (use-package org-indent
   :after org
-  :init
-  (add-hook 'org-mode-hook #'org-indent-mode))
+  :hook (org-mode . org-indent-mode))
 
 (use-package flyspell
   :after org
-  :init
-  (add-hook 'org-mode-hook #'flyspell-mode))
+  :hook (org-mode . flyspell-mode))
 
 (use-package org-babel-hydra
   :init

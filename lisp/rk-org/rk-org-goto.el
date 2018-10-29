@@ -17,25 +17,37 @@
 (defun rk-org-goto-diary ()
   "Switch to the diary file."
   (interactive)
-  (find-file org-agenda-diary-file))
+  (find-file rk-org-diary-file))
 
 ;;;###autoload
-(defun rk-org-goto-notes ()
-  "Switch to the default notes file."
+(defun rk-org-goto-inbox ()
+  "Switch to the GTD inbox file."
   (interactive)
-  (find-file org-default-notes-file))
+  (find-file rk-org-inbox-file))
+
+;;;###autoload
+(defun rk-org-goto-consume ()
+  "Switch to the consume file."
+  (interactive)
+  (find-file rk-org-consume-file))
+
+;;;###autoload
+(defun rk-org-goto-reference ()
+  "Switch to the GTD reference file."
+  (interactive)
+  (find-file rk-org-reference-file))
+
+;;;###autoload
+(defun rk-org-goto-projects ()
+  "Switch to the GTD projects file."
+  (interactive)
+  (find-file rk-org-projects-file))
 
 ;;;###autoload
 (defun rk-org-goto-work ()
   "Switch to the work file."
   (interactive)
   (find-file rk-org-work-file))
-
-;;;###autoload
-(defun rk-org-goto-recruitment ()
-  "Switch to the recruitment file."
-  (interactive)
-  (find-file rk-org-recruitment-file))
 
 ;;;###autoload
 (defun rk-org-goto-todo-list ()
@@ -54,6 +66,7 @@
 (defconst rk-org-goto--show-agenda-work-end-hour 18)
 
 (defun rk-org-goto--is-work-time? (time)
+  "Is TIME within work hours or not?"
   (-let* (((_s _m h d m y) time)
           (day-of-week (calendar-day-of-week (list m d y))))
     (and (<= rk-org-goto--show-agenda-work-start-hour h)
