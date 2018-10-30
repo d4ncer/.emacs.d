@@ -360,7 +360,7 @@ Do not scheduled items or repeating todos."
               (stuck ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list rk-org-projects-file rk-org-inbox-file rk-org-consume-file))
+              (org-agenda-files (list rk-org-projects-file rk-org-inbox-file rk-org-consume-file rk-org-tickler-file))
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-properties '(effort appt))))
