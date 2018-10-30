@@ -157,11 +157,11 @@ Do not scheduled items or repeating todos."
       "RET" #'org-return)
 
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-someday-file :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-consume-file :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-projects-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-someday-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org-consume-file :maxlevel . 2))
+    (add-to-list 'org-refile-targets '(rk-org-projects-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org-reference-file :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-tickler-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org-tickler-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org-diary-file :maxlevel . 3))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
