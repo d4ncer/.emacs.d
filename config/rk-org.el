@@ -549,11 +549,11 @@ Do not scheduled items or repeating todos."
 
            (rk-org--capture-template-entry
             "T" "Add to [tickler]"
-            '(file rk-org-tickler-file) "* %i%? \n %U")
+            '(file+headline rk-org-tickler-file "Appointments") "* %i%? \n%^{CATEGORY}p%^t")
 
            (rk-org--capture-template-entry
             "p" "Create [project]"
-            '(file rk-org-projects-file) "* %i%? [%] :project:\n:PROPERTIES:\n:CATEGORY:<ADD-CATEGORY-HERE>\n:END:")
+            '(file rk-org-projects-file) "* %i%? [%] :project:\n%^{CATEGORY}p")
 
            (rk-org--capture-template-entry
             "s" "Add task to do [someday]"
