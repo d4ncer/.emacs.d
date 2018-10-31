@@ -306,7 +306,7 @@ Do not scheduled items or repeating todos."
   :config
   (progn
     (rk-leader-def
-      "oA" '(org-agenda :wk "agenda"))
+      "oA" '(org-agenda :wk "agendas"))
 
     (rk-local-leader-def :keymaps 'org-agenda-mode-map
       "r" '(org-agenda-refile :wk "refile"))
@@ -685,14 +685,17 @@ table tr.tr-even td {
 (use-package rk-org-goto
   :config
   (rk-leader-def
-    "oa" '(rk-org-goto-agenda :wk "agenda")
-    "od" '(rk-org-goto-diary :wk "diary")
-    "oi" '(rk-org-goto-inbox :wk "inbox")
-    "ow" '(rk-org-goto-work :wk "work")
-    "or" '(rk-org-goto-reference :wk "reference")
-    "op" '(rk-org-goto-projects :wk "projects")
-    "ot" '(rk-org-goto-todo-list :wk "todos")
-    "ov" '(rk-org-goto-tags-list :wk "tags")))
+    "oa"  '(rk-org-goto-agenda :wk "agenda")
+    "og"  '(:ignore t :wk "goto")
+    "ogc" '(rk-org-goto-consume :wk "consume")
+    "oga" '(rk-org-goto-tickler :wk "apps")
+    "ogd" '(rk-org-goto-diary :wk "diary")
+    "ogi" '(rk-org-goto-inbox :wk "inbox")
+    "ogw" '(rk-org-goto-work :wk "work")
+    "ogr" '(rk-org-goto-reference :wk "reference")
+    "ogp" '(rk-org-goto-projects :wk "projects")
+    "ot"  '(rk-org-goto-todo-list :wk "todos")
+    "ov"  '(rk-org-goto-tags-list :wk "tags")))
 
 (use-package rk-org-jira-url
   :after org

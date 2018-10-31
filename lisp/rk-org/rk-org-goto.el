@@ -32,6 +32,12 @@
   (find-file rk-org-consume-file))
 
 ;;;###autoload
+(defun rk-org-goto-tickler ()
+  "Switch to the tickler file."
+  (interactive)
+  (find-file rk-org-tickler-file))
+
+;;;###autoload
 (defun rk-org-goto-reference ()
   "Switch to the GTD reference file."
   (interactive)
