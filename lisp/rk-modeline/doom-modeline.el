@@ -19,6 +19,7 @@
 (require 'doom-helpers)
 (require 'doom-add-hook)
 (require 'shrink-path)
+(require 'iedit)
 
 (use-package eldoc-eval
   :straight t
@@ -87,7 +88,6 @@ file-name => comint.el")
 (defvar evil-mode nil)
 (defvar evil-state nil)
 (defvar evil-visual-selection nil)
-(defvar iedit-mode nil)
 (defvar all-the-icons-scale-factor)
 (defvar all-the-icons-default-adjust)
 
@@ -506,19 +506,20 @@ lines are selected, or the NxM dimensions of a block selection."
   "Show the number of iedit regions matches + what match you're on."
   (when (and iedit-mode iedit-occurrences-overlays)
     (propertize
-     (let ((this-oc (or (let ((inhibit-message t))
-                          (iedit-find-current-occurrence-overlay))
-                        (progn (iedit-prev-occurrence)
-                               (iedit-find-current-occurrence-overlay))))
-           (length (length iedit-occurrences-overlays)))
-       (format " %s/%d "
-               (if this-oc
-                   (- length
-                      (length (memq this-oc (sort (append iedit-occurrences-overlays nil)
-                                                  #'doom-themes--overlay-sort)))
-                      -1)
-                 "-")
-               length))
+     (save-excursion
+       (let ((this-oc (or (let ((inhibit-message t))
+                            (iedit-find-current-occurrence-overlay))
+                          (progn (iedit-prev-occurrence)
+                                 (iedit-find-current-occurrence-overlay))))
+             (length (length iedit-occurrences-overlays)))
+         (format " %s/%d "
+                 (if this-oc
+                     (- length
+                        (length (memq this-oc (sort (append iedit-occurrences-overlays nil)
+                                                    #'doom-themes--overlay-sort)))
+                        -1)
+                   "-")
+                 length)))
      'face (if (active) 'doom-modeline-panel))))
 
 (def-modeline-segment! matches
@@ -526,6 +527,7 @@ lines are selected, or the NxM dimensions of a block selection."
 current search term (with anzu), 3. The number of substitutions being conducted
 with `evil-ex-substitute', and/or 4. The number of active `iedit' regions."
   (let ((meta (concat (+doom-modeline--macro-recording)
+                      (+doom-modeline--iedit)
                       (+doom-modeline--evil-substitute))))
     (or (and (not (equal meta "")) meta)
         (if buffer-file-name " %p  %l:%c "))))
