@@ -45,6 +45,7 @@
 
   :config
   (progn
+    (setq projectile-indexing-method 'alien)
     (setq projectile-completion-system 'ivy)
     (setq projectile-switch-project-action 'magit-status)
     (setq projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
