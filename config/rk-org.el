@@ -40,9 +40,12 @@
   :general
   (:keymaps 'org-mode-map
             "C-c C-." #'org-time-stamp-inactive
-            "M-p" #'org-metaup
-            "M-n" #'org-metadown
-            "C-c c" #'org-columns)
+            "M-p"     #'org-metaup
+            "M-n"     #'org-metadown
+            "C-c c"   #'org-columns
+            "?"       #'counsel-org-goto)
+  (:keymaps 'org-mode-map :states '(normal visual motion)
+            "?" #'counsel-org-goto)
   :defines (org-state
             org-log-states
             org-log-done
@@ -151,6 +154,7 @@ Do not scheduled items or repeating todos."
       "C" '(org-ctrl-c-ctrl-c :wk "magic C")
       "f" '(org-fill-paragraph :wk "wrap text")
       "L" '(org-insert-link :wk "insert link")
+      "t" '(counsel-org-tag :wk "edit tags")
       "s" '(org-schedule :wk "schedule"))
 
     (general-def :keymaps 'org-mode-map :states 'normal
