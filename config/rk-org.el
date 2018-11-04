@@ -209,8 +209,6 @@ Do not scheduled items or repeating todos."
                                      (gnuplot . t)
                                      (python . t)
                                      (javascript . t)
-                                     (scala . t)
-                                     (shell . t)
                                      (shell . t)
                                      (sql . t)))
 
