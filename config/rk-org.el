@@ -43,8 +43,7 @@
             "C-c C-." #'org-time-stamp-inactive
             "M-p"     #'org-metaup
             "M-n"     #'org-metadown
-            "C-c c"   #'org-columns
-            "?"       #'counsel-org-goto)
+            "C-c c"   #'org-columns)
   (:keymaps 'org-mode-map :states '(normal visual motion)
             "?" #'counsel-org-goto)
   :defines (org-state
