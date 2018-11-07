@@ -18,6 +18,9 @@
   :straight t
   :defer t
 
+  :general
+  (:keymaps 'prog-mode-map :states 'insert
+            ")" #'sp-up-sexp)
   :preface
   (progn
     (autoload 'thing-at-point-looking-at "thingatpt")
@@ -102,9 +105,6 @@
     (require 'smartparens-rust)
 
     (bind-key [remap c-electric-backspace] 'sp-backward-delete-char smartparens-strict-mode-map)
-
-    (with-eval-after-load 'evil
-      (general-def (with-no-warnings evil-insert-state-map) ")" #'sp-up-sexp))
 
     ;; Configure global pairs.
 
