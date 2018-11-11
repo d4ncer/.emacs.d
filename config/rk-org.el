@@ -88,6 +88,12 @@
     (autoload 'outline-forward-same-level "outline")
     (autoload 's-matches? "s")
 
+    (defun rk-org--tag-headline-or-region ()
+      (interactive)
+      (if (region-active-p)
+          (call-interactively #'org-change-tag-in-region)
+        (counsel-org-tag)))
+
     (defun rk-org--exit-minibuffer (&rest _)
       "Exit minibuffer before adding notes."
       (when (minibufferp (window-buffer (selected-window)))
@@ -154,7 +160,7 @@ Do not scheduled items or repeating todos."
       "C" '(org-ctrl-c-ctrl-c :wk "magic C")
       "f" '(org-fill-paragraph :wk "wrap text")
       "L" '(org-insert-link :wk "insert link")
-      "t" '(counsel-org-tag :wk "edit tags")
+      "t" '(rk-org--tag-headline-or-region :wk "edit tags")
       "s" '(org-schedule :wk "schedule"))
 
     (general-def :keymaps 'org-mode-map :states 'normal
