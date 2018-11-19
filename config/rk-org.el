@@ -125,7 +125,7 @@
 Do not scheduled items or repeating todos."
       (when (equal org-state "DONE")
         (save-excursion
-          (when (and (ignore-errors (outline-forward-same-level 1) t)
+          (when (and (ignore-errors (org-forward-heading-same-level 1) t)
                      (equal (org-get-todo-state) "TODO"))
             (unless (or (org-entry-get (point) "STYLE")
                         (org-entry-get (point) "LAST_REPEAT")
