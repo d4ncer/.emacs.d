@@ -377,7 +377,7 @@ Do not scheduled items or repeating todos."
             ("w" "Work"
              ((tags-todo "inbox"
                          ((org-agenda-overriding-header "To Refile")))
-              (tags-todo "-someday-media-study/NEXT"
+              (tags-todo "-someday-media-study-@home/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
               (agenda "")
               (todo "WAITING"
