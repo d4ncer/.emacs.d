@@ -52,7 +52,7 @@
     (setq projectile-enable-caching t)
 
     (setq projectile-globally-ignored-files '("TAGS" ".DS_Store"))
-    (setq projectile-globally-ignored-file-suffixes '("gz" "zip" "tar" "elc"))
+    (setq projectile-globally-ignored-file-suffixes '("meta" "jsbundle" "gz" "zip" "tar" "elc"))
     (setq projectile-globally-ignored-directories
           '(".bzr"
             ".ensime_cache"
