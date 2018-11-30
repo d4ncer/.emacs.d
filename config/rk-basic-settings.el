@@ -351,15 +351,6 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package simple
   :bind (("M-SPC" . cycle-spacing)))
 
-(use-package tiny
-  :straight t
-  :after iedit
-  :config
-  (progn
-    (autoload 'undo-tree-undo "undo-tree")
-    (tiny-setup-default)
-    (global-set-key (kbd "C-'") #'undo-tree-undo)))
-
 (use-package recentf
   :defer t
   :preface
