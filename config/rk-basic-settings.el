@@ -596,6 +596,13 @@ Optional arg JUSTIFY will justify comments and strings."
       (require 'info+))
     (setq Info-fontify-angle-bracketed-flag nil)))
 
+(use-package avy
+  :straight t
+  :general
+  ("C-; c" #'avy-goto-char
+   "C-; w" #'avy-goto-word-1
+   "C-; l" #'avy-goto-line))
+
 (use-package world-time-mode
   :straight t
   :defer t
