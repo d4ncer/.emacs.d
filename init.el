@@ -109,7 +109,6 @@
 (use-package rk-dired)
 (use-package rk-hl-todo)
 (use-package rk-lsp)
-(use-package rk-undo-tree)
 (use-package rk-ws-butler)
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
