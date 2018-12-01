@@ -51,6 +51,7 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     "gb" #'git-blame-transient-state/body)
   :config
   (general-setq magit-log-section-commit-count 0
+                magit-section-visibility-indicator nil
                 magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1))
 
 (use-package git-commit-jira-prefix
