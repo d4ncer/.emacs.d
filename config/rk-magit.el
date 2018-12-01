@@ -31,9 +31,8 @@
   :commands (magit-status magit-blame magit-branch-and-checkout)
   :functions (magit-display-buffer-fullframe-status-v1)
   :general
-  (:keymaps 'magit-refs-mode-map
-   :states '(normal)
-   "." #'magit-branch-and-checkout)
+  (:keymaps 'magit-refs-mode-map :states '(normal)
+            "." #'magit-branch-and-checkout)
   :preface
   (evil-transient-state-define git-blame
     :title "Git Blame Transient State"
