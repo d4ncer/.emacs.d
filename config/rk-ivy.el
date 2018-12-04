@@ -20,7 +20,9 @@
   :demand t
   :general
   (:states '(motion normal)
-           "/" #'swiper))
+           "/" #'swiper)
+  :config
+  (general-def "s-f" #'swiper))
 
 (use-package ivy
   :straight t
@@ -37,10 +39,10 @@
              ivy-wgrep-change-to-wgrep-mode)
   :general
   (:keymaps 'ivy-occur-grep-mode-map
-   :states '(normal motion visual emacs)
-   ", c" #'rk-search-wgrep-finish-edit-kill-buffer
-   ", k" #'rk-search-wgrep-abort-changes-kill-buffer
-   ", w" #'ivy-wgrep-change-to-wgrep-mode)
+            :states '(normal motion visual emacs)
+            ", c" #'rk-search-wgrep-finish-edit-kill-buffer
+            ", k" #'rk-search-wgrep-abort-changes-kill-buffer
+            ", w" #'ivy-wgrep-change-to-wgrep-mode)
 
   :preface
   (progn
