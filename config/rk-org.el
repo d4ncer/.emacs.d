@@ -369,10 +369,10 @@ Do not scheduled items or repeating todos."
                          ((org-agenda-overriding-header "To Refile")))
               (tags-todo "-someday/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
-              (agenda "")
+              (stuck "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
-              (stuck ""))
+              (agenda ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
               (org-agenda-files (list rk-org-projects-file rk-org-inbox-file rk-org-next-file rk-org-consume-file rk-org-tickler-file))
@@ -385,10 +385,10 @@ Do not scheduled items or repeating todos."
                          ((org-agenda-overriding-header "To Refile")))
               (tags-todo "-someday-media-study-@home/NEXT"
                          ((org-agenda-overriding-header "Next Actions")))
-              (agenda "")
+              (stuck "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Waiting")))
-              (stuck ""))
+              (agenda ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
               (org-agenda-show-inherited-tags nil)
