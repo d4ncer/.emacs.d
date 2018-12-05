@@ -562,7 +562,7 @@ Do not scheduled items or repeating todos."
 
            (rk-org--capture-template-entry
             "p" "Create [project]"
-            '(file rk-org-projects-file) "* %i%? [%] :project:\n%^{CATEGORY}p")
+            '(file rk-org-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
 
            (rk-org--capture-template-entry
             "s" "Add task to do [someday]"
