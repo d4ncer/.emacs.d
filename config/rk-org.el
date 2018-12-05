@@ -105,6 +105,11 @@
                         (buffer-substring (line-beginning-position) (line-end-position)))
         (goto-char (line-end-position))))
 
+    (defun rk-org--mark-first-child-next ()
+      "Mark first task in a project as NEXT when refiling."
+      (when (org-first-sibling-p)
+        (org-todo "NEXT")))
+
     (defun rk-org--mark-next-parent-tasks-todo ()
       "Visit each parent task and change state to TODO."
       (when-let (mystate (or (bound-and-true-p org-state)
@@ -144,6 +149,7 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
     (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
+    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
 
     (rk-leader-def
       "ok" '(org-capture :wk "capture")
