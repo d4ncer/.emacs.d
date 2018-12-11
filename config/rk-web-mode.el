@@ -147,9 +147,6 @@
              (rk-web--buffer-contains-react))
         (emmet-mode +1)))))
 
-  :general
-  (:keymaps 'emmet-mode-map
-            "C-/" #'emmet-expand-line)
   :init
   (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)
   :config
