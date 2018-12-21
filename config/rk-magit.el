@@ -136,6 +136,10 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     (add-hook 'magit-post-refresh-hook 'diff-hl-magit-post-refresh)
     (global-diff-hl-mode)))
 
+(use-package forge
+  :after magit
+  :straight (:host github :repo "magit/forge"))
+
 (provide 'rk-magit)
 
 ;;; rk-magit.el ends here
