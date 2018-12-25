@@ -14,15 +14,11 @@
 (require 'dash)
 (require 'definers)
 
-(use-package rk-lsp-python
-  :after python
+(use-package python
+  :after lsp-mode
   :config
-  (progn
-    (autoload 'flycheck-mode "flycheck")
-    (autoload 'python-mode-hook "python")
-    (rk-lsp-python--setup)
-    (add-hook 'python-mode-hook #'lsp-python-enable)
-    (add-hook 'lsp-python-mode-hook 'flycheck-mode)))
+  (add-hook 'python-mode-hook #'lsp)
+  (add-hook 'lsp-python-mode-hook #'flycheck-mode))
 
 (use-package pyvenv
   :straight t
