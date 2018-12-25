@@ -18,3 +18,6 @@ eshell/
 /straight/*
 !/straight/versions/
 !/straight/versions/*
+
+# LSP
+.lsp-session-v1
