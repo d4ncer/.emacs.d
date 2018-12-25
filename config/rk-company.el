@@ -55,7 +55,7 @@
 
 (use-package company-lsp
   :straight t
-  :after company
+  :after (company lsp-mode)
   :defines company-lsp
   :preface
   (progn
