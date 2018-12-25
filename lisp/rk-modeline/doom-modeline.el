@@ -355,6 +355,14 @@ directory, the file name, and its state (modified, read-only or non-existent)."
                    "UTF-8")
                   (t (upcase (symbol-name (plist-get sys :name))))))
           "  "))
+;; LSP server state, this piece is pretty useless
+;; Can consider adding it in if LSP upstream
+;; provides a modeline of a little more interest
+(def-modeline-segment! lsp
+  "The LSP server state."
+  (if (and (active)
+           (bound-and-true-p lsp-mode))
+      (concat (lsp-mode-line) " ")))
 
 ;;
 (def-modeline-segment! major-mode
