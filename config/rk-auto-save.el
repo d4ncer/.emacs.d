@@ -14,6 +14,7 @@
 (defconst rk-auto-save-dir (concat paths-cache-directory "/auto-save"))
 (defconst rk-auto-save-local-dir (concat rk-auto-save-dir "/local"))
 (defconst rk-auto-save-remotes-dir (concat rk-auto-save-dir "/remotes"))
+(defconst rk-auto-save-sessions-dir (concat rk-auto-save-dir "/sessions"))
 
 (dolist (dir (list rk-auto-save-local-dir rk-auto-save-remotes-dir))
   (unless (file-directory-p dir)
@@ -25,6 +26,8 @@
         ("\\`/[^/]*:\\([^/]*/\\)*\\([^/]*\\)\\'" ,(f-join rk-auto-save-remotes-dir "\\2") t)
         ;; Otherwise files go to local dir.
         ("\\`/?\\([^/]*/\\)*\\([^/]*\\)\\'" ,(f-join rk-auto-save-local-dir "\\2") t)))
+
+(setq auto-save-list-file-prefix (concat rk-auto-save-sessions-dir "/.saves-"))
 
 (provide 'rk-auto-save)
 
