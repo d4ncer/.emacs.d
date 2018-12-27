@@ -25,6 +25,7 @@
  ("emacs-ctable" . "b8830d1ca95abb100a81bc32011bd17d5ecba000")
  ("emacs-deferred" . "2239671d94b38d92e9b28d4e12fd79814cfb9c16")
  ("emacs-doom-themes" . "2f4a0cdf287a086d45a1d9e8536ace6a2e152318")
+ ("emacs-emojify" . "f2edcba0f6b19717e38a3e96adc8adc262f3b5a5")
  ("emacs-epc" . "e1bfa5ca163273859336e3cc89b4b6460f7f8cda")
  ("emacs-flycheck-flow" . "d945f21c74ba8a0f32e1eacb96c1361ebbe2d863")
  ("emacs-go-eldoc" . "cbbd2ea1e94a36004432a9ac61414cb5a95a39bd")

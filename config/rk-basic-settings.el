@@ -645,6 +645,10 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq smex-save-file (concat paths-cache-directory "/smex-items"))
     (smex-initialize)))
 
+(use-package emojify
+  :straight t
+  :hook (after-init . global-emojify-mode))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
