@@ -647,7 +647,9 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (use-package emojify
   :straight t
-  :hook (after-init . global-emojify-mode))
+  :hook (after-init . global-emojify-mode)
+  :init
+  (setq emojify-emojis-dir (concat paths-cache-directory "/emojis")))
 
 (provide 'rk-basic-settings)
 
