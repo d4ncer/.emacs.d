@@ -21,6 +21,7 @@
 
 (use-package rust-mode
   :straight t
+  :after lsp-mode
   :mode ("\\.rs\\'" . rust-mode)
   :preface
   (progn
@@ -53,41 +54,34 @@
     (rk-local-leader-def :keymaps 'rust-mode-map
       "." '(rust-format-buffer :wk "format"))
 
-    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)))
+    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)
 
-;; Similar to JS, need to set this up right. As of now, it seems lackluster :(
-;; (use-package lsp-rust
-;;   :straight t
-;;   :after rust-mode
-;;   :config
-;;   (progn
-;;     (autoload 'flycheck-mode "flycheck")
-;;     (autoload 'rust-mode-hook "rust-mode")
-;;     (add-hook 'rust-mode-hook #'lsp-rust-enable)
-;;     (add-hook 'rust-mode-hook #'flycheck-mode)))
+    ;; LSP
+    (add-hook 'rust-mode-hook #'lsp)
+    (add-hook 'lsp-rust-mode-hook #'flycheck-mode)))
 
 (use-package flycheck-rust
   :straight t
   :hook (flycheck-mode . flycheck-rust-setup))
 
-(use-package racer
-  :straight t
-  :after rust-mode
-  :commands (racer-find-definition racer-describe)
-  :general
-  (:keymaps 'rust-mode-map :states '(normal motion)
-            "gd" #'racer-find-definition
-            "K" #'racer-describe)
-  :hook (rust-mode . racer-mode)
-  :config
-  (progn
-    (add-hook 'racer-mode-hook #'eldoc-mode)
+;; (use-package racer
+;;   :straight t
+;;   :after rust-mode
+;;   :commands (racer-find-definition racer-describe)
+;;   :general
+;;   (:keymaps 'rust-mode-map :states '(normal motion)
+;;             "gd" #'racer-find-definition
+;;             "K" #'racer-describe)
+;;   :hook (rust-mode . racer-mode)
+;;   :config
+;;   (progn
+;;     (add-hook 'racer-mode-hook #'eldoc-mode)
 
-    (evil-set-initial-state 'racer-help-mode 'motion)
+;;     (evil-set-initial-state 'racer-help-mode 'motion)
 
-    ;; Teach compile.el about sources installed via rustup.
-    (let ((base (file-name-directory racer-rust-src-path)))
-      (add-to-list 'compilation-search-path base t))))
+;;     ;; Teach compile.el about sources installed via rustup.
+;;     (let ((base (file-name-directory racer-rust-src-path)))
+;;       (add-to-list 'compilation-search-path base t))))
 
 (use-package toml-mode
   :straight t
