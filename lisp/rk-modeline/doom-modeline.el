@@ -567,7 +567,7 @@ Returns \"\" to not break --no-window-system."
 ;;
 
 (def-modeline! main
-  (bar matches " " buffer-info vcs selection-info flycheck))
+  (bar matches " " buffer-encoding buffer-info vcs selection-info flycheck))
 
 (def-modeline! minimal
   (bar matches " " buffer-info media-info))
@@ -579,7 +579,7 @@ Returns \"\" to not break --no-window-system."
   (bar buffer-default-directory))
 
 (def-modeline! media
-  (bar " %b  " media-info))
+  (bar " %b  " buffer-encoding media-info))
 
 
 ;;
