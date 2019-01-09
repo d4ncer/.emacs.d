@@ -1,8 +1,8 @@
 ;;; rk-projectile.el --- Configuration for projectile.  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2017 Raghuvir Kastur
+;; Copyright (C) 2017 Raghuvir Kasturi
 
-;; Author: Raghuvir Kastur <raghuvir.kasturi@gmail.com>
+;; Author: Raghuvir Kasturi <raghuvir.kasturi@gmail.com>
 
 ;;; Commentary:
 
