@@ -757,6 +757,15 @@ table tr.tr-even td {
   (rk-local-leader-def :keymaps 'org-mode-map
     "b" '(org-babel-transient-state/body :wk "babel hydra")))
 
+(use-package idle-org-agenda
+  :straight t
+  :after org-agenda
+  :init
+  (general-setq idle-org-agenda-interval 600
+                idle-org-agenda-key "A")
+  :config
+  (idle-org-agenda-mode))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
