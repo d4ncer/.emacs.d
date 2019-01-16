@@ -116,6 +116,12 @@
       "T a" '(go-tag-add :wk "add")
       "T r" '(go-tag-remove :wk "remove"))))
 
+(use-package go-keyify
+  :after go-mode
+  :config
+  (rk-local-leader-def :keymaps 'go-mode-map
+    "r k" '(go-keyify :wk "keyify")))
+
 (use-package rk-go-run
   :after go-mode
   :config
