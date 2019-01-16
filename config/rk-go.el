@@ -55,6 +55,8 @@
     (setq godoc-at-point-function 'godoc-gogetdoc)
     (setq gofmt-show-errors nil)
     (rk-local-leader-def :keymaps 'go-mode-map
+      "r" '(:ignore t :wk "refactor")
+
       "g" '(:ignore t :wk "goto")
       "g g" '(godef-jump :wk "jump to def")
       "g d" '(godef-describe :wk "describe")
@@ -76,7 +78,7 @@
   :after go-mode
   :config
   (rk-local-leader-def :keymaps 'go-mode-map
-    "r" '(go-rename :wk "rename")))
+    "r r" '(go-rename :wk "rename")))
 
 (use-package company-go
   :straight t
