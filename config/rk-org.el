@@ -761,7 +761,7 @@ table tr.tr-even td {
   :straight t
   :after org-agenda
   :init
-  (general-setq idle-org-agenda-interval 600
+  (general-setq idle-org-agenda-interval 3000
                 idle-org-agenda-key "A")
   :config
   (idle-org-agenda-mode))
