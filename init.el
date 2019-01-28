@@ -127,6 +127,7 @@
 
 (use-package rk-elisp)
 (use-package rk-web-mode)
+(use-package rk-typescript)
 (use-package rk-coffeescript)
 (use-package rk-haskell)
 (use-package rk-go)
