@@ -41,6 +41,12 @@
       (when (thing-at-point-looking-at (rx (not space) (* space) "."))
         (delete-horizontal-space))))
 
+  :init
+  (progn
+    ;; LSP
+    (add-hook 'rust-mode-hook #'lsp)
+    (add-hook 'lsp-rust-mode-hook #'flycheck-mode))
+
   :config
   (progn
     ;; Enable backtraces in rust programs run from Emacs.
@@ -54,34 +60,11 @@
     (rk-local-leader-def :keymaps 'rust-mode-map
       "." '(rust-format-buffer :wk "format"))
 
-    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)
-
-    ;; LSP
-    (add-hook 'rust-mode-hook #'lsp)
-    (add-hook 'lsp-rust-mode-hook #'flycheck-mode)))
+    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)))
 
 (use-package flycheck-rust
   :straight t
   :hook (flycheck-mode . flycheck-rust-setup))
-
-;; (use-package racer
-;;   :straight t
-;;   :after rust-mode
-;;   :commands (racer-find-definition racer-describe)
-;;   :general
-;;   (:keymaps 'rust-mode-map :states '(normal motion)
-;;             "gd" #'racer-find-definition
-;;             "K" #'racer-describe)
-;;   :hook (rust-mode . racer-mode)
-;;   :config
-;;   (progn
-;;     (add-hook 'racer-mode-hook #'eldoc-mode)
-
-;;     (evil-set-initial-state 'racer-help-mode 'motion)
-
-;;     ;; Teach compile.el about sources installed via rustup.
-;;     (let ((base (file-name-directory racer-rust-src-path)))
-;;       (add-to-list 'compilation-search-path base t))))
 
 (use-package toml-mode
   :straight t
@@ -104,25 +87,6 @@
   :config
   (rk-local-leader-def :keymaps 'rust-mode-map
     "c" '(rust-hydra-transient-state/body :wk "rust hydra")))
-
-;; Rust backtraces sometimes contain absolute paths from travis builds. Rewrite
-;; these to paths relative to the rustup sources directory.
-
-(use-package compile
-  :preface
-  (progn
-    (defun rk-rust--rewrite-compilation-buffer (&optional buf &rest _)
-      (with-current-buffer (or buf (current-buffer))
-        (save-excursion
-          (goto-char (or compilation-filter-start (point-min)))
-          (let ((inhibit-read-only t)
-                (bad-path "/Users/travis/build/rust-lang/rust/"))
-            (while (search-forward-regexp (rx-to-string `(or "" ,bad-path)) nil t)
-              (replace-match "" t t)))))))
-  :config
-  (with-eval-after-load 'rust-mode
-    (add-hook 'compilation-filter-hook #'rk-rust--rewrite-compilation-buffer)
-    (add-to-list 'compilation-finish-functions #'rk-rust--rewrite-compilation-buffer)))
 
 (provide 'rk-rust)
 
