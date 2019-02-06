@@ -42,6 +42,16 @@
 (when (eq system-type 'darwin)
   (setq ns-use-native-fullscreen nil))
 
+;; Set up keybinds for Straight
+
+(rk-leader-def
+  "P"  '(:ignore t :wk "packages")
+  "Pp" '(straight-pull-all :wk "pull all package")
+  "PP" '(straight-pull-package :wk "pull package")
+  "Pr" '(straight-rebuild-all :wk "rebuild all packages")
+  "PR" '(straight-rebuild-package :wk "rebuild package")
+  "Pf" '(straight-freeze-versions :wk "freeze packages"))
+
 ;; Make <escape> quit as much as possible
 
 (define-key minibuffer-local-map (kbd "<escape>") #'keyboard-escape-quit)
