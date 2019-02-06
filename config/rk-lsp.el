@@ -30,15 +30,15 @@
             "K" #'lsp-describe-thing-at-point)
   :config
   (rk-local-leader-def :keymaps 'lsp-mode-map
-    "L" '(:ignore t :wk "LSP")
-    "L." '(lsp-format-buffer :wk "format")
+    "l" '(:ignore t :wk "LSP")
+    "l." '(lsp-format-buffer :wk "format")
 
-    "Ls" '(:ignore t :wk "session / workspace")
-    "Lss" '(lsp-describe-session :wk "describe")
-    "Lsr" '(lsp-restart-workspace :wk "restart")
-    "Lsa" '(lsp-workspace-folders-add :wk "add folder")
-    "Lsr" '(lsp-workspace-folders-remove :wk "remove folder")
-    "LsS" '(lsp-workspace-folders-switch :wk "switch folder")))
+    "ls" '(:ignore t :wk "session / workspace")
+    "lsd" '(lsp-describe-session :wk "describe")
+    "lsr" '(lsp-restart-workspace :wk "restart")
+    "lsa" '(lsp-workspace-folders-add :wk "add folder")
+    "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
+    "lss" '(lsp-workspace-folders-switch :wk "switch folder")))
 
 (use-package lsp-ui
   :straight t
