@@ -13,6 +13,7 @@
 
 (require 'paths)
 (require 'f)
+(require 'definers)
 
 (defvar rk-lsp--ui-menu-colors '("#e99ce8" "#bbbbff" "#ffbbff")
   "Colors to use for imenu.")
@@ -20,18 +21,33 @@
 (use-package lsp-mode
   :straight t
   :init
-  (setq lsp-prefer-flymake nil)
-  (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
+  (progn
+    (setq lsp-prefer-flymake nil)
+    (setq lsp-enable-on-type-formatting nil)
+    (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
+  :general
+  (:keymaps 'lsp-mode-map :states 'normal
+            "K" #'lsp-describe-thing-at-point)
+  :config
+  (rk-local-leader-def :keymaps 'lsp-mode-map
+    "L" '(:ignore t :wk "LSP")
+    "L." '(lsp-format-buffer :wk "format")
+
+    "Ls" '(:ignore t :wk "session / workspace")
+    "Lss" '(lsp-describe-session :wk "describe")
+    "Lsr" '(lsp-restart-workspace :wk "restart")
+    "Lsa" '(lsp-workspace-folders-add :wk "add folder")
+    "Lsr" '(lsp-workspace-folders-remove :wk "remove folder")
+    "LsS" '(lsp-workspace-folders-switch :wk "switch folder")))
 
 (use-package lsp-ui
   :straight t
   :after lsp-mode
   :preface
   (defun rk-lsp-ui--disable-highlight-thing ()
-    (setq-local lsp-ui-flycheck-live-reporting nil)
     (highlight-thing-mode -1))
   :init
-  (setq lsp-ui-doc-fringe-p nil)
+  (setq lsp-ui-sideline-enable nil)
   :config
   (progn
     (add-hook 'lsp-mode-hook #'rk-lsp-ui--disable-highlight-thing)))
