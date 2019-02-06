@@ -16,6 +16,9 @@
 
 (autoload 'evil-set-initial-state "evil-core")
 
+(defvar rk-flycheck--redundant-checkers
+  '(javascript-jshint))
+
 (use-package flycheck
   :straight t
   :defer t
@@ -26,10 +29,10 @@
              flycheck-error-list-goto-error)
   :general
   (:keymaps 'flycheck-mode-map
-    "M-n" #'flycheck-next-error
-    "M-p" #'flycheck-previous-error
-    "M-j" #'flycheck-next-error
-    "M-k" #'flycheck-previous-error)
+            "M-n" #'flycheck-next-error
+            "M-p" #'flycheck-previous-error
+            "M-j" #'flycheck-next-error
+            "M-k" #'flycheck-previous-error)
   :preface
   (progn
     (autoload 'flycheck-buffer "flycheck")
@@ -50,6 +53,13 @@
   :config
   (progn
     (global-flycheck-mode +1)
+
+    ;; Remove redundant checkers from list
+
+    (dolist (checker rk-flycheck--redundant-checkers)
+      (add-to-list 'flycheck-disabled-checkers checker))
+
+    ;; Config
 
     (setq flycheck-display-errors-function 'rk-flycheck-display-error-messages)
     (setq flycheck-display-errors-delay 0.5)
