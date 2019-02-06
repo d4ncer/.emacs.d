@@ -27,13 +27,12 @@ fi
 # Go setup
 if exists go; then
     echo '--> Installing required Go binaries...'
-    go get -u -v github.com/mdempsky/gocode
+    go get -u -v github.com/stamblerre/gocode
     go get -u -v github.com/rogpeppe/godef
     go get -u -v github.com/kardianos/govendor
     go get -u -v golang.org/x/tools/cmd/guru
     go get -u -v golang.org/x/tools/cmd/gorename
     go get -u -v golang.org/x/tools/cmd/goimports
-    go get -u -v github.com/sqs/goreturns
     go get -u -v github.com/zmb3/gogetdoc
     go get -u -v github.com/fatih/gomodifytags
     go get -u -v honnef.co/go/tools/cmd/keyify
