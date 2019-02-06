@@ -14,16 +14,27 @@
 (require 'dash)
 (require 's)
 (require 'definers)
+;; (require 'lsp)
 
 (autoload 'projectile-project-p "projectile")
 
+;; TODO: Replace this with the LSP once it stops sucking
 (use-package go-mode
   :straight t
-  :mode ("\\.go\\'" . go-mode)
-  :after lsp-mode
-  :config
-  (add-hook 'go-mode-hook #'lsp)
-  (add-hook 'lsp-go-mode-hook #'flycheck-mode))
+  :mode ("\\.go\\'" . go-mode))
+
+;; (use-package go-mode
+;;   :straight t
+;;   :mode ("\\.go\\'" . go-mode)
+;;   :preface
+;;   (lsp-register-client
+;;    (make-lsp-client :new-connection (lsp-stdio-connection '("gopls" "-logfile=/tmp/gopls/log-1" "server"))
+;;                     :major-modes '(go-mode)
+;;                     :priority -3
+;;                     :server-id 'gopls))
+;;   :config
+;;   (add-hook 'go-mode-hook #'lsp)
+;;   (add-hook 'lsp-go-mode-hook #'flycheck-mode))
 
 (use-package go-tag
   :straight t
