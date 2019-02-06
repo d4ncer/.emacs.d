@@ -73,6 +73,7 @@
  ("git.el" . "a3396a7027a7d986598c6a2d6d5599bac918f3da")
  ("gnuplot-mode" . "21f9046e3f5caad41b750b5c9cee02fa4fd20fb9")
  ("go-mode.el" . "120fb911f1d8038f828da85eed8aaad977dabd8c")
+ ("gocode" . "e620fbf44f150983d8082f8faa49589bee0a74a5")
  ("goto-chg" . "1829a13026c597e358f716d2c7793202458120b5")
  ("graphql.el" . "e2b309689f4faf9225f290080f836e988c5a576d")
  ("groovy-emacs-modes" . "f80b6795f645aff592ffbdc6b500084955094f5c")
