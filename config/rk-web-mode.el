@@ -20,6 +20,7 @@
 
 (autoload 'flow-minor-tag-present-p "flow-minor-mode")
 (autoload 'flow-minor-configured-p "flow-minor-mode")
+(autoload 'projectile-project-p "projectile")
 
 (defconst rk-web--prettier-default-args
   (list "--single-quote" "true" "--trailing-comma" "es5")
@@ -50,20 +51,11 @@
     (setq web-mode-markup-indent-offset 2)
     (setq web-mode-enable-auto-quoting nil)
 
-    ;; Use line comments when commenting in JS.
-
-    (setf (cdr (assoc "javascript" web-mode-comment-formats)) "//")
-
     ;; Change default indentation behaviour.
 
     (setf (cdr (assoc "lineup-args" web-mode-indentation-params)) nil)
     (setf (cdr (assoc "lineup-concats" web-mode-indentation-params)) nil)
-    (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil)
-
-    ;; Treat es6 files as JS files.
-
-    (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
-    (add-to-list 'web-mode-content-types '("jsx" . "\\.jsx?\\'"))))
+    (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil)))
 
 (use-package rk-web-modes
   :defer t
@@ -75,41 +67,32 @@
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
          ("\\.html\\'" . rk-web-html-mode))
-  :defines (flycheck-html-tidy-executable)
+  :preface
+  (defun rk-web--add-custom-eslint-rules-dir ()
+    (-when-let* ((root (projectile-project-p))
+                 (rules-dir (f-join root "rules"))
+                 (rules-dir-p (f-exists-p rules-dir)))
+      (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
+
   :config
   (progn
+    ;; Add all possible JS runtimes
+
     (dolist (name (list "node" "nodejs" "gjs" "rhino"))
       (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
 
-    (with-eval-after-load 'flycheck
-      (let ((tidy-bin "/usr/local/bin/tidy"))
-        (when (file-exists-p tidy-bin)
-          (setq flycheck-html-tidy-executable tidy-bin)))
+    ;; Use custom ESLint rules if a "rules" dir exists in project root
 
+    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
+
+    ;; Setup post flycheck load
+
+    (with-eval-after-load 'flycheck
+      (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
       (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
       (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
       (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
       (flycheck-add-mode 'html-tidy 'rk-web-html-mode))))
-
-(use-package flycheck
-  :defer t
-  :preface
-  (progn
-    (autoload 'projectile-project-p "projectile")
-    (autoload 'f-join "f")
-
-    (defun rk-web--add-custom-eslint-rules-dir ()
-      (-when-let* ((root (projectile-project-p))
-                   (rules-dir (f-join root "rules"))
-                   (rules-dir-p (f-exists-p rules-dir)))
-        (setq-local flycheck-eslint-rules-directories (-list rules-dir)))))
-
-  :config
-  (progn
-    (add-to-list 'flycheck-disabled-checkers 'javascript-jshint)
-    (add-to-list 'flycheck-disabled-checkers 'json-jsonlint)
-    (add-to-list 'flycheck-disabled-checkers 'css-csslint)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)))
 
 ;; TEMPORARY WHILE WE FIX ISSUES
 ;; (use-package rk-lsp-js
@@ -127,16 +110,15 @@
   :defer t
   :defines (emmet-expand-jsx-className?)
   :commands (emmet-mode emmet-expand-line)
+  :general (:keymaps 'emmet-mode-keymap :states '(normal insert)
+                     "M-;" #'emmet-expand-line)
   :preface
   (progn
-    (defun rk-web--buffer-contains-react ()
+    (defun rk-web--react-in-buffer-p ()
       (save-excursion
         (save-match-data
           (goto-char (point-min))
           (search-forward "React" nil t))))
-
-    (defun rk-web--set-jsx-classname-on ()
-      (setq-local emmet-expand-jsx-className? t))
 
     (defun rk-web--maybe-emmet-mode ()
       (cond
@@ -144,28 +126,25 @@
         (emmet-mode +1))
 
        ((and (derived-mode-p 'rk-web-js-mode)
-             (rk-web--buffer-contains-react))
-        (emmet-mode +1)))))
+             (rk-web--react-in-buffer-p))
+        (progn
+          (setq-local emmet-expand-jsx-className? t)
+          (emmet-mode +1))))))
 
   :init
-  (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)
-  :config
   (progn
     (setq emmet-move-cursor-between-quotes t)
-    (add-hook 'rk-web-js-mode-hook #'rk-web--set-jsx-classname-on)))
+    (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)))
 
 (use-package rk-flycheck-stylelint
   :after flycheck
   :preface
-  (progn
-    (autoload 'projectile-project-p "projectile")
-    (autoload 'f-join "f")
-    (defun rk-web--set-stylelintrc ()
-      "Set either local or root stylelintrc"
-      (-if-let* ((root (projectile-project-p))
-                 (root-rc (f-join root ".stylelintrc.json")))
-          (setq-local flycheck-stylelintrc root-rc))
-      (f-join user-emacs-directory "lisp" ".stylelintrc.json")))
+  (defun rk-web--set-stylelintrc ()
+    "Set either local or root stylelintrc"
+    (-if-let* ((root (projectile-project-p))
+               (root-rc (f-join root ".stylelintrc.json")))
+        (setq-local flycheck-stylelintrc root-rc))
+    (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
   :config
   (progn
     (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
@@ -187,7 +166,7 @@
     (autoload 's-matches? "s")
     (autoload 'sp-get-enclosing-sexp "smartparens")
 
-    (defun rk-flow-toggle-sealed-object ()
+    (defun rk-flow--toggle-sealed-object ()
       "Toggle between a sealed & unsealed object type."
       (interactive)
       (-let [(&plist :beg beg :end end :op op) (sp-get-enclosing-sexp)]
@@ -205,7 +184,7 @@
                 (t
                  (user-error "Not in an object type"))))))
 
-    (defun rk-flow-insert-flow-annotation ()
+    (defun rk-flow--insert-flow-annotation ()
       "Insert a flow annotation at the start of this file."
       (interactive)
       (unless (not (rk-in-flow-buffer-p))
@@ -220,18 +199,18 @@
   :config
   (progn
     (rk-local-leader-def :keymaps 'rk-web-js-mode-map
-      "a" '(rk-flow-insert-flow-annotation :wk "insert @flow"))
+      "a" '(rk-flow--insert-flow-annotation :wk "insert @flow"))
     (rk-local-leader-def :keymaps 'flow-minor-mode-map
       "f" '(:ignore t :wk "flow")
       "fs" '(flow-minor-suggest :wk "suggest")
       "fS" '(flow-minor-status :wk "status")
       "fc" '(flow-minor-coverage :wk "coverage")
-      "fo" '(rk-flow-toggle-sealed-object :wk "toggle object seal"))
+      "fo" '(rk-flow--toggle-sealed-object :wk "toggle object seal"))
     (add-hook 'rk-web-js-mode-hook #'flow-minor-enable-automatically)))
 
 (use-package flycheck-flow
   :straight t
-  :after flycheck
+  :after (flycheck rk-web-modes)
   :preface
   (defun rk-web--maybe-setup-flycheck-flow ()
     "Setup company-flow if buffer if applicable."
@@ -241,8 +220,7 @@
           (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))
       (setq-local flycheck-disabled-checkers '(javascript-flow))))
   :config
-  (progn
-    (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flycheck-flow)))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flycheck-flow))
 
 (use-package company-flow
   :straight t
@@ -258,22 +236,19 @@
       (let ((rk-web--non-flow-backends (-remove (lambda (backend) (eq backend 'company-flow)) company-backends)))
         (setq-local company-backends rk-web--non-flow-backends))))
   :config
-  (progn
-    (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-company-flow)))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-company-flow))
 
 (use-package prettier-js
   :straight t
   :after rk-web-modes
   :preface
   (progn
-    (autoload 'f-exists? "f")
-    (autoload 'json-read-file "json")
     (defun rk-web--prettier-enable-p ()
       "Enable prettier if no .prettierdisable is found in project root."
       (-when-let (root (projectile-project-p))
         (not (f-exists? (f-join root ".prettierdisable")))))
 
-    (defun rk-web--setup-prettier-local-binary-and-config ()
+    (defun rk-web--init-prettier-config ()
       "Set up prettier config & binary for file if applicable."
       (-if-let* ((root (projectile-project-p))
                  (prettier-bin (f-join root "node_modules/.bin/prettier"))
@@ -285,18 +260,18 @@
             (setq-local prettier-js-args (list "--config" prettier-config)))
         (setq-local prettier-js-args rk-web--prettier-default-args)))
 
-    (defun rk-web--setup-prettier ()
+    (defun rk-web--init-prettier ()
       (when (rk-web--prettier-enable-p)
         (progn
           (rk-local-leader-def :keymaps 'rk-web-js-mode-map
             "." '(prettier-js :wk "format"))
-          (rk-web--setup-prettier-local-binary-and-config)
+          (rk-web--init-prettier-config)
           (prettier-js-mode +1))))
 
     (defun rk-web--maybe-setup-prettier ()
       (when (and (derived-mode-p 'web-mode)
                  (-contains-p '("javascript" "jsx") web-mode-content-type))
-        (rk-web--setup-prettier))))
+        (rk-web--init-prettier))))
 
   :config
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier))
@@ -308,22 +283,6 @@
   (progn
     (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
     (add-hook 'rk-web-js-mode-hook #'add-node-modules-path)))
-
-(use-package aggressive-indent
-  :defer t
-  :preface
-  (progn
-    (autoload 'plusp "cl")
-    (defun rk-web--in-flow-strict-object-type? ()
-      (when (derived-mode-p 'rk-web-js-mode)
-        (-let [(depth start) (syntax-ppss)]
-          (and (plusp depth)
-               (eq (char-after start) ?{)
-               (eq (char-after (1+ start)) ?|))))))
-  :config
-  (progn
-    (add-to-list 'aggressive-indent-dont-indent-if '(rk-web--in-flow-strict-object-type?))
-    (add-hook 'aggressive-indent-stop-here-hook #'rk-web--in-flow-strict-object-type?)))
 
 (use-package stylefmt
   :straight t
