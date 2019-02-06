@@ -28,6 +28,7 @@
  ("emacs-emojify" . "f0e09b494ca6e6c48d369c47df56b9fc192e2b61")
  ("emacs-epc" . "e1bfa5ca163273859336e3cc89b4b6460f7f8cda")
  ("emacs-flycheck-flow" . "d945f21c74ba8a0f32e1eacb96c1361ebbe2d863")
+ ("emacs-go-tag" . "59b243f2fa079d9de9d56f6e2d94397e9560310a")
  ("emacs-memoize" . "9a561268ffb550b257a08710489a95cd087998b6")
  ("emacs-noflet" . "7ae84dc3257637af7334101456dafe1759c6b68a")
  ("emacs-sbt-mode" . "e658af140547cbef495c33535c7f694a501d318c")
