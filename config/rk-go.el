@@ -45,6 +45,9 @@
 
   :preface
   (progn
+    (defun rk-go--go-modules-p ()
+      (f-exists-p (f-join (projectile-project-p) "go.mod")))
+
     (defun rk-go--lookup-go-root ()
       (-let* ((default-directory (or (projectile-project-p) default-directory))
               (output (s-lines (s-trim (shell-command-to-string "go env"))))
@@ -61,6 +64,9 @@
       (setq-local compile-command "go build -v")
       (with-no-warnings
         (setq-local evil-shift-width 4))
+      (if (rk-go--go-modules-p)
+          (setenv "GO111MODULE" "on")
+        (setenv "GO111MODULE" "off"))
       (unless (getenv "GOROOT")
         (setenv "GOROOT" (rk-go--lookup-go-root)))))
 
