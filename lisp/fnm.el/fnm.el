@@ -40,11 +40,13 @@
   "Current active version.")
 
 (defun fnm--installed-versions ()
+  "List all fnm-aware installed Node versions."
   (let ((match-fn (lambda (directory)
                     (s-matches? (concat fnm-version-re "$") (f-filename directory)))))
     (fnm--version-directories match-fn)))
 
 (defun fnm--version-directories (match-fn)
+  "List all installed versions using MATCH-FN and their directories."
   (--map (list (f-filename it) it) (f-directories (f-join fnm-dir "node-versions") match-fn)))
 
 (defun fnm--version-installed? (version)
