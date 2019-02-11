@@ -292,12 +292,25 @@
   (rk-local-leader-def :keymaps 'rk-web-css-mode-map
     "." '(stylefmt-format-buffer :wk "format")))
 
+(use-package fnm
+  :after rk-web-modes
+  :preface
+  (defun rk-web--maybe-use-fnm ()
+    (when (and
+           (f-exists-p (locate-dominating-file default-directory ".nvmrc"))
+           (locate-file "fnm" exec-path))
+      (fnm-use-for-buffer)))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-fnm))
+
 (use-package nvm
   :straight t
   :after rk-web-modes
   :preface
   (defun rk-web--maybe-use-nvm ()
-    (when (locate-dominating-file default-directory ".nvmrc")
+    (when (and
+           (f-exists-p (locate-dominating-file default-directory ".nvmrc"))
+           (locate-file "nvm" exec-path))
       (nvm-use-for-buffer)))
   :config
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-nvm))
