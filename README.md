@@ -144,6 +144,8 @@ packages of note:
   * Tern
   * Stylelint
   * Prettier
+* Python (via LSP)
+* OCaml
 * Elisp
 * Go
 * Scala
@@ -163,9 +165,7 @@ supported not on this list, feel free to issue a PR.
 
 #### Languages
 
-* Python (I do have an LSP setup but it's still a WIP)
 * Java
-* OCaml
 * TypeScript
 * Racket
 
