@@ -148,6 +148,9 @@
 (use-package private-config
   :load-path "~/private")
 
+(use-package opam-user-setup
+  :load-path "~/.emacs.d/opam-user-setup.el")
+
 ;;; Post init setup.
 
 (unless (file-directory-p org-directory)
