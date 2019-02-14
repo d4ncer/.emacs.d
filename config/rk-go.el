@@ -101,7 +101,7 @@
     "r r" '(go-rename :wk "rename")))
 
 (use-package company-go
-  :straight (:host github :repo "stamblerre/gocode"
+  :straight (:host github :repo "mdempsky/gocode"
                    :files ("emacs-company/company-go.el")
                    :branch "master")
   :after go-mode
