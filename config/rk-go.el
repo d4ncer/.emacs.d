@@ -119,6 +119,11 @@
       (setq company-go-show-annotation t))
     (add-hook 'go-mode-hook #'rk-go-company-setup)))
 
+(use-package go-eldoc
+  :straight t
+  :after go-mode
+  :config (add-hook 'go-mode-hook 'go-eldoc-setup))
+
 (use-package rk-go-run
   :after go-mode
   :config
