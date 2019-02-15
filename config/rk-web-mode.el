@@ -18,6 +18,7 @@
 (require 's)
 (require 'flycheck)
 (require 'lsp)
+(require 'ht)
 
 (autoload 'flow-minor-tag-present-p "flow-minor-mode")
 (autoload 'flow-minor-configured-p "flow-minor-mode")
@@ -29,11 +30,37 @@
   (list "--single-quote" "true" "--trailing-comma" "es5")
   "Default values for prettier.")
 
+(defvar rk-web--flow-lsp-buffer-cache (ht-create)
+  "A cache to store if a previously visited buffer has Flow LSP capabilities.")
+
 (defun rk-in-flow-buffer-p ()
   "Check if the buffer is a valid Flow buffer."
   (and (eq major-mode 'rk-web-js-mode)
        (flow-minor-configured-p)
        (flow-minor-tag-present-p)))
+
+(defun rk-web--flow-lsp-p ()
+  "Check if the Flow version used by the buffer has LSP capabilities."
+  (when (rk-in-flow-buffer-p)
+    (-if-let* ((fname (buffer-file-name))
+               (cache-hit (ht-contains-p rk-web--flow-lsp-buffer-cache fname)))
+        (ht-get rk-web--flow-lsp-buffer-cache fname)
+      (-let* ((flow-version-cmd (s-concat (flow-minor-binary) " version --json"))
+              (json-output (ignore-errors (json-read-from-string (shell-command-to-string flow-version-cmd))))
+              (semver (assoc 'semver json-output))
+              (flow-version (cdr semver))
+              (flow-major-version (nth 1 (s-split "\\." flow-version)))
+              (flow-major-version-int (string-to-number flow-major-version))
+              (flow-lsp-capable-p (> flow-major-version-int 90)))
+        (progn
+          (ht-set! rk-web--flow-lsp-buffer-cache fname flow-lsp-capable-p)
+          flow-lsp-capable-p)))))
+
+(defun rk-web--flow-clear-buffer-cache ()
+  "Clear Flow buffer cache."
+  (interactive)
+  (message "Clearing Flow buffer cache...")
+  (ht-clear! rk-web--flow-lsp-buffer-cache))
 
 (use-package web-mode
   :straight t
