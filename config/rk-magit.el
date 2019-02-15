@@ -66,17 +66,6 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
 (use-package git-commit-jira-prefix
   :hook (git-commit-setup . git-commit-jira-prefix-insert))
 
-(use-package evil-magit
-  :straight t
-  :after magit
-  :general
-  (:keymaps 'magit-mode-map
-   :states '(normal visual)
-     "C-u" #'evil-scroll-page-up
-     "C-d" #'evil-scroll-page-down)
-  :init
-  (evil-magit-init))
-
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
   :defer t
@@ -148,6 +137,17 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
 (use-package forge
   :after magit
   :straight (:host github :repo "magit/forge"))
+
+(use-package evil-magit
+  :straight t
+  :demand t
+  :after magit
+  :general
+  (:keymaps 'magit-mode-map
+            :states '(normal visual)
+            "C-u" #'evil-scroll-page-up
+            "C-d" #'evil-scroll-page-down))
+
 
 (provide 'rk-magit)
 
