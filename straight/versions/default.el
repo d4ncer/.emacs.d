@@ -150,6 +150,7 @@
  ("undo-tree" . "d54ef13e3c69655e39f977b8bf75399a6d2b5e42")
  ("use-package" . "12731665e068a68883bdb280e9844dbfd14e5626")
  ("vi-tilde-fringe" . "f1597a8d54535bb1d84b442577b2024e6f910308")
+ ("vlfi" . "31b292dc85a374fb343789e217015683bfbdf5f1")
  ("web-mode" . "70fcfb6e127a466ffb8ab6674f62cf40912b8a9d")
  ("with-editor" . "9dd9f176d96abc60365369de6d08c26c414ef1f3")
  ("ws-butler" . "52321b99be69aa1b661da7743c4421a30d8b6bcb")

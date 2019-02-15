@@ -614,6 +614,11 @@ Optional arg JUSTIFY will justify comments and strings."
    "C-; w" #'avy-goto-word-1
    "C-; l" #'avy-goto-line))
 
+(use-package vlf
+  :straight t
+  :init
+  (require 'vlf-setup))
+
 (use-package world-time-mode
   :straight t
   :defer t
