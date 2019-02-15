@@ -47,7 +47,9 @@
   (defun rk-lsp-ui--disable-highlight-thing ()
     (highlight-thing-mode -1))
   :init
-  (setq lsp-ui-sideline-enable nil)
+  (progn
+    (setq lsp-ui-doc-enable nil)
+    (setq lsp-ui-sideline-enable nil))
   :config
   (progn
     (add-hook 'lsp-mode-hook #'rk-lsp-ui--disable-highlight-thing)))
