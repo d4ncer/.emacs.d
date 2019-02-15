@@ -21,9 +21,18 @@
              with-editor-cancel)
   :general
   (:keymaps 'with-editor-mode-map
-   :states '(normal motion visual emacs)
-   ", c" #'with-editor-finish
-   ", k" #'with-editor-cancel))
+            :states '(normal motion visual emacs)
+            ", c" #'with-editor-finish
+            ", k" #'with-editor-cancel))
+
+(use-package transient
+  :straight (:host github :repo "magit/transient"
+                   :branch "master"
+                   :files ("lisp/transient.el"))
+  :init
+  (setq transient-values-file (f-join paths-cache-directory "transient/values.el"))
+  (setq transient-history-file (f-join paths-cache-directory "transient/history.el"))
+  (setq transient-levels-file (f-join paths-cache-directory "transient/levels.el")))
 
 (use-package magit
   :straight t
