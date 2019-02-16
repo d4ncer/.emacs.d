@@ -13,6 +13,8 @@
 
 (defconst rk-aggressive-indent-exclude-modes
   '(toml-mode
+    go-mode
+    tuareg-mode
     haskell-mode
     dockerfile-mode
     diff-auto-refine-mode
