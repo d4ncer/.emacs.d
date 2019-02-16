@@ -50,7 +50,7 @@
             "C-k" #'lsp-ui-peek--select-prev
             "C-n" #'lsp-ui-peek--select-next-file
             "C-p" #'lsp-ui-peek--select-prev-file
-            "<S-return>" #'lsp-ui-peek--goto-xref-other-window)
+            "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
   :preface
   (defun rk-lsp-ui--disable-highlight-thing ()
     (highlight-thing-mode -1))
