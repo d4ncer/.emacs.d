@@ -239,8 +239,23 @@
     (lsp-face-highlight-textual
      ((t :background nil :weight demibold :foreground ,rk-theme-base-cyan)))
 
+    (lsp-ui-peek-filename
+     ((t :foreground ,rk-theme-base-violet)))
 
+    (lsp-ui-peek-list
+     ((t :background ,rk-theme-base-solarized-b2)))
 
+    (lsp-ui-peek-peek
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (lsp-ui-peek-highlight
+     ((t :foreground ,rk-theme-base-blue)))
+
+    (lsp-ui-peek-header
+     ((t :foreground ,rk-theme-base-solarized-b2 :background ,rk-theme-base-solarized-b02)))
+
+    (lsp-ui-peek-selection
+     ((t :background ,rk-theme-base-solarized-b1 :foreground ,rk-theme-base-solarized-b03)))
 
     ;; Pairs
 
