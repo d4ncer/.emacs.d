@@ -20,6 +20,10 @@
 
 (use-package lsp-mode
   :straight t
+  :preface
+  (defun rk-lsp--maybe-disable-highlight-thing ()
+    (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
+      (highlight-thing-mode -1)))
   :init
   (progn
     (setq lsp-prefer-flymake nil)
@@ -30,16 +34,18 @@
             "K" #'lsp-describe-thing-at-point
             "L" #'lsp-ui-peek-find-references)
   :config
-  (rk-local-leader-def :keymaps 'lsp-mode-map
-    "l" '(:ignore t :wk "LSP")
-    "l." '(lsp-format-buffer :wk "format")
+  (progn
+    (add-hook 'lsp-after-open-hook #'rk-lsp--maybe-disable-highlight-thing)
+    (rk-local-leader-def :keymaps 'lsp-mode-map
+      "l" '(:ignore t :wk "LSP")
+      "l." '(lsp-format-buffer :wk "format")
 
-    "ls" '(:ignore t :wk "session / workspace")
-    "lsd" '(lsp-describe-session :wk "describe")
-    "lsr" '(lsp-restart-workspace :wk "restart")
-    "lsa" '(lsp-workspace-folders-add :wk "add folder")
-    "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
-    "lss" '(lsp-workspace-folders-switch :wk "switch folder")))
+      "ls" '(:ignore t :wk "session / workspace")
+      "lsd" '(lsp-describe-session :wk "describe")
+      "lsr" '(lsp-restart-workspace :wk "restart")
+      "lsa" '(lsp-workspace-folders-add :wk "add folder")
+      "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
+      "lss" '(lsp-workspace-folders-switch :wk "switch folder"))))
 
 (use-package lsp-ui
   :straight t
@@ -51,16 +57,10 @@
             "C-n" #'lsp-ui-peek--select-next-file
             "C-p" #'lsp-ui-peek--select-prev-file
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
-  :preface
-  (defun rk-lsp-ui--disable-highlight-thing ()
-    (highlight-thing-mode -1))
   :init
   (progn
     (setq lsp-ui-doc-enable nil)
-    (setq lsp-ui-sideline-enable nil))
-  :config
-  (progn
-    (add-hook 'lsp-mode-hook #'rk-lsp-ui--disable-highlight-thing)))
+    (setq lsp-ui-sideline-enable nil)))
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
