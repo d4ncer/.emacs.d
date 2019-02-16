@@ -26,7 +26,7 @@
     (setq lsp-enable-on-type-formatting nil)
     (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
   :general
-  (:keymaps 'lsp-mode-map :states 'normal
+  (:keymaps 'lsp-mode-map
             "K" #'lsp-describe-thing-at-point
             "L" #'lsp-ui-peek-find-references)
   :config
