@@ -27,7 +27,8 @@
     (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
   :general
   (:keymaps 'lsp-mode-map :states 'normal
-            "K" #'lsp-describe-thing-at-point)
+            "K" #'lsp-describe-thing-at-point
+            "L" #'lsp-ui-peek-find-references)
   :config
   (rk-local-leader-def :keymaps 'lsp-mode-map
     "l" '(:ignore t :wk "LSP")
@@ -43,6 +44,13 @@
 (use-package lsp-ui
   :straight t
   :after lsp-mode
+  :general
+  (:keymaps 'lsp-ui-peek-mode-map
+            "C-j" #'lsp-ui-peek--select-next
+            "C-k" #'lsp-ui-peek--select-prev
+            "C-n" #'lsp-ui-peek--select-next-file
+            "C-p" #'lsp-ui-peek--select-prev-file
+            "<S-return>" #'lsp-ui-peek--goto-xref-other-window)
   :preface
   (defun rk-lsp-ui--disable-highlight-thing ()
     (highlight-thing-mode -1))
