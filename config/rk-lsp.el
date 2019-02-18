@@ -39,6 +39,8 @@
       "l" '(:ignore t :wk "LSP")
       "l." '(lsp-format-buffer :wk "format")
 
+      "lr" '(lsp-rename :wk "rename")
+
       "ls" '(:ignore t :wk "session / workspace")
       "lsd" '(lsp-describe-session :wk "describe")
       "lsr" '(lsp-restart-workspace :wk "restart")
