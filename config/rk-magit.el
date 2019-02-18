@@ -37,7 +37,7 @@
 (use-package magit
   :straight t
   :defer t
-  :commands (magit-status magit-blame magit-branch-and-checkout)
+  :commands (magit-status magit-blame-addition magit-branch-and-checkout)
   :functions (magit-display-buffer-fullframe-status-v1)
   :general
   (:keymaps 'magit-refs-mode-map :states '(normal)
@@ -48,12 +48,14 @@
     :doc "
 Press [_b_] again to blame further in the history, [_q_] to go up or quit."
     :on-enter (unless (bound-and-true-p magit-blame-mode)
-                (call-interactively 'magit-blame))
+                (call-interactively 'magit-blame-addition))
     :on-exit (magit-blame-quit)
     :foreign-keys run
     :bindings
-    ("b" magit-blame)
-    ("q" nil :exit t))
+    ("b" magit-blame-addition)
+    ("q" nil :exit (progn (when (bound-and-true-p magit-blame-mode)
+                            (magit-blame-quit))
+                          (not (bound-and-true-p magit-blame-mode)))))
   :init
   (rk-leader-def
     "gs" #'magit-status
