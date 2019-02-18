@@ -59,8 +59,8 @@
             "C-p" #'lsp-ui-peek--select-prev-file
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
   (:keymaps 'lsp-mode-map :states '(normal motion visual)
-            "L" #'lsp-ui-peek-find-references
-            ":" #'lsp-ui-peek-find-implementation)
+            "R" #'lsp-ui-peek-find-references
+            "M" #'lsp-ui-peek-find-implementation)
   :init
   (progn
     (setq lsp-ui-doc-enable nil)
