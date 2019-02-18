@@ -8,6 +8,12 @@
 
 ;;; Code:
 
+;; Cursor colours (ULTRA PASTEL)
+(defconst rk-theme-cursor-yellow "#f1c40f")
+(defconst rk-theme-cursor-blue "#3498db")
+(defconst rk-theme-cursor-green "#2ecc71")
+(defconst rk-theme-cursor-purple "#9b59b6")
+
 ;; Solarized light for text
 (defconst rk-theme-base-yellow "#b58900")
 (defconst rk-theme-base-orange "#cb4b16")

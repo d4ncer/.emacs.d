@@ -53,11 +53,11 @@
 
     ;; Configure cursors.
 
-    (general-setq evil-motion-state-cursor '("plum3" box)
-                  evil-visual-state-cursor '("gray" (hbar . 2))
-                  evil-normal-state-cursor '("DarkGoldenrod2" box)
-                  evil-insert-state-cursor '("chartreuse3" (bar . 2))
-                  evil-emacs-state-cursor  '("SkyBlue2" hbar))
+    (general-setq evil-motion-state-cursor `(,rk-theme-cursor-purple box)
+                  evil-visual-state-cursor `(,rk-theme-base-solarized-b2 (hbar . 2))
+                  evil-normal-state-cursor `(,rk-theme-cursor-yellow box)
+                  evil-insert-state-cursor `(,rk-theme-cursor-green (bar . 2))
+                  evil-emacs-state-cursor  `(,rk-theme-cursor-blue hbar))
 
     ;; Better compat with smartparens-strict mode.
     ;; TODO: Move to SP config.
