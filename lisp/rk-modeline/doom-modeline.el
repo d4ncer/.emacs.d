@@ -465,13 +465,13 @@ lines are selected, or the NxM dimensions of a block selection."
                     (eq 'block evil-visual-selection))
                 (let ((cols (abs (- (doom-column reg-end)
                                     (doom-column reg-beg)))))
-                  (format "%dx%dB" lines cols)))
+                  (format "%dx%dB " lines cols)))
                ((eq 'line evil-visual-selection)
-                (format "%dL" lines))
+                (format "%dL " lines))
                ((> lines 1)
-                (format "%dC %dL" (- (1+ reg-end) reg-beg) lines))
+                (format "%dC %dL " (- (1+ reg-end) reg-beg) lines))
                (t
-                (format "%dC" (- (1+ reg-end) reg-beg)))))
+                (format "%dC " (- (1+ reg-end) reg-beg)))))
        'face 'doom-modeline-highlight))))
 
 
@@ -567,13 +567,13 @@ Returns \"\" to not break --no-window-system."
 ;;
 
 (def-modeline! main
-  (bar matches " " buffer-encoding buffer-info vcs selection-info flycheck))
+  (bar matches selection-info buffer-encoding buffer-info vcs flycheck))
 
 (def-modeline! minimal
-  (bar matches " " buffer-info media-info))
+  (bar matches buffer-info media-info))
 
 (def-modeline! special
-  (bar matches " " buffer-info-simple selection-info flycheck))
+  (bar matches selection-info buffer-info-simple flycheck))
 
 (def-modeline! project
   (bar buffer-default-directory))
