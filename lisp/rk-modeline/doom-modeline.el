@@ -567,13 +567,13 @@ Returns \"\" to not break --no-window-system."
 ;;
 
 (def-modeline! main
-  (bar matches selection-info buffer-encoding buffer-info vcs flycheck))
+  (bar matches " " selection-info buffer-encoding buffer-info vcs flycheck))
 
 (def-modeline! minimal
-  (bar matches buffer-info media-info))
+  (bar matches " " buffer-info media-info))
 
 (def-modeline! special
-  (bar matches selection-info buffer-info-simple flycheck))
+  (bar matches " " selection-info buffer-info-simple flycheck))
 
 (def-modeline! project
   (bar buffer-default-directory))
