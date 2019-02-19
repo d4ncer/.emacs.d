@@ -24,6 +24,12 @@
   (defun rk-lsp--maybe-disable-highlight-thing ()
     (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
       (highlight-thing-mode -1)))
+  (defun rk-lsp--maybe-setup-format-on-save ()
+    (when (gethash "documentFormattingProvider" (lsp--server-capabilities))
+      (add-hook 'before-save-hook #'lsp-format-buffer nil 'local)))
+  (defun rk-lsp--setup-lsp ()
+    (rk-lsp--maybe-disable-highlight-thing)
+    (rk-lsp--maybe-setup-format-on-save))
   :init
   (progn
     (setq lsp-prefer-flymake nil)
@@ -34,7 +40,7 @@
             "K" #'lsp-describe-thing-at-point)
   :config
   (progn
-    (add-hook 'lsp-after-open-hook #'rk-lsp--maybe-disable-highlight-thing)
+    (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
     (rk-local-leader-def :keymaps 'lsp-mode-map
       "l" '(:ignore t :wk "LSP")
       "l." '(lsp-format-buffer :wk "format")
