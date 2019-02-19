@@ -144,6 +144,7 @@
 (use-package rk-racket)
 (use-package rk-protobuf)
 (use-package rk-puppet)
+(use-package rk-sh)
 
 (use-package private-config
   :load-path "~/private")
