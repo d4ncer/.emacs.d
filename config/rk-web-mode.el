@@ -39,6 +39,28 @@
        (flow-minor-configured-p)
        (flow-minor-tag-present-p)))
 
+(defun rk-web--setup-flow-lsp ()
+  "Setup Flow with the LSP."
+  (progn
+    (setq-local lsp-clients-flow-server (flow-minor-binary))
+    (lsp)))
+
+(defun rk-web--setup-flow-sans-lsp ()
+  "Setup Flow with `flow-minor-mode', `company-flow', and `flycheck-flow'."
+  (progn
+    (with-eval-after-load 'flow-minor-mode
+      (general-def
+        :keymaps 'flow-minor-mode-map
+        :states 'normal
+        "gd" #'flow-minor-jump-to-definition
+        "K" #'flow-minor-type-at-pos))))
+
+(defun rk-web--setup-flow ()
+  "Setup Flow either via the LSP or normally."
+  (if (rk-web--flow-lsp-p)
+      (rk-web--setup-flow-lsp)
+    (rk-web--setup-flow-sans-lsp)))
+
 (defun rk-web--flow-lsp-p ()
   "Check if the Flow version used by the buffer has LSP capabilities."
   (when (rk-in-flow-buffer-p)
@@ -51,7 +73,7 @@
               (flow-version (cdr semver))
               (flow-major-version (nth 1 (s-split "\\." flow-version)))
               (flow-major-version-int (string-to-number flow-major-version))
-              (flow-lsp-capable-p (> flow-major-version-int 90)))
+              (flow-lsp-capable-p (> flow-major-version-int 95)))
         (progn
           (ht-set! rk-web--flow-lsp-buffer-cache fname flow-lsp-capable-p)
           flow-lsp-capable-p)))))
@@ -100,19 +122,13 @@
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
          ("\\.html\\'" . rk-web-html-mode))
-  :preface
-  (progn
-    (defun rk-web--maybe-setup-flow-lsp ()
-      (when (rk-web--flow-lsp-p)
-        (progn
-          (setq-local lsp-clients-flow-server (flow-minor-binary))
-          (lsp))))
 
-    (defun rk-web--add-custom-eslint-rules-dir ()
-      (-when-let* ((root (projectile-project-p))
-                   (rules-dir (f-join root "rules"))
-                   (rules-dir-p (f-exists-p rules-dir)))
-        (setq-local flycheck-eslint-rules-directories (-list rules-dir)))))
+  :preface
+  (defun rk-web--add-custom-eslint-rules-dir ()
+    (-when-let* ((root (projectile-project-p))
+                 (rules-dir (f-join root "rules"))
+                 (rules-dir-p (f-exists-p rules-dir)))
+      (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
 
   :config
   (progn
@@ -126,7 +142,7 @@
     (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
 
     ;; Set up LSP for Flow buffers
-    (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flow-lsp)
+    (add-hook 'rk-web-js-mode-hook #'rk-web--setup-flow)
 
     ;; Setup post flycheck load
 
@@ -136,17 +152,6 @@
       (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
       (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
       (flycheck-add-mode 'html-tidy 'rk-web-html-mode))))
-
-;; TEMPORARY WHILE WE FIX ISSUES
-;; (use-package rk-lsp-js
-;;   :after rk-web-modes
-;;   :commands (rk-lsp-js--setup)
-;;   :config
-;;   (progn
-;;     (autoload 'rk-web-js-mode-hook "rk-web-modes")
-;;     (rk-lsp-js--setup)
-;;     (add-hook 'rk-web-js-mode-hook #'lsp-js-flow-enable)
-;;     (add-hook 'lsp-js-flow-mode-hook 'flycheck-mode)))
 
 (use-package emmet-mode
   :straight t
@@ -199,12 +204,6 @@
   :demand t
   :straight (:host github :repo "d4ncer/flow-minor-mode"
                    :branch "master")
-  ;; Rely on LSP bindings for moving around / help at point
-  ;; TODO: Ensure these are enabled for any buffers that don't have LSP capabilities
-  ;; :general
-  ;; (:keymaps 'flow-minor-mode-map :states 'normal
-  ;;           "gd" #'flow-minor-jump-to-definition
-  ;;           "K"  #'flow-minor-type-at-pos)
   :after rk-web-modes
   :preface
   (progn
@@ -247,38 +246,37 @@
       "a" '(rk-flow--insert-flow-annotation :wk "insert @flow"))
     (add-hook 'rk-web-js-mode-hook #'flow-minor-enable-automatically)))
 
-;; Can rely on Flow to do these
-;; TODO: Ensure these are enabled for any buffers that don't have LSP capabilities
+;; Fallbacks for non-LSP enabled Flow buffers
 
-;; (use-package flycheck-flow
-;;   :straight t
-;;   :after (flycheck rk-web-modes)
-;;   :preface
-;;   (defun rk-web--maybe-setup-flycheck-flow ()
-;;     "Setup company-flow if buffer if applicable."
-;;     (if (rk-in-flow-buffer-p)
-;;         (progn
-;;           (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
-;;           (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))
-;;       (setq-local flycheck-disabled-checkers '(javascript-flow))))
-;;   :config
-;;   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flycheck-flow))
+(use-package flycheck-flow
+  :straight t
+  :after (flycheck rk-web-modes)
+  :preface
+  (defun rk-web--maybe-setup-flycheck-flow ()
+    "Setup company-flow if buffer if applicable."
+    (if (not (rk-web--flow-lsp-p))
+        (progn
+          (flycheck-add-mode 'javascript-flow 'rk-web-js-mode)
+          (flycheck-add-next-checker 'javascript-flow 'javascript-eslint))
+      (setq-local flycheck-disabled-checkers '(javascript-flow))))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-flycheck-flow))
 
-;; (use-package company-flow
-;;   :straight t
-;;   :after rk-web-modes
-;;   :preface
-;;   (defun rk-web--maybe-setup-company-flow ()
-;;     "Setup company-flow if buffer if applicable."
-;;     (if (rk-in-flow-buffer-p)
-;;         (progn
-;;           (setq-local company-flow-modes '(rk-web-js-mode))
-;;           (with-eval-after-load 'company
-;;             (add-to-list 'company-backends 'company-flow)))
-;;       (let ((rk-web--non-flow-backends (-remove (lambda (backend) (eq backend 'company-flow)) company-backends)))
-;;         (setq-local company-backends rk-web--non-flow-backends))))
-;;   :config
-;;   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-company-flow))
+(use-package company-flow
+  :straight t
+  :after rk-web-modes
+  :preface
+  (defun rk-web--maybe-setup-company-flow ()
+    "Setup company-flow if buffer if applicable."
+    (if (not (rk-web--flow-lsp-p))
+        (progn
+          (setq-local company-flow-modes '(rk-web-js-mode))
+          (with-eval-after-load 'company
+            (add-to-list 'company-backends 'company-flow)))
+      (let ((rk-web--non-flow-backends (-remove (lambda (backend) (eq backend 'company-flow)) company-backends)))
+        (setq-local company-backends rk-web--non-flow-backends))))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-company-flow))
 
 (use-package prettier-js
   :straight t
