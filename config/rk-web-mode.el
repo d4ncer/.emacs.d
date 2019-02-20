@@ -81,6 +81,9 @@
     (setq web-mode-markup-indent-offset 2)
     (setq web-mode-enable-auto-quoting nil)
 
+    (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
+    (add-to-list 'web-mode-content-types '("jsx" . "\\.jsx?\\'"))
+
     ;; Change default indentation behaviour.
 
     (setf (cdr (assoc "lineup-args" web-mode-indentation-params)) nil)
