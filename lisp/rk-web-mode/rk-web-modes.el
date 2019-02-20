@@ -15,11 +15,6 @@
   "Derived mode for editing JavaScript files.")
 
 ;;;###autoload
-(define-derived-mode rk-web-json-mode web-mode "JSON"
-  "Derived mode for editing JSON files."
-  (setq-local web-mode-content-type "json"))
-
-;;;###autoload
 (define-derived-mode rk-web-html-mode web-mode "HTML"
   "Derived mode for editing HTML files."
   (setq-local web-mode-content-type "html"))

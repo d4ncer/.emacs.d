@@ -114,10 +114,7 @@
 
 (use-package rk-web-modes
   :defer t
-  :mode (("\\.json\\'" . rk-web-json-mode)
-         ("\\.eslintrc\\'" . rk-web-json-mode)
-         ("\\.babelrc\\'" . rk-web-json-mode)
-         ("\\.es6\\'"  . rk-web-js-mode)
+  :mode (("\\.es6\\'"  . rk-web-js-mode)
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)

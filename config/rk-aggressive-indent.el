@@ -21,7 +21,7 @@
     sql-mode
     restclient-mode
     rk-web-js-mode
-    rk-web-json-mode
+    json-mode
     rk-web-php-mode
     rnc-mode
     scala-mode)

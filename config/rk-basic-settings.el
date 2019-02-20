@@ -667,6 +667,27 @@ Optional arg JUSTIFY will justify comments and strings."
   :init
   (setq emojify-emojis-dir (concat paths-cache-directory "/emojis")))
 
+(use-package json-mode
+  :straight t
+  :init
+  (setq json-mode-auto-mode-list '(".babelrc" ".eslintrc" "composer.lock"))
+  :preface
+  (defun rk-json--format-region-or-buffer ()
+    "Format region or buffer."
+    (interactive)
+    (if (use-region-p)
+        (json-pretty-print (region-beginning) (region-end))
+      (json-pretty-print (point-min) (point-max))))
+  :init
+  (rk-local-leader-def :keymaps 'json-mode-map
+    "." '(rk-json--format-region-or-buffer :wk "format"))
+  :config
+  (progn
+    (with-eval-after-load 'js
+      (setq js-indent-level 2))
+    (with-eval-after-load 'json-reformat
+      (setq json-reformat:indent-width 2))))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
