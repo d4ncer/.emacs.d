@@ -53,6 +53,12 @@
     (setq company-dabbrev-ignore-case nil)
     (setq company-dabbrev-downcase nil)))
 
+(use-package company-box
+  :straight t
+  :after company
+  :hook
+  (company-mode . company-box-mode))
+
 (use-package company-lsp
   :straight t
   :after (company lsp-mode)

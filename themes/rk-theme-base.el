@@ -486,6 +486,21 @@
     (company-template-field
      ((t :inherit highlight)))
 
+    (company-box-annotation
+     ((t :foreground ,rk-theme-base-magenta)))
+
+    (company-box-background
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (company-box-candidate
+     ((t :foreground ,default-foreground)))
+
+    (company-box-scrollbar
+     ((t :foreground ,default-foreground :background ,rk-theme-base-blue)))
+
+    (company-box-selection
+     ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-blue)))
+
     ;; Misc faces
 
     (go-peg-mode-production-name
