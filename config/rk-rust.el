@@ -52,8 +52,6 @@
     ;; Enable backtraces in rust programs run from Emacs.
     (setenv "RUST_BACKTRACE" "1")
 
-    (general-def :keymaps 'rust-mode-map :states '(insert)
-      "TAB" #'company-indent-or-complete-common)
     (general-def :keymaps 'rust-mode-map :states 'normal
       "J" #'rk-rust--join-line)
 
