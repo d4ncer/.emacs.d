@@ -19,10 +19,7 @@
 
   :general
   (:keymaps 'company-active-map
-            "TAB" #'company-complete-selection
-            "<tab>" #'company-complete-selection
-            "S-<return>" #'company-complete-selection)
-
+            "C-<return>" #'company-complete-selection)
 
   :preface
   (defun rk-company--set-company-vars ()
