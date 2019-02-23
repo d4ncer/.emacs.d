@@ -20,6 +20,10 @@
   (add-hook 'python-mode-hook #'lsp)
   (add-hook 'lsp-python-mode-hook #'flycheck-mode))
 
+(use-package pipenv
+  :straight t
+  :hook (python-mode . pipenv-mode))
+
 (use-package pyvenv
   :straight t
   :commands (pyvenv-activate pyvenv-deactivate pyvenv-workon)
