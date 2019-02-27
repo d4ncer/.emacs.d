@@ -1,0 +1,7 @@
+# key: rcl
+# name: src restclient
+# condition: (rk-yas/bol?)
+# --
+#+begin_src restclient
+$0
+#+end_src
