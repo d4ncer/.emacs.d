@@ -99,7 +99,7 @@
  ("keychain-environment" . "d3643196de6dc79ea77f9f4805028350fd76100b")
  ("ledger-mode" . "b2c1e316de1541e62541343b045f0042ac19accf")
  ("let-alist" . "33e71829e8814cf5f28b6e4291192aafef61b69e")
- ("lsp-mode" . "f16c446dbfb377d4d60909254b8916991803415b")
+ ("lsp-mode" . "60f2bf04f2b48b0576a1d1015425c3c27b50e123")
  ("lsp-scala" . "7c8a61a841c85b88c23b9a78a9aa5bc581afee0e")
  ("lsp-ui" . "df3681b6a578a314374a8d689675aa60ad4afa6e")
  ("magit" . "04930bb0ae6fe3e79b767dd75f61145de1cddaad")
