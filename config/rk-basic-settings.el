@@ -310,7 +310,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (setq delete-by-moving-to-trash nil)
 (setq initial-scratch-message nil)
 (setq inhibit-startup-message t)
-(setq initial-major-mode 'text-mode)
+(setq initial-major-mode 'fundamental-mode)
 (setq initial-buffer-choice t)
 (setq ring-bell-function #'ignore)
 
