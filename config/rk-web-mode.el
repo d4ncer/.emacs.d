@@ -340,18 +340,6 @@
   :config
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-fnm))
 
-(use-package nvm
-  :straight t
-  :after rk-web-modes
-  :preface
-  (defun rk-web--maybe-use-nvm ()
-    (when (and
-           (f-exists-p (locate-dominating-file default-directory ".nvmrc"))
-           (locate-file "nvm" exec-path))
-      (nvm-use-for-buffer)))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-nvm))
-
 (provide 'rk-web-mode)
 
 ;;; rk-web-mode.el ends here
