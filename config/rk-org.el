@@ -226,6 +226,7 @@ Do not scheduled items or repeating todos."
     (setq org-babel-load-languages '((emacs-lisp . t)
                                      (restclient . t)
                                      (gnuplot . t)
+                                     (js . t)
                                      (python . t)
                                      (javascript . t)
                                      (shell . t)
@@ -255,15 +256,6 @@ Do not scheduled items or repeating todos."
 (use-package ob-restclient
   :straight t
   :after org)
-
-(use-package ob-javascript
-  :straight (:host github :repo "zweifisch/ob-javascript"
-                   :branch "master"
-                   :files ("ob-javascript.el" "repl.js" "util.js"))
-  :after org
-  :defines (ob-javascript-path-to-lib)
-  :init
-  (setq ob-javascript-path-to-lib (f-join user-emacs-directory "straight/repos/ob-javascript/")))
 
 (use-package ob-shell :after org)
 
@@ -510,6 +502,7 @@ Do not scheduled items or repeating todos."
                                ("screen" . shell-script)
                                ("shell" . sh)
                                ("javascript" . rk-web-js)
+                               ("js" . rk-web-js)
                                ("bash" . sh)))
     (setq org-src-fontify-natively t)
     (setq org-src-window-setup 'current-window)
