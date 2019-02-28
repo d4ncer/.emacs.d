@@ -21,9 +21,20 @@
 (use-package go-mode
   :straight t
   :mode ("\\.go\\'" . go-mode)
-  :demand t
+  :preface
+  (defun rk-go--modules-p ()
+    "Return non-nil if this buffer is part of a Go Modules project."
+    (locate-dominating-file default-directory "go.mod"))
+
+  (defun rk-go--setup-go ()
+    "Run setup for Go buffers."
+    (progn
+      (if (rk-go--modules-p)
+          (setenv "GO111MODULE" "on")
+        (setenv "GO111MODULE" "auto"))
+      (lsp)))
   :hook
-  (go-mode . lsp))
+  (go-mode . rk-go--setup-go))
 
 (use-package rk-go-run
   :after go-mode
