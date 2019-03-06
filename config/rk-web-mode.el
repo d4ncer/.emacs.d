@@ -26,6 +26,9 @@
 
 (autoload 'projectile-project-p "projectile")
 
+(defconst rk-web--node-js-lts-version "v10.15.1"
+  "The version of Node to use by default if .nvmrc isn't found.")
+
 (defconst rk-web--prettier-default-args
   (list "--single-quote" "true" "--trailing-comma" "es5")
   "Default values for prettier.")
@@ -333,10 +336,11 @@
   :after rk-web-modes
   :preface
   (defun rk-web--maybe-use-fnm ()
-    (when (and
-           (f-exists-p (locate-dominating-file default-directory ".nvmrc"))
-           (locate-file "fnm" exec-path))
-      (fnm-use-for-buffer)))
+    (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
+               (file-p (f-exists-p project-nvmrc))
+               (fnm-exec-p (executable-find "fnm")))
+        (fnm-use-for-buffer)
+      (fnm-use rk-web--node-js-lts-version)))
   :config
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-fnm))
 
