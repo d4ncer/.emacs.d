@@ -56,6 +56,17 @@
                    (slot            . 0)
                    (window-height   . 0.2)))))
 
+(use-package go-tag
+  :straight t
+  :after go-mode
+  :custom
+  (go-tag-args '("-transform" "camelcase"))
+  :config
+  (rk-local-leader-def :keymaps 'go-mode-map
+    "k"   '(:ignore t :wk "keyify")
+    "k a" '(go-tag-add :wk "add")
+    "k r" '(go-tag-remove :wk "remove")))
+
 (provide 'rk-go)
 
 ;;; rk-go.el ends here
