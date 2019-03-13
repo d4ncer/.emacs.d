@@ -16,8 +16,6 @@
 (require 'definers)
 (require 'lsp)
 
-(autoload 'projectile-project-p "projectile")
-
 (use-package go-mode
   :straight t
   :mode ("\\.go\\'" . go-mode)
