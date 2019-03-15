@@ -20,6 +20,14 @@
   :straight t
   :mode ("\\.go\\'" . go-mode)
   :preface
+  (defun rk-go--setup-gopls ()
+    (lsp-register-client
+     (make-lsp-client :new-connection (lsp-stdio-connection "gopls")
+                      :major-modes '(go-mode)
+                      :priority 0
+                      :server-id 'go-gopls
+                      :library-folders-fn (lambda (_workspace)
+                                            lsp-clients-go-library-directories))))
   (defun rk-go--modules-p ()
     "Return non-nil if this buffer is part of a Go Modules project."
     (locate-dominating-file default-directory "go.mod"))
