@@ -38,6 +38,7 @@
       (if (rk-go--modules-p)
           (setenv "GO111MODULE" "on")
         (setenv "GO111MODULE" "auto"))
+      (setq gofmt-command "goimports")
       (lsp)))
   :hook
   (go-mode . rk-go--setup-go))
