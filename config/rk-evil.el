@@ -22,8 +22,12 @@
     (if (bound-and-true-p smartparens-strict-mode)
         (call-interactively 'sp-backward-delete-char)
       (apply fn args)))
+  (defun rk-evil--select-non-empty-line ()
+    (interactive)
+    (evil-visual-select (line-beginning-position) (line-end-position)))
   :general
   (:states '(normal motion)
+           "C-l" #'rk-evil--select-non-empty-line
            "C-u" #'evil-scroll-page-up
            "C-d" #'evil-scroll-page-down)
   (:states 'motion
