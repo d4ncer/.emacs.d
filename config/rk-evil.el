@@ -24,7 +24,10 @@
       (apply fn args)))
   (defun rk-evil--select-non-empty-line ()
     (interactive)
-    (evil-visual-select (line-beginning-position) (line-end-position)))
+    (back-to-indentation)
+    (set-mark (point))
+    (end-of-line)
+    (backward-char 1))
   :general
   (:states '(normal motion)
            "C-l" #'rk-evil--select-non-empty-line
