@@ -20,7 +20,6 @@
 
 (use-package yasnippet
   :straight t
-  :defer t
   :preface
   (progn
     (autoload 'sp-backward-delete-char "smartparens")
@@ -90,7 +89,6 @@ Otherwise delete backwards."
    yas--field-text-for-display))
 
 (use-package warnings
-  :defer t
   :config
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)))
 
