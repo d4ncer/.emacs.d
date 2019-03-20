@@ -22,7 +22,7 @@
     restclient-mode
     rk-web-js-mode
     json-mode
-    rk-web-php-mode
+    php-mode
     rnc-mode
     rust-mode
     scala-mode)
