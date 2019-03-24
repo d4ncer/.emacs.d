@@ -544,7 +544,20 @@ Do not scheduled items or repeating todos."
 
 (use-package org-capture
   :after org
+  :defines org-capture-list
   :preface
+  (defun rk-org--align-ledger-clean-buffer ()
+    (dolist (window (window-list))
+      (with-current-buffer (window-buffer window)
+        (when (and (derived-mode-p 'ledger-mode)
+                   (-contains-p '("ls" "lr" "lc") (plist-get org-capture-plist :key)))
+          (call-interactively #'ledger-mode-clean-buffer)))))
+  (defun rk-org--ledger-template-entry (key label form template &rest kws)
+    (append
+     (list key label 'plain form template
+           :empty-lines 1
+           :immediate-finish t)
+     kws))
   (defun rk-org--capture-template-entry (key label form template &rest kws)
     (append
      (list key label 'entry form template
@@ -555,8 +568,10 @@ Do not scheduled items or repeating todos."
   :defines (org-capture-templates)
   :config
   (progn
+    (add-hook 'org-capture-before-finalize-hook #'rk-org--align-ledger-clean-buffer)
     (setq org-capture-templates
           (list
+           ;; Reg org
            (rk-org--capture-template-entry
             "t" "Add to [inbox]"
             '(file rk-org-inbox-file) "* TODO %i%?")
@@ -572,7 +587,24 @@ Do not scheduled items or repeating todos."
            (rk-org--capture-template-entry
             "s" "Add task to do [someday]"
             '(file+olp rk-org-someday-file "Side projects")
-            "* SOMEDAY  %?")))))
+            "* SOMEDAY  %?")
+
+           ;; Ledger templates
+           '("l" "Ledger")
+           (rk-org--ledger-template-entry
+            "lc" "Credit Card"
+            '(file rk-org-ledger-file)
+            "%(org-read-date) %^{Payee}\n\tLiabilities:Visa\n\tExpenses:%^{Type}    %^{Amount} NZD")
+
+           (rk-org--ledger-template-entry
+            "ls" "EFTPOS:SP"
+            '(file rk-org-ledger-file)
+            "%(org-read-date) %^{Payee}\n\tLiabilities:EFTPOS:SP\n\tExpenses:%^{Type}    %^{Amount} NZD")
+
+           (rk-org--ledger-template-entry
+            "lr" "EFTPOS:RK"
+            '(file rk-org-ledger-file)
+            "%(org-read-date) %^{Payee}\n\tLiabilities:EFTPOS:RK\n\tExpenses:%^{Type}    %^{Amount} NZD")))))
 
 (use-package org-download
   :straight t
