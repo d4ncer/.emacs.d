@@ -48,6 +48,7 @@
 (straight-use-package 'noflet)
 (straight-use-package 'memoize)
 (straight-use-package 'general)
+(straight-use-package 'el-patch)
 
 ;; Set up general to auto unbind keys (override everything)
 
@@ -122,6 +123,7 @@
 (use-package rk-yasnippet)
 (use-package rk-prodigy)
 (use-package rk-ledger)
+(use-package rk-eshell)
 
 ;; Programming language support
 

@@ -26,6 +26,9 @@
 (defconst paths-config-directory
   (concat user-emacs-directory "config"))
 
+(defconst paths-hacks-directory
+  (concat user-emacs-directory "hacks"))
+
 (defconst paths-themes-directory
   (concat user-emacs-directory "themes"))
 
@@ -37,6 +40,7 @@ If argument INTERACTIVE-P is set, log additional information."
          (main-dirs
           (list paths-lisp-directory
                 paths-config-directory
+                paths-hacks-directory
                 paths-themes-directory))
          (subdirs
           (f-directories paths-lisp-directory))
