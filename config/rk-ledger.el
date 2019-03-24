@@ -8,9 +8,21 @@
   (require 'use-package))
 
 (require 'definers)
+(require 'general)
+
 (use-package ledger-mode
   :mode ("\\.ledger$" . ledger-mode)
-  :straight t)
+  :init
+  (rk-local-leader-def :keymaps 'ledger-mode-map
+    "r" '(ledger-report :wk "report"))
+  :straight t
+  :config
+  (general-setq ledger-reports
+                `(("bal" "ledger -f %(ledger-file) bal")
+                  ("reg" "ledger -f %(ledger-file) reg")
+                  ("payee" "ledger -f %(ledger-file) reg @%(payee)")
+                  ("account" "ledger -f %(ledger-file) reg %(account)"))))
+
 (use-package cb-ledger-format
   :after ledger-mode
   :init
