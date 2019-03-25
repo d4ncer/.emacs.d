@@ -35,6 +35,7 @@
 (defconst rk-org-diary-file (f-join org-directory "diary.org"))
 (defconst rk-org-recruitment-file (f-join org-directory "recruitment.org"))
 (defconst rk-org-consume-file (f-join org-directory "consume.org"))
+(defconst rk-org-ledger-file (f-join org-directory "base.ledger"))
 
 (use-package org
   :straight org-plus-contrib
@@ -594,17 +595,12 @@ Do not scheduled items or repeating todos."
            (rk-org--ledger-template-entry
             "lc" "Credit Card"
             '(file rk-org-ledger-file)
-            "%(org-read-date) %^{Payee}\n\tLiabilities:Visa\n\tExpenses:%^{Type}    %^{Amount} NZD")
+            "%(org-read-date) %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tLiabilities:Visa")
 
            (rk-org--ledger-template-entry
-            "ls" "EFTPOS:SP"
+            "lj" "Joint Checking"
             '(file rk-org-ledger-file)
-            "%(org-read-date) %^{Payee}\n\tLiabilities:EFTPOS:SP\n\tExpenses:%^{Type}    %^{Amount} NZD")
-
-           (rk-org--ledger-template-entry
-            "lr" "EFTPOS:RK"
-            '(file rk-org-ledger-file)
-            "%(org-read-date) %^{Payee}\n\tLiabilities:EFTPOS:RK\n\tExpenses:%^{Type}    %^{Amount} NZD")))))
+            "%(org-read-date) * %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tAssets:Joint Checking")))))
 
 (use-package org-download
   :straight t
