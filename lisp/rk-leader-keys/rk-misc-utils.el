@@ -109,6 +109,11 @@ current window."
   (interactive)
   (display-buffer "*Messages*"))
 
+(defun rk-goto--base-ledger ()
+  "Open base ledger file."
+  (interactive)
+  (find-file rk-org-ledger-file))
+
 (defun rk-rename-file-and-buffer--assert-file-exists-for-buffer (&optional buf)
   (let ((cur (buffer-file-name buf)))
     (if (not (and cur (f-exists? cur)))
