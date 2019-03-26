@@ -61,6 +61,9 @@
     (fringe
      ((t :background ,default-background)))
 
+    (internal-border
+     ((t :background ,rk-theme-base-magenta)))
+
     ;; Mode & header line
 
     (mode-line
@@ -299,6 +302,12 @@
 
     (ahs-plugin-whole-buffer-face
      ((t :inherit highlight)))
+
+    (hydra-posframe-face
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (hydra-posframe-border-face
+     ((t :background ,rk-theme-base-magenta)))
 
     ;; Magit
 
