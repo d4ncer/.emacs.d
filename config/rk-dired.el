@@ -16,7 +16,6 @@
 (require 'definers)
 
 (use-package dired
-  :defer t
   :commands (dired dired-hide-details-mode)
   :preface
   (progn
@@ -60,20 +59,23 @@
       "k" #'diredp-previous-line)))
 
 (use-package dired-x
+  :after dired
   :commands (dired-omit-mode)
   :init
   (progn
     (add-hook 'dired-load-hook (lambda () (load "dired-x")))
     (add-hook 'dired-mode-hook #'dired-omit-mode))
+  :general
+  (:keymaps 'dired-mode-map :states '(normal)
+            "h" #'dired-omit-mode)
+  :custom
+  (dired-omit-verbose nil)
+  (dired-clean-up-buffers-too t)
+  (dired-omit-files (rx bol (or (+ ".")
+                                (and "__pycache__" eol))))
   :config
-  (progn
-    (rk-local-leader-def :keymaps 'dired-mode-map
-      "h" '(dired-omit-mode :wk "switch to omit mode"))
-    (general-def 'normal dired-mode-map "h" #'dired-omit-mode)
-    (setq dired-omit-verbose nil)
-    (setq dired-clean-up-buffers-too t)
-    (setq dired-omit-files (rx bol (or (+ ".")
-                                       (and "__pycache__" eol))))))
+  (rk-local-leader-def :keymaps 'dired-mode-map
+    "h" '(dired-omit-mode :wk "switch to omit mode")))
 
 (use-package dired+
   :straight t
