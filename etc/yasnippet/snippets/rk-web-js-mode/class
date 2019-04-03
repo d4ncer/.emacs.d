@@ -1,10 +1,8 @@
 # -*- mode: snippet -*-
 # name: class
 # key: cl
-# condition: (rk-yas/bol?)
+# condition: (yas-funcs-bolp)
 # --
 class ${1:Name} {
-  constructor($2) {
-    ${2:$(cb-yas-js--ctor-body yas-text)}
-  }$0
+  $0
 }

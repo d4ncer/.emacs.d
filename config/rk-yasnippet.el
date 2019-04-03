@@ -92,7 +92,7 @@ Otherwise delete backwards."
   :config
   (add-to-list 'warning-suppress-types '(yasnippet backquote-change)))
 
-(use-package rk-yas-utils
+(use-package yas-funcs
   :after yasnippet)
 
 (use-package ivy-yasnippet
