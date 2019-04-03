@@ -19,6 +19,7 @@
 (use-package go-mode
   :straight t
   :mode ("\\.go\\'" . go-mode)
+  :preface
   (defun rk-go--modules-p ()
     "Return non-nil if this buffer is part of a Go Modules project."
     (locate-dominating-file default-directory "go.mod"))
