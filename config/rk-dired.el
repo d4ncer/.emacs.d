@@ -11,7 +11,6 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'rk-emacs)
 (require 'general)
 (require 'definers)
 
