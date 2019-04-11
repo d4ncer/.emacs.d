@@ -317,12 +317,16 @@
         (progn
           (rk-local-leader-def :keymaps 'rk-web-js-mode-map
             "." '(prettier-js :wk "format"))
+          (rk-local-leader-def :keymaps 'rk-web-html-mode-map
+            "." '(prettier-js :wk "format"))
+          (rk-local-leader-def :keymaps 'rk-web-css-mode-map
+            "." '(prettier-js :wk "format"))
           (rk-web--init-prettier-config)
           (prettier-js-mode +1))))
 
     (defun rk-web--maybe-setup-prettier ()
       (when (and (derived-mode-p 'web-mode)
-                 (-contains-p '("javascript" "jsx") web-mode-content-type))
+                 (-contains-p '("javascript" "jsx" "html" "css") web-mode-content-type))
         (rk-web--init-prettier))))
 
   :config
