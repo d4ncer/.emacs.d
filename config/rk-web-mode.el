@@ -115,6 +115,18 @@
     (setf (cdr (assoc "lineup-concats" web-mode-indentation-params)) nil)
     (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil)))
 
+(use-package jsonnet-mode
+  :straight t
+  :preface
+  (defun rk-jsonnet--disable-hideshow ()
+    (autoload 'hs-minor-mode "hideshow")
+    (remove-hook 'prog-mode-hook #'hs-minor-mode t))
+  :config
+  (add-hook 'jsonnet-mode-hook #'rk-jsonnet--disable-hideshow)
+  (rk-local-leader-def :keymaps 'jsonnet-mode-map
+    "." '(jsonnet-reformat-buffer :wk "format")
+    "b" '(jsonnet-eval :wk "eval buffer")))
+
 (use-package rk-web-modes
   :defer t
   :mode (("\\.es6\\'"  . rk-web-js-mode)
