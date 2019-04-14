@@ -14,6 +14,9 @@
   :mode ("\\.ledger$" . ledger-mode)
   :init
   (rk-local-leader-def :keymaps 'ledger-mode-map
+    )
+  (rk-local-leader-def :keymaps 'ledger-mode-map
+    "." '(ledger-mode-clean-buffer :wk "format")
     "r" '(ledger-report :wk "report"))
   :straight t
   :config
@@ -22,12 +25,6 @@
                   ("reg" "ledger -f %(ledger-file) reg")
                   ("payee" "ledger -f %(ledger-file) reg @%(payee)")
                   ("account" "ledger -f %(ledger-file) reg %(account)"))))
-
-(use-package cb-ledger-format
-  :after ledger-mode
-  :init
-  (rk-local-leader-def :keymaps 'ledger-mode-map
-    "." '(cb-ledger-format-buffer :wk "format")))
 
 (use-package flycheck-ledger
   :straight t
