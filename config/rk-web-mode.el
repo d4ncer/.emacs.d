@@ -76,7 +76,7 @@
               (flow-version (cdr semver))
               (flow-major-version (nth 1 (s-split "\\." flow-version)))
               (flow-major-version-int (string-to-number flow-major-version))
-              (flow-lsp-capable-p (> flow-major-version-int 94)))
+              (flow-lsp-capable-p (> flow-major-version-int 100)))
         (progn
           (ht-set! rk-web--flow-lsp-buffer-cache fname flow-lsp-capable-p)
           flow-lsp-capable-p)))))
