@@ -77,6 +77,7 @@ Fall back to the file name sans extension."
     ("assert"  "power-assert")
     ("VError"  "verror")
     ("styles"  "./styles.css")
+    ("styled"  "styled-components")
     ("stampit"   "@stamp/it")
     ("Configure" "@stamp/configure")
     ("Required"  "@stamp/required")
