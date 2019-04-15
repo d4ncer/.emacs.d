@@ -17,7 +17,9 @@
   :straight t
   :mode ("\\.php\\'" . php-mode)
   :general
-  (:keymaps 'php-mode-map "(" nil)
+  (:keymaps 'php-mode-map
+            "(" nil
+            "{" nil)
   :custom
   (php-template-compatibility nil)
   :preface
