@@ -9,7 +9,7 @@
 ;;; Code:
 
 (require 'dash)
-(require 'org)
+(require 'paths)
 
 (autoload 'org-agenda-filter-apply "org-agenda")
 
@@ -17,43 +17,43 @@
 (defun rk-org-goto-diary ()
   "Switch to the diary file."
   (interactive)
-  (find-file rk-org-diary-file))
+  (find-file rk-org--diary-file))
 
 ;;;###autoload
 (defun rk-org-goto-inbox ()
   "Switch to the GTD inbox file."
   (interactive)
-  (find-file rk-org-inbox-file))
+  (find-file rk-org--inbox-file))
 
 ;;;###autoload
 (defun rk-org-goto-consume ()
   "Switch to the consume file."
   (interactive)
-  (find-file rk-org-consume-file))
+  (find-file rk-org--consume-file))
 
 ;;;###autoload
 (defun rk-org-goto-tickler ()
   "Switch to the tickler file."
   (interactive)
-  (find-file rk-org-tickler-file))
+  (find-file rk-org--tickler-file))
 
 ;;;###autoload
 (defun rk-org-goto-reference ()
   "Switch to the GTD reference file."
   (interactive)
-  (find-file rk-org-reference-file))
+  (find-file rk-org--reference-file))
 
 ;;;###autoload
 (defun rk-org-goto-projects ()
   "Switch to the GTD projects file."
   (interactive)
-  (find-file rk-org-projects-file))
+  (find-file rk-org--projects-file))
 
 ;;;###autoload
-(defun rk-org-goto-work ()
-  "Switch to the work file."
+(defun rk-org-goto-next ()
+  "Switch to the next / one-off file."
   (interactive)
-  (find-file rk-org-work-file))
+  (find-file rk-org--next-file))
 
 ;;;###autoload
 (defun rk-org-goto-todo-list ()

@@ -54,6 +54,26 @@ If argument INTERACTIVE-P is set, log additional information."
           (message "Load path updated. Added: %S" added)
         (message "No change to load-path")))))
 
+;; Org stuff
+
+(defconst paths--org-dir "~/org")
+
+(defconst paths--gtd-dir (f-join paths--org-dir "gtd"))
+(defconst paths--accounts-dir (f-join paths--org-dir "accounts"))
+
+(defconst rk-org--work-file (f-join paths--org-dir "work_movio.org"))
+(defconst rk-org--diary-file (f-join paths--org-dir "diary.org"))
+(defconst rk-org--recruitment-file (f-join paths--org-dir "recruitment.org"))
+(defconst rk-org--consume-file (f-join paths--org-dir "consume.org"))
+
+(defconst rk-org--inbox-file (f-join paths--gtd-dir "inbox.org"))
+(defconst rk-org--next-file (f-join paths--gtd-dir "next.org"))
+(defconst rk-org--tickler-file (f-join paths--gtd-dir "tickler.org"))
+(defconst rk-org--someday-file (f-join paths--gtd-dir "someday.org"))
+(defconst rk-org--projects-file (f-join paths--gtd-dir "projects.org"))
+(defconst rk-org--reference-file (f-join paths--gtd-dir "reference.org"))
+(defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
+
 
 (provide 'paths)
 

@@ -25,17 +25,6 @@
 (defvar org-directory "~/org")
 
 (defconst rk-org-gtd-dir (f-join org-directory "gtd"))
-(defconst rk-org-work-file (f-join org-directory "work_movio.org"))
-(defconst rk-org-inbox-file (f-join rk-org-gtd-dir "inbox.org"))
-(defconst rk-org-next-file (f-join rk-org-gtd-dir "next.org"))
-(defconst rk-org-tickler-file (f-join rk-org-gtd-dir "tickler.org"))
-(defconst rk-org-someday-file (f-join rk-org-gtd-dir "someday.org"))
-(defconst rk-org-projects-file (f-join rk-org-gtd-dir "projects.org"))
-(defconst rk-org-reference-file (f-join rk-org-gtd-dir "reference.org"))
-(defconst rk-org-diary-file (f-join org-directory "diary.org"))
-(defconst rk-org-recruitment-file (f-join org-directory "recruitment.org"))
-(defconst rk-org-consume-file (f-join org-directory "consume.org"))
-(defconst rk-org-ledger-file (f-join org-directory "base.ledger"))
 
 (use-package org
   :straight org-plus-contrib
@@ -180,13 +169,13 @@ Do not scheduled items or repeating todos."
       "RET" #'org-return)
 
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-someday-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org-consume-file :maxlevel . 2))
-    (add-to-list 'org-refile-targets '(rk-org-projects-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org-next-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org-reference-file :maxlevel . 3))
-    (add-to-list 'org-refile-targets '(rk-org-tickler-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org-diary-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 2))
+    (add-to-list 'org-refile-targets '(rk-org--projects-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 3))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
     (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file-other-window)
@@ -207,7 +196,7 @@ Do not scheduled items or repeating todos."
     (setq org-pretty-entities t)
     (setq org-refile-allow-creating-parent-nodes 'confirm)
     (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
-    (setq org-agenda-diary-file rk-org-inbox-file)
+    (setq org-agenda-diary-file rk-org--inbox-file)
 
     (setq org-refile-use-outline-path t)
     (setq org-return-follows-link t)
@@ -333,7 +322,7 @@ Do not scheduled items or repeating todos."
     (setq org-agenda-include-diary nil)
     (setq org-agenda-start-on-weekday nil)
     (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
-    (setq org-agenda-files (f-files rk-org-gtd-dir (lambda (f) (f-ext? f "org"))))
+    (setq org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
     (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
     (setq org-agenda-insert-diary-extract-time t)
     (setq org-agenda-span 'week)
@@ -374,7 +363,7 @@ Do not scheduled items or repeating todos."
               (agenda ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list rk-org-projects-file rk-org-inbox-file rk-org-next-file rk-org-consume-file rk-org-tickler-file))
+              (org-agenda-files (list rk-org--projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-properties '(effort appt))))
@@ -425,7 +414,7 @@ Do not scheduled items or repeating todos."
                '("-ignore"))
               (org-agenda-show-log t)
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list rk-org-consume-file rk-org-projects-file rk-org-inbox-file rk-org-someday-file))
+              (org-agenda-files (list rk-org--consume-file rk-org--projects-file rk-org--inbox-file rk-org--someday-file))
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))))))
 
@@ -575,31 +564,31 @@ Do not scheduled items or repeating todos."
            ;; Reg org
            (rk-org--capture-template-entry
             "t" "Add to [inbox]"
-            '(file rk-org-inbox-file) "* TODO %i%?")
+            '(file rk-org--inbox-file) "* TODO %i%?")
 
            (rk-org--capture-template-entry
             "T" "Add to [tickler]"
-            '(file+headline rk-org-tickler-file "Appointments") "* %i%? \n%^{CATEGORY}p%^t")
+            '(file+headline rk-org--tickler-file "Appointments") "* %i%? \n%^{CATEGORY}p%^t")
 
            (rk-org--capture-template-entry
             "p" "Create [project]"
-            '(file rk-org-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
+            '(file rk-org--projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
 
            (rk-org--capture-template-entry
             "s" "Add task to do [someday]"
-            '(file+olp rk-org-someday-file "Side projects")
+            '(file+olp rk-org--someday-file "Side projects")
             "* SOMEDAY  %?")
 
            ;; Ledger templates
            '("l" "Ledger")
            (rk-org--ledger-template-entry
             "lc" "Credit Card"
-            '(file rk-org-ledger-file)
+            '(file rk-org--ledger-file)
             "%(org-read-date) %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tLiabilities:Visa")
 
            (rk-org--ledger-template-entry
             "lj" "Joint Checking"
-            '(file rk-org-ledger-file)
+            '(file rk-org--ledger-file)
             "%(org-read-date) * %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tAssets:Joint Checking")))))
 
 (use-package org-download
@@ -733,7 +722,7 @@ table tr.tr-even td {
     "oga" '(rk-org-goto-tickler :wk "apps")
     "ogd" '(rk-org-goto-diary :wk "diary")
     "ogi" '(rk-org-goto-inbox :wk "inbox")
-    "ogw" '(rk-org-goto-work :wk "work")
+    "ogn" '(rk-org-goto-next :wk "next/one-off")
     "ogr" '(rk-org-goto-reference :wk "reference")
     "ogp" '(rk-org-goto-projects :wk "projects")
     "ot"  '(rk-org-goto-todo-list :wk "todos")

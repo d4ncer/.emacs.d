@@ -6,6 +6,7 @@
 
 (require 'seq)
 (require 'subr-x)
+(require 'paths)
 (require 'dash)
 (require 'f)
 (require 's)
@@ -112,7 +113,7 @@ current window."
 (defun rk-goto--base-ledger ()
   "Open base ledger file."
   (interactive)
-  (find-file rk-org-ledger-file))
+  (find-file rk-accounts--ledger-file))
 
 (defun rk-rename-file-and-buffer--assert-file-exists-for-buffer (&optional buf)
   (let ((cur (buffer-file-name buf)))
