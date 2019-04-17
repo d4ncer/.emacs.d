@@ -583,12 +583,12 @@ Do not scheduled items or repeating todos."
            '("l" "Ledger")
            (rk-org--ledger-template-entry
             "lc" "Credit Card"
-            '(file rk-org--ledger-file)
+            '(file rk-accounts--ledger-file)
             "%(org-read-date) %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tLiabilities:Visa")
 
            (rk-org--ledger-template-entry
             "lj" "Joint Checking"
-            '(file rk-org--ledger-file)
+            '(file rk-accounts--ledger-file)
             "%(org-read-date) * %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tAssets:Joint Checking")))))
 
 (use-package org-download
