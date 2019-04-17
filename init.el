@@ -23,7 +23,7 @@
 (setq package-enable-at-startup nil)
 
 (eval-and-compile
-  (defvar bootstrap-version 3)
+  (defvar bootstrap-version 5)
   (defvar bootstrap-file (concat user-emacs-directory "straight/repos/straight.el/bootstrap.el")))
 
 (unless (file-exists-p bootstrap-file)
