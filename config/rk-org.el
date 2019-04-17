@@ -719,7 +719,7 @@ table tr.tr-even td {
     "oa"  '(rk-org-goto-agenda :wk "agenda")
     "og"  '(:ignore t :wk "goto")
     "ogc" '(rk-org-goto-consume :wk "consume")
-    "oga" '(rk-org-goto-tickler :wk "apps")
+    "oga" '(rk-org-goto-tickler :wk "apts")
     "ogd" '(rk-org-goto-diary :wk "diary")
     "ogi" '(rk-org-goto-inbox :wk "inbox")
     "ogn" '(rk-org-goto-next :wk "next/one-off")
