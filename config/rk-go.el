@@ -31,7 +31,8 @@
           (setenv "GO111MODULE" "on")
         (setenv "GO111MODULE" "auto"))
       (setq gofmt-command "goimports")
-      (lsp)))
+      (lsp)
+      (add-hook 'before-save-hook #'gofmt-before-save nil t)))
   :hook
   (go-mode . rk-go--setup-go))
 
