@@ -58,6 +58,8 @@
   :straight t
   :after lsp-mode
   :general
+  (:keymaps 'lsp-ui-imenu-mode-map :states '(normal visual)
+            "q" #'lsp-ui-imenu--kill)
   (:keymaps 'lsp-ui-peek-mode-map
             "C-j" #'lsp-ui-peek--select-next
             "C-k" #'lsp-ui-peek--select-prev
