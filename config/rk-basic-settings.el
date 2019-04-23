@@ -573,13 +573,6 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (setq lv-use-separator t))
 
-(use-package hydra-posframe
-  :straight (:host github :repo "Ladicle/hydra-posframe" :branch "master")
-  :after hydra
-  :custom
-  (hydra-posframe-border-width 4)
-  :hook (after-init . hydra-posframe-enable))
-
 (use-package sql-indent
   :straight (:host github :repo "alex-hhh/emacs-sql-indent"
                    :branch "master")
