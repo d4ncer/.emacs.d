@@ -11,12 +11,12 @@
 ;;; Code:
 
 (require 'evil-transient-state)
+(require 'flycheck)
 
 (evil-transient-state-define rk-flycheck-ts
-  :on-enter (progn (setq hydra-lv t) (flycheck-list-errors))
-  :on-exit (progn (setq hydra-lv nil) (quit-windows-on "*Flycheck errors*"))
+  :on-enter (progn (setq-local hydra-hint-display-type 'lv) (flycheck-list-errors))
+  :on-exit (progn (setq-local hydra-hint-display-type 'lv) (quit-windows-on "*Flycheck errors*"))
   :title "Flycheck errors"
-  :hint nil
   :foreign-keys run
   :doc "
 [_j_] Next [_k_] Previous [_gg_] First [_G_] Last [_f_] Filter [_q_] Quit"
