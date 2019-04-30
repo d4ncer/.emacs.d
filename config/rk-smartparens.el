@@ -13,19 +13,24 @@
 
 (require 'definers)
 (require 'general)
+(require 'thingatpt)
+(require 's)
 
 (use-package smartparens
   :straight t
-  :defer t
+  :demand t
+
+  :hook ((prog-mode . smartparens-strict-mode)
+         (eshell-mode . smartparens-strict-mode)
+         (text-mode . smartparens-strict-mode))
 
   :general
-  (:keymaps 'prog-mode-map :states 'insert
-            ")" #'sp-up-sexp)
+  (:keymaps 'smartparens-strict-mode-map [remap c-electric-backspace] #'sp-backward-delete-char)
+  (:states 'insert ")" #'sp-up-sexp)
+  (:states 'normal "D" #'sp-kill-hybrid-sexp)
+
   :preface
   (progn
-    (autoload 'thing-at-point-looking-at "thingatpt")
-    (autoload 's-matches? "s")
-
     (defun rk-smartparens--this-command-is-eval-expression (&rest _)
       (equal this-command 'eval-expression))
 
@@ -39,7 +44,15 @@
       (when (eq this-command 'eval-expression)
         (smartparens-mode)))
 
-    (defun rk-smartparens-add-space-after-sexp-insertion (id action _context)
+    (defun rk-smartparens--k&r-curlies (&rest _)
+      (save-excursion
+        (search-backward "{")
+        (newline-and-indent))
+      (save-excursion
+        (newline-and-indent))
+      (indent-according-to-mode))
+
+    (defun rk-smartparens--add-space-after-sexp-insertion (id action _context)
       (when (eq action 'insert)
         (save-excursion
           (forward-char (sp-get-pair id :cl-l))
@@ -47,7 +60,7 @@
                     (looking-at (sp--get-opening-regexp)))
             (insert " ")))))
 
-    (defun rk-smartparens-web-mode-is-code-context (_id action _context)
+    (defun rk-smartparens--web-mode-is-code-context (_id action _context)
       (and (eq action 'insert)
            (not (or (get-text-property (point) 'part-side)
                     (get-text-property (point) 'block-side)))))
@@ -67,7 +80,106 @@
           (search-backward "(")
           (just-one-space))))
 
-    (defun rk-smartparens-add-space-before-sexp-insertion (id action _context)
+    (defun rk-smartparens--delete-horizontal-space-for-delete (f &rest args)
+      "Perform context-sensitive whitespace cleanups when deleting."
+      (-let* ((line-before-pt (buffer-substring (line-beginning-position) (point)))
+              (line-after-pt (buffer-substring (point) (line-end-position)))
+
+              ((&plist :beg beg :end end :op op :cl cl) (sp-get-enclosing-sexp))
+              (inside-start (when op (+ beg (length op))))
+              (inside-end   (when op (- end (length cl))))
+              (inside       (when op
+                              (concat (buffer-substring inside-start (point))
+                                      (buffer-substring (point) inside-end)))))
+        (cond
+         ;; Collapse horizontal space in empty pairs.
+         ;;
+         ;; [  |  ] -> [|]
+         ;;
+         ((when op (string-match-p (rx bos (+ space) eos) inside))
+          (delete-region inside-start inside-end))
+
+         ;; Delete contents for multiline pairs that were just inserted, e.g. braces.
+         ;;
+         ;; {
+         ;;   |
+         ;; }
+         ;;
+         ;; ->
+         ;;
+         ;; {|}
+         ((when op (string-match-p (rx bos (* space) "\n" (* space) "\n" (* space) eos) inside))
+          (delete-region inside-start inside-end))
+
+         ;; Delete back from end of the line.
+         ;;
+         ;;
+         ;; foo |
+         ;; ->
+         ;; foo|
+
+         ;; foo      |
+         ;; ->
+         ;; foo |
+         ((string-empty-p line-after-pt)
+          (if (string-match-p (rx space space eos) line-before-pt)
+              (while (looking-back (rx space space) (line-beginning-position))
+                (delete-char -1))
+            (funcall f args)))
+
+         ;; Don't aggressively delete whitespace if there's a comment
+         ;; following pt.
+         ;;
+         ;;
+         ;; foo |  // bar
+         ;;
+         ;; ->
+         ;;
+         ;; foo|  // bar
+         ;;
+         ((string-match-p (rx (* nonl) (syntax comment-start)) line-after-pt)
+          (funcall f args))
+
+         ;; Collapse surrounding space, but preserve padding inside pairs.
+         ;;
+         ;; foo | bar -> foo|bar
+         ;;
+         ;; foo | }   -> foo| }
+         ;;
+         ((and (string-match-p (rx (or bol (not space)) space eos) line-before-pt)
+               (string-match-p (rx bos space (or eol (not space))) line-after-pt))
+          (let ((backward-only? (when inside (string-match-p (rx bos space) inside))))
+            (delete-horizontal-space backward-only?)))
+
+         ;; Delete if there is a single preceding space.
+         ;;
+         ;; foo |bar -> foo|bar
+         ;;
+         ;; but not:
+         ;;
+         ;; foo| bar -> foo|bar
+         ;;
+         ((and (string-match-p (rx (or bol (not space)) space eos) line-before-pt)
+               (string-match-p (rx bos (not space)) line-after-pt))
+          (delete-char -1))
+
+         ;; Delete surrounding whitespace beyond a certain length.
+         ;;
+         ;; foo    |bar      -> foo |bar
+         ;; foo    |    bar  -> foo | bar
+         ((string-match-p (rx (+ space) eos) line-before-pt)
+          (let ((has-space? (eq (char-after) ? )))
+            (skip-chars-forward " ")
+            (while (looking-back (rx space space) (line-beginning-position))
+              (delete-char -1))
+            (when has-space?
+              (insert " ")
+              (forward-char -1))))
+
+         (t
+          (funcall f args)))))
+
+    (defun rk-smartparens--add-space-before-sexp-insertion (id action _context)
       (when (eq action 'insert)
         (save-excursion
           (backward-char (length id))
@@ -83,28 +195,22 @@
             (just-one-space)))))))
 
   :init
-  (progn
-    (add-hook 'prog-mode-hook #'smartparens-strict-mode)
-    (add-hook 'text-mode-hook #'smartparens-strict-mode)
-    (add-hook 'text-mode-hook #'smartparens-strict-mode)
-    (add-hook 'minibuffer-setup-hook #'rk-smartparens--sp-for-eval-expression))
+  (add-hook 'minibuffer-setup-hook #'rk-smartparens--sp-for-eval-expression)
 
   :config
   (progn
-    (setq sp-show-pair-delay 0.2)
-    (setq sp-show-pair-from-inside t)
-    (setq sp-cancel-autoskip-on-backward-movement nil)
-    (setq sp-highlight-pair-overlay nil)
-    (setq sp-highlight-wrap-overlay nil)
-    (setq sp-highlight-wrap-tag-overlay nil)
-    (setq sp-navigate-close-if-unbalanced t)
-    (setq sp-message-width nil)
+    (general-setq sp-show-pair-delay 0.2
+                  sp-show-pair-from-inside t
+                  sp-cancel-autoskip-on-backward-movement nil
+                  sp-highlight-pair-overlay nil
+                  sp-highlight-wrap-overlay nil
+                  sp-highlight-wrap-tag-overlay nil
+                  sp-navigate-close-if-unbalanced t
+                  sp-message-width nil)
 
     (require 'smartparens-config)
     (require 'smartparens-scala)
     (require 'smartparens-rust)
-
-    (bind-key [remap c-electric-backspace] 'sp-backward-delete-char smartparens-strict-mode-map)
 
     ;; Configure global pairs.
 
@@ -112,7 +218,7 @@
              :bind "M-`")
     (sp-pair "{" "}"
              :bind "M-{"
-             :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
+             :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
              :post-handlers '(("||\n[i]" "RET") ("| " "SPC")))
     (sp-pair "[" "]"
              :bind "M-["
@@ -122,7 +228,7 @@
              :post-handlers '(("||\n[i]" "RET") ("| " "SPC")))
     (sp-pair "\"" "\""
              :bind "M-\""
-             :pre-handlers '(:add (rk-smartparens-add-space-before-sexp-insertion)))
+             :pre-handlers '(:add (rk-smartparens--add-space-before-sexp-insertion)))
 
     ;; Configure local pairs.
 
@@ -130,29 +236,43 @@
       (sp-local-pair "'" nil :actions nil)
       (sp-local-pair "(" nil
                      :when (rk-smartparens--this-command-is-eval-expression)
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
       (sp-local-pair "\"" nil
                      :when (rk-smartparens--this-command-is-eval-expression)
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion)))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion)))
 
-    (sp-with-modes sp-lisp-modes
+    (sp-with-modes (cons 'eshell-mode sp-lisp-modes)
       (sp-local-pair "(" nil
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
       (sp-local-pair "[" nil
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
       (sp-local-pair "\"" nil
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
       (sp-local-pair "{" nil
-                     :pre-handlers '(rk-smartparens-add-space-before-sexp-insertion)
-                     :post-handlers '(rk-smartparens-add-space-after-sexp-insertion)))
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion)))
+
+    (sp-with-modes 'haskell-mode
+      (sp-local-pair "(" nil
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
+      (sp-local-pair "[" nil
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
+      (sp-local-pair "{" nil
+                     :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
+                     :post-handlers '(rk-smartparens--add-space-after-sexp-insertion))
+      (sp-local-pair "[|" "|]" :post-handlers '(("||\n[i]" "RET") ("| " "SPC")))
+      (sp-local-pair "{-" "-}" :post-handlers '(("||\n[i]" "RET") ("- " "SPC")))
+      (sp-local-pair "{-#" "#-}" :post-handlers '(("||\n[i]" "RET") ("-# " "SPC"))))
 
     (sp-with-modes 'web-mode
-      (sp-local-pair "<" nil :when '(rk-smartparens-web-mode-is-code-context)))
+      (sp-local-pair "<" nil :when '(rk-smartparens--web-mode-is-code-context)))
 
     (sp-with-modes 'rk-web-js-mode
       ;; Flow strict types
@@ -199,6 +319,10 @@
       ",." '(sp-next-sexp :wk "next")
       ",<" '(sp-backward-down-sexp :wk "go down backwards")
       ",>" '(sp-down-sexp :wk "go down"))
+
+    ;; Delete enclosing whitespace if necessary.
+
+    (advice-add 'sp-backward-delete-char :around #'rk-smartparens--delete-horizontal-space-for-delete)
 
     ;; Enable modes.
 
