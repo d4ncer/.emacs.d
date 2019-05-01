@@ -49,7 +49,7 @@
 (defun rk-swiper-region-or-symbol (input)
   "Run `swiper' with INPUT, which is either the selected region or the symbol at point."
   (interactive (list (rk--region-or-symbol)))
-  (swiper input))
+  (swiper (rk-counsel--escape-string input)))
 
 (defun rk-counsel-project-region-or-symbol (input)
   "Search project for INPUT, which is either the selected region or the symbol at point."
