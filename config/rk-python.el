@@ -13,12 +13,11 @@
 
 (require 'dash)
 (require 'definers)
+(require 'lsp)
 
 (use-package python
   :after lsp-mode
-  :config
-  (add-hook 'python-mode-hook #'lsp)
-  (add-hook 'lsp-python-mode-hook #'flycheck-mode))
+  :hook (python-mode . lsp))
 
 (use-package pipenv
   :straight t
@@ -81,6 +80,16 @@ Return the first non-nil result of evalutating PRED."
   :config
   (rk-local-leader-def :keymaps 'python-mode-map
     "e" '(rk-py/pyvenv-init :wk "init pyvenv")))
+
+;; TODO: Add this back once it works
+;; (use-package lsp-python-ms
+;;   :after (lsp-mode python)
+;;   :straight (:host github :repo "emacs-lsp/lsp-python-ms"
+;;                    :branch "master")
+;;   :preface
+;;   (defconst rk-python--lsp-ms-dir (expand-file-name "~/go/src/github.com/Microsoft/python-language-server/"))
+;;   :custom
+;;   (lsp-python-ms-executable (f-join rk-python--lsp-ms-dir "output/bin/Release/osx.10.14-x64/publish/Microsoft.Python.LanguageServer")))
 
 (provide 'rk-python)
 
