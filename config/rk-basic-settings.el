@@ -696,6 +696,11 @@ Optional arg JUSTIFY will justify comments and strings."
     (with-eval-after-load 'json-reformat
       (setq json-reformat:indent-width 2))))
 
+(use-package editorconfig
+  :straight t
+  :config
+  (editorconfig-mode 1))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
