@@ -80,7 +80,7 @@ Otherwise delete backwards."
 
     (general-def :keymaps 'yas-keymap :states 'insert
       "SPC" #'rk-yasnippet-space)
-    (general-def :keyamps 'yas-keymap :states '(insert normal motion)
+    (general-def :keymaps 'yas-keymap :states '(insert normal motion)
       "<backspace>" #'rk-yasnippet-backspace))
 
   :functions
