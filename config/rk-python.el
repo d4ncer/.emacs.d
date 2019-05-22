@@ -18,6 +18,10 @@
 
 (use-package python
   :after lsp-mode
+  :general
+  (:keymaps 'python-mode-map
+            "<backspace>" nil
+            "DEL" nil)
   :hook (python-mode . lsp))
 
 (use-package pipenv
