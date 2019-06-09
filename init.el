@@ -144,6 +144,7 @@
 (use-package rk-rust)
 (use-package rk-nim)
 (use-package rk-racket)
+(use-package rk-janet)
 (use-package rk-protobuf)
 (use-package rk-puppet)
 (use-package rk-sh)
