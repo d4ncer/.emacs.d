@@ -1,4 +1,4 @@
-;;; rk-racket.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; rk-racket.el --- Config for Racket  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2018  Raghuvir Kasturi
 
