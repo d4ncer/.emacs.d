@@ -680,6 +680,9 @@ Optional arg JUSTIFY will justify comments and strings."
   :init
   (setq json-mode-auto-mode-list '(".babelrc" ".eslintrc" "composer.lock"))
   :preface
+  (defun rk-json--disable-python-checker ()
+    (with-eval-after-load 'flycheck
+      (setq-local flycheck-disabled-checkers '(json-python-json))))
   (defun rk-json--format-region-or-buffer ()
     "Format region or buffer."
     (interactive)
@@ -691,6 +694,7 @@ Optional arg JUSTIFY will justify comments and strings."
     "." '(rk-json--format-region-or-buffer :wk "format"))
   :config
   (progn
+    (add-hook 'json-mode-hook #'rk-json--disable-python-checker)
     (with-eval-after-load 'js
       (setq js-indent-level 2))
     (with-eval-after-load 'json-reformat
