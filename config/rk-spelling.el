@@ -18,6 +18,7 @@
   :straight t
   :config
   (progn
+    (add-hook 'prog-mode-hook #'flyspell-prog-mode)
     (when (executable-find "aspell")
       (setq ispell-program-name "aspell"))
     (setq ispell-silently-savep t)))
