@@ -45,6 +45,7 @@
 (defun rk-web--setup-flow-lsp ()
   "Setup Flow with the LSP."
   (progn
+    (add-to-list 'lsp-language-id-configuration '(rk-web-js-mode . "flow"))
     (setq-local lsp-clients-flow-server (flow-minor-binary))
     (lsp)))
 
