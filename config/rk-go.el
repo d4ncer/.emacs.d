@@ -39,8 +39,7 @@
         (setenv "GO111MODULE" "auto"))
       (setq gofmt-command "goimports")
       (lsp)
-      (rk-go--setup-flycheck)
-      (add-hook 'before-save-hook #'gofmt-before-save nil t)))
+      (rk-go--setup-flycheck)))
   :hook
   (go-mode . rk-go--setup-go))
 
