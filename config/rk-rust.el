@@ -24,20 +24,22 @@
   :mode ("\\.rs\\'" . rust-mode)
   :preface
   (progn
-    (setq rust-format-on-save (executable-find "rustfmt"))
-
     (defun rk-rust--set-local-vars ()
       (setq-local compile-command "cargo build"))
 
+    (defun rk-rust--fmt-on-save ()
+      (add-hook 'before-save-hook #'rust-format-buffer nil t))
 
-  :init
-  (progn
-    ;; LSP
-    (add-hook 'rust-mode-hook #'lsp)
-    (add-hook 'lsp-rust-mode-hook #'flycheck-mode))
+    (defun rk-rust--setup ()
+      (rk-rust--set-local-vars)
+      (lsp)
+      (rk-rust--fmt-on-save)))
 
   :config
   (progn
+    (setq rust-rustfmt-bin (executable-find "rustfmt"))
+    (setq rust-format-on-save t)
+
     ;; Enable backtraces in rust programs run from Emacs.
     (setenv "RUST_BACKTRACE" "1")
 
@@ -47,7 +49,7 @@
     (rk-local-leader-def :keymaps 'rust-mode-map
       "." '(rust-format-buffer :wk "format"))
 
-    (add-hook 'rust-mode-hook #'rk-rust--set-local-vars)))
+    (add-hook 'rust-mode-hook #'rk-rust--setup)))
 
 (use-package flycheck-rust
   :straight t
