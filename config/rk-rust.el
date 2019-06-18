@@ -32,7 +32,7 @@
     (setq rust-format-on-save (executable-find "rustfmt"))
 
     (defun rk-rust--set-local-vars ()
-      (setq-local compile-command "cargo run"))
+      (setq-local compile-command "cargo build"))
 
     (defun rk-rust--join-line ()
       "Join lines, deleting intermediate spaces for chained function calls."
