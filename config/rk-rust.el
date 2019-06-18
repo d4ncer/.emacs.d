@@ -16,8 +16,7 @@
 (require 's)
 (require 'definers)
 (require 'general)
-
-(autoload 'evil-define-key "evil")
+(require 'rk-utils)
 
 (use-package rust-mode
   :straight t
@@ -25,21 +24,11 @@
   :mode ("\\.rs\\'" . rust-mode)
   :preface
   (progn
-    (autoload 'company-indent-or-complete-common "company")
-    (autoload 'thing-at-point-looking-at "thingatpt")
-    (autoload 'evil-join "evil-commands")
-
     (setq rust-format-on-save (executable-find "rustfmt"))
 
     (defun rk-rust--set-local-vars ()
       (setq-local compile-command "cargo build"))
 
-    (defun rk-rust--join-line ()
-      "Join lines, deleting intermediate spaces for chained function calls."
-      (interactive)
-      (call-interactively #'evil-join)
-      (when (thing-at-point-looking-at (rx (not space) (* space) "."))
-        (delete-horizontal-space))))
 
   :init
   (progn
@@ -53,7 +42,7 @@
     (setenv "RUST_BACKTRACE" "1")
 
     (general-def :keymaps 'rust-mode-map :states 'normal
-      "J" #'rk-rust--join-line)
+      "J" #'rk-utils--chainable-aware-join-line)
 
     (rk-local-leader-def :keymaps 'rust-mode-map
       "." '(rust-format-buffer :wk "format"))

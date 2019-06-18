@@ -13,6 +13,7 @@
 
 (require 'paths)
 (require 'lsp)
+(require 'rk-utils)
 
 (autoload 'projectile-project-name "projectile")
 
@@ -26,6 +27,9 @@
   ("scala" . scala-mode)
   :config
   (progn
+    (general-def :keymaps 'scala-mode-map :states 'normal
+      "J" #'rk-utils--chainable-aware-join-line)
+
     (setq scala-indent:align-forms t)
     (setq scala-indent:align-parameters t)
     (setq scala-indent:default-run-on-strategy scala-indent:operator-strategy)

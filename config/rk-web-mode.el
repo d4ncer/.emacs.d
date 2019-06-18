@@ -145,6 +145,9 @@
 
   :config
   (progn
+    (general-def :keymaps 'rk-web-js-mode-map :states 'normal
+      "J" #'rk-utils--chainable-aware-join-line)
+
     ;; Add all possible JS runtimes
 
     (dolist (name (list "node" "nodejs" "gjs" "rhino"))
