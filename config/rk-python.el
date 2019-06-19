@@ -22,6 +22,8 @@
   (:keymaps 'python-mode-map
             "<backspace>" nil
             "DEL" nil)
+  :init
+  (setq lsp-pyls-plugins-pylint-enabled nil)
   :hook (python-mode . lsp))
 
 (use-package pipenv
