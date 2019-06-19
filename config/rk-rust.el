@@ -27,13 +27,9 @@
     (defun rk-rust--set-local-vars ()
       (setq-local compile-command "cargo build"))
 
-    (defun rk-rust--fmt-on-save ()
-      (add-hook 'before-save-hook #'rust-format-buffer nil t))
-
     (defun rk-rust--setup ()
       (rk-rust--set-local-vars)
-      (lsp)
-      (rk-rust--fmt-on-save)))
+      (lsp)))
 
   :config
   (progn
