@@ -169,7 +169,10 @@
   :after ivy
   :commands (rk-swiper-region-or-symbol
              rk-counsel-project-region-or-symbol
-             rk-counsel-region-or-symbol)
+             rk-counsel-region-or-symbol
+             rk-counsel-deadgrep-from-ivy)
+  :config
+  (general-def counsel-ag-map "C-c C-e" '(rk-counsel-deadgrep-from-ivy :wk "deadgrep"))
   :init
   (rk-leader-def
     "sS" '(rk-swiper-region-or-symbol :wk "search in buffer")

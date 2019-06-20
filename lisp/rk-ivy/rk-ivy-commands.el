@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 'counsel)
+(require 'deadgrep)
 (require 'swiper)
 (require 'subr-x)
 (require 'dash)
@@ -61,6 +62,14 @@
   (interactive (list (read-directory-name "Start from directory: ")
                      (rk--region-or-symbol)))
   (counsel-rg (rk-counsel--escape-string input) start-dir))
+
+(defun rk-counsel-deadgrep-from-ivy ()
+  "Convert an Ivy QUERY to a Deadgrep search."
+  (interactive)
+  (ivy-exit-with-action
+   (lambda (&rest _)
+     (let ((deadgrep--search-type 'regexp))
+       (deadgrep (replace-regexp-in-string (rx (+ space)) ".*?" ivy-text))))))
 
 (provide 'rk-ivy-commands)
 
