@@ -294,6 +294,9 @@
     (evil-search-highlight-persist-highlight-face
      ((t :inherit highlight :background nil)))
 
+    (deadgrep-match-face
+     ((t :inherit highlight :foreground ,rk-theme-base-blue)))
+
     (highlight-thing
      ((t :weight demibold :foreground ,rk-theme-base-blue)))
 
