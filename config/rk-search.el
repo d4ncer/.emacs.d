@@ -28,10 +28,9 @@
   :init
   (add-hook 'grep-setup-hook #'wgrep-stup)
   :general
-  (:keymaps 'wgrep-mode-map
-   :states '(normal motion visual emacs)
-   ", c" #'rk-search-wgrep-finish-edit-kill-buffer
-   ", k" #'rk-search-wgrep-abort-changes-kill-buffer)
+  (:keymaps 'wgrep-mode-map :states '(normal motion visual emacs)
+            ", c" #'rk-search-wgrep-finish-edit-kill-buffer
+            ", k" #'rk-search-wgrep-abort-changes-kill-buffer)
   :config
   (progn
     (setq wgrep-auto-save-buffer t)))
