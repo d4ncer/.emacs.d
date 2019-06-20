@@ -51,6 +51,8 @@
       "l" '(:ignore t :wk "LSP")
       "l." '(lsp-format-buffer :wk "format")
 
+      "li" '(lsp-ui-imenu :wk "imenu")
+
       "lr" '(lsp-rename :wk "rename")
 
       "ls" '(:ignore t :wk "session / workspace")
