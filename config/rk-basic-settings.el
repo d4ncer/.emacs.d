@@ -700,6 +700,14 @@ Optional arg JUSTIFY will justify comments and strings."
     (with-eval-after-load 'json-reformat
       (setq json-reformat:indent-width 2))))
 
+(use-package csv-mode
+  :straight t
+  :mode ("\\.csv\\'" . csv-mode)
+  :preface
+  (defun rk-csv--suppress-final-newline ()
+    (setq-local require-final-newline nil))
+  :config (add-hook 'csv-mode-hook #'rk-csv--suppress-final-newline))
+
 (use-package editorconfig
   :straight t
   :config
