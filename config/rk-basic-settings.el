@@ -617,10 +617,10 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package avy
   :straight t
   :general
-  ("C-; c" #'avy-goto-char
-   "C-; ;" #'avy-goto-word-1
-   "C-; w" #'avy-goto-word-1
-   "C-; l" #'avy-goto-line))
+  ("C-' c" #'avy-goto-char
+   "C-' '" #'avy-goto-word-1
+   "C-' w" #'avy-goto-word-1
+   "C-' l" #'avy-goto-line))
 
 (use-package vlf
   :straight t
