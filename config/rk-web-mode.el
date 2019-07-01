@@ -42,6 +42,12 @@
        (flow-minor-configured-p)
        (flow-minor-tag-present-p)))
 
+;; TODO: This is unused due to how slow everything gets.
+(defun rk-web--setup-flow-lsp-flycheck ()
+  "Setup Flycheck checkers for LSP + Flow."
+  (when lsp-mode
+    (flycheck-add-next-checker 'lsp-ui 'javascript-eslint)))
+
 (defun rk-web--setup-flow-lsp ()
   "Setup Flow with the LSP."
   (progn
