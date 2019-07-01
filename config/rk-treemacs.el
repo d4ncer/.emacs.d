@@ -16,7 +16,6 @@
 (autoload 'evil-set-initial-state "evil-core")
 
 (use-package treemacs
-  :defer t
   :straight t
   :commands (treemacs
              treemacs-add-project-to-workspace
