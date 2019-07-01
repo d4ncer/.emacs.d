@@ -48,6 +48,7 @@
   :config
   (progn
     (rk-local-leader-def :keymaps 'go-mode-map
+      "."   '(gofmt :wk "fmt")
       "t"   '(:ignore t :wk "test")
       "t t" '(rk-go-run-test-current-function :wk "current fn")
       "t s" '(rk-go-run-test-current-suite :wk "current suite")
