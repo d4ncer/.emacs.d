@@ -16,6 +16,7 @@
 (autoload 'evil-set-initial-state "evil-core")
 
 (use-package treemacs
+  :defer t
   :straight t
   :commands (treemacs
              treemacs-add-project-to-workspace
@@ -29,16 +30,18 @@
     "p t" '(treemacs-add-project-to-workspace :wk "add to tree"))
 
   :config
-  (setq treemacs-persist-file (concat paths-cache-directory "/treemacs-persist"))
-  (treemacs-follow-mode t)
-  (treemacs-filewatch-mode t)
-  (treemacs-fringe-indicator-mode t)
-  (pcase (cons (not (null (executable-find "git")))
-               (not (null (executable-find "python3"))))
-    (`(t . t)
-     (treemacs-git-mode 'deferred))
-    (`(t . _)
-     (treemacs-git-mode 'simple))))
+  (progn
+    (treemacs-resize-icons 22)
+    (setq treemacs-persist-file (concat paths-cache-directory "/treemacs-persist"))
+    (treemacs-follow-mode t)
+    (treemacs-filewatch-mode t)
+    (treemacs-fringe-indicator-mode t)
+    (pcase (cons (not (null (executable-find "git")))
+                 (not (null (executable-find "python3"))))
+      (`(t . t)
+       (treemacs-git-mode 'deferred))
+      (`(t . _)
+       (treemacs-git-mode 'simple)))))
 
 (use-package treemacs-evil
   :after treemacs evil
@@ -52,6 +55,10 @@
   :after treemacs dired
   :straight t
   :config (treemacs-icons-dired-mode))
+
+(use-package treemacs-magit
+  :straight t
+  :after treemacs magit)
 
 (provide 'rk-treemacs)
 
