@@ -310,7 +310,7 @@
      ((t :background ,rk-theme-base-solarized-b2)))
 
     (hydra-posframe-border-face
-     ((t :background ,rk-theme-base-magenta)))
+     ((t :background ,rk-theme-base-violet)))
 
     ;; Magit
 
