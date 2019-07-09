@@ -72,6 +72,7 @@
               ((facep sym)    'ElispFace)))))
   :config
   (general-setq company-box-show-single-candidate t
+                company-box-doc-frame-parameters '((internal-border-width . 1))
                 company-box-backends-colors nil
                 company-box-max-candidates 50
                 company-box-icons-alist 'company-box-icons-all-the-icons
