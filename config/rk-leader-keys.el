@@ -51,6 +51,8 @@
             (force-mode-line-update))))))
   :config
   (progn
+    (general-setq which-key-popup-type 'side-window
+                  which-key-side-window-location 'right)
     (general-setq which-key-special-keys nil)
     (general-setq which-key-use-C-h-commands t)
     (general-setq which-key-echo-keystrokes 0.02)
