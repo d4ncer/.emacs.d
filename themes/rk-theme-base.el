@@ -62,7 +62,7 @@
      ((t :background ,default-background)))
 
     (internal-border
-     ((t :background ,rk-theme-base-magenta)))
+     ((t :background ,rk-theme-base-violet)))
 
     ;; Mode & header line
 
@@ -499,7 +499,7 @@
      ((t :inherit highlight)))
 
     (company-box-annotation
-     ((t :foreground ,rk-theme-base-magenta)))
+     ((t :foreground ,rk-theme-base-orange)))
 
     (company-box-background
      ((t :background ,rk-theme-base-solarized-b2)))
@@ -508,10 +508,10 @@
      ((t :foreground ,default-foreground)))
 
     (company-box-scrollbar
-     ((t :foreground ,default-foreground :background ,rk-theme-base-blue)))
+     ((t :foreground ,default-foreground :background ,rk-theme-base-violet)))
 
     (company-box-selection
-     ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-blue)))
+     ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-violet)))
 
     ;; Misc faces
 
