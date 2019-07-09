@@ -16,18 +16,21 @@
 (require 'dash)
 (require 'general)
 
+;; Set up ligatures correctly based on emacs flavour
+(if (fboundp 'mac-auto-operator-composition-mode)
+    (mac-auto-operator-composition-mode)
+  (use-package rk-ligatures
+    :if (window-system)
+    :preface
+    (autoload 'rk-ligatures--set-kwds "rk-ligatures")
+    :config
+    (rk-ligatures--set-kwds
+     '((rk-ligatures--fira-font prog-mode-hook)))))
+
 (defun rk/themes/light-theme ()
   "Load light theme."
   (interactive)
   (load-theme 'rk-light t))
-
-(use-package rk-ligatures
-  :if (window-system)
-  :preface
-  (autoload 'rk-ligatures--set-kwds "rk-ligatures")
-  :config
-  (rk-ligatures--set-kwds
-   '((rk-ligatures--fira-font prog-mode-hook))))
 
 (use-package doom-themes
   :straight t
