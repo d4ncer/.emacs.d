@@ -17,7 +17,6 @@
 
 (use-package swiper
   :straight t
-  :demand t
   :general
   (:states '(motion normal)
            "/" #'swiper)
@@ -26,7 +25,6 @@
 
 (use-package ivy
   :straight t
-  :demand t
   :commands (ivy-dispatching-done
              ivy-help
              ivy-immediate-done
@@ -101,7 +99,6 @@
 
 (use-package counsel
   :straight t
-  :demand t
   :commands (counsel-M-x
              counsel-descbinds
              counsel-describe-face
@@ -178,6 +175,16 @@
     "sS" '(rk-swiper-region-or-symbol :wk "search in buffer")
     "sP" '(rk-counsel-project-region-or-symbol :wk "search in project")
     "sF" '(rk-counsel-region-or-symbol :wk "search in dir")))
+
+(use-package ivy-posframe
+  :straight t
+  :after ivy
+  :custom
+  (ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-window-center)))
+  (ivy-posframe-border-width 2)
+  (ivy-posframe-hide-minibuffer t)
+  :config
+  (ivy-posframe-enable))
 
 (provide 'rk-ivy)
 

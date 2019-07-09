@@ -312,6 +312,9 @@
     (hydra-posframe-border-face
      ((t :background ,rk-theme-base-violet)))
 
+    (ivy-posframe-border
+     ((t :background ,rk-theme-base-violet)))
+
     ;; Magit
 
     (magit-diff-file-heading
