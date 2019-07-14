@@ -180,7 +180,7 @@
   :straight t
   :after ivy
   :custom
-  (ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-window-center)))
+  (ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-center)))
   (ivy-posframe-border-width 2)
   (ivy-posframe-hide-minibuffer t)
   :config
