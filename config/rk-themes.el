@@ -18,7 +18,7 @@
 
 ;; Set up ligatures correctly based on emacs flavour
 (if (fboundp 'mac-auto-operator-composition-mode)
-    (add-hook 'prog-mode-hook #'mac-auto-operator-composition-mode)
+    (add-hook 'prog-mode-hook (lambda () (unless (derived-mode-p 'org-mode) (mac-auto-operator-composition-mode 1))))
   (use-package rk-ligatures
     :if (window-system)
     :preface

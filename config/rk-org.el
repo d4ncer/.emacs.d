@@ -144,14 +144,6 @@ Do not scheduled items or repeating todos."
   :init
   (progn
     (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
-
-    (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
-    (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
-    (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
-    (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
-    (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
-    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
-
     (rk-leader-def
       "ok" '(org-capture :wk "capture")
       "ol" '(org-store-link :wk "store link")
@@ -159,6 +151,13 @@ Do not scheduled items or repeating todos."
 
   :config
   (progn
+    (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
+    (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
+    (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
+    (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
+    (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
+    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
+
     (setq org-default-notes-file (f-join org-directory "notes.org"))
     (rk-local-leader-def :keymaps 'org-mode-map
       "A" '(org-align-tags :wk "align tags")
