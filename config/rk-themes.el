@@ -16,16 +16,12 @@
 (require 'dash)
 (require 'general)
 
-;; Set up ligatures correctly based on emacs flavour
-(if (fboundp 'mac-auto-operator-composition-mode)
-    (add-hook 'prog-mode-hook (lambda () (unless (derived-mode-p 'org-mode 'magit-mode) (mac-auto-operator-composition-mode 1))))
-  (use-package rk-ligatures
-    :if (window-system)
-    :preface
-    (autoload 'rk-ligatures--set-kwds "rk-ligatures")
-    :config
-    (rk-ligatures--set-kwds
-     '((rk-ligatures--fira-font prog-mode-hook)))))
+;; Set up ligatures using Fira Code Symbol font
+;; See here - https://github.com/tonsky/FiraCode/wiki/Emacs-instructions
+(use-package fira-code-mode
+  :if (window-system)
+  :config
+  (add-hook 'prog-mode-hook #'fira-code-mode--setup))
 
 (defun rk/themes/light-theme ()
   "Load light theme."
