@@ -83,6 +83,9 @@
     (general-def ivy-minibuffer-map "C-<return>" #'ivy-immediate-done)
     (general-def ivy-minibuffer-map "C-j" #'ivy-next-line)
     (general-def ivy-minibuffer-map "C-k" #'ivy-previous-line)
+
+    (general-def ivy-switch-buffer-map "C-k" #'ivy-previous-line)
+    (general-def ivy-switch-buffer-map "M-k" #'ivy-switch-buffer-kill)
     (setq ivy-flx-limit 2000)
 
     (ivy-mode))
