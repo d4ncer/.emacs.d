@@ -13,6 +13,8 @@
 (require 'swiper)
 (require 'subr-x)
 (require 'dash)
+(require 'projectile)
+(require 'counsel-projectile)
 (require 's)
 
 (autoload 'projectile-project-root "projectile")
@@ -70,6 +72,18 @@
    (lambda (&rest _)
      (let ((deadgrep--search-type 'regexp))
        (deadgrep (replace-regexp-in-string (rx (+ space)) ".*?" ivy-text))))))
+
+(defun rk-counsel--switch-project ()
+  "Switch to projectile project that is a git root."
+  (interactive)
+  (ivy-read (projectile-prepend-project-name "Switch to project: ")
+            (--filter (f-dir-p (f-join it ".git")) projectile-known-projects)
+            :preselect (and (projectile-project-p)
+                            (abbreviate-file-name (projectile-project-root)))
+            :action counsel-projectile-switch-project-action
+            :require-match t
+            :sort counsel-projectile-sort-projects
+            :caller 'rk-counsel--switch-project))
 
 (provide 'rk-ivy-commands)
 

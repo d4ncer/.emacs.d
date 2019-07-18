@@ -163,8 +163,9 @@
     (counsel-mode +1)))
 
 (use-package rk-ivy-commands
-  :after ivy
+  :after (ivy projectile)
   :commands (rk-swiper-region-or-symbol
+             rk-counsel--switch-project
              rk-counsel-project-region-or-symbol
              rk-counsel-region-or-symbol
              rk-counsel-deadgrep-from-ivy)
@@ -172,6 +173,7 @@
   (general-def counsel-ag-map "C-c C-e" '(rk-counsel-deadgrep-from-ivy :wk "deadgrep"))
   :init
   (rk-leader-def
+    "pp" '(rk-counsel--switch-project :wk "switch project")
     "sS" '(rk-swiper-region-or-symbol :wk "search in buffer")
     "sP" '(rk-counsel-project-region-or-symbol :wk "search in project")
     "sF" '(rk-counsel-region-or-symbol :wk "search in dir")))

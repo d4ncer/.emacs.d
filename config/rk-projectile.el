@@ -89,7 +89,6 @@
     "pf" '(counsel-projectile-find-file :wk "find file (project)")
     "pd" '(counsel-projectile-find-dir :wk "find dir (project)")
     "pb" '(counsel-projectile-switch-to-buffer :wk "switch buffer (project)")
-    "pp" '(counsel-projectile-switch-project :wk "switch project")
     "/"  '(counsel-projectile-rg :wk "search (project)"))
 
   :config
