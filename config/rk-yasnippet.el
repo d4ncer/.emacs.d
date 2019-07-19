@@ -102,18 +102,6 @@ Otherwise delete backwards."
     (rk-leader-def
       "yy" '(ivy-yasnippet :wk "list snippets"))))
 
-(use-package emacs-snippets
-  :straight (:host github :repo "hlissner/emacs-snippets"
-                   :branch "master"
-                   :files ("*"))
-  :after yasnippet
-  :config
-  (emacs-snippets-initialize)
-
-  ;; yas-global-mode needs to be turned off/on to pick up changes
-  (yas-global-mode -1)
-  (yas-global-mode +1))
-
 (provide 'rk-yasnippet)
 
 ;;; rk-yasnippet.el ends here
