@@ -23,6 +23,7 @@
  ("docker-tramp.el" . "8e2b671eff7a81af43b76d9dfcf94ddaa8333a23")
  ("docker.el" . "dbd89c1cd05f9ec6f1921f8bc85d9411a80412c2")
  ("dockerfile-mode" . "ed73e82dcc636dad00d1a8c3b32a49136d25ee60")
+ ("doom-snippets" . "3ce0c49f56a02c0fb02a370582920c974f764b45")
  ("editorconfig-emacs" . "f24f651245344f5f97c348246ce035843419b322")
  ("el-patch" . "1ea0645280f8e3d9a6858ec9050f4e260b52f6ce")
  ("eldoc-eval" . "a67fe3637378dcb6c5f9e140acc8131f0d2346b3")

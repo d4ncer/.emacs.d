@@ -102,6 +102,12 @@ Otherwise delete backwards."
     (rk-leader-def
       "yy" '(ivy-yasnippet :wk "list snippets"))))
 
+(use-package doom-snippets
+  :straight (:host github :repo "hlissner/doom-snippets"
+                   :branch "master"
+                   :files ("*"))
+  :after yasnippet)
+
 (provide 'rk-yasnippet)
 
 ;;; rk-yasnippet.el ends here
