@@ -323,6 +323,7 @@ Optional arg JUSTIFY will justify comments and strings."
 
 ;;; TODO: Move this into it's own package
 (use-package all-the-icons
+  :defer t
   :straight t)
 
 (use-package page-break-lines
