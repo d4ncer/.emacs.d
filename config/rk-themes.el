@@ -16,12 +16,13 @@
 (require 'dash)
 (require 'general)
 
-;; Set up ligatures using Fira Code Symbol font
-;; See here - https://github.com/tonsky/FiraCode/wiki/Emacs-instructions
-(use-package fira-code-mode
+(use-package rk-ligatures
   :if (window-system)
+  :preface
+  (autoload 'rk-ligatures--set-kwds "rk-ligatures")
   :config
-  (add-hook 'prog-mode-hook #'fira-code-mode--setup))
+  (rk-ligatures--set-kwds
+   '((rk-ligatures--fira-font prog-mode-hook))))
 
 (defun rk/themes/light-theme ()
   "Load light theme."
