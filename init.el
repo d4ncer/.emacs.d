@@ -151,9 +151,11 @@
 (use-package rk-hashicorp)
 
 (use-package private-config
+  :when (f-dir-p "~/private")
   :load-path "~/private")
 
 (use-package opam-user-setup
+  :when (f-exists-p "~/.emacs.d/opam-user-setup.el")
   :load-path "~/.emacs.d/opam-user-setup.el")
 
 ;;; Post init setup.

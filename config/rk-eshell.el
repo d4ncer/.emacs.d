@@ -68,6 +68,7 @@
 (use-package fasd
   :straight
   (:type git :repo "https://framagit.org/steckerhalter/emacs-fasd.git")
+  :when (executable-find "fasd")
   :config
   (progn
     (apply #'start-process "*fasd*" nil "fasd" "--add" (seq-map #'shell-quote-argument recentf-list))
