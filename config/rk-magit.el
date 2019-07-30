@@ -14,6 +14,7 @@
 (require 'evil-transient-state)
 (require 'definers)
 (require 'general)
+(require 'pretty-hydra)
 
 (use-package with-editor
   :straight t
@@ -43,23 +44,16 @@
   (:keymaps 'magit-refs-mode-map :states '(normal)
             "." #'magit-branch-and-checkout)
   :preface
-  (evil-transient-state-define git-blame
-    :title "Git Blame Transient State"
-    :doc "
-Press [_b_] again to blame further in the history, [_q_] to go up or quit."
-    :on-enter (unless (bound-and-true-p magit-blame-mode)
-                (call-interactively 'magit-blame-addition))
-    :on-exit (magit-blame-quit)
-    :foreign-keys run
-    :bindings
-    ("b" magit-blame-addition)
-    ("q" nil :exit (progn (when (bound-and-true-p magit-blame-mode)
-                            (magit-blame-quit))
-                          (not (bound-and-true-p magit-blame-mode)))))
+  (pretty-hydra-define git-blame (:title "Git Blame" :pre (unless (bound-and-true-p magit-blame-mode) (call-interactively 'magit-blame-addition)) :post (when (bound-and-true-p magit-blame-mode) (magit-blame-quit)) :foreign-keys run :quit-key "q")
+    ("Basic"
+     (("b" magit-blame-addition "blame more"))
+
+     "Something else"
+     (("d" magit-blame-removal "blame less"))))
   :init
   (rk-leader-def
     "gs" #'magit-status
-    "gb" #'git-blame-transient-state/body)
+    "gb" #'git-blame/body)
   :config
   (general-setq magit-log-section-commit-count 0
                 magit-section-visibility-indicator nil
@@ -81,26 +75,19 @@ Press [_b_] again to blame further in the history, [_q_] to go up or quit."
    git-timemachine-kill-revision
    git-timemachine-quit)
   :preface
-  (evil-transient-state-define time-machine
-    :title "Git Timemachine Transient State"
-    :doc "
-[_p_/_N_] previous [_n_] next [_c_] current [_g_] goto nth rev [_Y_] copy hash [_q_] quit"
-    :on-enter (unless (bound-and-true-p git-timemachine-mode)
-                (call-interactively 'git-timemachine))
-    :on-exit (when (bound-and-true-p git-timemachine-mode)
-               (git-timemachine-quit))
-    :foreign-keys run
-    :bindings
-    ("c" git-timemachine-show-current-revision)
-    ("g" git-timemachine-show-nth-revision)
-    ("p" git-timemachine-show-previous-revision)
-    ("n" git-timemachine-show-next-revision)
-    ("N" git-timemachine-show-previous-revision)
-    ("Y" git-timemachine-kill-revision)
-    ("q" nil :exit t))
+  (pretty-hydra-define rk-git--timemachine
+    (:title "Hot Git Time Machine" :pre (unless (bound-and-true-p git-timemachine-mode) (call-interactively 'git-timemachine)) :post (when (bound-and-true-p git-timemachine-mode) (git-timemachine-quit)) :foreign-keys run :quit-key "q")
+    ("Goto"
+     (("p" git-timemachine-show-previous-revision "previous commit")
+      ("n" git-timemachine-show-next-revision "next commit")
+      ("c" git-timemachine-show-current-revision "current commit")
+      ("g" git-timemachine-show-nth-revision "nth commit"))
+
+     "Misc"
+     (("Y" git-timemachine-kill-revision "copy hash"))))
   :init
   (rk-leader-def
-    "gt" #'time-machine-transient-state/body))
+    "gt" #'rk-git--timemachine/body))
 
 (use-package diff-hl
   :straight t

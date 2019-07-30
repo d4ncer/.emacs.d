@@ -49,6 +49,7 @@
 (straight-use-package 'memoize)
 (straight-use-package 'general)
 (straight-use-package 'el-patch)
+(straight-use-package 'pretty-hydra)
 
 ;; Set up general to auto unbind keys (override everything)
 
