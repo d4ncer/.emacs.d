@@ -488,6 +488,28 @@
     (rk-rust-faces-bool
      ((t :weight normal)))
 
+    ;; Shell
+
+    (epe-dir-face
+     ((t :foreground ,rk-theme-base-blue)))
+
+    (epe-pipeline-delimiter-face
+     ((t :foreground ,rk-theme-base-solarized-b1)))
+
+    (epe-pipeline-host-face
+     ((t :foreground ,rk-theme-base-cyan)))
+    (epe-pipeline-time-face
+     ((t :foreground ,rk-theme-base-magenta)))
+    (epe-pipeline-user-face
+     ((t :foreground ,rk-theme-base-magenta)))
+
+    ;; TODO: Add styles for these faces if needed
+    ;; epe-git-face
+    ;; epe-remote-face
+    ;; epe-sudo-symbol-face
+    ;; epe-symbol-face
+    ;; epe-venv-face
+
     ;; Scala
 
     (scala-font-lock:var-keyword-face
