@@ -391,6 +391,9 @@
     (org-agenda-date-weekend
      ((t :inherit org-agenda-date)))
 
+    (org-agenda-clocking
+     ((t :background ,rk-theme-cursor-green)))
+
     (org-warning
      ((t :foreground ,rk-theme-base-red :weight normal)))
 
