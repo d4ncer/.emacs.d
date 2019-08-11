@@ -34,6 +34,7 @@
            "C-u" #'evil-scroll-page-up
            "C-d" #'evil-scroll-page-down)
   (:states 'motion
+           "gd" #'xref-find-definitions
            "gb" #'xref-pop-marker-stack)
   (:keymaps 'help-mode-map
             :states 'motion
