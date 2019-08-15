@@ -44,16 +44,16 @@
   (:keymaps 'magit-refs-mode-map :states '(normal)
             "." #'magit-branch-and-checkout)
   :preface
-  (pretty-hydra-define git-blame (:title "Git Blame" :pre (unless (bound-and-true-p magit-blame-mode) (call-interactively 'magit-blame-addition)) :post (when (bound-and-true-p magit-blame-mode) (magit-blame-quit)) :foreign-keys run :quit-key "q")
-    ("Basic"
-     (("b" magit-blame-addition "blame more"))
-
-     "Something else"
-     (("d" magit-blame-removal "blame less"))))
+  (pretty-hydra-define rk-git--git-blame
+    (:title "Git Blame" :pre (unless (bound-and-true-p magit-blame-mode) (call-interactively 'magit-blame-addition)) :post (when (bound-and-true-p magit-blame-mode) (magit-blame-quit)) :foreign-keys run)
+    ("Blame"
+     (("j" magit-blame-addition "More")
+      ("k" magit-blame-removal "Less")
+      ("q" magit-blame-quit "quit" :exit t))))
   :init
   (rk-leader-def
     "gs" #'magit-status
-    "gb" #'git-blame/body)
+    "gb" #'rk-git--git-blame/body)
   :config
   (general-setq magit-log-section-commit-count 0
                 magit-section-visibility-indicator nil
