@@ -11,7 +11,8 @@
 (eval-when-compile
   (require 'use-package))
 
-(defvar rk-php--lsp-ip-cmd `("node" ,(executable-find "intelephense") "--stdio"))
+(require 'paths)
+(require 'f)
 
 (use-package php-mode
   :straight t
@@ -23,15 +24,8 @@
   :custom
   (php-template-compatibility nil)
   :preface
-  (defun rk-php--setup-intelephense ()
-    (lsp-register-client
-     (make-lsp-client :new-connection (lsp-stdio-connection rk-php--lsp-ip-cmd)
-                      :major-modes '(php-mode)
-                      :priority 0
-                      :server-id 'php-ip
-                      :ignore-messages '("indexing\\(Started\\|Ended\\)"))))
   (defun rk-php--setup ()
-    (rk-php--setup-intelephense)
+    (setq-default lsp-intelephense-storage-path (f-join paths-cache-directory "lsp-intelephense-cache"))
     (lsp))
   :hook
   (php-mode . rk-php--setup))
