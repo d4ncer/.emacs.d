@@ -43,6 +43,7 @@
     (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
   :general
   (:keymaps 'lsp-mode-map :states '(normal motion visual)
+            "gd" #'lsp-find-definition
             "K" #'lsp-describe-thing-at-point)
   :config
   (progn
