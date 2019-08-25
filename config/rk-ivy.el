@@ -121,6 +121,8 @@
              counsel-load-theme
              counsel-up-directory)
   :defines (counsel-rg-base-command)
+  :custom
+  (counsel-yank-pop-preselect-last t)
   :preface
   (progn
     (autoload 'ivy-immediate-done "ivy")
