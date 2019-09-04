@@ -181,6 +181,7 @@
     "pp" '(rk-counsel--switch-project :wk "switch project")
     "sS" '(rk-swiper-region-or-symbol :wk "search in buffer")
     "sP" '(rk-counsel-project-region-or-symbol :wk "search in project")
+    "sI" '(rk-counsel-i18n-project-region-or-symbol :wk "search i18n in project")
     "sF" '(rk-counsel-region-or-symbol :wk "search in dir")))
 
 (use-package ivy-posframe

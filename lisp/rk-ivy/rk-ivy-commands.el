@@ -16,6 +16,7 @@
 (require 'projectile)
 (require 'counsel-projectile)
 (require 's)
+(require 'f)
 
 (autoload 'projectile-project-root "projectile")
 
@@ -58,6 +59,11 @@
   "Search project for INPUT, which is either the selected region or the symbol at point."
   (interactive (list (rk--region-or-symbol)))
   (counsel-rg (rk-counsel--escape-string input) (projectile-project-root)))
+
+(defun rk-counsel-i18n-project-region-or-symbol (input)
+  "Search project for INPUT, which is either the selected region or the symbol at point."
+  (interactive (list (rk--region-or-symbol)))
+  (counsel-rg (s-join " " (list "i18n.t" (rk-counsel--escape-string input))) (projectile-project-root)))
 
 (defun rk-counsel-region-or-symbol (start-dir input)
   "Search START-DIR for INPUT which is either the selected region or symbol at point."
