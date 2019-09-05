@@ -97,6 +97,16 @@
   (rk-leader-def
     "el" '(rk-flycheck-ts-transient-state/body :wk "error hydra")))
 
+(use-package flycheck-posframe
+  :straight t
+  :custom
+  (flycheck-posframe-border-width 7)
+  :config
+  (progn
+    (flycheck-posframe-configure-pretty-defaults)
+    (with-eval-after-load 'flycheck
+      (add-hook 'flycheck-mode-hook #'flycheck-posframe-mode))))
+
 (provide 'rk-flycheck)
 
 ;;; rk-flycheck.el ends here

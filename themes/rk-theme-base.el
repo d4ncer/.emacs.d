@@ -306,6 +306,12 @@
     (ahs-plugin-whole-buffer-face
      ((t :inherit highlight)))
 
+    (flycheck-posframe-background-face
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (flycheck-posframe-border-face
+     ((t :foreground ,rk-theme-base-solarized-b2)))
+
     (hydra-posframe-face
      ((t :background ,rk-theme-base-solarized-b2)))
 
