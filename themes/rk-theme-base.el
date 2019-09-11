@@ -312,6 +312,12 @@
     (flycheck-posframe-border-face
      ((t :foreground ,rk-theme-base-solarized-b2)))
 
+    (flycheck-posframe-error-face
+     ((t :inherit error :weight normal)))
+
+    (flycheck-posframe-warning-face
+     ((t :inherit warning :weight normal)))
+
     (hydra-posframe-face
      ((t :background ,rk-theme-base-solarized-b2)))
 
