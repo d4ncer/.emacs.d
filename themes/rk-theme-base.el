@@ -406,6 +406,12 @@
     (org-agenda-clocking
      ((t :background ,rk-theme-cursor-green)))
 
+    (org-drawer
+     ((t :foreground ,rk-theme-base-blue)))
+
+    (org-special-keyword
+     ((t :foreground ,rk-theme-base-dark-grey)))
+
     (org-warning
      ((t :foreground ,rk-theme-base-red :weight normal)))
 
