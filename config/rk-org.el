@@ -102,18 +102,14 @@
 
     (defun rk-org--mark-next-parent-tasks-todo ()
       "Visit each parent task and change state to TODO."
-      (when-let (mystate (or (bound-and-true-p org-state)
-                             (nth 2 (org-heading-components))))
-        (save-excursion
-          (while (org-up-heading-safe)
-            (when (-contains? '("NEXT" "WAITING")
-                              (nth 2 (org-heading-components)))
-              (org-todo "TODO"))))))
-
-    (defun rk-org--add-local-hooks ()
-      "Set buffer-local hooks for orgmode."
-      (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo nil t)
-      (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo nil t))
+      (let ((mystate (or (and (fboundp 'org-state)
+                              state)
+                         (nth 2 (org-heading-components)))))
+        (when mystate
+          (save-excursion
+            (while (org-up-heading-safe)
+              (when (member (nth 2 (org-heading-components)) (list "NEXT"))
+                (org-todo "TODO")))))))
 
     (defun rk-org--disable-flycheck ()
       "Disable Flycheck in org buffers."
@@ -155,6 +151,8 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
     (add-hook 'org-mode-hook #'rk-org--add-local-hooks)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
+    (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
+    (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
     (add-hook 'org-after-todo-statistics-hook #'rk-org--children-done-parent-done)
     (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
 
