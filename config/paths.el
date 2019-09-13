@@ -70,7 +70,8 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst rk-org--next-file (f-join paths--gtd-dir "next.org"))
 (defconst rk-org--tickler-file (f-join paths--gtd-dir "tickler.org"))
 (defconst rk-org--someday-file (f-join paths--gtd-dir "someday.org"))
-(defconst rk-org--projects-file (f-join paths--gtd-dir "projects.org"))
+(defconst rk-org--work-projects-file (f-join paths--gtd-dir "projects-work.org"))
+(defconst rk-org--personal-projects-file (f-join paths--gtd-dir "projects-personal.org"))
 (defconst rk-org--reference-file (f-join paths--gtd-dir "reference.org"))
 (defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
 

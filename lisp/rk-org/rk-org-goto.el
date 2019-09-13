@@ -45,9 +45,9 @@
 
 ;;;###autoload
 (defun rk-org-goto-projects ()
-  "Switch to the GTD projects file."
+  "Switch to the GTD work projects file."
   (interactive)
-  (find-file rk-org--projects-file))
+  (find-file rk-org--work-projects-file))
 
 ;;;###autoload
 (defun rk-org-goto-next ()

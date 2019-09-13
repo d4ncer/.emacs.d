@@ -175,7 +175,8 @@ Do not scheduled items or repeating todos."
     (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
     (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 2))
-    (add-to-list 'org-refile-targets '(rk-org--projects-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--work-projects-file :maxlevel . 1))
+    (add-to-list 'org-refile-targets '(rk-org--personal-projects-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 3))
     (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
@@ -367,7 +368,7 @@ Do not scheduled items or repeating todos."
               (agenda ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list rk-org--projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
+              (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
               (org-agenda-ignore-properties '(effort appt))))
@@ -375,7 +376,7 @@ Do not scheduled items or repeating todos."
             ("w" "Work"
              ((tags-todo "inbox"
                          ((org-agenda-overriding-header "To Refile")))
-              (tags-todo "-someday-media-study-@home/NEXT"
+              (tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")
                           (org-agenda-breadcrumbs-separator "")
                           (org-agenda-prefix-format '((tags . "  %i %-15b")))))
@@ -385,6 +386,26 @@ Do not scheduled items or repeating todos."
               (agenda ""))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-include-inactive-timestamps t)
+              (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
+              (org-agenda-show-inherited-tags nil)
+              (org-agenda-dim-blocked-tasks nil)
+              (org-agenda-archives-mode nil)
+              (org-agenda-ignore-drawer-properties '(effort appt))))
+
+            ("p" "Personal"
+             ((tags-todo "inbox"
+                         ((org-agenda-overriding-header "To Refile")))
+              (tags-todo "-someday-media-study/NEXT"
+                         ((org-agenda-overriding-header "Next Actions")
+                          (org-agenda-breadcrumbs-separator "")
+                          (org-agenda-prefix-format '((tags . "  %i %-15b")))))
+              (stuck "")
+              (todo "WAITING"
+                    ((org-agenda-overriding-header "Waiting")))
+              (agenda ""))
+             ((org-agenda-tag-filter-preset '("-ignore"))
+              (org-agenda-include-inactive-timestamps t)
+              (org-agenda-files (list rk-org--personal-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
               (org-agenda-show-inherited-tags nil)
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)
@@ -420,7 +441,7 @@ Do not scheduled items or repeating todos."
                '("-ignore"))
               (org-agenda-show-log t)
               (org-agenda-include-inactive-timestamps t)
-              (org-agenda-files (list rk-org--consume-file rk-org--projects-file rk-org--inbox-file rk-org--someday-file))
+              (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file))
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))))))
 
@@ -577,8 +598,12 @@ Do not scheduled items or repeating todos."
             '(file+headline rk-org--tickler-file "Appointments") "* %i%? \n%^{CATEGORY}p%^t")
 
            (rk-org--capture-template-entry
-            "p" "Create [project]"
-            '(file rk-org--projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
+            "p" "Create work [project]"
+            '(file rk-org--work-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
+
+           (rk-org--capture-template-entry
+            "P" "Create personal [project]"
+            '(file rk-org--personal-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
 
            (rk-org--capture-template-entry
             "s" "Add task to do [someday]"
