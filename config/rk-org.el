@@ -123,14 +123,12 @@
     (defun rk-org--set-next-todo-state ()
       "When marking a todo to DONE, set the next TODO as NEXT.
 Do not scheduled items or repeating todos."
-      (when (equal org-state "DONE")
+      (when (and (string= org-state "DONE")
+                 (org-goto-sibling)
+                 (org-entry-is-todo-p)
+                 (not (member "project" (org-get-tags))))
         (save-excursion
-          (when (and (ignore-errors (org-forward-heading-same-level 1) t)
-                     (equal (org-get-todo-state) "TODO"))
-            (unless (or (org-entry-get (point) "STYLE")
-                        (org-entry-get (point) "LAST_REPEAT")
-                        (org-get-scheduled-time (point)))
-              (org-todo "NEXT"))))))
+          (org-todo "NEXT"))))
 
     (defun rk-org--children-done-parent-done (_n-done n-todo)
       "Mark the parent task as done when all children are completed."
