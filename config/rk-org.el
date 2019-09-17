@@ -129,7 +129,7 @@
 Do not scheduled items or repeating todos."
       (when (and (string= org-state "DONE")
                  (org-goto-sibling)
-                 (org-entry-is-todo-p)
+                 (string= (org-get-todo-state) "TODO")
                  (not (member "project" (org-get-tags))))
         (save-excursion
           (org-todo "NEXT"))))
