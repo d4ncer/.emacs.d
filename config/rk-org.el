@@ -801,11 +801,6 @@ table tr.tr-even td {
   :after org
   :hook (org-mode . flyspell-mode))
 
-(use-package org-babel-hydra
-  :init
-  (rk-local-leader-def :keymaps 'org-mode-map
-    "b" '(org-babel-transient-state/body :wk "babel hydra")))
-
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
