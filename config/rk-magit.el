@@ -27,9 +27,7 @@
             ", k" #'with-editor-cancel))
 
 (use-package transient
-  :straight (:host github :repo "magit/transient"
-                   :branch "master"
-                   :files ("lisp/transient.el"))
+  :straight t
   :init
   (setq transient-values-file (f-join paths-cache-directory "transient/values.el"))
   (setq transient-history-file (f-join paths-cache-directory "transient/history.el"))

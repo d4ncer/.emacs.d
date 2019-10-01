@@ -13,7 +13,7 @@
 
 (require 'definers)
 
-(use-package help-fns+
+(use-package help-fns-plus
   :straight t
   :commands (describe-buffer
              describe-file

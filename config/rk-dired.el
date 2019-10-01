@@ -73,7 +73,7 @@
   (rk-local-leader-def :keymaps 'dired-mode-map
     "h" '(dired-omit-mode :wk "switch to omit mode")))
 
-(use-package dired+
+(use-package dired-plus
   :straight t
   :defer t
   :custom
