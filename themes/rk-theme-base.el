@@ -559,6 +559,32 @@
     (company-box-selection
      ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-violet)))
 
+    ;; vterm
+
+    (vterm-color-black
+     ((t :foreground ,rk-theme-base-offblack)))
+
+    (vterm-color-blue
+     ((t :foreground ,rk-theme-base-blue)))
+
+    (vterm-color-cyan
+     ((t :foreground ,rk-theme-base-cyan)))
+
+    (vterm-color-green
+     ((t :foreground ,rk-theme-base-green)))
+
+    (vterm-color-magenta
+     ((t :foreground ,rk-theme-base-magenta)))
+
+    (vterm-color-red
+     ((t :foreground ,rk-theme-base-red)))
+
+    (vterm-color-offwhite
+     ((t :foreground ,rk-theme-base-offwhite)))
+
+    (vterm-color-yellow
+     ((t :foreground ,rk-theme-base-yellow)))
+
     ;; Misc faces
 
     (go-peg-mode-production-name
