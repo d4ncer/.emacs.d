@@ -269,6 +269,11 @@
              evil-window-rotate-downwards)
   :config
   (progn
+    ;; Unbind some odd evil-insert commands
+    (general-unbind :states '(insert)
+      "C-w"
+      "C-r"
+      "C-k")
     (rk-leader-def
       "w w" '(evil-window-next :wk "next window")
       "w r" '(evil-window-rotate-downwards :wk "rotate windows")
