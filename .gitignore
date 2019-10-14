@@ -12,6 +12,7 @@ projectile-bookmarks.eld
 auto-save-list
 custom.el
 eshell/
+url/
 
 # Straight
 /var
