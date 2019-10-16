@@ -166,15 +166,15 @@ Do not scheduled items or repeating todos."
     (general-def :keymaps 'org-mode-map :states 'normal
       "RET" #'org-return)
 
-    (add-to-list 'org-refile-targets '(nil :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(nil :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 2))
+    (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--work-projects-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--personal-projects-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 3))
+    (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
     (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file-other-window)
