@@ -25,6 +25,8 @@
   :mode (("\\.scala\\'" . scala-mode))
   :interpreter
   ("scala" . scala-mode)
+  :hook
+  (scala-mode . lsp)
   :config
   (progn
     (general-def :keymaps 'scala-mode-map :states 'normal
