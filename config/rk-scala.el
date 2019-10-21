@@ -55,12 +55,6 @@
                                'self-insert-command
                                minibuffer-local-completion-map)))
 
-(use-package lsp-scala
-  :straight t
-  :demand t
-  :after scala-mode
-  :hook (scala-mode . lsp))
-
 (provide 'rk-scala)
 
 ;;; rk-scala.el ends here
