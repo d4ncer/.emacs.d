@@ -62,7 +62,7 @@
      ((t :background ,default-background)))
 
     (internal-border
-     ((t :background ,rk-theme-base-violet)))
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     ;; Mode & header line
 
