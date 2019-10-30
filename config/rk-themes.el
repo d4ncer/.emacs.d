@@ -47,6 +47,18 @@
 (use-package tao-theme
   :straight t)
 
+(defun config-themes--after-enable-theme (&rest _)
+  ;; Delete posframes after changing themes.
+  (when (fboundp 'posframe-delete-all)
+    (posframe-delete-all))
+  ;; Force org buffers to refontify to fix org-bullet properties.
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (derived-mode-p 'org-mode)
+        (font-lock-flush (point-min) (point-max))))))
+
+(advice-add 'enable-theme :after #'config-themes--after-enable-theme)
+
 (provide 'rk-themes)
 
 ;;; rk-themes.el ends here
