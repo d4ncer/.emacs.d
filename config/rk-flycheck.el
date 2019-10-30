@@ -99,8 +99,11 @@
 
 (use-package flycheck-posframe
   :straight t
+  :after flycheck
+  :commands (flycheck-posframe-mode)
   :custom
   (flycheck-posframe-border-width 7)
+  (flycheck-posframe-override-parameters '((alpha 100 100)))
   :config
   (progn
     (flycheck-posframe-configure-pretty-defaults)

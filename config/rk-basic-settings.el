@@ -579,7 +579,8 @@ Optional arg JUSTIFY will justify comments and strings."
   :after hydra
   :custom
   (hydra-posframe-border-width 2)
-  :hook (after-init . hydra-posframe-enable))
+  (hydra-posframe-parameters '((alpha 100 100)))
+  :hook (after-init . hydra-posframe-mode))
 
 (use-package sql-indent
   :straight (:host github :repo "alex-hhh/emacs-sql-indent"

@@ -187,12 +187,12 @@
 (use-package ivy-posframe
   :straight t
   :after ivy
+  :hook (after-init . ivy-posframe-mode)
   :custom
-  (ivy-posframe-display-functions-alist '((t . ivy-posframe-display-at-frame-center)))
-  (ivy-posframe-border-width 2)
+  (ivy-posframe-style 'frame-center)
+  (ivy-posframe-border-width 20)
   (ivy-posframe-hide-minibuffer t)
-  :config
-  (ivy-posframe-enable))
+  (ivy-posframe-parameters '((alpha 100 100))))
 
 (provide 'rk-ivy)
 

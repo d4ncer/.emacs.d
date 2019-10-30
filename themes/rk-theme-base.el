@@ -322,10 +322,13 @@
      ((t :background ,rk-theme-base-solarized-b2)))
 
     (hydra-posframe-border-face
-     ((t :background ,rk-theme-base-violet)))
+     ((t :background ,rk-theme-base-solarized-b2)))
+
+    (ivy-posframe
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     (ivy-posframe-border
-     ((t :background ,rk-theme-base-violet)))
+     ((t :background ,rk-theme-base-solarized-b2)))
 
     ;; Magit
 
