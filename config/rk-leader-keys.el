@@ -164,10 +164,10 @@
   "z"     '(:ignore t :wk "scale"))
 
 (use-package rk-scale-font-transient-state
-  :commands (rk-scale-font-transient-state/body)
+  :commands (rk-general--scale-font/body)
   :init
   (rk-leader-def
-    "zx" '(rk-scale-font-transient-state/body :wk "font scale hydra")))
+    "zx" '(rk-general--scale-font/body :wk "font scale hydra")))
 
 (use-package rk-buffer-transient-state
   :commands (rk-buffer-transient-state/body
