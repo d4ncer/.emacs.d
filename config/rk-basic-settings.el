@@ -580,6 +580,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :custom
   (hydra-posframe-border-width 20)
   (hydra-posframe-parameters '((alpha 100 100)))
+  (hydra-posframe-poshandler 'posframe-poshandler-frame-top-right-corner)
   :hook (after-init . hydra-posframe-mode)
   :config
   (set-face-attribute 'hydra-posframe-face nil :inherit 'ivy-posframe))
