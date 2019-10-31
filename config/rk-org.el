@@ -127,11 +127,11 @@
     (defun rk-org--set-next-todo-state ()
       "When marking a todo to DONE, set the next TODO as NEXT.
 Do not scheduled items or repeating todos."
-      (when (and (string= org-state "DONE")
-                 (org-goto-sibling)
-                 (string= org-state "TODO")
-                 (not (member "project" (org-get-tags))))
-        (save-excursion
+      (save-excursion
+        (when (and (string= org-state "DONE")
+                   (org-goto-sibling)
+                   (-contains? '("TODO") (org-get-todo-state))
+                   (not (-contains-p (org-get-tags) "project")))
           (org-todo "NEXT")))))
 
   :init
