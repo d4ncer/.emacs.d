@@ -65,6 +65,7 @@ Otherwise delete backwards."
 
   :config
   (progn
+    (setq doom-snippets-dir (f-join straight-base-dir "straight/build/doom-snippets"))
     (setq yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
     (setq yas-wrap-around-region t)
     (setq yas-prompt-functions '(rk-yasnippet--ivy-yas-prompt))
