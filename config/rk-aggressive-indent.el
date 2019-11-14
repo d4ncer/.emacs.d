@@ -25,6 +25,7 @@
     php-mode
     rnc-mode
     rust-mode
+    jsonnet-mode
     scala-mode)
   "List of modes to be excluded from aggressive indent.")
 
