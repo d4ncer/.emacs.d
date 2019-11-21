@@ -592,6 +592,11 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
 
+(use-package tiny
+  :straight t
+  :config
+  (tiny-setup-default))
+
 (use-package autoinsert
   :preface
   (defvar auto-insert-alist nil)
