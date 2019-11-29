@@ -719,6 +719,9 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (editorconfig-mode 1))
 
+(use-package request
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
