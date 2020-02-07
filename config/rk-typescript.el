@@ -7,11 +7,14 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'lsp)
+
 (use-package typescript-mode
   :straight t
-  :defines (typescript-indent-level)
+  :custom
+  (typescript-indent-level 2)
   :config
-  (setq typescript-indent-level 2))
+  (add-hook 'typescript-mode-hook #'lsp))
 
 (provide 'rk-typescript)
 
