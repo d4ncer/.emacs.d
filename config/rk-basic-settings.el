@@ -328,11 +328,11 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (use-package page-break-lines
   :straight t
-  :init
-  (with-eval-after-load 'eshell
-    (add-to-list 'page-break-lines-modes 'eshell-mode))
   :config
-  (global-page-break-lines-mode 1))
+  (progn
+    (with-eval-after-load 'eshell
+      (add-to-list 'page-break-lines-modes 'eshell-mode))
+    (global-page-break-lines-mode 1)))
 
 (use-package abbrev
   :defer t
