@@ -1,3 +1,5 @@
+THIS README IS STALE, AND IS NOT INDICATIVE OF THE STATE OF THIS CODEBASE. I WILL WORK ON IT SOON.
+
 # My .emacs setup
 
 ![web-mode-trifecta](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/main.png "JS + CSS + MD")
