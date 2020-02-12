@@ -208,8 +208,8 @@ Do not scheduled items or repeating todos."
     (setq org-log-repeat nil)
     (setq org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
 
-    (setq org-todo-keywords '((type "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
-                              (type "SOMEDAY(s)" "|")))
+    (setq org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
+                              (sequence "SOMEDAY(s)" "|")))
 
     (setq org-confirm-babel-evaluate nil)
     (setq org-babel-load-languages '((emacs-lisp . t)
