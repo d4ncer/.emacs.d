@@ -28,6 +28,7 @@
 
 (use-package org
   :straight org-plus-contrib
+  :demand t
   :general
   (:keymaps 'org-mode-map
             "C-c C-." #'org-time-stamp-inactive
@@ -166,6 +167,7 @@ Do not scheduled items or repeating todos."
     (general-def :keymaps 'org-mode-map :states 'normal
       "RET" #'org-return)
 
+    (setq org-refile-targets nil)
     (add-to-list 'org-refile-targets '(nil :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
     (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 1))
