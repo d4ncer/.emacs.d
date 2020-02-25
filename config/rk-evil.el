@@ -274,6 +274,8 @@
       "C-w"
       "C-r"
       "C-k")
+    (general-unbind :states '(motion)
+      "K")
     (rk-leader-def
       "w w" '(evil-window-next :wk "next window")
       "w r" '(evil-window-rotate-downwards :wk "rotate windows")
