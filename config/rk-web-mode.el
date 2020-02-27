@@ -205,6 +205,7 @@
   :init
   (progn
     (setq emmet-move-cursor-between-quotes t)
+    (add-hook 'typescript-mode-hook #'emmet-mode)
     (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)))
 
 (use-package rk-flycheck-stylelint
