@@ -11,6 +11,7 @@
 
 (use-package typescript-mode
   :straight t
+  :mode ("\\.tsx?\\'" . typescript-mode)
   :custom
   (typescript-indent-level 2)
   :config
