@@ -64,6 +64,7 @@ go get -u -v golang.org/x/tools/cmd/goimports
 go get -u -v github.com/zmb3/gogetdoc
 go get -u -v github.com/fatih/gomodifytags
 go get -u -v honnef.co/go/tools/cmd/keyify
+GO11MODULE=on go get golang.org/x/tools/gopls@latest
 ```
 
 **Rust setup**
