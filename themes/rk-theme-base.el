@@ -44,7 +44,7 @@
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
-(defconst rk-theme-font-family "Fira Code")
+(defconst rk-theme-font-family "Monoid")
 
 (defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
@@ -55,7 +55,7 @@
         :width narrow
         :spacing 90
         :family ,rk-theme-font-family
-        :height 190)))
+        :height 140)))
 
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
@@ -70,7 +70,7 @@
 
     (mode-line
      ((t
-       :height 140
+       :height 100
        :background ,rk-theme-base-solarized-b2
        :foreground ,rk-theme-base-solarized-b02)))
 
