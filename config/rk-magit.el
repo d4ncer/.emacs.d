@@ -129,6 +129,8 @@
   :straight t
   :demand t
   :after magit
+  :custom
+  (forge-database-file (f-join paths-cache-directory "forge-database.sqlite"))
   :general
   (:keymaps 'magit-mode-map
             :states '(normal visual)
