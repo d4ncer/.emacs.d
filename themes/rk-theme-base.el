@@ -88,7 +88,7 @@
 
     (header-line
      ((t
-       :height 140
+       :height 100
        :weight bold
        :background ,rk-theme-base-violet
        :foreground ,rk-theme-base-offwhite
