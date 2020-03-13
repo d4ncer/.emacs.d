@@ -11,7 +11,6 @@
 
 (use-package prodigy
   :straight t
-  :demand t
   :commands (prodigy)
   :general
   (:keymaps 'prodigy-view-mode-map :states '(normal motion)
