@@ -135,6 +135,7 @@
 (use-package rk-haskell)
 (use-package rk-go)
 (use-package rk-scala)
+(use-package rk-kotlin)
 (use-package rk-markdown)
 (use-package rk-yaml)
 (use-package rk-rnc)
