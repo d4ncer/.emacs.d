@@ -16,13 +16,13 @@
 (require 'dash)
 (require 'general)
 
-(use-package rk-ligatures
-  :if (window-system)
-  :preface
-  (autoload 'rk-ligatures--set-kwds "rk-ligatures")
-  :config
-  (rk-ligatures--set-kwds
-   '((rk-ligatures--fira-font prog-mode-hook))))
+;; (use-package rk-ligatures
+;;   :if (window-system)
+;;   :preface
+;;   (autoload 'rk-ligatures--set-kwds "rk-ligatures")
+;;   :config
+;;   (rk-ligatures--set-kwds
+;;    '((rk-ligatures--fira-font prog-mode-hook))))
 
 (defun rk/themes/light-theme ()
   "Load light theme."
