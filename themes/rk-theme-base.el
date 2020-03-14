@@ -44,7 +44,7 @@
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
-(defconst rk-theme-font-family "Monoid")
+(defconst rk-theme-font-family "Ubuntu Mono")
 
 (defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
