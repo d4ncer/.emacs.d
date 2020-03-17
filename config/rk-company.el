@@ -122,7 +122,7 @@
            (bound-and-true-p company-mode)))
     (defun rk-company--setup-lsp-backend ()
       (when (rk-company--lsp-mode-p)
-        (set (make-local-variable 'company-backends) '(company-lsp)))))
+        (set (make-local-variable 'company-backends) '(company-files company-lsp)))))
   :config
   (add-hook 'company-mode-hook #'rk-company--setup-lsp-backend))
 
