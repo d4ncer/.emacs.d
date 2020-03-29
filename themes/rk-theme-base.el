@@ -63,6 +63,9 @@
     (fringe
      ((t :background ,default-background)))
 
+    (fixed-pitch
+     ((t :family "Inconsolata" :height 130 :weight normal)))
+
     (internal-border
      ((t :background ,rk-theme-base-solarized-b2)))
 
