@@ -9,10 +9,11 @@
 
 (require 'lsp)
 
+;;; TODO Come back to this once I can build razzmatazz's branch
 (use-package csharp-mode
   :straight t
-  :custom
-  (lsp-csharp-server-path (expand-file-name "~/code/omnisharp-roslyn/artifacts/scripts/OmniSharp.Stdio"))
+  ;; :custom
+  ;; (lsp-csharp-server-path (expand-file-name "~/code/omnisharp-roslyn/artifacts/scripts/OmniSharp.Stdio"))
   :hook (csharp-mode . lsp))
 
 (provide 'rk-csharp)
