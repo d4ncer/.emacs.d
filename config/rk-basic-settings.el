@@ -724,6 +724,12 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (editorconfig-mode 1))
 
+(use-package graphql-mode
+  :straight t)
+
+(use-package graphql
+  :straight t)
+
 (use-package request
   :straight t)
 
