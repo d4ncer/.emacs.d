@@ -36,11 +36,11 @@
     (rk-lsp--maybe-setup-organize-imports)
     (rk-lsp--maybe-disable-highlight-thing)
     (rk-lsp--maybe-setup-format-on-save))
-  :init
-  (progn
-    (setq lsp-prefer-flymake nil)
-    (setq lsp-enable-on-type-formatting nil)
-    (setq lsp-session-file (f-join paths-cache-directory "lsp-session-v1")))
+  :custom
+  (lsp-prefer-flymake nil)
+  (lsp-enable-on-type-formatting nil)
+  (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
+  (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
   :general
   (:keymaps 'lsp-mode-map :states '(normal motion visual)
             "gd" #'lsp-find-definition
@@ -78,10 +78,10 @@
   (:keymaps 'lsp-mode-map :states '(normal motion visual)
             "R" #'lsp-ui-peek-find-references
             "M" #'lsp-ui-peek-find-implementation)
-  :init
-  (progn
-    (setq lsp-ui-doc-enable nil)
-    (setq lsp-ui-sideline-enable nil)))
+  :custom
+  (lsp-ui-doc-enable nil)
+  (lsp-ui-sideline-enable nil)
+  (lsp-ui-peek-fontify 'always))
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
