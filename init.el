@@ -149,6 +149,7 @@
 (use-package rk-protobuf)
 (use-package rk-puppet)
 (use-package rk-sh)
+(use-package rk-csharp)
 (use-package rk-hashicorp)
 
 (use-package private-config
