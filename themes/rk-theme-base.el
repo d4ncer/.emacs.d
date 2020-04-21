@@ -52,6 +52,8 @@
         :background ,default-background
         :foreground ,default-foreground
         :weight normal
+        :width narrow
+        :spacing 90
         :family ,rk-theme-font-family
         :height 190)))
 
