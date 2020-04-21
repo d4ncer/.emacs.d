@@ -442,7 +442,7 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq version-control t)))
 
 (use-package highlight
-  :straight (:repo "https://framagit.org/steckerhalter/highlight.el" :branch "master"))
+  :straight (:host nil :repo "git@framagit.org:steckerhalter/highlight.el.git" :branch "master"))
 
 (use-package select
   :config
