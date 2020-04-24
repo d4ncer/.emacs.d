@@ -45,6 +45,9 @@
   (:keymaps 'lsp-mode-map :states '(normal motion visual)
             "gd" #'lsp-find-definition
             "K" #'lsp-describe-thing-at-point)
+  :custom
+  (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-theme-base-solarized-b1)
+                                (deprecated :strike-through t)))
   :config
   (progn
     (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
