@@ -18,6 +18,8 @@
     haskell-mode
     dockerfile-mode
     diff-auto-refine-mode
+    csharp-mode
+    typescript-mode
     sql-mode
     restclient-mode
     rk-web-js-mode
