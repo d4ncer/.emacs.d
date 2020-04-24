@@ -733,6 +733,11 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package request
   :straight t)
 
+(use-package undo-tree
+  :straight t
+  :config
+  (global-undo-tree-mode))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
