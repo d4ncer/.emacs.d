@@ -45,6 +45,9 @@
   (:keymaps 'omnisharp-mode-map :states '(normal motion visual)
             "gd" #'omnisharp-go-to-definition))
 
+(use-package csproj-mode
+  :straight t)
+
 (provide 'rk-csharp)
 
 ;;; rk-csharp.el ends here
