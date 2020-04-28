@@ -738,6 +738,15 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (global-undo-tree-mode))
 
+(use-package xref
+  :general
+  (:keymaps 'xref--xref-buffer-mode-map :states 'normal
+            "n" #'xref-next-line
+            "p" #'xref-prev-line
+            "N" #'xref-prev-line
+            "q" #'quit-window
+            "RET" #'xref-quit-and-goto-xref))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
