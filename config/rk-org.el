@@ -435,7 +435,7 @@ Do not scheduled items or repeating todos."
              ((org-agenda-tag-filter-preset
                '("-ignore"))
               (org-agenda-show-log t)
-              (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file))
+              (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file rk-org--tickler-file))
               (org-agenda-archives-mode nil)
               (org-agenda-dim-blocked-tasks nil)))))))
 
