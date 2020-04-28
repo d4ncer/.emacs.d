@@ -16,6 +16,7 @@
 (require 's)
 (require 'definers)
 (require 'general)
+(require 'lsp)
 (require 'rk-utils)
 
 (use-package rust-mode
@@ -25,6 +26,7 @@
   :preface
   (progn
     (defun rk-rust--set-local-vars ()
+      (setq lsp-rust-server 'rust-analyzer)
       (setq-local compile-command "cargo build"))
 
     (defun rk-rust--setup ()
