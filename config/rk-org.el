@@ -371,6 +371,7 @@ Do not scheduled items or repeating todos."
             ("w" "Work"
              ((tags-todo "inbox"
                          ((org-agenda-overriding-header "To Refile")))
+              (agenda "")
               (tags-todo "-someday-media-study/NEXT"
                          ((org-agenda-overriding-header "Next Actions")
                           (org-agenda-breadcrumbs-separator "")
@@ -379,8 +380,7 @@ Do not scheduled items or repeating todos."
               (todo "WAITING"
                     ((org-agenda-overriding-header "Delegated / Follow Up")
                      (org-agenda-breadcrumbs-separator "")
-                     (org-agenda-prefix-format '((todo . "  %i %-15b")))))
-              (agenda ""))
+                     (org-agenda-prefix-format '((todo . "  %i %-15b"))))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
               (org-agenda-show-inherited-tags nil)
