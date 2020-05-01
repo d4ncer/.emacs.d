@@ -101,9 +101,11 @@
       (when (org-first-sibling-p)
         (org-todo "NEXT")))
 
-    (defun rk-org--remove-todo-tickler ()
-      (when (s-contains-p "tickler.org" (-first-item org-refile-history))
-        (org-todo "")))
+    (defun rk-org--remove-todo-tickler-or-reference ()
+      (let ((last-refile (-first-item org-refile-history)))
+        (when (or (s-contains-p "tickler.org" last-refile)
+                  (s-contains-p "reference.org" last-refile))
+          (org-todo ""))))
 
     (defun rk-org--mark-next-parent-tasks-todo ()
       "Visit each parent task and change state to TODO."
@@ -151,7 +153,7 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
     (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
-    (add-hook 'org-after-refile-insert-hook #'rk-org--remove-todo-tickler)
+    (add-hook 'org-after-refile-insert-hook #'rk-org--remove-todo-tickler-or-reference)
 
     (setq org-default-notes-file (f-join org-directory "notes.org"))
     (rk-local-leader-def :keymaps 'org-mode-map
