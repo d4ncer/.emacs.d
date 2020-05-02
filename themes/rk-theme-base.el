@@ -564,6 +564,9 @@
     (company-box-selection
      ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-violet)))
 
+    (company-tooltip-common-selection
+     ((t :inherit company-box-selection)))
+
     ;; vterm
 
     (vterm-color-black
