@@ -105,6 +105,18 @@
     (setq lsp-ui-imenu-colors 'rk-lsp--ui-menu-colors)
     (add-hook 'lsp-after-open-hook #'lsp-enable-imenu)))
 
+(use-package lsp-ivy
+  :straight t
+  :after lsp-mode
+  :preface
+  (defun rk-lsp-ivy--setup-local-keybinds ()
+    (general-define-key
+     :states 'normal
+     :keybinds 'local
+     "C-/" #'lsp-ivy-workspace-symbol))
+  :hook
+  (lsp-mode . rk-lsp-ivy--setup-local-keybinds))
+
 (provide 'rk-lsp)
 
 ;;; rk-lsp.el ends here
