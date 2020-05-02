@@ -32,24 +32,29 @@
     (when (and (gethash "documentFormattingProvider" (lsp--server-capabilities))
                (not (eq major-mode 'rust-mode)))
       (add-hook 'before-save-hook #'lsp-format-buffer nil 'local)))
+  (defun rk-lsp--setup-local-keybinds ()
+    (general-define-key
+     :states 'normal
+     :keymaps 'local
+     "gd" #'lsp-find-definition
+     "K" #'lsp-describe-thing-at-point))
   (defun rk-lsp--setup-lsp ()
     (rk-lsp--maybe-setup-organize-imports)
     (rk-lsp--maybe-disable-highlight-thing)
-    (rk-lsp--maybe-setup-format-on-save))
+    (rk-lsp--maybe-setup-format-on-save)
+    (rk-lsp--setup-local-keybinds))
   :custom
   (lsp-prefer-flymake nil)
   (lsp-enable-on-type-formatting nil)
   (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
   (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
-  :general
-  (:keymaps 'lsp-mode-map :states '(normal motion visual)
-            "gd" #'lsp-find-definition
-            "K" #'lsp-describe-thing-at-point)
+  (lsp-keymap-prefix "C-l")
   :custom
   (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-theme-base-solarized-b1)
                                 (deprecated :strike-through t)))
   :config
   (progn
+
     (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
     (rk-local-leader-def :keymaps 'lsp-mode-map
       "l" '(:ignore t :wk "LSP")
@@ -69,6 +74,15 @@
 (use-package lsp-ui
   :straight t
   :after lsp-mode
+  :preface
+  (defun rk-lsp-ui--setup-local-keybinds ()
+    (general-define-key
+     :states 'normal
+     :keymaps 'local
+     "R" #'lsp-ui-peek-find-references
+     "M" #'lsp-ui-peek-find-implementation))
+  :hook
+  (lsp-mode . rk-lsp-ui--setup-local-keybinds)
   :general
   (:keymaps 'lsp-ui-imenu-mode-map :states '(normal visual)
             "q" #'lsp-ui-imenu--kill)
@@ -78,9 +92,6 @@
             "C-n" #'lsp-ui-peek--select-next-file
             "C-p" #'lsp-ui-peek--select-prev-file
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
-  (:keymaps 'lsp-mode-map :states '(normal motion visual)
-            "R" #'lsp-ui-peek-find-references
-            "M" #'lsp-ui-peek-find-implementation)
   :custom
   (lsp-ui-doc-enable nil)
   (lsp-ui-sideline-enable nil)
