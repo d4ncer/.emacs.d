@@ -706,6 +706,7 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (progn
     (add-hook 'json-mode-hook #'rk-json--disable-python-checker)
+    (add-hook 'json-mode-hook #'lsp)
     (with-eval-after-load 'js
       (setq js-indent-level 2))
     (with-eval-after-load 'json-reformat
