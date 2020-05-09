@@ -24,6 +24,9 @@
 ;;   (rk-ligatures--set-kwds
 ;;    '((rk-ligatures--fira-font prog-mode-hook))))
 
+(use-package rk-iosevka
+  :if (window-system))
+
 (defun rk/themes/light-theme ()
   "Load light theme."
   (interactive)
