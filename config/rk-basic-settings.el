@@ -764,6 +764,15 @@ Optional arg JUSTIFY will justify comments and strings."
             "N" #'xref-prev-line
             "q" #'quit-window
             "RET" #'xref-quit-and-goto-xref))
+(use-package epg
+  :custom
+  (epg-pinentry-mode 'loopback))
+
+(use-package pinentry
+  :straight t
+  :demand t
+  :config
+  (pinentry-start))
 
 (use-package apex-mode
   :straight (:host github :repo "ctomo/apex-mode" :branch "master"))
