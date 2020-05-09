@@ -730,6 +730,24 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package graphql
   :straight t)
 
+(use-package exec-path-from-shell
+  :straight t
+  :if window-system
+  :config
+  (progn
+    (setq exec-path-from-shell-check-startup-files nil)
+    (exec-path-from-shell-copy-env "GOPATH")
+    (exec-path-from-shell-copy-env "RUST_SRC_PATH")
+    (exec-path-from-shell-copy-env "LANG")
+    (exec-path-from-shell-copy-env "LC_ALL")
+    (exec-path-from-shell-initialize)
+
+    ;;; Use gls instead of ls on OS X (if available)
+    (when (and (equal system-type "darwin") (executable-find "gls"))
+      (setq insert-directory-program "gls")))
+  :functions
+  (exec-path-from-shell-initialize))
+
 (use-package request
   :straight t)
 
