@@ -23,3 +23,6 @@ request/
 
 # Generated
 opam-user-setup.el
+
+# Session stuff
+session.*
