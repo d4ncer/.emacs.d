@@ -315,6 +315,7 @@ Do not scheduled items or repeating todos."
       "oA" '(org-agenda :wk "agendas"))
 
     (rk-local-leader-def :keymaps 'org-agenda-mode-map
+      "d" '(org-agenda-deadline :wk "deadline")
       "r" '(org-agenda-refile :wk "refile"))
 
     ;; Match projects that do not have a scheduled action or NEXT action.
