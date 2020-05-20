@@ -30,7 +30,7 @@
     (backward-char 1))
   :general
   (:states '(normal motion)
-           "C-S-l" #'rk-evil--select-non-empty-line
+           "C-l" #'rk-evil--select-non-empty-line
            "C-u" #'evil-scroll-page-up
            "C-d" #'evil-scroll-page-down)
   (:states 'motion
