@@ -621,15 +621,15 @@ Optional arg JUSTIFY will justify comments and strings."
          ("M-n" . Man-next-section)
          ("M-p" . Man-previous-section)))
 
-(use-package info-plus
-  :straight t
-  :defer 3
-  :defines (Info-fontify-angle-bracketed-flag)
-  :init
-  (progn
-    (with-eval-after-load 'info
-      (require 'info+))
-    (setq Info-fontify-angle-bracketed-flag nil)))
+;; (use-package info-plus
+;;   :straight t
+;;   :defer 3
+;;   :defines (Info-fontify-angle-bracketed-flag)
+;;   :init
+;;   (progn
+;;     (with-eval-after-load 'info
+;;       (require 'info+))
+;;     (setq Info-fontify-angle-bracketed-flag nil)))
 
 (use-package avy
   :straight t
