@@ -44,7 +44,7 @@
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
-(defconst rk-theme-font-family "Iosevka")
+(defconst rk-theme-font-family "JetBrains Mono")
 
 (defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
@@ -64,7 +64,7 @@
      ((t :background ,default-background)))
 
     (fixed-pitch
-     ((t :family "Inconsolata" :height 100 :weight normal)))
+     ((t :family "Inconsolata" :height 120 :weight normal)))
 
     (internal-border
      ((t :background ,rk-theme-base-solarized-b2)))
