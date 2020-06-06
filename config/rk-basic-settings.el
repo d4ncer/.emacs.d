@@ -747,6 +747,9 @@ Optional arg JUSTIFY will justify comments and strings."
             "q" #'quit-window
             "RET" #'xref-quit-and-goto-xref))
 
+(use-package apex-mode
+  :straight (:host github :repo "ctomo/apex-mode" :branch "master"))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
