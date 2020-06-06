@@ -799,6 +799,11 @@ table tr.tr-even td {
   :after org
   :hook (org-mode . flyspell-mode))
 
+(use-package org-bullets
+  :straight t
+  :after org
+  :hook (org-mode . org-bullets-mode))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
