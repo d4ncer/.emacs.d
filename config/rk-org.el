@@ -164,6 +164,7 @@ Do not scheduled items or repeating todos."
       "f" '(org-fill-paragraph :wk "wrap text")
       "L" '(org-insert-link :wk "insert link")
       "t" '(rk-org--tag-headline-or-region :wk "edit tags")
+      "p" '(org-set-property :wk "set property")
       "s" '(org-schedule :wk "schedule"))
 
     (general-def :keymaps 'org-mode-map :states 'normal
@@ -316,6 +317,7 @@ Do not scheduled items or repeating todos."
 
     (rk-local-leader-def :keymaps 'org-agenda-mode-map
       "d" '(org-agenda-deadline :wk "deadline")
+      "p" '(org-agenda-set-property :wk "set property")
       "r" '(org-agenda-refile :wk "refile"))
 
     ;; Match projects that do not have a scheduled action or NEXT action.
