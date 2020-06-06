@@ -152,8 +152,8 @@ Do not scheduled items or repeating todos."
     (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
     (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
     (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
-    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
     (add-hook 'org-after-refile-insert-hook #'rk-org--remove-todo-tickler-or-reference)
+    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
 
     (setq org-default-notes-file (f-join org-directory "notes.org"))
     (rk-local-leader-def :keymaps 'org-mode-map
