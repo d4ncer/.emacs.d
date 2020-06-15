@@ -69,6 +69,9 @@
 
 (autoload 'magit-get-current-branch "magit-git")
 
+(defvar git-commit-prefix-delimiter ""
+  "The delimiter to use between the JIRA ticket prefix & the commit message.")
+
 (defun git-commit-jira-prefix--ticket-number ()
   (-when-let* ((branch (magit-get-current-branch))
                ((ticket) (s-match (rx bos (group (+ alpha) "-" (+ digit))) branch)))
@@ -89,7 +92,7 @@
       (unless (git-commit-jira-prefix--message-contains-ticket-number? ticket)
         (goto-char (point-min))
         (goto-char (line-beginning-position))
-        (insert (format "%s: " ticket))
+        (insert (format "%s%s " ticket git-commit-prefix-delimiter))
         (just-one-space)
         t))))
 
