@@ -284,7 +284,7 @@
   :straight t
   :after evil
   :config
-  (setq evil-collection-mode-list '(ivy dired company racer git-timemachine ibuffer help info))
+  (setq evil-collection-mode-list '(ivy dired company racer git-timemachine ibuffer help info docker))
   (evil-collection-init))
 
 (provide 'rk-evil)
