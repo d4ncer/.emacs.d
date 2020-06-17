@@ -83,6 +83,9 @@
 ;; Auto-indent on RET
 (define-key global-map (kbd "RET") #'comment-indent-new-line)
 
+;; Unbind M-o on global map
+(define-key global-map (kbd "M-o") nil)
+
 ;; Disable backup files
 (setq make-backup-files nil)
 
