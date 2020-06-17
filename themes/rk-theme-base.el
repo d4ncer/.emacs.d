@@ -381,6 +381,12 @@
     (org-link
      ((t :inherit link :weight normal)))
 
+    (org-roam-link
+     ((t :inherit org-link :underline ,rk-theme-base-solarized-b2 :foreground ,rk-theme-base-magenta)))
+
+    (org-roam-link-current
+     ((t :inherit org-link :underline ,rk-theme-base-solarized-b2 :foreground ,rk-theme-base-orange)))
+
     (org-done
      ((t
        :inherit default
@@ -394,13 +400,10 @@
      ((t :inherit default)))
 
     (org-date
-     ((t :weight light :underline t)))
+     ((t :weight light :underline ,rk-theme-base-solarized-b2)))
 
     (org-sexp-date
      ((t :weight light)))
-
-    (org-date
-     ((t :underline t)))
 
     (org-agenda-date-today
      ((t :foreground ,rk-theme-base-red :weight demibold)))
