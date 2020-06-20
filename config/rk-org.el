@@ -337,12 +337,31 @@
               (agenda ""))
              ((org-agenda-files (list rk-org-roam-dir))))
 
-            ("w" "Work"
-             ((agenda "")
+            ("W" "Work (old)"
+             ((tags-todo "inbox"
+                         ((org-agenda-overriding-header "To Refile")))
+              (agenda "")
+              (tags-todo "-someday-media-study/NEXT"
+                         ((org-agenda-overriding-header "Next Actions")
+                          (org-agenda-breadcrumbs-separator "")
+                          (org-agenda-prefix-format '((tags . "  %i %-15b")))))
+              (stuck "")
               (todo "WAITING"
                     ((org-agenda-overriding-header "Delegated / Follow Up")
                      (org-agenda-breadcrumbs-separator "")
                      (org-agenda-prefix-format '((todo . "  %i %-15b"))))))
+             ((org-agenda-tag-filter-preset '("-ignore"))
+              (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
+              (org-agenda-show-inherited-tags nil)
+              (org-agenda-dim-blocked-tasks nil)
+              (org-agenda-archives-mode nil)
+              (org-agenda-ignore-drawer-properties '(effort appt))))
+
+            ("w" "Work"
+             ((agenda "")
+              (todo "WAITING"
+                    ((org-agenda-overriding-header "Delegated / Follow Up")
+                     (org-agenda-breadcrumbs-separator ""))))
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-files (list rk-org-roam-dir))
               (org-agenda-show-inherited-tags nil)
