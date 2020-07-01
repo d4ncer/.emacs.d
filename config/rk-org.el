@@ -722,6 +722,7 @@ table tr.tr-even td {
     (general-define-key
      :states 'normal
      :keymaps 'local
+     "q" #'delete-window
      "n" #'org-next-link
      "p" #'org-previous-link))
   (defun rk-org--switch-to-org-roam-buffer ()
