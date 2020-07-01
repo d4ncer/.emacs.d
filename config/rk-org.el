@@ -780,6 +780,12 @@ table tr.tr-even td {
   :hook
   (org-mode . rk-org--setup-company-backends))
 
+(use-package verb
+  :straight t
+  :after org
+  :config
+  (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
