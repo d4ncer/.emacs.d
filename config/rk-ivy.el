@@ -184,6 +184,16 @@
     "sI" '(rk-counsel-i18n-project-region-or-symbol :wk "search i18n in project")
     "sF" '(rk-counsel-region-or-symbol :wk "search in dir")))
 
+(use-package all-the-icons-ivy-rich
+  :after (ivy all-the-icons)
+  :straight t
+  :init (all-the-icons-ivy-rich-mode 1))
+
+(use-package ivy-rich
+  :after (ivy)
+  :straight t
+  :init (ivy-rich-mode 1))
+
 ;; (use-package ivy-posframe
 ;;   :straight t
 ;;   :after ivy
