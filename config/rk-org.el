@@ -200,7 +200,9 @@
                                      (python . t)
                                      (javascript . t)
                                      (shell . t)
-                                     (sql . t)))
+                                     (sql . t)
+                                     (plantuml . t)
+                                     (verb . t)))
 
     (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
     (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol)))
