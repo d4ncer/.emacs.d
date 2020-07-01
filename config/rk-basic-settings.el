@@ -769,6 +769,12 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package apex-mode
   :straight (:host github :repo "ctomo/apex-mode" :branch "master"))
 
+(use-package plantuml-mode
+  :straight t
+  :custom
+  (plantuml-default-exec-mode 'executable)
+  (plantuml-executable-path "/usr/local/bin/plantuml"))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
