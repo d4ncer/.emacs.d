@@ -157,7 +157,7 @@
     (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
-    (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file-other-window)
+    (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
     (setq org-M-RET-may-split-line nil)
     (setq org-catch-invisible-edits 'smart)
