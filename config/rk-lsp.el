@@ -75,12 +75,17 @@
   :straight t
   :after lsp-mode
   :preface
+  (defun rk-lsp-ui--goto-impl ()
+    (interactive)
+    (if (gethash "implementationProvider" (lsp--server-capabilities))
+        (call-interactively #'lsp-ui-peek-find-implementation)
+      (call-interactively #'dumb-jump-go)))
   (defun rk-lsp-ui--setup-local-keybinds ()
     (general-define-key
      :states 'normal
      :keymaps 'local
      "R" #'lsp-ui-peek-find-references
-     "M" #'lsp-ui-peek-find-implementation))
+     "M" #'rk-lsp-ui--goto-impl))
   :hook
   (lsp-mode . rk-lsp-ui--setup-local-keybinds)
   :general
@@ -116,6 +121,12 @@
      "C-/" #'lsp-ivy-workspace-symbol))
   :hook
   (lsp-mode . rk-lsp-ivy--setup-local-keybinds))
+
+(use-package dumb-jump
+  :straight t
+  :custom
+  (dumb-jump-selector 'ivy)
+  (dumb-jump-force-searcher 'rg))
 
 (provide 'rk-lsp)
 
