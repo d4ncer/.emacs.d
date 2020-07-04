@@ -789,6 +789,9 @@ table tr.tr-even td {
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
+(use-package ox-slack
+  :straight t)
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
