@@ -441,8 +441,7 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
     (setq version-control t)))
 
-(use-package highlight
-  :straight (:host nil :repo "git@framagit.org:steckerhalter/highlight.el.git" :branch "master"))
+(use-package highlight)
 
 (use-package select
   :config
