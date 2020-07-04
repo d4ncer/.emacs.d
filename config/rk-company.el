@@ -111,21 +111,6 @@
                   (ElispFeature  . ,(all-the-icons-material "stars"                    :height 0.8 :face 'all-the-icons-orange))
                   (ElispFace     . ,(all-the-icons-material "format_paint"             :height 0.8 :face 'all-the-icons-pink)))))
 
-(use-package company-lsp
-  :straight t
-  :after (company lsp-mode)
-  :defines company-lsp
-  :preface
-  (progn
-    (defun rk-company--lsp-mode-p ()
-      (and (bound-and-true-p lsp-mode)
-           (bound-and-true-p company-mode)))
-    (defun rk-company--setup-lsp-backend ()
-      (when (rk-company--lsp-mode-p)
-        (set (make-local-variable 'company-backends) '(company-files company-lsp)))))
-  :config
-  (add-hook 'company-mode-hook #'rk-company--setup-lsp-backend))
-
 (provide 'rk-company)
 
 ;;; rk-company.el ends here

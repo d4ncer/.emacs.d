@@ -21,6 +21,12 @@
 (use-package lsp-mode
   :straight t
   :preface
+  (defun rk-lsp--lsp-company-mode-p ()
+    (and (bound-and-true-p lsp-mode)
+         (bound-and-true-p company-mode)))
+  (defun rk-lsp--setup-company-backend ()
+    (when (rk-lsp--lsp-company-mode-p)
+      (set (make-local-variable 'company-backends) '(company-files company-capf))))
   (defun rk-lsp--maybe-disable-highlight-thing ()
     (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
       (highlight-thing-mode -1)))
@@ -54,8 +60,9 @@
                                 (deprecated :strike-through t)))
   :config
   (progn
-
     (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
+    (with-eval-after-load 'company
+      (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend))
     (rk-local-leader-def :keymaps 'lsp-mode-map
       "l" '(:ignore t :wk "LSP")
       "l." '(lsp-format-buffer :wk "format")
