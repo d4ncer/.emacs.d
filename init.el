@@ -75,6 +75,11 @@
 (paths-initialise)
 (add-to-list 'custom-theme-load-path paths-themes-directory)
 
+;; Up sub-process throughput data size
+;; https://github.com/emacs-mirror/emacs/commit/cc78faee7d23dd0433ba537818a68cbd20fa52a3
+
+(setq read-process-output-max (* 1024 1024))
+
 ;; Aggressively load in org-plus-contrib to avoid shadowing
 
 (straight-use-package 'org-plus-contrib)
