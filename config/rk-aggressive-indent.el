@@ -23,6 +23,7 @@
     sql-mode
     restclient-mode
     rk-web-js-mode
+    graphql-mode
     json-mode
     php-mode
     rnc-mode
