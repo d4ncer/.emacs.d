@@ -750,14 +750,6 @@ table tr.tr-even td {
       :file-name ,(format "%s-${slug}" rk-org-roam-temporal-prefix)
       :head "#+TITLE: ${title}
 #+CATEGORY: ${category}\n"
-      :unnarrowed t)
-     ("t" "Add a [t]odo" plain (function org-roam--capture-get-point)
-      "%?"
-      :file-name ,(format "%s-${slug}" rk-org-roam-temporal-prefix)
-      :head "#+TITLE: ${title}
-#+CATEGORY: ${category}
-
-* TODO "
       :unnarrowed t)))
   :init
   (rk-leader-def
