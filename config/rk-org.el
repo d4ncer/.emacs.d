@@ -19,6 +19,7 @@
 (require 's)
 (require 'dash)
 (require 'subr-x)
+(require 'transient)
 
 (autoload 'evil-define-key "evil")
 
@@ -427,7 +428,7 @@
   :config
   (progn
     (rk-local-leader-def :keymaps 'org-mode-map
-      "c" '(org-archive-subtree :wk "archive"))
+      "z" '(org-archive-subtree :wk "archive"))
     (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags)))
 
 (use-package org-src
@@ -481,6 +482,13 @@
   (progn
     (autoload 'org-remove-empty-drawer-at "org")
 
+    (define-transient-command org-clock-transient ()
+      "Org clock transient"
+      ["Actions"
+       ("i" "In" org-clock-in)
+       ("o" "Out" org-clock-out)
+       ("g" "Goto" org-clock-goto)])
+
     (defun rk-org--remove-empty-clock-drawers ()
       "Remove empty clock drawers at point."
       (save-excursion
@@ -496,6 +504,8 @@
     (setq org-clock-report-include-clocking-task t)
     (setq org-clock-out-remove-zero-time-clocks t)
     (setq org-clock-persist-file (f-join org-directory ".org-clock-save"))
+    (rk-local-leader-def :keymaps 'org-mode-map
+      "c" '(org-clock-transient :wk "clock"))
 
     (org-clock-persistence-insinuate)
     (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t)))
