@@ -75,6 +75,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst rk-org--reference-file (f-join paths--gtd-dir "reference.org"))
 (defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
 
+(defconst paths--dropbox-dir "~/Dropbox")
 
 (provide 'paths)
 

@@ -25,7 +25,7 @@
 
 (defvar org-directory "~/org")
 (defconst rk-org-gtd-dir (f-join org-directory "gtd"))
-(defconst rk-org-roam-dir (f-join org-directory "roam"))
+(defconst rk-org-roam-dir (f-join paths--dropbox-dir "org"))
 (defconst rk-org-roam-temporal-prefix "%<%Y%m%d%H%M%S>")
 
 (use-package org
@@ -753,7 +753,7 @@ table tr.tr-even td {
          (find-file . rk-org--roam-maybe-open-buffer)
          (org-roam-backlinks-mode .  rk-org--setup-roam-backlinks-local-keybinds))
   :custom
-  (org-roam-directory (f-join org-directory "roam"))
+  (org-roam-directory rk-org-roam-dir)
   (org-roam-capture-templates
    `(("n" "Add a [n]ote" plain (function org-roam--capture-get-point)
       "%?"
