@@ -507,9 +507,9 @@
     (setq org-clock-in-resume t)
     (setq org-clock-report-include-clocking-task t)
     (setq org-clock-out-remove-zero-time-clocks t)
-    (setq org-clock-persist-file (f-join org-directory ".org-clock-save"))
-    (rk-local-leader-def :keymaps 'org-mode-map
-      "c" '(org-clock-transient :wk "clock"))
+    (setq org-clock-persist-file (f-join rk-org-roam-dir ".org-clock-save"))
+    (rk-leader-def
+      "oC" '(org-clock-transient :wk "clock"))
 
     (org-clock-persistence-insinuate)
     (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t)))
