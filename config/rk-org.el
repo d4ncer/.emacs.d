@@ -34,10 +34,14 @@
   :general
   (:keymaps 'org-mode-map
             "C-c C-." #'org-time-stamp-inactive
+            "C-n" #'org-next-visible-heading
+            "C-p" #'org-previous-visible-heading
             "M-p"     #'org-metaup
             "M-n"     #'org-metadown
             "C-c c"   #'org-columns)
   (:keymaps 'org-mode-map :states '(normal visual motion)
+            "C-n" #'org-next-visible-heading
+            "C-p" #'org-previous-visible-heading
             "?" #'counsel-org-goto
             "gb" #'org-mark-ring-goto)
   :defines (org-state
