@@ -19,6 +19,8 @@
 (require 'flycheck)
 (require 'lsp)
 (require 'ht)
+(require 'rk-utils)
+(require 'projectile)
 
 (defconst rk-web--node-js-lts-version "v10.15.1"
   "The version of Node to use by default if .nvmrc isn't found.")
@@ -153,45 +155,40 @@
 
 (use-package prettier-js
   :straight t
-  :after rk-web-modes
+  :after (rk-web-modes typescript-mode)
   :preface
-  (progn
-    (defun rk-web--prettier-enable-p ()
-      "Enable prettier if no .prettierdisable is found in project root."
-      (-when-let (root (projectile-project-p))
-        (not (f-exists? (f-join root ".prettierdisable")))))
+  (defun rk-web--prettier-enable-p ()
+    "Enable prettier if no .prettierdisable is found in project root."
+    (-when-let (root (projectile-project-p))
+      (not (f-exists? (f-join root ".prettierdisable")))))
 
-    (defun rk-web--init-prettier-config ()
-      "Set up prettier config & binary for file if applicable."
-      (-if-let* ((root (projectile-project-p))
-                 (prettier-bin (f-join root "node_modules/.bin/prettier"))
-                 (prettier-bin-p (f-exists? prettier-bin))
-                 (prettier-config (s-trim (shell-command-to-string
-                                           (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name)))))))
-          (progn
-            (setq-local prettier-js-command prettier-bin)
-            (setq-local prettier-js-args (list "--config" prettier-config)))
-        (setq-local prettier-js-args rk-web--prettier-default-args)))
-
-    (defun rk-web--init-prettier ()
-      (when (rk-web--prettier-enable-p)
+  (defun rk-web--init-prettier-config ()
+    "Set up prettier config & binary for file if applicable."
+    (-if-let* ((root (projectile-project-p))
+               (prettier-bin (f-join root "node_modules/.bin/prettier"))
+               (prettier-bin-p (f-exists? prettier-bin))
+               (prettier-config (s-trim (shell-command-to-string
+                                         (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name)))))))
         (progn
-          (rk-local-leader-def :keymaps 'rk-web-js-mode-map
-            "." '(prettier-js :wk "format"))
-          (rk-local-leader-def :keymaps 'rk-web-html-mode-map
-            "." '(prettier-js :wk "format"))
-          (rk-local-leader-def :keymaps 'rk-web-css-mode-map
-            "." '(prettier-js :wk "format"))
-          (rk-web--init-prettier-config)
-          (prettier-js-mode +1))))
+          (setq-local prettier-js-command prettier-bin)
+          (setq-local prettier-js-args (list "--config" prettier-config)))
+      (setq-local prettier-js-args rk-web--prettier-default-args)))
 
-    (defun rk-web--maybe-setup-prettier ()
-      (when (and (derived-mode-p 'web-mode)
-                 (-contains-p '("javascript" "jsx" "html" "css") web-mode-content-type))
-        (rk-web--init-prettier))))
+  (defun rk-web--init-prettier ()
+    (when (rk-web--prettier-enable-p)
+      (progn
+        (rk-web--init-prettier-config)
+        (prettier-js-mode +1))))
+
+  (defun rk-web--maybe-setup-prettier ()
+    (when (or (equal major-mode 'typescript-mode)
+              (and (derived-mode-p 'web-mode)
+                   (-contains-p '("javascript" "jsx" "html" "css") web-mode-content-type)))
+      (rk-web--init-prettier)))
 
   :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier))
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier)
+  (add-hook 'typescript-mode-hook #'rk-web--maybe-setup-prettier))
 
 (use-package add-node-modules-path
   :straight t
@@ -211,6 +208,7 @@
 
 (use-package fnm
   :after rk-web-modes
+  :commands (fnm-use fnm-use-for-buffer)
   :preface
   (defun rk-web--maybe-use-fnm ()
     (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
