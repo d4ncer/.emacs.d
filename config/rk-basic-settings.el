@@ -671,7 +671,7 @@ Optional arg JUSTIFY will justify comments and strings."
     ;; (let* ((trp (rx "*" (or "Cargo" "go" "Racer" "restclient" "lsp" "Ledger" "docker") (zero-or-more anything) "*"))
     ;;        (trp-1? (if (s-matches-p trp "*docker containers*") "YES" "NO")))
     ;;   (message trp-1?))
-    (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
+    (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
     (popwin-mode 1)))
 
 (use-package keychain-environment
