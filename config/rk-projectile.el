@@ -67,7 +67,6 @@
             "build"
             "dist"
             "node_modules"
-            "flow-typed/npm"
             "vendor"
             "straight/repos"
             "target"))

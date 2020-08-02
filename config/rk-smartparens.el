@@ -176,8 +176,6 @@
       (sp-local-pair "<" nil :when '(rk-smartparens--web-mode-is-code-context)))
 
     (sp-with-modes 'rk-web-js-mode
-      ;; Flow strict types
-      (sp-local-pair "{|" "|}" :post-handlers '(("||\n[i]" "RET") ("| " "SPC")))
       (sp-local-pair "(" ")" :pre-handlers '(:add rk-smartparens--web-mode-format-paren-after-keyword)))
 
     (sp-with-modes 'org-mode

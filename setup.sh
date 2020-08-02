@@ -45,8 +45,8 @@ fi
 # JS setup
 if (exists npm && exists node); then
     echo '--> Installing global NPM binaries...'
-    npm install -g eslint flow prettier eslint-config-airbnb eslint-config-prettier \
-        eslint-plugin-flowtype eslint-plugin-import eslint-plugin-jsx-a11y \
+    npm install -g eslint  prettier eslint-config-airbnb eslint-config-prettier \
+        eslint-plugin-import eslint-plugin-jsx-a11y \
         eslint-plugin-prettier eslint-plugin-react
     echo '--> Done!'
 else
