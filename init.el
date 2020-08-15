@@ -168,6 +168,8 @@
 
 ;;; Post init setup.
 
+(use-package rk-envrc)
+
 (unless (file-directory-p org-directory)
   (when (y-or-n-p (format "`org-directory' does not exist. Create at %s? " org-directory))
     (mkdir org-directory)))
