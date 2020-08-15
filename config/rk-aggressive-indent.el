@@ -14,7 +14,6 @@
 (use-package aggressive-indent
   :straight t
   :commands (aggressive-indent-mode)
-  :defer 3
   :config
   (add-hook 'emacs-lisp-mode-hook #'aggressive-indent-mode))
 
