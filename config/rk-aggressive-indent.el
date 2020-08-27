@@ -11,40 +11,12 @@
 (eval-when-compile
   (require 'use-package))
 
-(defconst rk-aggressive-indent-exclude-modes
-  '(toml-mode
-    go-mode
-    tuareg-mode
-    haskell-mode
-    dockerfile-mode
-    diff-auto-refine-mode
-    csharp-mode
-    typescript-mode
-    sql-mode
-    restclient-mode
-    rk-web-js-mode
-    graphql-mode
-    json-mode
-    php-mode
-    rnc-mode
-    rust-mode
-    jsonnet-mode
-    scala-mode)
-  "List of modes to be excluded from aggressive indent.")
-
 (use-package aggressive-indent
   :straight t
-  :commands (global-aggressive-indent-mode)
+  :commands (aggressive-indent-mode)
   :defer 3
-  :preface
-  (defun rk-extend-aggressive-indent-exclude-modes ()
-    "Add select modes to be excluded by aggressive indent."
-    (dolist (item rk-aggressive-indent-exclude-modes)
-      (add-to-list 'aggressive-indent-excluded-modes item)))
   :config
-  (progn
-    (rk-extend-aggressive-indent-exclude-modes)
-    (global-aggressive-indent-mode +1)))
+  (add-hook 'emacs-lisp-mode-hook #'aggressive-indent-mode))
 
 (provide 'rk-aggressive-indent)
 
