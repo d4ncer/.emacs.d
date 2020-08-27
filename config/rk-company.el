@@ -38,7 +38,7 @@
     (setq company-idle-delay 0.3)
     (setq company-require-match nil)
 
-    (dolist (map (list company-active-map company-search-map company-filter-map))
+    (dolist (map (list company-active-map company-search-map))
       (general-def map "C-j" #'company-select-next)
       (general-def map "C-k" #'company-select-previous)
       (general-def map "C-h" #'company-show-doc-buffer)
