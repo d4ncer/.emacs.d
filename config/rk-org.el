@@ -164,6 +164,7 @@
 
     (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
+    (setq org-image-actual-width nil)
     (setq org-M-RET-may-split-line nil)
     (setq org-catch-invisible-edits 'smart)
     (setq org-cycle-separator-lines 1)
