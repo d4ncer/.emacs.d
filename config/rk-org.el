@@ -343,7 +343,8 @@
           '(("z" "Roam"
              ((tags-todo "inbox")
               (agenda ""))
-             ((org-agenda-files (list rk-org-roam-dir))))
+             ((org-agenda-files (list rk-org-roam-dir))
+              (org-agenda-start-day "-1d")))
 
             ("W" "Work (old)"
              ((tags-todo "inbox"
@@ -371,6 +372,8 @@
                     ((org-agenda-overriding-header "Delegated / Follow Up")
                      (org-agenda-breadcrumbs-separator ""))))
              ((org-agenda-tag-filter-preset '("-ignore"))
+              (org-agenda-start-day "-1d")
+              (org-agenda-show-log t)
               (org-agenda-files (list rk-org-roam-dir))
               (org-agenda-show-inherited-tags nil)
               (org-agenda-dim-blocked-tasks nil)
