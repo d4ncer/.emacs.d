@@ -84,6 +84,15 @@
              counsel-projectile-switch-project
              counsel-projectile-switch-to-buffer
              counsel-projectile-rg)
+
+  :custom
+  (counsel-projectile-switch-project-action 'magit-status)
+
+  :preface
+  (defun rk-counsel-projectile--ad-read-args (fn &optional options)
+    (funcall fn (if current-prefix-arg
+                    (read-string "rg args: " options)
+                  options)))
   :init
   (rk-leader-def
     "pf" '(counsel-projectile-find-file :wk "find file (project)")
@@ -91,9 +100,10 @@
     "pb" '(counsel-projectile-switch-to-buffer :wk "switch buffer (project)")
     "/"  '(counsel-projectile-rg :wk "search (project)"))
 
+
   :config
   (progn
-    (setq counsel-projectile-switch-project-action 'magit-status)
+    (advice-add #'counsel-projectile-rg :around #'rk-counsel-projectile--ad-read-args)
     (counsel-projectile-mode +1)))
 
 (provide 'rk-projectile)
