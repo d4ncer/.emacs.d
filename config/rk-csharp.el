@@ -13,6 +13,7 @@
   :straight t
   :custom
   (lsp-csharp-server-path "/usr/local/bin/omnisharp")
+  ;; (lsp-csharp-server-path "~/bin/omnisharp")
   :hook (csharp-mode . lsp))
 
 (use-package csproj-mode
