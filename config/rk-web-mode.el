@@ -195,10 +195,9 @@
 (use-package add-node-modules-path
   :straight t
   :after rk-web-modes
-  :config
-  (progn
-    (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
-    (add-hook 'rk-web-js-mode-hook #'add-node-modules-path)))
+  :init
+  (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
+  (add-hook 'rk-web-js-mode-hook #'add-node-modules-path))
 
 (use-package stylefmt
   :straight t
