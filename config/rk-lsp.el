@@ -31,8 +31,7 @@
     (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
       (highlight-thing-mode -1)))
   (defun rk-lsp--maybe-setup-organize-imports ()
-    (when (and (gethash "codeActionProvider" (lsp--server-capabilities))
-               (eq major-mode 'go-mode))
+    (when (and (gethash "codeActionProvider" (lsp--server-capabilities)))
       (add-hook 'before-save-hook #'lsp-organize-imports nil 'local)))
   (defun rk-lsp--maybe-setup-format-on-save ()
     (when (and (gethash "documentFormattingProvider" (lsp--server-capabilities))
@@ -59,28 +58,28 @@
   (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
   (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
   (lsp-keymap-prefix "C-l")
-  :custom
+  (lsp-eslint-server-command '("node" "/home/rk/.local/eslint-server/server/out/eslintServer.js" "--stdio"))
   (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-theme-base-solarized-b1)
                                 (deprecated :strike-through t)))
+  :init
+  (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
+  (rk-local-leader-def :keymaps 'lsp-mode-map
+    "l" '(:ignore t :wk "LSP")
+    "l." '(lsp-format-buffer :wk "format")
+
+    "li" '(lsp-ui-imenu :wk "imenu")
+
+    "lr" '(lsp-rename :wk "rename")
+
+    "ls" '(:ignore t :wk "session / workspace")
+    "lsd" '(lsp-describe-session :wk "describe")
+    "lsr" '(lsp-restart-workspace :wk "restart")
+    "lsa" '(lsp-workspace-folders-add :wk "add folder")
+    "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
+    "lss" '(lsp-workspace-folders-switch :wk "switch folder"))
   :config
-  (progn
-    (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
-    (with-eval-after-load 'company
-      (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend))
-    (rk-local-leader-def :keymaps 'lsp-mode-map
-      "l" '(:ignore t :wk "LSP")
-      "l." '(lsp-format-buffer :wk "format")
-
-      "li" '(lsp-ui-imenu :wk "imenu")
-
-      "lr" '(lsp-rename :wk "rename")
-
-      "ls" '(:ignore t :wk "session / workspace")
-      "lsd" '(lsp-describe-session :wk "describe")
-      "lsr" '(lsp-restart-workspace :wk "restart")
-      "lsa" '(lsp-workspace-folders-add :wk "add folder")
-      "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
-      "lss" '(lsp-workspace-folders-switch :wk "switch folder"))))
+  (with-eval-after-load 'company
+    (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend)))
 
 (use-package lsp-ui
   :straight t
