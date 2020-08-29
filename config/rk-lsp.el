@@ -43,7 +43,11 @@
      :states 'normal
      :keymaps 'local
      "gd" #'lsp-find-definition
-     "K" #'lsp-describe-thing-at-point))
+     "K" #'lsp-describe-thing-at-point)
+    (general-define-key
+     :states 'insert
+     :keymaps 'local
+     "C-." #'company-complete))
   (defun rk-lsp--setup-lsp ()
     (rk-lsp--maybe-setup-organize-imports)
     (rk-lsp--maybe-disable-highlight-thing)
