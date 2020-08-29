@@ -155,7 +155,7 @@
 
 (use-package prettier-js
   :straight t
-  :after (rk-web-modes typescript-mode)
+  :defer t
   :preface
   (defun rk-web--prettier-enable-p ()
     "Enable prettier if no .prettierdisable is found in project root."
@@ -182,11 +182,13 @@
 
   (defun rk-web--maybe-setup-prettier ()
     (when (or (equal major-mode 'typescript-mode)
+              (equal major-mode 'graphql-mode)
               (and (derived-mode-p 'web-mode)
                    (-contains-p '("javascript" "jsx" "html" "css") web-mode-content-type)))
       (rk-web--init-prettier)))
 
-  :config
+  :init
+  (add-hook 'graphql-mode-hook #'rk-web--maybe-setup-prettier)
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier)
   (add-hook 'typescript-mode-hook #'rk-web--maybe-setup-prettier))
 
