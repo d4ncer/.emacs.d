@@ -14,7 +14,7 @@
 (use-package aggressive-indent
   :straight t
   :commands (aggressive-indent-mode)
-  :config
+  :init
   (add-hook 'emacs-lisp-mode-hook #'aggressive-indent-mode))
 
 (provide 'rk-aggressive-indent)
