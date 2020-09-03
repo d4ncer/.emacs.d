@@ -32,19 +32,12 @@
 
   :init
   (add-hook 'after-init-hook #'global-company-mode)
+  :custom
+  (company-idle-delay 0.3)
+  (company-require-match nil)
 
   :config
-  (progn
-    (setq company-idle-delay 0.3)
-    (setq company-require-match nil)
-
-    (dolist (map (list company-active-map company-search-map))
-      (general-def map "C-j" #'company-select-next)
-      (general-def map "C-k" #'company-select-previous)
-      (general-def map "C-h" #'company-show-doc-buffer)
-      (general-def map "C-w" nil))
-
-    (add-hook 'company-mode-hook #'rk-company--set-company-vars)))
+  (add-hook 'company-mode-hook #'rk-company--set-company-vars))
 
 (use-package company-dabbrev
   :after company
