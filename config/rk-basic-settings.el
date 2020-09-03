@@ -771,8 +771,8 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package plantuml-mode
   :straight t
   :custom
-  (plantuml-default-exec-mode 'executable)
-  (plantuml-executable-path "/usr/local/bin/plantuml"))
+  (plantuml-default-exec-mode 'jar)
+  (plantuml-jar-path "/Users/raghuvirkasturi/.local/jars/plantuml.jar"))
 
 (provide 'rk-basic-settings)
 
