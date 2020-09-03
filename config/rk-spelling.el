@@ -11,17 +11,13 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'general)
-(require 'flyspell)
-
 (use-package ispell
   :straight t
+  :custom
+  (ispell-silently-savep t)
   :config
-  (progn
-    (add-hook 'prog-mode-hook #'flyspell-prog-mode)
-    (when (executable-find "aspell")
-      (setq ispell-program-name "aspell"))
-    (setq ispell-silently-savep t)))
+  (when (executable-find "aspell")
+    (setq ispell-program-name "aspell")))
 
 (use-package flyspell-correct-ivy
   :straight t
