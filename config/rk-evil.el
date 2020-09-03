@@ -121,26 +121,12 @@
                     (?f . evil-surround-function)))
     (global-evil-surround-mode +1)))
 
-(use-package evil-multiedit
-  :after evil
+(use-package evil-iedit-state
   :straight t
-  :commands (evil-multiedit-match-all)
-  :general
-  (:keymaps 'evil-multiedit-state-map
-            "RET" #'evil-multiedit-toggle-or-restrict-region
-            "C" nil
-            "S" #'evil-multiedit--substitute
-            "C-j" #'evil-multiedit-match-symbol-and-next
-            "C-k" #'evil-multiedit-match-symbol-and-prev)
-  (:states 'motion
-           "RET" #'evil-multiedit-toggle-or-restrict-region)
-  (:keymaps 'evil-multiedit-insert-state-map
-            "C-j" #'evil-multiedit-match-symbol-and-next
-            "C-k" #'evil-multiedit-match-symbol-and-prev)
+  :after evil
   :init
   (rk-leader-def
-    "se" '(evil-multiedit-match-all :wk "iedit - all matches")
-    "sp" '(evil-multiedit-match-symbol-and-next :wk "iedit - match current / next")))
+    "se" '(evil-iedit-state/iedit-mode :wk "iedit - all matches")))
 
 (use-package evil-ex
   :defer t
