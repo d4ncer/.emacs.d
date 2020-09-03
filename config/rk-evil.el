@@ -269,8 +269,10 @@
 (use-package evil-collection
   :straight t
   :after evil
+  :custom
+  (evil-collection-company-use-tng nil)
+  (evil-collection-mode-list '(ivy dired racer company git-timemachine ibuffer help info docker))
   :config
-  (setq evil-collection-mode-list '(ivy dired company racer git-timemachine ibuffer help info docker))
   (evil-collection-init))
 
 (provide 'rk-evil)
