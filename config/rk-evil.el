@@ -142,26 +142,6 @@
     "se" '(evil-multiedit-match-all :wk "iedit - all matches")
     "sp" '(evil-multiedit-match-symbol-and-next :wk "iedit - match current / next")))
 
-(use-package evil-ex
-  :defer t
-  :commands (evil-ex-define-cmd)
-  :preface
-  (progn
-    (defun rk-evil-flyspell-on ()
-      "Enable flyspell."
-      (interactive)
-      (turn-on-flyspell))
-
-    (defun rk-evil-flyspell-off ()
-      "Disable flyspell."
-      (interactive)
-      (turn-off-flyspell)))
-
-  :config
-  (progn
-    (evil-ex-define-cmd "nospell" #'rk-evil-flyspell-off)
-    (evil-ex-define-cmd "spell" #'rk-evil-flyspell-on)))
-
 (use-package evil-ediff
   :straight t
   :after ediff)
