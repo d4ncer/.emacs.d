@@ -21,30 +21,23 @@
   (:keymaps 'company-active-map
             "C-<return>" #'company-complete-selection)
 
-  :preface
-  (defun rk-company--set-company-vars ()
-    (setq company-minimum-prefix-length 3)
-    (setq company-tooltip-align-annotations t))
-
-  :commands (company-select-next
-             company-select-previous
+  :commands (company-select-next-or-abort
+             company-select-previous-or-abort
              company-show-doc-buffer)
+  :custom
+  (company-tooltip-align-annotations t)
+  (company-idle-delay 0)
+  (company-require-match nil)
 
   :init
   (add-hook 'after-init-hook #'global-company-mode)
 
   :config
-  (progn
-    (setq company-idle-delay 0.3)
-    (setq company-require-match nil)
-
-    (dolist (map (list company-active-map company-search-map))
-      (general-def map "C-j" #'company-select-next)
-      (general-def map "C-k" #'company-select-previous)
-      (general-def map "C-h" #'company-show-doc-buffer)
-      (general-def map "C-w" nil))
-
-    (add-hook 'company-mode-hook #'rk-company--set-company-vars)))
+  (dolist (map (list company-active-map company-search-map company-mode-map))
+    (general-def map "C-j" #'company-select-next-or-abort)
+    (general-def map "C-k" #'company-select-previous-or-abort)
+    (general-def map "C-h" #'company-show-doc-buffer)
+    (general-def map "C-w" nil)))
 
 (use-package company-dabbrev
   :after company
