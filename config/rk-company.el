@@ -15,7 +15,8 @@
 
 (use-package company
   :straight t
-  :commands (global-company-mode)
+  :demand t
+  :hook (after-init . global-company-mode)
 
   :general
   (:keymaps 'company-active-map
@@ -29,11 +30,8 @@
   (company-idle-delay 0)
   (company-require-match nil)
 
-  :init
-  (add-hook 'after-init-hook #'global-company-mode)
-
   :config
-  (dolist (map (list company-active-map company-search-map company-mode-map))
+  (dolist (map (list company-active-map company-search-map))
     (general-def map "C-j" #'company-select-next-or-abort)
     (general-def map "C-k" #'company-select-previous-or-abort)
     (general-def map "C-h" #'company-show-doc-buffer)
@@ -49,8 +47,7 @@
 (use-package company-box
   :straight t
   :after company
-  :hook
-  (company-mode . company-box-mode)
+  :hook (company-mode . company-box-mode)
   :preface
   (defun rk-company-box-icons--yasnippet (candidate)
     (when (get-text-property 0 'yas-annotation candidate)
