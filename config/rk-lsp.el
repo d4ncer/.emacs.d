@@ -59,7 +59,7 @@
   (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
   (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
   (lsp-keymap-prefix "C-l")
-  (lsp-eslint-server-command '("node" "/home/rk/.local/eslint-server/server/out/eslintServer.js" "--stdio"))
+  ;; (lsp-eslint-server-command '("node" "/home/rk/.local/eslint-server/server/out/eslintServer.js" "--stdio"))
   (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-theme-base-solarized-b1)
                                 (deprecated :strike-through t)))
   :init
