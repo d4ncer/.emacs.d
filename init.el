@@ -18,6 +18,10 @@
 (unless noninteractive
   (message "Loading %s..." load-file-name))
 
+;; Set frame resize behaviour
+
+(setq frame-resize-pixelwise t)
+
 ;; Bootstrap straight
 
 (setq package-enable-at-startup nil)
