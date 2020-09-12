@@ -550,6 +550,11 @@
     (scala-font-lock:var-face
      ((t :inherit font-lock-variable-name-face)))
 
+    ;; Tide
+
+    (tide-file
+     ((t :inherit bold :foreground ,rk-theme-base-magenta)))
+
     ;; Company
 
     (company-template-field
