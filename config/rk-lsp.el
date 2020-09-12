@@ -54,6 +54,7 @@
     (rk-lsp--setup-local-keybinds))
   :custom
   (lsp-prefer-flymake nil)
+  (lsp-enable-snippet t)
   (lsp-enable-on-type-formatting nil)
   (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
   (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
