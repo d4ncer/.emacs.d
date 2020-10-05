@@ -49,7 +49,6 @@
     (setq web-mode-enable-auto-quoting nil)
 
     (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
-    (add-to-list 'web-mode-content-types '("jsx" . "\\.jsx?\\'"))
 
     ;; Change default indentation behaviour.
 
@@ -75,7 +74,8 @@
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
-         ("\\.html\\'" . rk-web-html-mode))
+         ("\\.html\\'" . rk-web-html-mode)
+         ("\\.tsx\\'" . rk-web-tsx-mode))
 
   :preface
   (defun rk-web--add-custom-eslint-rules-dir ()
@@ -103,6 +103,7 @@
     (with-eval-after-load 'flycheck
       (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
       (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
+      (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
       (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
       (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
       (flycheck-add-mode 'html-tidy 'rk-web-html-mode))))
@@ -127,7 +128,7 @@
        ((derived-mode-p 'rk-web-html-mode 'html-mode 'nxml-mode)
         (emmet-mode +1))
 
-       ((and (derived-mode-p 'rk-web-js-mode)
+       ((and (derived-mode-p 'rk-web-js-mode 'rk-web-tsx-mode)
              (rk-web--react-in-buffer-p))
         (progn
           (setq-local emmet-expand-jsx-className? t)
@@ -155,7 +156,6 @@
 
 (use-package prettier-js
   :straight t
-  :defer t
   :preface
   (defun rk-web--prettier-enable-p ()
     "Enable prettier if no .prettierdisable is found in project root."
@@ -190,6 +190,7 @@
   :init
   (add-hook 'graphql-mode-hook #'rk-web--maybe-setup-prettier)
   (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier)
+  (add-hook 'rk-web-tsx-mode-hook #'rk-web--maybe-setup-prettier)
   (add-hook 'typescript-mode-hook #'rk-web--maybe-setup-prettier))
 
 (use-package add-node-modules-path
