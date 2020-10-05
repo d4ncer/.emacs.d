@@ -44,7 +44,7 @@
 (defconst rk-theme-base-dark-grey "#747369")
 (defconst rk-theme-base-light-grey "#e8e6df")
 
-(defconst rk-theme-font-family "JetBrains Mono")
+(defconst rk-theme-font-family "Fira Code")
 
 (defun rk-theme-base-make-theme (default-foreground default-background)
   `((default
@@ -55,7 +55,7 @@
         :width narrow
         :spacing 90
         :family ,rk-theme-font-family
-        :height 120)))
+        :height 140)))
 
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
@@ -64,7 +64,7 @@
      ((t :background ,default-background)))
 
     (fixed-pitch
-     ((t :family "Inconsolata" :height 120 :weight normal)))
+     ((t :family "JetBrains Mono" :height 140 :weight normal)))
 
     (internal-border
      ((t :background ,rk-theme-base-solarized-b2)))
