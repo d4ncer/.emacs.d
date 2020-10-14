@@ -26,3 +26,6 @@ opam-user-setup.el
 
 # Session stuff
 session.*
+
+# Org
+org-roam.db
