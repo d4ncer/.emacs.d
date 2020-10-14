@@ -66,8 +66,6 @@
                 company-box-backends-colors nil
                 company-box-max-candidates 50
                 company-box-icons-alist 'company-box-icons-all-the-icons
-                company-box-icons-functions
-                '(rk-company-box-icons--yasnippet company-box-icons--lsp rk-company-box-icons--elisp company-box-icons--acphp)
                 company-box-icons-all-the-icons
                 `((Unknown       . ,(all-the-icons-material "find_in_page"             :height 0.8 :face 'all-the-icons-purple))
                   (Text          . ,(all-the-icons-material "text_fields"              :height 0.8 :face 'all-the-icons-green))
