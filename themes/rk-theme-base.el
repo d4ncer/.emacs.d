@@ -560,23 +560,11 @@
     (company-template-field
      ((t :inherit highlight)))
 
-    (company-box-annotation
-     ((t :foreground ,rk-theme-base-orange)))
+    (company-tooltip
+     ((t :background ,rk-theme-base-solarized-b3)))
 
-    (company-box-background
-     ((t :background ,rk-theme-base-solarized-b2)))
-
-    (company-box-candidate
-     ((t :foreground ,default-foreground)))
-
-    (company-box-scrollbar
-     ((t :foreground ,default-foreground :background ,rk-theme-base-violet)))
-
-    (company-box-selection
-     ((t :foreground ,rk-theme-base-offwhite :background ,rk-theme-base-violet)))
-
-    (company-tooltip-common-selection
-     ((t :inherit company-box-selection)))
+    (company-tooltip-selection
+     ((t :background ,rk-theme-base-solarized-b3 :foreground ,rk-theme-base-violet)))
 
     ;; vterm
 
@@ -603,6 +591,8 @@
 
     (vterm-color-yellow
      ((t :foreground ,rk-theme-base-yellow)))
+    (company-tooltip-annotation-selection
+     ((t :inherit commpany-tooltip-selection)))
 
     ;; Misc faces
 
