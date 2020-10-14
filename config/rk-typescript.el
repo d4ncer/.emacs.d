@@ -8,17 +8,19 @@
   (require 'use-package))
 
 (require 'definers)
+(require 'rk-web-modes)
 
 (use-package typescript-mode
   :straight t
   :custom
   (typescript-indent-level 2)
-  :mode ("\\.tsx?\\'" . typescript-mode))
+  :mode ("\\.ts\\'" . typescript-mode))
 
 (use-package tide
   :straight t
   :commands (tide-setup)
-  :after typescript-mode
+  :custom
+  (tide-server-max-response-length 999999999)
   :preface
   (defun rk-ts--setup-tide-local-binds ()
     (general-define-key
@@ -48,12 +50,17 @@
     (tide-hl-identifier-mode +1)
     (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
     (rk-ts--setup-tide-local-binds))
+
   :init
   (add-hook 'typescript-mode-hook #'rk-ts--setup-tide)
   (advice-add 'tide-references :after #'rk-ts--switch-to-ref)
   (add-hook 'tide-references-mode-hook #'rk-ts--setup-tide-reference-local-binds)
+  (add-hook 'rk-web-tsx-mode-hook #'rk-ts--setup-tide)
+
   :config
-  (rk-local-leader-def :keymaps 'typescript-mode-map
+  (with-eval-after-load 'flycheck
+    (flycheck-add-mode 'typescript-tide 'rk-web-tsx-mode))
+  (rk-local-leader-def :keymaps '(typescript-mode-map rk-web-tsx-mode-map)
     "x" '(tide-restart-server :wk "restart server")
     "f" '(tide-fix :wk "fix")
     "r" '(tide-rename-file :wk "rename file")

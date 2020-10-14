@@ -11,6 +11,11 @@
 (require 'web-mode)
 
 ;;;###autoload
+(define-derived-mode rk-web-tsx-mode web-mode "TSX"
+  "Derived mode for editing TSX files."
+  (setq-local web-mode-content-type "jsx"))
+
+;;;###autoload
 (define-derived-mode rk-web-js-mode web-mode "JS"
   "Derived mode for editing JavaScript files.")
 
