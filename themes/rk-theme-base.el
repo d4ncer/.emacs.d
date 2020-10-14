@@ -303,7 +303,7 @@
      ((t :inherit highlight :foreground ,rk-theme-base-blue)))
 
     (highlight-thing
-     ((t :weight demibold :foreground ,rk-theme-base-blue)))
+     ((t :weight normal :foreground ,rk-theme-base-blue)))
 
     (ahs-face
      ((t :inherit highlight)))
