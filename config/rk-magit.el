@@ -125,19 +125,6 @@
   :after magit
   :straight (:host github :repo "magit/forge"))
 
-(use-package evil-magit
-  :straight t
-  :demand t
-  :after magit
-  :custom
-  (forge-database-file (f-join paths-cache-directory "forge-database.sqlite"))
-  :general
-  (:keymaps 'magit-mode-map
-            :states '(normal visual)
-            "C-u" #'evil-scroll-page-up
-            "C-d" #'evil-scroll-page-down))
-
-
 (provide 'rk-magit)
 
 ;;; rk-magit.el ends here
