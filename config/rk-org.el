@@ -26,6 +26,7 @@
 (defvar org-directory "~/org")
 (defconst rk-org-gtd-dir (f-join org-directory "gtd"))
 (defconst rk-org-roam-dir (f-join paths--dropbox-dir "org"))
+(defconst rk-org-roam-dailies-dir (f-join rk-org-roam-dir "daily"))
 (defconst rk-org-roam-temporal-prefix "%<%Y%m%d%H%M%S>")
 
 (use-package org
@@ -341,9 +342,9 @@
 
     (setq org-agenda-custom-commands
           '(("z" "Roam"
-             ((tags-todo "inbox")
+             ((todo "TODO")
               (agenda ""))
-             ((org-agenda-files (list rk-org-roam-dir))
+             ((org-agenda-files (list rk-org-roam-dailies-dir))
               (org-agenda-start-day "-1d")))
 
             ("W" "Work (old)"
@@ -374,7 +375,7 @@
              ((org-agenda-tag-filter-preset '("-ignore"))
               (org-agenda-start-day "-1d")
               (org-agenda-show-log t)
-              (org-agenda-files (list rk-org-roam-dir))
+              (org-agenda-files (list rk-org-roam-dailies-dir))
               (org-agenda-show-inherited-tags nil)
               (org-agenda-dim-blocked-tasks nil)
               (org-agenda-archives-mode nil)))
@@ -548,7 +549,7 @@
     (interactive)
     (-let* ((t-format "%Y-%m-%d")
             (t-file (format-time-string (format "%s.org" t-format)))
-            (t-path (expand-file-name t-file rk-org-roam-dir)))
+            (t-path (expand-file-name t-file rk-org-roam-dailies-dir)))
       (unless (f-exists-p t-path)
         (f-write-text (format "#+title: %s" (format-time-string t-format)) 'utf-8 t-path))
       (set-buffer (org-capture-target-buffer t-path))
