@@ -55,7 +55,7 @@
         :width narrow
         :spacing 90
         :family ,rk-theme-font-family
-        :height 140)))
+        :height 200)))
 
     (link
      ((t :weight light :underline ,rk-theme-base-light-grey)))
@@ -64,7 +64,7 @@
      ((t :background ,default-background)))
 
     (fixed-pitch
-     ((t :family "JetBrains Mono" :height 140 :weight normal)))
+     ((t :family "JetBrains Mono" :height 200 :weight normal)))
 
     (internal-border
      ((t :background ,rk-theme-base-solarized-b2)))
@@ -73,7 +73,7 @@
 
     (mode-line
      ((t
-       :height 120
+       :height 200
        :background ,rk-theme-base-solarized-b2
        :foreground ,rk-theme-base-solarized-b02)))
 
