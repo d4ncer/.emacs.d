@@ -85,15 +85,20 @@
              counsel-projectile-rg)
 
   :custom
-  (counsel-projectile-switch-project-action 'magit-status)
+  (counsel-projectile-switch-project-action 'rk-counsel-switch-project-action)
 
   :preface
+  (defun rk-counsel-switch-project-action (project)
+    (if (f-exists-p (f-join project ".git"))
+        (magit-status project)
+      (dired project)))
   (defun rk-counsel-projectile--ad-read-args (fn &optional options)
     (funcall fn (if current-prefix-arg
                     (read-string "rg args: " options)
                   options)))
   :init
   (rk-leader-def
+    "pp" '(counsel-projectile-switch-project :wk "switch project")
     "pf" '(counsel-projectile-find-file :wk "find file (project)")
     "pd" '(counsel-projectile-find-dir :wk "find dir (project)")
     "pb" '(counsel-projectile-switch-to-buffer :wk "switch buffer (project)")
