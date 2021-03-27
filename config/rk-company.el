@@ -27,7 +27,7 @@
              company-show-doc-buffer)
   :custom
   (company-tooltip-align-annotations t)
-  (company-idle-delay 0)
+  (company-idle-delay 0.2)
   (company-require-match nil)
 
   :config
