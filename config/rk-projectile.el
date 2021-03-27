@@ -85,6 +85,8 @@
              counsel-projectile-rg)
 
   :custom
+  (counsel-projectile-remove-current-buffer t)
+  (counsel-projectile-remove-current-project t)
   (counsel-projectile-switch-project-action 'rk-counsel-switch-project-action)
 
   :preface
