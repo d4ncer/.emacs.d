@@ -41,10 +41,23 @@
      "n" #'tide-find-next-reference
      "p" #'tide-find-previous-reference
      "RET" #'tide-goto-line-reference))
+  (defun rk-ts--setup-tide-error-local-binds ()
+    (general-define-key
+     :states 'normal
+     :keymaps 'local
+     "n" #'tide-find-next-error
+     "p" #'tide-find-previous-error
+     "RET" #'tide-goto-error))
   (defun rk-ts--switch-to-ref (&rest _)
     (-when-let* ((buffer (get-buffer "*tide-references*"))
                  (visible (get-buffer-window buffer)))
       (switch-to-buffer-other-window buffer)))
+  (defun rk-ts--switch-to-errors (&rest _)
+    (-if-let* ((p-buffer-name (tide-project-errors-buffer-name))
+               (buffer (get-buffer p-buffer-name))
+               (visible (get-buffer-window buffer)))
+        (select-window visible)
+      (display-buffer buffer)))
   (defun rk-ts--setup-tide ()
     (tide-setup)
     (tide-hl-identifier-mode +1)
@@ -54,7 +67,9 @@
   :init
   (add-hook 'typescript-mode-hook #'rk-ts--setup-tide)
   (advice-add 'tide-references :after #'rk-ts--switch-to-ref)
+  (advice-add 'tide-project-errors :after #'rk-ts--switch-to-errors)
   (add-hook 'tide-references-mode-hook #'rk-ts--setup-tide-reference-local-binds)
+  (add-hook 'tide-project-errors-mode-hook #'rk-ts--setup-tide-error-local-binds)
   (add-hook 'rk-web-tsx-mode-hook #'rk-ts--setup-tide)
 
   :config
@@ -65,7 +80,8 @@
     "f" '(tide-fix :wk "fix")
     "r" '(tide-rename-file :wk "rename file")
     "i" '(tide-organize-imports :wk "organize imports")
-    "e" '(tide-refactor :wk "refactor")
+    "R" '(tide-refactor :wk "refactor")
+    "e" '(tide-project-errors :wk "errors")
     "j" '(tide-jsdoc-template :wk "insert jsdoc")
     "v" '(tide-verify-setup :wk "verify setup")))
 
