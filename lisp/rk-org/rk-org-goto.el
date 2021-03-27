@@ -10,7 +10,63 @@
 
 (require 'dash)
 (require 'paths)
-(require 'calendar)
+
+(autoload 'org-agenda-filter-apply "org-agenda")
+
+;;;###autoload
+(defun rk-org-goto-diary ()
+  "Switch to the diary file."
+  (interactive)
+  (find-file rk-org--diary-file))
+
+;;;###autoload
+(defun rk-org-goto-inbox ()
+  "Switch to the GTD inbox file."
+  (interactive)
+  (find-file rk-org--inbox-file))
+
+;;;###autoload
+(defun rk-org-goto-consume ()
+  "Switch to the consume file."
+  (interactive)
+  (find-file rk-org--consume-file))
+
+;;;###autoload
+(defun rk-org-goto-tickler ()
+  "Switch to the tickler file."
+  (interactive)
+  (find-file rk-org--tickler-file))
+
+;;;###autoload
+(defun rk-org-goto-reference ()
+  "Switch to the GTD reference file."
+  (interactive)
+  (find-file rk-org--reference-file))
+
+;;;###autoload
+(defun rk-org-goto-projects ()
+  "Switch to the GTD work projects file."
+  (interactive)
+  (find-file rk-org--work-projects-file))
+
+;;;###autoload
+(defun rk-org-goto-next ()
+  "Switch to the next / one-off file."
+  (interactive)
+  (find-file rk-org--next-file))
+
+;;;###autoload
+(defun rk-org-goto-todo-list ()
+  "Show the todo list."
+  (interactive)
+  (org-agenda prefix-arg "t")
+  (org-agenda-filter-apply '("-someday") 'tag))
+
+;;;###autoload
+(defun rk-org-goto-tags-list ()
+  "Show all tagged items."
+  (interactive)
+  (org-tags-view nil))
 
 (defconst rk-org-goto--show-agenda-work-start-hour 7)
 (defconst rk-org-goto--show-agenda-work-end-hour 18)
