@@ -56,15 +56,15 @@ If argument INTERACTIVE-P is set, log additional information."
 
 ;; Org stuff
 
-(defconst paths--org-dir "~/org")
+(defconst paths--dropbox-dir "~/Dropbox")
+(defconst paths--org-dir (f-join paths--dropbox-dir "org"))
 
 (defconst paths--gtd-dir (f-join paths--org-dir "gtd"))
+(defconst paths--life-dir (f-join paths--org-dir "life"))
 (defconst paths--accounts-dir (f-join paths--org-dir "accounts"))
 
-(defconst rk-org--work-file (f-join paths--org-dir "work_movio.org"))
-(defconst rk-org--diary-file (f-join paths--org-dir "diary.org"))
-(defconst rk-org--recruitment-file (f-join paths--org-dir "recruitment.org"))
-(defconst rk-org--consume-file (f-join paths--org-dir "consume.org"))
+(defconst rk-org--diary-file (f-join paths--life-dir "diary.org"))
+(defconst rk-org--consume-file (f-join paths--life-dir "consume.org"))
 
 (defconst rk-org--inbox-file (f-join paths--gtd-dir "inbox.org"))
 (defconst rk-org--next-file (f-join paths--gtd-dir "next.org"))
@@ -74,8 +74,6 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst rk-org--personal-projects-file (f-join paths--gtd-dir "projects-personal.org"))
 (defconst rk-org--reference-file (f-join paths--gtd-dir "reference.org"))
 (defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
-
-(defconst paths--dropbox-dir "~/Dropbox")
 
 (provide 'paths)
 
