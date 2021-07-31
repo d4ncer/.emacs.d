@@ -68,8 +68,10 @@
 
   :config
   (progn
+    (setq ivy-height 6)
     (setq ivy-use-virtual-buffers t)
     (setq ivy-count-format "(%d/%d) ")
+    (setq enable-recursive-minibuffers t)
     (setq ivy-re-builders-alist '((t . ivy--regex-plus)))
 
     ;; Do not show extra directories when finding files.

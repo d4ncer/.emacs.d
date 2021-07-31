@@ -30,7 +30,7 @@
 (defconst rk-org-roam-temporal-prefix "%<%Y%m%d%H%M%S>")
 
 (use-package org
-  :straight org-plus-contrib
+  :straight t
   :demand t
   :general
   (:keymaps 'org-mode-map
@@ -233,16 +233,6 @@ Do not scheduled items or repeating todos."
                               (sequence "SCHEDULE(s)" "|")))
 
     (setq org-confirm-babel-evaluate nil)
-    (setq org-babel-load-languages '((emacs-lisp . t)
-                                     (restclient . t)
-                                     (gnuplot . t)
-                                     (js . t)
-                                     (python . t)
-                                     (javascript . t)
-                                     (shell . t)
-                                     (sql . t)
-                                     (plantuml . t)
-                                     (verb . t)))
 
     (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
     (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol)))
@@ -712,16 +702,6 @@ Do not scheduled items or repeating todos."
 (use-package ox-gfm
   :straight t
   :after org)
-
-(use-package ox-confluence
-  :after org
-  :preface
-  (autoload 'org-export-define-derived-backend "ox")
-  :config
-  (org-export-define-derived-backend 'custom-confluence 'confluence
-    :menu-entry
-    '(?c "Export as Confluence markup"
-         ((?c "To temporary buffer" org-confluence-export-as-confluence)))))
 
 (use-package ox-html
   :after org

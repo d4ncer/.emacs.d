@@ -16,23 +16,23 @@
 (use-package hl-todo
   :straight t
   :defer t
+  :custom
+  (hl-todo-keyword-faces
+   (--map (cons it 'hl-todo)
+          '("TODO"
+            "NEXT"
+            "HACK"
+            "FIXME"
+            "KLUDGE"
+            "NOTE")))
   :preface
   (defun rk-hl-todo--enable-unless-org-buffer ()
     (unless (derived-mode-p 'org-mode)
       (hl-todo-mode)))
 
   :init
-  (progn
-    (setq hl-todo-keyword-faces
-          (--map (cons it 'hl-todo)
-                '("TODO"
-                  "NEXT"
-                  "HACK"
-                  "FIXME"
-                  "KLUDGE"
-                  "NOTE")))
-    (add-hook 'prog-mode-hook #'hl-todo-mode)
-    (add-hook 'text-mode-hook #'rk-hl-todo--enable-unless-org-buffer)))
+  (add-hook 'prog-mode-hook #'hl-todo-mode)
+  (add-hook 'text-mode-hook #'rk-hl-todo--enable-unless-org-buffer))
 
 (provide 'rk-hl-todo)
 

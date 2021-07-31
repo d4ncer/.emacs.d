@@ -587,6 +587,10 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (set-face-attribute 'hydra-posframe-face nil :inherit 'ivy-posframe))
 
+(use-package frame
+  :config
+  (general-unbind org-mode-map "<M-return>"))
+
 (use-package sql-indent
   :straight (:host github :repo "alex-hhh/emacs-sql-indent"
                    :branch "master")
@@ -746,8 +750,9 @@ Optional arg JUSTIFY will justify comments and strings."
     (exec-path-from-shell-initialize)
 
     ;;; Use gls instead of ls on OS X (if available)
-    (when (and (equal system-type "darwin") (executable-find "gls"))
+    (when (and (equal system-type 'darwin) (executable-find "gls"))
       (setq insert-directory-program "gls")))
+
   :functions
   (exec-path-from-shell-initialize))
 

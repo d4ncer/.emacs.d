@@ -13,6 +13,7 @@
 
 (require 'general)
 (require 'definers)
+(require 'rk-theme-base)
 
 (use-package evil
   :straight t
@@ -51,27 +52,26 @@
     (setq evil-want-integration t)
     (setq evil-want-keybinding nil))
   :config
-  (progn
-    (evil-mode +1)
-    (setq-default evil-shift-width 2)
-    (setq-default evil-symbol-word-search t)
+  (evil-mode +1)
+  (setq-default evil-shift-width 2)
+  (setq-default evil-symbol-word-search t)
 
-    (general-setq evil-want-visual-char-semi-exclusive t
-                  evil-want-Y-yank-to-eol t)
+  (general-setq evil-want-visual-char-semi-exclusive t
+                evil-want-Y-yank-to-eol t)
 
-    ;; Configure cursors.
+  ;; Configure cursors.
 
-    (general-setq evil-motion-state-cursor `(,rk-theme-cursor-purple box)
-                  evil-visual-state-cursor `(,rk-theme-base-solarized-b2 (hbar . 2))
-                  evil-normal-state-cursor `(,rk-theme-cursor-yellow box)
-                  evil-insert-state-cursor `(,rk-theme-cursor-green (bar . 2))
-                  evil-emacs-state-cursor  `(,rk-theme-cursor-blue hbar))
+  (general-setq evil-motion-state-cursor `(,rk-theme-cursor-purple box)
+                evil-visual-state-cursor `(,rk-theme-base-solarized-b2 (hbar . 2))
+                evil-normal-state-cursor `(,rk-theme-cursor-yellow box)
+                evil-insert-state-cursor `(,rk-theme-cursor-green (bar . 2))
+                evil-emacs-state-cursor  `(,rk-theme-cursor-blue hbar))
 
-    ;; Better compat with smartparens-strict mode.
-    ;; TODO: Move to SP config.
+  ;; Better compat with smartparens-strict mode.
+  ;; TODO: Move to SP config.
 
-    (advice-add #'evil-delete-backward-char-and-join
-                :around #'rk-evil--sp-delete-and-join-compat))
+  (advice-add #'evil-delete-backward-char-and-join
+              :around #'rk-evil--sp-delete-and-join-compat)
 
   :functions (evil-mode evil-delay evil-delete-backward-char-and-join)
   :defines (evil-want-Y-yank-to-eol))

@@ -53,6 +53,7 @@
     (rk-lsp--maybe-setup-format-on-save)
     (rk-lsp--setup-local-keybinds))
   :custom
+  (lsp-headerline-breadcrumb-enable nil)
   (lsp-prefer-flymake nil)
   (lsp-enable-snippet t)
   (lsp-enable-on-type-formatting nil)
