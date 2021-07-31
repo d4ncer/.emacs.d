@@ -57,8 +57,10 @@
                 magit-section-visibility-indicator nil
                 magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1))
 
-(use-package git-commit-jira-prefix
-  :hook (git-commit-setup . git-commit-jira-prefix-insert))
+(use-package git-commit-clubhouse-prefix
+  :demand t
+  :commands git-commit-clubhouse-prefix-init
+  :config (git-commit-clubhouse-prefix-init))
 
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")

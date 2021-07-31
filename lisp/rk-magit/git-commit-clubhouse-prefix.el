@@ -1,4 +1,4 @@
-;;; git-commit-jira-prefix.el --- Prefix commit messages with JIRA ticket numbers.  -*- lexical-binding: t; -*-
+;;; git-commit-clubhouse-prefix.el --- Prefix commit messages with Clubhouse ticket numbers.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2016  Chris Barrett
 
@@ -22,10 +22,10 @@
 
 ;;; Commentary:
 
-;; A helper library that automatically prepends the JIRA ticket number to your
+;; A helper library that automatically prepends the Clubhouse ticket number to your
 ;; commit messages in Magit.
 
-;; It extracts the JIRA ticket number from the current branch name, and prepends
+;; It extracts the Clubhouse ticket number from the current branch name, and prepends
 ;; the ticket number to each commit messages.
 
 ;;; Installation:
@@ -47,19 +47,19 @@
 ;;
 ;; Then, install this file with `M-x package-install-file <path-to-this-file>'.
 ;;
-;; Add `(git-commit-jira-prefix-init)' to your Emacs configuration to initialise the package.
+;; Add `(git-commit-clubhouse-prefix-init)' to your Emacs configuration to initialise the package.
 ;;
-;;   (autoload 'git-commit-jira-prefix-init 'git-commit-jira-prefix)
+;;   (autoload 'git-commit-clubhouse-prefix-init 'git-commit-clubhouse-prefix)
 ;;
 ;;   (with-eval-after-load 'git-commit
-;;     (git-commit-jira-prefix-init))
+;;     (git-commit-clubhouse-prefix-init))
 ;;
 ;; Alternatively, if you use `use-package', the form below will do the right thing:
 ;;
-;;   (use-package git-commit-jira-prefix
+;;   (use-package git-commit-clubhouse-prefix
 ;;     :after git-commit
-;;     :commands git-commit-jira-prefix-init
-;;     :config (git-commit-jira-prefix-init))
+;;     :commands git-commit-clubhouse-prefix-init
+;;     :config (git-commit-clubhouse-prefix-init))
 
 ;;; Code:
 
@@ -69,50 +69,51 @@
 
 (autoload 'magit-get-current-branch "magit-git")
 
-(defvar git-commit-prefix-delimiter ""
-  "The delimiter to use between the JIRA ticket prefix & the commit message.")
+(defvar git-clubhouse-commit-prefix-delimiter ":"
+  "The delimiter to use between the Clubhouse ticket prefix & the commit message.")
 
-(defun git-commit-jira-prefix--ticket-number ()
+(defun git-commit-clubhouse-prefix--ticket-number ()
   (-when-let* ((branch (magit-get-current-branch))
-               ((ticket) (s-match (rx bos (group (+ alpha) "-" (+ digit))) branch)))
+               ((_ ticket) (s-match (rx bos (? (or "feature" "release") "/")
+                                        (group "ch" (+ digit))) branch)))
     ticket))
 
-(defun git-commit-jira-prefix--message-contains-ticket-number? (ticket-number)
+(defun git-commit-clubhouse-prefix--message-contains-ticket-number? (ticket-number)
   (save-excursion
     (goto-char (point-min))
     (s-contains? ticket-number (buffer-substring (line-beginning-position)
                                                  (line-end-position)))))
 
 ;;;###autoload
-(defun git-commit-jira-prefix-insert-ticket-number (buffer)
-  "Insert the JIRA ticket number, unless it's already in BUFFER."
+(defun git-commit-clubhouse-prefix-insert-ticket-number (buffer)
+  "Insert the Clubhouse ticket number, unless it's already in BUFFER."
   (interactive (list (current-buffer)))
   (with-current-buffer buffer
-    (-when-let (ticket (git-commit-jira-prefix--ticket-number))
-      (unless (git-commit-jira-prefix--message-contains-ticket-number? ticket)
+    (-when-let (ticket (git-commit-clubhouse-prefix--ticket-number))
+      (unless (git-commit-clubhouse-prefix--message-contains-ticket-number? ticket)
         (goto-char (point-min))
         (goto-char (line-beginning-position))
-        (insert (format "%s%s " ticket git-commit-prefix-delimiter))
+        (insert (format "%s%s " ticket git-clubhouse-commit-prefix-delimiter))
         (just-one-space)
         t))))
 
 ;;;###autoload
-(defun git-commit-jira-prefix-insert ()
+(defun git-commit-clubhouse-prefix-insert ()
   (let ((buf (current-buffer)))
     ;; Run after `server-execute', which is run using
     ;; a timer which starts immediately.
     (run-with-timer 0.01 nil
                     (lambda ()
-                      (when (git-commit-jira-prefix-insert-ticket-number buf)
+                      (when (git-commit-clubhouse-prefix-insert-ticket-number buf)
                         (run-with-timer 0.1 nil
                                         (lambda ()
                                           (goto-char (line-end-position)))))))))
 
 ;;;###autoload
-(defun git-commit-jira-prefix-init ()
-  (add-hook 'git-commit-setup-hook #'git-commit-jira-prefix-insert)
-  (define-key git-commit-mode-map (kbd "C-c C-a") #'git-commit-jira-prefix-insert-ticket-number))
+(defun git-commit-clubhouse-prefix-init ()
+  (add-hook 'git-commit-setup-hook #'git-commit-clubhouse-prefix-insert)
+  (define-key git-commit-mode-map (kbd "C-c C-a") #'git-commit-clubhouse-prefix-insert-ticket-number))
 
-(provide 'git-commit-jira-prefix)
+(provide 'git-commit-clubhouse-prefix)
 
-;;; git-commit-jira-prefix.el ends here
+;;; git-commit-clubhouse-prefix.el ends here
