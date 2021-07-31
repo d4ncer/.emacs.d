@@ -86,7 +86,7 @@
 
 ;; Aggressively load in org-plus-contrib to avoid shadowing
 
-(straight-use-package 'org-plus-contrib)
+(straight-use-package 'org)
 
 ;; Aggressively load themes
 
