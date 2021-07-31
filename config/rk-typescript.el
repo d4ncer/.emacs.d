@@ -85,6 +85,12 @@
     "j" '(tide-jsdoc-template :wk "insert jsdoc")
     "v" '(tide-verify-setup :wk "verify setup")))
 
+(use-package add-node-modules-path
+  :straight t
+  :after typescript-mode
+  :init
+  (add-hook 'typescript-mode #'add-node-modules-path))
+
 (provide 'rk-typescript)
 
 ;;; rk-typescript.el ends here
