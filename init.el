@@ -174,6 +174,12 @@
 
 ;;; Post init setup.
 
+;;; Hack
+
+(general-unbind global-map "M-<return>")
+(general-unbind org-mode-map "M-<return>")
+(general-unbind org-capture-mode-map "M-<return>")
+
 (use-package rk-envrc)
 
 (unless (file-directory-p org-directory)
