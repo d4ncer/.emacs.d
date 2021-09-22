@@ -201,18 +201,6 @@
   (rk-local-leader-def :keymaps 'rk-web-css-mode-map
     "." '(stylefmt-format-buffer :wk "format")))
 
-(use-package fnm
-  :after rk-web-modes
-  :commands (fnm-use fnm-use-for-buffer)
-  :preface
-  (defun rk-web--maybe-use-fnm ()
-    (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
-               (file-p (f-exists-p project-nvmrc))
-               (fnm-exec-p (executable-find "fnm")))
-        (fnm-use-for-buffer)
-      (fnm-use rk-web--node-js-lts-version)))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-fnm))
 
 (provide 'rk-web-mode)
 
