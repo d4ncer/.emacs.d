@@ -65,6 +65,9 @@
          ("\\.html\\'" . rk-web-html-mode)
          ("\\.tsx\\'" . rk-web-tsx-mode))
 
+  ;; :hook
+  ;; (rk-web-tsx-mode . lsp)
+
   :preface
   (defun rk-web--add-custom-eslint-rules-dir ()
     (-when-let* ((root (projectile-project-p))
