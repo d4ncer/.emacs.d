@@ -9,12 +9,16 @@
 
 (require 'definers)
 (require 'rk-web-modes)
+;; (require 'lsp)
 
 (use-package typescript-mode
   :straight t
   :custom
   (typescript-indent-level 2)
   :mode ("\\.ts\\'" . typescript-mode))
+;; :hook (typescript-mode . lsp)
+;; :init
+;; (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
 
 (use-package tide
   :straight t
