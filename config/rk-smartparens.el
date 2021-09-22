@@ -85,7 +85,9 @@
         (save-excursion
           (backward-char (length id))
           (cond
-           ((and (eq (preceding-char) ?$)
+           ((and (or (eq (preceding-char) ?$)
+                     (and (eq major-mode 'rk-web-tsx-mode)
+                          (eq (preceding-char) ?>)))
                  (equal id "{")))
 
            ((eq (char-syntax (preceding-char)) ?w)
