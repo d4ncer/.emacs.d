@@ -157,8 +157,11 @@
     (-if-let* ((root (projectile-project-p))
                (prettier-bin (f-join root "node_modules/.bin/prettier"))
                (prettier-bin-p (f-exists? prettier-bin))
-               (prettier-config (s-trim (shell-command-to-string
-                                         (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name)))))))
+               (prettier-root-config (f-join root ".prettierrc"))
+               (prettier-root-config-p (f-exists? prettier-root-config))
+               (prettier-config (or prettier-root-config
+                                    (s-trim (shell-command-to-string
+                                             (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name))))))))
         (progn
           (setq-local prettier-js-command prettier-bin)
           (setq-local prettier-js-args (list "--config" prettier-config)))
