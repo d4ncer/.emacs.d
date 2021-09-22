@@ -42,7 +42,7 @@
   (nano-font-family-monospaced "Fira Code")
   :config
   (setq pop-up-windows t)
-  (setq font-lock-maximum-decoration '((web-mode . t) (rk-web-tsx-mode . t) (rk-web-js-mode . t) (t . nil)))
+  (setq font-lock-maximum-decoration '((web-mode . t) (rk-web-tsx-mode . t) (rk-web-js-mode . t) (rk-web-css-mode . t) (rk-web-html-mode . t) (t . nil)))
 
   (set-face-attribute 'default nil
                       :weight 'normal)
