@@ -98,6 +98,12 @@
   :init
   (add-hook 'typescript-mode #'add-node-modules-path))
 
+(use-package emmet-mode
+  :straight t
+  :after typescript-mode
+  :init
+  (add-hook 'typescript-mode-hook #'emmet-mode))
+
 (provide 'rk-typescript)
 
 ;;; rk-typescript.el ends here
