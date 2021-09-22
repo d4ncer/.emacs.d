@@ -163,6 +163,7 @@
 (use-package rk-csharp)
 (use-package rk-fsharp)
 (use-package rk-hashicorp)
+(use-package rk-nix)
 
 (use-package private-config
   :when (f-dir-p "~/private")
