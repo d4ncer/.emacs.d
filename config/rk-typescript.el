@@ -74,20 +74,23 @@
   (advice-add 'tide-project-errors :after #'rk-ts--switch-to-errors)
   (add-hook 'tide-references-mode-hook #'rk-ts--setup-tide-reference-local-binds)
   (add-hook 'tide-project-errors-mode-hook #'rk-ts--setup-tide-error-local-binds)
-  (add-hook 'rk-web-tsx-mode-hook #'rk-ts--setup-tide)
+  (with-eval-after-load 'rk-web-modes
+    (add-hook 'rk-web-tsx-mode-hook #'rk-ts--setup-tide))
 
   :config
   (with-eval-after-load 'flycheck
-    (flycheck-add-mode 'typescript-tide 'rk-web-tsx-mode))
-  (rk-local-leader-def :keymaps '(typescript-mode-map rk-web-tsx-mode-map)
-    "x" '(tide-restart-server :wk "restart server")
-    "f" '(tide-fix :wk "fix")
-    "r" '(tide-rename-file :wk "rename file")
-    "i" '(tide-organize-imports :wk "organize imports")
-    "R" '(tide-refactor :wk "refactor")
-    "e" '(tide-project-errors :wk "errors")
-    "j" '(tide-jsdoc-template :wk "insert jsdoc")
-    "v" '(tide-verify-setup :wk "verify setup")))
+    (with-eval-after-load 'rk-web-modes
+      (flycheck-add-mode 'typescript-tide 'rk-web-tsx-mode)))
+  (with-eval-after-load 'rk-web-modes
+    (rk-local-leader-def :keymaps '(typescript-mode-map rk-web-tsx-mode-map)
+      "x" '(tide-restart-server :wk "restart server")
+      "f" '(tide-fix :wk "fix")
+      "r" '(tide-rename-file :wk "rename file")
+      "i" '(tide-organize-imports :wk "organize imports")
+      "R" '(tide-refactor :wk "refactor")
+      "e" '(tide-project-errors :wk "errors")
+      "j" '(tide-jsdoc-template :wk "insert jsdoc")
+      "v" '(tide-verify-setup :wk "verify setup"))))
 
 (use-package add-node-modules-path
   :straight t
