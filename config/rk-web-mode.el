@@ -76,28 +76,27 @@
       (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
 
   :config
-  (progn
-    (general-def :keymaps 'rk-web-js-mode-map :states 'normal
-      "J" #'rk-utils--chainable-aware-join-line)
+  (general-def :keymaps 'rk-web-js-mode-map :states 'normal
+    "J" #'rk-utils--chainable-aware-join-line)
 
-    ;; Add all possible JS runtimes
+  ;; Add all possible JS runtimes
 
-    (dolist (name (list "node" "nodejs" "gjs" "rhino"))
-      (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
+  (dolist (name (list "node" "nodejs" "gjs" "rhino"))
+    (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
 
-    ;; Use custom ESLint rules if a "rules" dir exists in project root
+  ;; Use custom ESLint rules if a "rules" dir exists in project root
 
-    (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
+  (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
 
-    ;; Setup post flycheck load
+  ;; Setup post flycheck load
 
-    (with-eval-after-load 'flycheck
-      (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
-      (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
-      (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
-      (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
-      (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
-      (flycheck-add-mode 'html-tidy 'rk-web-html-mode))))
+  (with-eval-after-load 'flycheck
+    (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
+    (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
+    (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
+    (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
+    (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
+    (flycheck-add-mode 'html-tidy 'rk-web-html-mode)))
 
 (use-package emmet-mode
   :straight t
@@ -126,10 +125,7 @@
           (emmet-mode +1))))))
 
   :init
-  (progn
-    (setq emmet-move-cursor-between-quotes t)
-    (add-hook 'typescript-mode-hook #'emmet-mode)
-    (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode)))
+  (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode))
 
 (use-package rk-flycheck-stylelint
   :after flycheck
