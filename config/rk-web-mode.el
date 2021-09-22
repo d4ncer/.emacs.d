@@ -101,28 +101,31 @@
 (use-package emmet-mode
   :straight t
   :defer t
+  :after rk-web-modes
   :defines (emmet-expand-jsx-className?)
   :commands (emmet-mode emmet-expand-line)
   :general (:keymaps 'emmet-mode-keymap :states '(normal insert)
                      "M-;" #'emmet-expand-line)
+  :custom
+  (emmet-move-cursor-between-quotes t)
   :preface
-  (progn
-    (defun rk-web--react-in-buffer-p ()
-      (save-excursion
-        (save-match-data
-          (goto-char (point-min))
-          (search-forward "React" nil t))))
+  (defun rk-web--react-in-buffer-p ()
+    (save-excursion
+      (save-match-data
+        (goto-char (point-min))
+        (search-forward "React" nil t))))
 
-    (defun rk-web--maybe-emmet-mode ()
-      (cond
-       ((derived-mode-p 'rk-web-html-mode 'html-mode 'nxml-mode)
-        (emmet-mode +1))
+  (defun rk-web--maybe-emmet-mode ()
+    (cond
+     ((derived-mode-p 'rk-web-html-mode 'html-mode 'nxml-mode)
+      (emmet-mode +1))
 
-       ((and (derived-mode-p 'rk-web-js-mode 'rk-web-tsx-mode)
-             (rk-web--react-in-buffer-p))
-        (progn
-          (setq-local emmet-expand-jsx-className? t)
-          (emmet-mode +1))))))
+     ((or (and (derived-mode-p 'rk-web-js-mode)
+               (rk-web--react-in-buffer-p))
+          (eq (derived-mode-p 'rk-web-tsx-mode)))
+      (progn
+        (setq-local emmet-expand-jsx-className? t)
+        (emmet-mode +1)))))
 
   :init
   (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode))
