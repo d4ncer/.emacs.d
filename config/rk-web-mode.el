@@ -122,7 +122,7 @@
 
      ((or (and (derived-mode-p 'rk-web-js-mode)
                (rk-web--react-in-buffer-p))
-          (eq (derived-mode-p 'rk-web-tsx-mode)))
+          (derived-mode-p 'rk-web-tsx-mode))
       (progn
         (setq-local emmet-expand-jsx-className? t)
         (emmet-mode +1)))))
