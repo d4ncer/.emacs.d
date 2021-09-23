@@ -99,6 +99,12 @@
   :init
   (add-hook 'typescript-mode #'add-node-modules-path))
 
+(use-package prettier
+  :straight t
+  :after typescript-mode
+  :init
+  (add-hook 'typescript-mode-hook #'prettier-mode))
+
 (provide 'rk-typescript)
 
 ;;; rk-typescript.el ends here

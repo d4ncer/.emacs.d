@@ -144,47 +144,14 @@
     (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
     (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
 
-(use-package prettier-js
+(use-package prettier
   :straight t
-  :preface
-  (defun rk-web--prettier-enable-p ()
-    "Enable prettier if no .prettierdisable is found in project root."
-    (-when-let (root (projectile-project-p))
-      (not (f-exists? (f-join root ".prettierdisable")))))
-
-  (defun rk-web--init-prettier-config ()
-    "Set up prettier config & binary for file if applicable."
-    (-if-let* ((root (projectile-project-p))
-               (prettier-bin (f-join root "node_modules/.bin/prettier"))
-               (prettier-bin-p (f-exists? prettier-bin))
-               (prettier-root-config (f-join root ".prettierrc"))
-               (prettier-root-config-p (f-exists? prettier-root-config))
-               (prettier-config (or prettier-root-config
-                                    (s-trim (shell-command-to-string
-                                             (s-join " " (list prettier-bin "--find-config-path" (buffer-file-name))))))))
-        (progn
-          (setq-local prettier-js-command prettier-bin)
-          (setq-local prettier-js-args (list "--config" prettier-config)))
-      (setq-local prettier-js-args rk-web--prettier-default-args)))
-
-  (defun rk-web--init-prettier ()
-    (when (rk-web--prettier-enable-p)
-      (progn
-        (rk-web--init-prettier-config)
-        (prettier-js-mode +1))))
-
-  (defun rk-web--maybe-setup-prettier ()
-    (when (or (equal major-mode 'typescript-mode)
-              (equal major-mode 'graphql-mode)
-              (and (derived-mode-p 'web-mode)
-                   (-contains-p '("javascript" "jsx" "html" "css") web-mode-content-type)))
-      (rk-web--init-prettier)))
-
+  :after rk-web-modes
   :init
-  (add-hook 'graphql-mode-hook #'rk-web--maybe-setup-prettier)
-  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-setup-prettier)
-  (add-hook 'rk-web-tsx-mode-hook #'rk-web--maybe-setup-prettier)
-  (add-hook 'typescript-mode-hook #'rk-web--maybe-setup-prettier))
+  (add-hook 'rk-web-js-mode-hook #'prettier-mode)
+  (add-hook 'rk-web-css-mode-hook #'prettier-mode)
+  (add-hook 'rk-web-html-mode-hook #'prettier-mode)
+  (add-hook 'rk-web-tsx-mode-hook #'prettier-mode))
 
 (use-package add-node-modules-path
   :straight t

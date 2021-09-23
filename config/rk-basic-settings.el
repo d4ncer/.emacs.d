@@ -734,6 +734,12 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package graphql
   :straight t)
 
+(use-package prettier
+  :straight t
+  :after graphql
+  :init
+  (add-hook 'graphql-mode-hook #'prettier-mode))
+
 (use-package exec-path-from-shell
   :straight t
   :if window-system
