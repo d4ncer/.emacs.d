@@ -25,6 +25,7 @@
   :commands (tide-setup)
   :custom
   (tide-server-max-response-length 999999999)
+  (tide-save-buffer-after-code-edit nil)
   :preface
   (defun rk-ts--setup-tide-local-binds ()
     (general-define-key
