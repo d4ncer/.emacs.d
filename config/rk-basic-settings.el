@@ -302,6 +302,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (add-hook 'find-file-hook #'rk-basic-settings--prompt-to-open-large-files-in-fundamental-mode)
 
 ;;; General variables
+(setq org-roam-v2-ack t)
 
 (setq-default fill-column 80)
 (setq-default tab-width 4)
