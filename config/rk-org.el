@@ -197,7 +197,7 @@ Do not scheduled items or repeating todos."
     (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
     (add-to-list 'org-tags-exclude-from-inheritance "project")
 
-    (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file-other-window)
+    (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
     (setq org-M-RET-may-split-line nil)
     (setq org-catch-invisible-edits 'smart)
@@ -814,36 +814,13 @@ table tr.tr-even td {
   :straight t
   :after org
   :general
-  (:keymaps 'org-roam-mode-map
-            "C-c i" #'org-roam-insert)
-  :preface
-  (defun rk-org--setup-roam-backlinks-local-keybinds ()
-    (general-define-key
-     :states 'normal
-     :keymaps 'local
-     "q" #'delete-window
-     "n" #'org-next-link
-     "p" #'org-previous-link))
-  (defun rk-org--switch-to-org-roam-buffer ()
-    (interactive)
-    (setq org-roam-last-window (get-buffer-window))
-    (org-roam-buffer--get-create)
-    (org-roam-buffer--update-maybe :redisplay t)
-    (switch-to-buffer-other-window org-roam-buffer))
-  (defun rk-org--roam-maybe-open-buffer ()
-    (and (memq 'org-roam-buffer--update-maybe post-command-hook)
-         (not (window-parameter nil 'window-side))
-         (not (eq 'visible (org-roam-buffer--visibility)))
-         (with-current-buffer (window-buffer)
-           (org-roam-buffer--get-create))))
-  :hook ((after-init . org-roam-mode)
-         (find-file . rk-org--roam-maybe-open-buffer)
-         (org-roam-backlinks-mode .  rk-org--setup-roam-backlinks-local-keybinds))
+  (:keymaps 'org-mode-map
+            "C-c i" #'org-roam-node-insert)
   :custom
   (org-roam-directory rk-org-roam-dir)
   :init
   (rk-leader-def
-    "of"  '(org-roam-find-file :wk "find file")
+    "of"  '(org-roam-node-find :wk "find file node")
     "ob"  '(rk-org--switch-to-org-roam-buffer :wk "backlinks")
     "oB"  '(org-roam-switch-to-buffer :wk "switch buffer")
     "od"  '(:ignore t :wk "date")
@@ -851,6 +828,20 @@ table tr.tr-even td {
     "odd" '(org-roam-dailies-date :wk "for date")
     "ody" '(org-roam-dailies-yesterday :wk "yesterday")
     "odT" '(org-roam-dailies-tomorrow :wk "tomorrow")))
+
+(use-package org-roam-ui
+  :straight
+  (:host github :repo "org-roam/org-roam-ui" :branch "main" :files ("*.el" "out"))
+  :after org-roam
+  ;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
+  ;;         a hookable mode anymore, you're advised to pick something yourself
+  ;;         if you don't care about startup time, use
+  ;; :hook (after-init . org-roam-ui-mode)
+  :config
+  (setq org-roam-ui-sync-theme t
+        org-roam-ui-follow t
+        org-roam-ui-update-on-save t
+        org-roam-ui-open-on-start t))
 
 (use-package company-org-roam
   :straight t
