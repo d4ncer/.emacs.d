@@ -20,7 +20,6 @@
   (hl-todo-keyword-faces
    (--map (cons it 'hl-todo)
           '("TODO"
-            "NEXT"
             "HACK"
             "FIXME"
             "KLUDGE"
