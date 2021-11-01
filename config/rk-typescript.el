@@ -15,7 +15,9 @@
   :straight t
   :custom
   (typescript-indent-level 2)
-  :mode ("\\.ts\\'" . typescript-mode))
+  :mode ("\\.ts\\'" . typescript-mode)
+  :config
+  (setq interpreter-mode-alist (--map-when (-contains-p (list "node" "nodejs" "gjs" "rhino") (car it)) (cons (car it) 'typescript-mode) interpreter-mode-alist)))
 ;; :hook (typescript-mode . lsp)
 ;; :init
 ;; (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
