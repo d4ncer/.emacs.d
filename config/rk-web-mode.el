@@ -79,11 +79,6 @@
   (general-def :keymaps 'rk-web-js-mode-map :states 'normal
     "J" #'rk-utils--chainable-aware-join-line)
 
-  ;; Add all possible JS runtimes
-
-  (dolist (name (list "node" "nodejs" "gjs" "rhino"))
-    (add-to-list 'interpreter-mode-alist (cons (purecopy name) 'rk-web-js-mode)))
-
   ;; Use custom ESLint rules if a "rules" dir exists in project root
 
   (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
