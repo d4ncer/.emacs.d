@@ -445,7 +445,8 @@ Optional arg JUSTIFY will justify comments and strings."
     (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
     (setq version-control t)))
 
-(use-package highlight)
+(use-package highlight
+  :straight t)
 
 (use-package select
   :config
