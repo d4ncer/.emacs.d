@@ -95,6 +95,12 @@
 
 (advice-add 'enable-theme :after #'config-themes--after-enable-theme)
 
+;; (use-package tree-sitter
+;;   :straight t)
+
+;; (use-package tree-sitter-langs
+;;   :after tree-sitter)
+
 (provide 'rk-themes)
 
 ;;; rk-themes.el ends here
