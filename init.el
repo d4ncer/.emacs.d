@@ -107,7 +107,6 @@
 
 ;; Editor capabilities
 
-(use-package rk-modeline)
 (use-package rk-highlight-thing)
 (use-package rk-auto-save)
 (use-package rk-evil)
