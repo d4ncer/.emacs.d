@@ -66,6 +66,11 @@
     (setq checkdoc-force-docstrings-flag nil)
     (setq checkdoc-arguments-in-order-flag nil)))
 
+(use-package lisp-extra-font-lock
+  :straight t
+  :config
+  (lisp-extra-font-lock-global-mode 1))
+
 (provide 'rk-elisp)
 
 ;;; rk-elisp.el ends here

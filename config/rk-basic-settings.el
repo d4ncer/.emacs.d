@@ -795,6 +795,9 @@ Optional arg JUSTIFY will justify comments and strings."
   (plantuml-default-exec-mode 'executable)
   (plantuml-executable-path "plantuml"))
 
+(use-package mini-frame
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
