@@ -91,11 +91,11 @@
 ;; Aggressively load themes
 
 (use-package rk-themes
-  ;; :config
-  ;; (rk/themes/light-theme)
-  )
-;; (straight-use-package '(nano-emacs :type git :host github :repo "rougier/nano-emacs"))
-;; (require 'nano)
+  :disabled
+  :config
+  (rk/themes/light-theme))
+
+(use-package rk-themes)
 
 ;; Load features.
 
