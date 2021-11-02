@@ -48,9 +48,8 @@
             "gb" #'help-go-back
             "gh" #'help-follow-symbol)
   :init
-  (progn
-    (setq evil-want-integration t)
-    (setq evil-want-keybinding nil))
+  (setq evil-want-integration t)
+  (setq evil-want-keybinding nil)
   :config
   (evil-mode +1)
   (setq-default evil-shift-width 2)
@@ -272,6 +271,8 @@
   :custom
   (evil-collection-company-use-tng nil)
   (evil-collection-mode-list '(ivy dired racer company git-timemachine ibuffer help info docker magit))
+  :init
+  (setq evil-want-keybinding nil)
   :config
   (evil-collection-init))
 
