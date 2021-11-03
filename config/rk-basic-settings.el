@@ -580,6 +580,7 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (use-package hydra-posframe
   :straight (:host github :repo "Ladicle/hydra-posframe" :branch "master")
+  :disabled
   :after hydra
   :custom
   (hydra-posframe-border-width 20)
