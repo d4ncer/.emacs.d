@@ -18,6 +18,11 @@
   :config
   (rvm-use-default))
 
+(use-package inf-ruby
+  :straight t
+  :after ruby-mode
+  (add-hook 'ruby-mode-hook #'inf-ruby-minor-mode))
+
 (provide 'rk-ruby)
 
 ;;; rk-ruby.el ends here
