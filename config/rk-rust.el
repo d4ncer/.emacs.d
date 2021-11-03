@@ -33,21 +33,20 @@
       (rk-rust--set-local-vars)
       (lsp)))
 
+  :custom
+  (rust-rustfmt-bin (executable-find "rustfmt"))
+  (rust-format-on-save t)
   :config
-  (progn
-    (setq rust-rustfmt-bin (executable-find "rustfmt"))
-    (setq rust-format-on-save t)
+  ;; Enable backtraces in rust programs run from Emacs.
+  (setenv "RUST_BACKTRACE" "1")
 
-    ;; Enable backtraces in rust programs run from Emacs.
-    (setenv "RUST_BACKTRACE" "1")
+  (general-def :keymaps 'rust-mode-map :states 'normal
+    "J" #'rk-utils--chainable-aware-join-line)
 
-    (general-def :keymaps 'rust-mode-map :states 'normal
-      "J" #'rk-utils--chainable-aware-join-line)
+  (rk-local-leader-def :keymaps 'rust-mode-map
+    "." '(rust-format-buffer :wk "format"))
 
-    (rk-local-leader-def :keymaps 'rust-mode-map
-      "." '(rust-format-buffer :wk "format"))
-
-    (add-hook 'rust-mode-hook #'rk-rust--setup)))
+  (add-hook 'rust-mode-hook #'rk-rust--setup))
 
 (use-package flycheck-rust
   :straight t
