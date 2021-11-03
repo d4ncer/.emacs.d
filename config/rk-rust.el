@@ -72,7 +72,7 @@
   :after rust-mode
   :config
   (rk-local-leader-def :keymaps 'rust-mode-map
-    "c" '(rust-hydra-transient-state/body :wk "rust hydra")))
+    "c" '(rk-rust--main/body :wk "hydra")))
 
 (provide 'rk-rust)
 
