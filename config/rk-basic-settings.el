@@ -573,6 +573,10 @@ Optional arg JUSTIFY will justify comments and strings."
   :config
   (setq auto-insert-query nil))
 
+(use-package project
+  :init
+  (setq project-list-file (concat paths-cache-directory "/projects.cache")))
+
 (use-package autoinsert-funcs
   :after autoinsert
   :defines (autoinsert-funcs-forms)
