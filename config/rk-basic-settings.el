@@ -748,6 +748,10 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package mini-frame
   :straight t)
 
+(use-package delsel
+  :config
+  (delete-selection-mode +1))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
