@@ -54,6 +54,11 @@
 (straight-use-package 'general)
 (straight-use-package 'el-patch)
 (straight-use-package 'pretty-hydra)
+(straight-use-package 'selectrum)
+
+;; Set up selectrum
+
+(selectrum-mode +1)
 
 ;; Set up general to auto unbind keys (override everything)
 
@@ -107,6 +112,7 @@
 
 ;; Editor capabilities
 
+(use-package rk-completions)
 (use-package rk-highlight-thing)
 (use-package rk-auto-save)
 (use-package rk-evil)
