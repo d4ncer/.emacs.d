@@ -17,6 +17,7 @@
 
 (use-package swiper
   :straight t
+  :disabled
   :general
   (:states '(motion normal)
            "/" #'swiper)
@@ -25,6 +26,7 @@
 
 (use-package ivy
   :straight t
+  :disabled
   :commands (ivy-dispatching-done
              ivy-help
              ivy-immediate-done
@@ -96,14 +98,17 @@
 
 (use-package flx
   :straight t
+  :disabled
   :after ivy)
 
 (use-package ivy-hydra
   :straight t
+  :disabled
   :after ivy)
 
 (use-package counsel
   :straight t
+  :disabled
   :commands (counsel-M-x
              counsel-descbinds
              counsel-describe-face
@@ -147,10 +152,7 @@
       "i c"   '(counsel-command-history :wk "history (commands)")
       "i m"   '(counsel-minibuffer-history :wk "history (minibuffer)")
       "i p"   '(counsel-list-processes :wk "list processes")
-      "i t"   '(counsel-load-theme :wk "load theme")
-      "h d f" '(counsel-describe-function :wk "describe function")
-      "h d v" '(counsel-describe-variable :wk "describe variable")
-      "h d c" '(counsel-describe-face :wk "describe face"))
+      "i t"   '(counsel-load-theme :wk "load theme"))
 
     (general-def "M-x" #'counsel-M-x)
     (general-def "C-h v" #'counsel-describe-variable)
@@ -171,6 +173,7 @@
 
 (use-package rk-ivy-commands
   :after (ivy projectile)
+  :disabled
   :commands (rk-swiper-region-or-symbol
              rk-counsel-project-region-or-symbol
              rk-counsel-region-or-symbol
@@ -186,24 +189,27 @@
 
 (use-package all-the-icons-ivy-rich
   :after (ivy all-the-icons)
+  :disabled
   :straight t
   :init (all-the-icons-ivy-rich-mode 1))
 
 (use-package ivy-rich
   :after (ivy)
+  :disabled
   :straight t
   :init (ivy-rich-mode 1))
 
-;; (use-package ivy-posframe
-;;   :straight t
-;;   :after ivy
-;;   :hook (after-init . ivy-posframe-mode)
-;;   :custom
-;;   (ivy-posframe-style 'frame-center)
-;;   (ivy-posframe-border-width 20)
-;;   (ivy-posframe-hide-minibuffer t)
-;;   (ivy-posframe-parameters '((alpha 100 100))))
+(use-package ivy-posframe
+  :straight t
+  :disabled
+  :after ivy
+  :hook (after-init . ivy-posframe-mode)
+  :custom
+  (ivy-posframe-style 'frame-center)
+  (ivy-posframe-border-width 20)
+  (ivy-posframe-hide-minibuffer t)
+  (ivy-posframe-parameters '((alpha 100 100))))
 
 (provide 'rk-ivy)
 
-;;; rk-ivy ends here
+;;; rk-ivy.el ends here

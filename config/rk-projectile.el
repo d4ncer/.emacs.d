@@ -78,6 +78,7 @@
 
 (use-package counsel-projectile
   :straight t
+  :disabled
   :defer t
   :commands (counsel-projectile-mode
              counsel-projectile-find-file

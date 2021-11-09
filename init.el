@@ -110,7 +110,7 @@
 (use-package rk-highlight-thing)
 (use-package rk-auto-save)
 (use-package rk-evil)
-(use-package rk-ivy)
+;; (use-package rk-ivy)
 (use-package rk-search)
 (use-package rk-help)
 (use-package rk-projectile)

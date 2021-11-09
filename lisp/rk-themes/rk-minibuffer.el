@@ -15,7 +15,7 @@
         `((left . 0.5)
           (top . 1.0)
           (width . 1.0)
-          (height . 6)
+          (height . 8)
           (left-fringe . 0)
           (right-fringe . 0)
           (child-frame-border-width . 16)
@@ -24,15 +24,14 @@
           (background-color . ,nano-color-subtle)))
 
 
-  (with-eval-after-load 'ivy
-    (setq ivy-height 6)
-    (set-face 'ivy-current-match 'nano-face-strong)
-    ;; See https://github.com/abo-abo/swiper/issues/2383
-    (setcdr (assoc t ivy-format-functions-alist) #'ivy-format-function-line)
-    (set-face-attribute 'ivy-current-match nil
+  (with-eval-after-load 'selectrum
+    (setq selectrum-max-window-height 6)
+    (set-face 'selectrum-current-candidate 'nano-face-strong)
+    (set-face-attribute 'selectrum-current-candidate nil
                         :extend t
                         :foreground nano-color-background
                         :background nano-color-faded))
+
   (setq mini-frame-ignore-commands
         '("edebug-eval-expression" debugger-eval-expression))
 
