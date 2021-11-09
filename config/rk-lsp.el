@@ -58,7 +58,6 @@
     (rk-lsp--setup-local-keybinds))
   :custom
   (lsp-headerline-breadcrumb-enable nil)
-  (lsp-prefer-flymake nil)
   (lsp-enable-snippet t)
   (lsp-enable-on-type-formatting nil)
   (lsp-session-file (f-join paths-cache-directory "lsp-session-v1"))
