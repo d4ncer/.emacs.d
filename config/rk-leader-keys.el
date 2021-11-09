@@ -89,7 +89,10 @@
 
     "e"     '(:ignore t :wk "errors")
 
+    "?"     '(describe-bindings :wk "describe bindings")
+
     "f"     '(:ignore t :wk "file")
+    "f f"   '(find-file :wk "find file")
     "f d"   '(dired :wk "dired")
     "f D"   '(rk-delete-current-buffer-and-file :wk "delete file & buffer")
     "f F"   '(find-file-other-window :wk "open file (new window)")
@@ -114,6 +117,7 @@
     "h d k" '(describe-key :wk "describe key")
     "h d m" '(describe-mode :wk "describe mode")
     "h d v" '(describe-variable :wk "describe variable")
+    "h d f" '(describe-function :wk "describe function")
     "h f"   '(:ignore t :wk "find")
     "h f c" '(find-face-definition :wk "find face def")
     "h f f" '(find-function :wk "find function")
