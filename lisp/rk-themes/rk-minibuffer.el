@@ -5,10 +5,9 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package))
-
-(require 'nano-base-colors)
-(require 'nano-theme)
+  (require 'use-package)
+  (require 'nano-base-colors)
+  (require 'nano-theme))
 
 (with-eval-after-load 'mini-frame
   ;; Miniframe at the bottom for a nicer display

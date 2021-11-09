@@ -377,46 +377,44 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package recentf
   :defer t
   :preface
-  (progn
+  (defun rk-basic-settings-boring-filename-p (f)
+    (memq (f-filename f)
+          '("TAGS" ".DS_Store")))
 
-    (defun rk-basic-settings-boring-filename-p (f)
-      (memq (f-filename f)
-            '("TAGS" ".DS_Store")))
+  (defun rk-basic-settings-boring-extension-p (f)
+    (seq-intersection (f-ext f)
+                      '("gz" "zip" "tar")))
 
-    (defun rk-basic-settings-boring-extension-p (f)
-      (seq-intersection (f-ext f)
-                        '("gz" "zip" "tar")))
+  (defun rk-basic-settings-child-of-boring-relative-dir-p (f)
+    (seq-intersection (f-split f)
+                      '(".git"
+                        ".ensime_cache"
+                        ".cargo"
+                        ".stack_work"
+                        ".g8"
+                        "target"
+                        "build"
+                        "Maildir"
+                        "dist")))
 
-    (defun rk-basic-settings-child-of-boring-relative-dir-p (f)
-      (seq-intersection (f-split f)
-                        '(".git"
-                          ".ensime_cache"
-                          ".cargo"
-                          ".stack_work"
-                          ".g8"
-                          "target"
-                          "build"
-                          "Maildir"
-                          "dist")))
+  (defun rk-basic-settings-child-of-boring-abs-dir-p (f)
+    (let ((ignore-case (eq system-type 'darwin)))
+      (seq-find (lambda (d)
+                  (s-starts-with? d f ignore-case))
+                (list "/var/folders/"
+                      "/usr/local/Cellar/"
+                      "/tmp/"
+                      (f-expand (concat user-emacs-directory "snippets/"))))))
 
-    (defun rk-basic-settings-child-of-boring-abs-dir-p (f)
-      (let ((ignore-case (eq system-type 'darwin)))
-        (seq-find (lambda (d)
-                    (s-starts-with? d f ignore-case))
-                  (list "/var/folders/"
-                        "/usr/local/Cellar/"
-                        "/tmp/"
-                        (f-expand (concat user-emacs-directory "snippets/")))))))
-
+  :custom
+  (recentf-max-saved-items 1000)
+  (recentf-save-file (concat paths-cache-directory "/recentf"))
+  (recentf-exclude '(rk-basic-settings-boring-filename-p
+                     rk-basic-settings-boring-extension-p
+                     rk-basic-settings-child-of-boring-relative-dir-p
+                     rk-basic-settings-child-of-boring-abs-dir-p))
   :config
-  (progn
-    (setq recentf-max-saved-items 1000)
-    (setq recentf-save-file (concat paths-cache-directory "/recentf"))
-    (setq recentf-exclude
-          '(rk-basic-settings-boring-filename-p
-            rk-basic-settings-boring-extension-p
-            rk-basic-settings-child-of-boring-relative-dir-p
-            rk-basic-settings-child-of-boring-abs-dir-p))))
+  (recentf-mode +1))
 
 (use-package calendar
   :config
@@ -425,25 +423,22 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package bookmark
   :defer t
   :config
-  (progn
-    (setq bookmark-save-flag nil)
-    (setq bookmark-default-file (concat paths-cache-directory "/bookmarks"))))
+  (setq bookmark-save-flag nil)
+  (setq bookmark-default-file (concat paths-cache-directory "/bookmarks")))
 
 (use-package iedit
   :straight t
   :config
-  (progn
-    (setq iedit-toggle-key-default nil)))
+  (setq iedit-toggle-key-default nil))
 
 (use-package files
   :config
-  (progn
-    (setq kept-new-versions 6)
-    (setq require-final-newline t)
-    (setq delete-old-versions t)
-    (setq confirm-nonexistent-file-or-buffer nil)
-    (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
-    (setq version-control t)))
+  (setq kept-new-versions 6)
+  (setq require-final-newline t)
+  (setq delete-old-versions t)
+  (setq confirm-nonexistent-file-or-buffer nil)
+  (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
+  (setq version-control t))
 
 (use-package highlight
   :straight t)
@@ -465,38 +460,6 @@ Optional arg JUSTIFY will justify comments and strings."
   :defer t
   :config
   (setq comint-prompt-read-only t))
-
-(use-package hippie-exp
-  :init
-  (progn
-    (global-set-key (kbd "M-/") #'hippie-expand)
-    (with-eval-after-load 'evil
-      (define-key evil-insert-state-map [remap evil-complete-previous] #'hippie-expand)))
-
-  :config
-  (setq hippie-expand-try-functions-list
-        '(
-          ;; Try to expand word "dynamically", searching the current buffer.
-          try-expand-dabbrev
-          ;; Try to expand word "dynamically", searching all other buffers.
-          try-expand-dabbrev-all-buffers
-          ;; Try to expand word "dynamically", searching the kill ring.
-          try-expand-dabbrev-from-kill
-          ;; Try to complete text as a file name, as many characters as unique.
-          try-complete-file-name-partially
-          ;; Try to complete text as a file name.
-          try-complete-file-name
-          ;; Try to expand word before point according to all abbrev tables.
-          try-expand-all-abbrevs
-          ;; Try to complete the current line to an entire line in the buffer.
-          try-expand-list
-          ;; Try to complete the current line to an entire line in the buffer.
-          try-expand-line
-          ;; Try to complete as an Emacs Lisp symbol, as many characters as
-          ;; unique.
-          try-complete-lisp-symbol-partially
-          ;; Try to complete word as an Emacs Lisp symbol.
-          try-complete-lisp-symbol)))
 
 (use-package winner
   :preface
@@ -626,16 +589,6 @@ Optional arg JUSTIFY will justify comments and strings."
          ("M-n" . Man-next-section)
          ("M-p" . Man-previous-section)))
 
-;; (use-package info-plus
-;;   :straight t
-;;   :defer 3
-;;   :defines (Info-fontify-angle-bracketed-flag)
-;;   :init
-;;   (progn
-;;     (with-eval-after-load 'info
-;;       (require 'info+))
-;;     (setq Info-fontify-angle-bracketed-flag nil)))
-
 (use-package avy
   :straight t
   :general
@@ -669,13 +622,12 @@ Optional arg JUSTIFY will justify comments and strings."
 (use-package popwin
   :straight t
   :config
-  (progn
-    ;; Dirty test this regex
-    ;; (let* ((trp (rx "*" (or "Cargo" "go" "Racer" "restclient" "lsp" "Ledger" "docker") (zero-or-more anything) "*"))
-    ;;        (trp-1? (if (s-matches-p trp "*docker containers*") "YES" "NO")))
-    ;;   (message trp-1?))
-    (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help" "tide") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
-    (popwin-mode 1)))
+  ;; Dirty test this regex
+  ;; (let* ((trp (rx "*" (or "Cargo" "go" "Racer" "restclient" "lsp" "Ledger" "docker") (zero-or-more anything) "*"))
+  ;;        (trp-1? (if (s-matches-p trp "*docker containers*") "YES" "NO")))
+  ;;   (message trp-1?))
+  (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help" "tide") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
+  (popwin-mode 1))
 
 (use-package keychain-environment
   :straight t
@@ -687,9 +639,8 @@ Optional arg JUSTIFY will justify comments and strings."
   :commands (smex-initialize)
   :defines (smex-save-file)
   :config
-  (progn
-    (setq smex-save-file (concat paths-cache-directory "/smex-items"))
-    (smex-initialize)))
+  (setq smex-save-file (concat paths-cache-directory "/smex-items"))
+  (smex-initialize))
 
 (use-package json-mode
   :straight t
@@ -709,13 +660,12 @@ Optional arg JUSTIFY will justify comments and strings."
   (rk-local-leader-def :keymaps 'json-mode-map
     "." '(rk-json--format-region-or-buffer :wk "format"))
   :config
-  (progn
-    (add-hook 'json-mode-hook #'rk-json--disable-python-checker)
-    (add-hook 'json-mode-hook #'lsp)
-    (with-eval-after-load 'js
-      (setq js-indent-level 2))
-    (with-eval-after-load 'json-reformat
-      (setq json-reformat:indent-width 2))))
+  (add-hook 'json-mode-hook #'rk-json--disable-python-checker)
+  (add-hook 'json-mode-hook #'lsp)
+  (with-eval-after-load 'js
+    (setq js-indent-level 2))
+  (with-eval-after-load 'json-reformat
+    (setq json-reformat:indent-width 2)))
 
 (use-package csv-mode
   :straight t
@@ -746,17 +696,16 @@ Optional arg JUSTIFY will justify comments and strings."
   :straight t
   :if window-system
   :config
-  (progn
-    (setq exec-path-from-shell-check-startup-files nil)
-    (exec-path-from-shell-copy-env "GOPATH")
-    (exec-path-from-shell-copy-env "RUST_SRC_PATH")
-    (exec-path-from-shell-copy-env "LANG")
-    (exec-path-from-shell-copy-env "LC_ALL")
-    (exec-path-from-shell-initialize)
+  (setq exec-path-from-shell-check-startup-files nil)
+  (exec-path-from-shell-copy-env "GOPATH")
+  (exec-path-from-shell-copy-env "RUST_SRC_PATH")
+  (exec-path-from-shell-copy-env "LANG")
+  (exec-path-from-shell-copy-env "LC_ALL")
+  (exec-path-from-shell-initialize)
 
     ;;; Use gls instead of ls on OS X (if available)
-    (when (and (equal system-type 'darwin) (executable-find "gls"))
-      (setq insert-directory-program "gls")))
+  (when (and (equal system-type 'darwin) (executable-find "gls"))
+    (setq insert-directory-program "gls"))
 
   :functions
   (exec-path-from-shell-initialize))

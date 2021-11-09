@@ -31,47 +31,49 @@
   :preface
   (autoload 'magit-status "magit")
 
+  :custom
+  (projectile-indexing-method 'alien)
+  (projectile-completion-system 'default)
+  (projectile-switch-project-action 'magit-status)
+  (projectile-enable-caching t)
+  (projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
+  (projectile-globally-ignored-files '("TAGS" ".DS_Store"))
+  (projectile-globally-ignored-file-suffixes '("meta" "jsbundle" "gz" "zip" "tar" "elc"))
+  (projectile-globally-ignored-directoriess '(".bzr"
+                                              ".ensime_cache"
+                                              ".eunit"
+                                              ".fslckout"
+                                              ".g8"
+                                              ".git"
+                                              ".hg"
+                                              ".idea"
+                                              ".stack-work"
+                                              ".svn"
+                                              "build"
+                                              "dist"
+                                              "node_modules"
+                                              "vendor"
+                                              "straight/repos"
+                                              "target"))
+
   :init
-  (progn
-    (rk-leader-def
-      "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
-      "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
-      "pI" '(projectile-invalidate-cache :wk "invalidate cache")
-      "pc" '(projectile-compile-project :wk "compile project")
-      "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
-      "pr" '(projectile-replace :wk "replace (project)")
-      "pt" '(projectile-test-project :wk "test (project)")
-      "pu" '(projectile-run-project :wk "run (project)")))
+  (rk-leader-def
+    "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
+    "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
+    "pI" '(projectile-invalidate-cache :wk "invalidate cache")
+    "pc" '(projectile-compile-project :wk "compile project")
+    "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
+    "pr" '(projectile-replace :wk "replace (project)")
+    "pt" '(projectile-test-project :wk "test (project)")
+    "pu" '(projectile-run-project :wk "run (project)")
+    "pp" '(projectile-switch-project :wk "switch project")
+    "pf" '(projectile-find-file :wk "find file (project)")
+    "pF" '(projectile-recentf :wk "find recent file (project)")
+    "pd" '(projectile-find-dir :wk "find dir (project)")
+    "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)"))
 
   :config
-  (progn
-    (setq projectile-indexing-method 'alien)
-    (setq projectile-completion-system 'ivy)
-    (setq projectile-switch-project-action 'magit-status)
-    (setq projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
-    (setq projectile-enable-caching t)
-
-    (setq projectile-globally-ignored-files '("TAGS" ".DS_Store"))
-    (setq projectile-globally-ignored-file-suffixes '("meta" "jsbundle" "gz" "zip" "tar" "elc"))
-    (setq projectile-globally-ignored-directories
-          '(".bzr"
-            ".ensime_cache"
-            ".eunit"
-            ".fslckout"
-            ".g8"
-            ".git"
-            ".hg"
-            ".idea"
-            ".stack-work"
-            ".svn"
-            "build"
-            "dist"
-            "node_modules"
-            "vendor"
-            "straight/repos"
-            "target"))
-
-    (projectile-mode)))
+  (projectile-mode +1))
 
 
 (use-package counsel-projectile
@@ -108,9 +110,9 @@
 
 
   :config
-  (progn
-    (advice-add #'counsel-projectile-rg :around #'rk-counsel-projectile--ad-read-args)
-    (counsel-projectile-mode +1)))
+  (advice-add #'counsel-projectile-rg :around #'rk-counsel-projectile--ad-read-args)
+  (counsel-projectile-mode +1))
+
 
 (provide 'rk-projectile)
 

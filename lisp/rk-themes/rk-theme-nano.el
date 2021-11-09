@@ -5,9 +5,8 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package))
-
-(require 'straight)
+  (require 'use-package)
+  (require 'straight))
 
 (defconst rk-theme-cursor-yellow "#f1c40f")
 (defconst rk-theme-cursor-blue "#3498db")
