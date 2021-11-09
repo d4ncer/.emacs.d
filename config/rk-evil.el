@@ -33,7 +33,8 @@
   (:states '(normal motion)
            "C-l" #'rk-evil--select-non-empty-line
            "C-u" #'evil-scroll-page-up
-           "C-d" #'evil-scroll-page-down)
+           "C-d" #'evil-scroll-page-down
+           "C-." nil)
   (:states 'motion
            "gd" #'xref-find-definitions
            "gb" #'xref-pop-marker-stack)
