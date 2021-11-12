@@ -114,8 +114,12 @@
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
   :custom
   (lsp-ui-doc-enable nil)
+  (lsp-ui-doc-border 'nano-color-subtle)
+  (lsp-ui-doc-delay 0.75)
   (lsp-ui-sideline-enable nil)
-  (lsp-ui-peek-fontify 'always))
+  (lsp-ui-peek-fontify 'always)
+  :config
+  (set-face-attribute 'lsp-ui-doc-background nil :background nil :inherit 'nano-face-subtle))
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
