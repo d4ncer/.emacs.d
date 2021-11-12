@@ -74,7 +74,13 @@ ARG is the same as for `backward-kill-sexp'."
 
     "s S" '(rk-comp--consult-line-at-point :wk "search in buffer")
     "s P" '(rk-comp--consult-rg-at-point :wk "search in project")
-    "s F" '(rk-comp--consult-rg-at-point-custom-dir :wk "search from dir")))
+    "s F" '(rk-comp--consult-rg-at-point-custom-dir :wk "search from dir"))
+  :config
+  (consult-customize
+   consult-ripgrep consult-git-grep consult-grep
+   consult-bookmark consult-recent-file consult-xref
+   consult--source-file consult--source-project-file consult--source-bookmark
+   :preview-key (kbd "M-.")))
 
 (use-package marginalia
   :straight t
