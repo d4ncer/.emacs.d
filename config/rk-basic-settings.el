@@ -604,16 +604,13 @@ Optional arg JUSTIFY will justify comments and strings."
   :init
   (rk-leader-def "a m w" '(world-time-list :wk "world time"))
   :config
-  (progn
-    (setq display-time-world-list '(("Pacific/Auckland" "NZT")
-                                    ("Asia/Kolkata" "India")
-                                    ("UTC" "UTC")
-                                    ("Europe/Berlin" "Germany")
-                                    ("America/Los_Angeles" "Los Angeles")
-                                    ("America/New_York" "New York")))
-    (with-eval-after-load 'evil
-      (evil-define-key 'normal world-time-table-mode-map (kbd "q") #'quit-window))
-    (add-hook 'world-time-table-mode-hook 'hl-line-mode)))
+  (setq display-time-world-list '(("Pacific/Auckland" "NZT")
+                                  ("Australia/Melbourne" "AEDT")
+                                  ("Asia/Kolkata" "India")
+                                  ("UTC" "UTC")))
+  (with-eval-after-load 'evil
+    (evil-define-key 'normal world-time-table-mode-map (kbd "q") #'quit-window))
+  (add-hook 'world-time-table-mode-hook 'hl-line-mode))
 
 (use-package popwin
   :straight t
