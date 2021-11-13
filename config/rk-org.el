@@ -819,6 +819,7 @@ table tr.tr-even td {
   :custom
   (org-roam-directory rk-org-roam-dir)
   :init
+  (org-roam-db-autosync-mode)
   (rk-leader-def
     "of"  '(org-roam-node-find :wk "find file node")
     "ob"  '(rk-org--switch-to-org-roam-buffer :wk "backlinks")
