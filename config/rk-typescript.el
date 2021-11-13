@@ -18,7 +18,7 @@
   :mode ("\\.ts\\'" . typescript-mode)
   :config
   (dolist (lang '("node" "nodejs" "gjs" "rhino"))
-    (setf (alist-get lang interpreter-mode-alist) 'typescript-mode))
+    (setf (alist-get lang interpreter-mode-alist) 'typescript-mode)))
 ;; :hook (typescript-mode . lsp)
 ;; :init
 ;; (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
