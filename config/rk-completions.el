@@ -28,6 +28,7 @@ ARG is the same as for `backward-kill-sexp'."
   :general (:keymaps 'selectrum-minibuffer-map
                      "C-j" #'next-line-or-history-element
                      "C-k" #'previous-line-or-history-element
+                     "C-<return>" #'selectrum-submit-exact-input
                      "C-h" #'rk-comp--backward-kill-sexp)
   :init
   (rk-leader-def
