@@ -271,7 +271,7 @@
   :after evil
   :custom
   (evil-collection-company-use-tng nil)
-  (evil-collection-mode-list '(ivy dired racer company git-timemachine ibuffer help info docker magit))
+  (evil-collection-mode-list '(ivy dired racer company git-timemachine ibuffer help info docker magit forge))
   :init
   (setq evil-want-keybinding nil)
   :config

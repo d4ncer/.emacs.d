@@ -125,7 +125,10 @@
 
 (use-package forge
   :after magit
-  :straight (:host github :repo "magit/forge"))
+  :straight (:host github :repo "magit/forge")
+  :custom
+  (forge-add-default-sections nil)
+  (forge-add-default-bindings nil))
 
 (provide 'rk-magit)
 
