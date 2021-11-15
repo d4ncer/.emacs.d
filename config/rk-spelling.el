@@ -19,13 +19,11 @@
   (when (executable-find "aspell")
     (setq ispell-program-name "aspell")))
 
-(use-package flyspell-correct-ivy
+(use-package flyspell-correct
   :straight t
   :general
   (:keymaps 'flyspell-mode-map :states 'normal
-            "z g" #'flyspell-correct-wrapper)
-  :custom
-  (flyspell-correct-interface #'flyspell-correct-ivy))
+            "z g" #'flyspell-correct-wrapper))
 
 (provide 'rk-spelling)
 
