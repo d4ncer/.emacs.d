@@ -580,65 +580,39 @@ Do not scheduled items or repeating todos."
 (use-package org-capture
   :after org
   :defines org-capture-list
+  :defines (org-capture-templates)
   :preface
-  (defun rk-org--align-ledger-clean-buffer ()
-    (dolist (window (window-list))
-      (with-current-buffer (window-buffer window)
-        (when (and (derived-mode-p 'ledger-mode)
-                   (-contains-p '("ls" "lr" "lc") (plist-get org-capture-plist :key)))
-          (call-interactively #'ledger-mode-clean-buffer)))))
-  (defun rk-org--ledger-template-entry (key label form template &rest kws)
-    (append
-     (list key label 'plain form template
-           :empty-lines 1
-           :immediate-finish t)
-     kws))
   (defun rk-org--capture-template-entry (key label form template &rest kws)
     (append
      (list key label 'entry form template
            :clock-keep t
-           :empty-lines 1
+           :empty-lines 0
            :prepend t)
      kws))
-  :defines (org-capture-templates)
   :config
-  (progn
-    (add-hook 'org-capture-before-finalize-hook #'rk-org--align-ledger-clean-buffer)
-    (setq org-capture-templates
-          (list
-           ;; Reg org
-           (rk-org--capture-template-entry
-            "t" "Add [t]o inbox"
-            '(file rk-org--inbox-file) "* TODO %i%?")
+  (setq org-capture-templates
+        (list
+         ;; Reg org
+         (rk-org--capture-template-entry
+          "t" "Add [t]o inbox"
+          '(file rk-org--inbox-file) "* TODO %i%?")
 
-           (rk-org--capture-template-entry
-            "m" "Add [m]eeting"
-            '(file+headline rk-org--tickler-file "Meetings") "* TODO %i%? \n%^t")
+         (rk-org--capture-template-entry
+          "m" "Add [m]eeting"
+          '(file+headline rk-org--tickler-file "Meetings") "* TODO %i%? \n%^t")
 
-           (rk-org--capture-template-entry
-            "p" "Create work [p]roject"
-            '(file rk-org--work-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
+         (rk-org--capture-template-entry
+          "p" "Create work [p]roject"
+          '(file rk-org--work-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
 
-           (rk-org--capture-template-entry
-            "P" "Create [P]ersonal project"
-            '(file rk-org--personal-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
+         (rk-org--capture-template-entry
+          "P" "Create [P]ersonal project"
+          '(file rk-org--personal-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
 
-           (rk-org--capture-template-entry
-            "s" "Add task to do [s]omeday"
-            '(file+olp rk-org--someday-file "Side projects")
-            "* SOMEDAY  %?")
-
-           ;; Ledger templates
-           '("l" "Ledger")
-           (rk-org--ledger-template-entry
-            "lc" "Credit Card"
-            '(file rk-accounts--ledger-file)
-            "%(org-read-date) %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tLiabilities:Visa")
-
-           (rk-org--ledger-template-entry
-            "lj" "Joint Checking"
-            '(file rk-accounts--ledger-file)
-            "%(org-read-date) * %^{Payee}\n\tExpenses:%^{Type}    %^{Amount} NZD\n\tAssets:Joint Checking")))))
+         (rk-org--capture-template-entry
+          "s" "Add task to do [s]omeday"
+          '(file+olp rk-org--someday-file "Side projects")
+          "* SOMEDAY  %?"))))
 
 (use-package org-download
   :straight t
@@ -813,22 +787,44 @@ table tr.tr-even td {
 (use-package org-roam
   :straight t
   :after org
+  :preface
+  (defun rk-org-roam--open-with-buffer-maybe ()
+    (and (not org-roam-capture--node)
+         (not (eq 'visible (org-roam-buffer--visibility)))
+         (org-roam-buffer-toggle)))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'org-roam-node-insert)
+  (:keymaps 'org-roam-mode-map :states '(normal)
+            "<tab>" #'magit-section-toggle
+            "n" #'magit-section-forward
+            "p" #'magit-section-backward
+            "<return>" #'org-roam-buffer-visit-thing)
+  (:keymaps 'org-roam-preview-map
+            "SPC" nil)
+  (:keymaps 'org-roam-node-map
+            "SPC" nil)
+  (:keymaps 'org-roam-grep-map
+            "SPC" nil)
   :custom
   (org-roam-directory rk-org-roam-dir)
   :init
-  (org-roam-db-autosync-mode)
   (rk-leader-def
     "of"  '(org-roam-node-find :wk "find file node")
-    "ob"  '(rk-org--switch-to-org-roam-buffer :wk "backlinks")
-    "oB"  '(org-roam-switch-to-buffer :wk "switch buffer")
     "od"  '(:ignore t :wk "date")
-    "odt" '(org-roam-dailies-today :wk "today")
-    "odd" '(org-roam-dailies-date :wk "for date")
-    "ody" '(org-roam-dailies-yesterday :wk "yesterday")
-    "odT" '(org-roam-dailies-tomorrow :wk "tomorrow")))
+    "odt" '(org-roam-dailies-goto-today :wk "today")
+    "odd" '(org-roam-dailies-goto-date :wk "for date")
+    "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
+    "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
+  :config
+  (org-roam-db-autosync-mode)
+  (add-to-list 'display-buffer-alist
+               '("\\*org-roam\\*"
+                 (display-buffer-in-direction)
+                 (direction . right)
+                 (window-width . 0.33)
+                 (window-height . fit-window-to-buffer)))
+  (add-hook 'org-roam-find-file-hook #'rk-org-roam--open-with-buffer-maybe :append))
 
 (use-package org-roam-ui
   :straight
@@ -843,15 +839,6 @@ table tr.tr-even td {
         org-roam-ui-follow t
         org-roam-ui-update-on-save t
         org-roam-ui-open-on-start t))
-
-(use-package company-org-roam
-  :straight t
-  :after org-roam
-  :preface
-  (defun rk-org--setup-company-backends ()
-    (setq-local company-backends '(company-org-roam company-yasnippet company-dabbrev)))
-  :hook
-  (org-mode . rk-org--setup-company-backends))
 
 (use-package verb
   :straight t
