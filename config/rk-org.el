@@ -792,6 +792,18 @@ table tr.tr-even td {
     (and (not org-roam-capture--node)
          (not (eq 'visible (org-roam-buffer--visibility)))
          (org-roam-buffer-toggle)))
+  (defun rk-org-roam--visit-node-other-window ()
+    (interactive)
+    (let ((current-prefix-arg t))
+      (call-interactively 'org-roam-node-visit)))
+  (defun rk-org-roam--visit-preview-other-window ()
+    (interactive)
+    (let ((current-prefix-arg t))
+      (call-interactively 'org-roam-preview-visit)))
+  (defun rk-org-roam--visit-grep-other-window ()
+    (interactive)
+    (let ((current-prefix-arg t))
+      (call-interactively 'org-roam-grep-visit)))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'org-roam-node-insert)
@@ -801,11 +813,14 @@ table tr.tr-even td {
             "p" #'magit-section-backward
             "<return>" #'org-roam-buffer-visit-thing)
   (:keymaps 'org-roam-preview-map
-            "SPC" nil)
+            "SPC" nil
+            "<return>" #'rk-org-roam--visit-preview-other-window)
   (:keymaps 'org-roam-node-map
-            "SPC" nil)
+            "SPC" nil
+            "<return>" #'rk-org-roam--visit-node-other-window)
   (:keymaps 'org-roam-grep-map
-            "SPC" nil)
+            "SPC" nil
+            "<return>" #'rk-org-roam--visit-grep-other-window)
   :custom
   (org-roam-directory rk-org-roam-dir)
   :init
