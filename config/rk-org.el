@@ -766,7 +766,7 @@ table tr.tr-even td {
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
             (lambda ()
-              (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))))
+              (evil-org-set-key-theme '(textobjects navigation additional shift heading))))
   (require 'evil-org-agenda)
   (evil-org-agenda-set-keys))
 
