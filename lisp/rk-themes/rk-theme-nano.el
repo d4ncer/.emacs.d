@@ -63,7 +63,8 @@
 (require 'nano-layout)
 
 (require 'nano-modeline)
-(require 'rk-minibuffer)
+(use-package 'rk-minibuffer
+  :disabled t)
 
 (set-face-attribute 'default nil
                     :weight 'regular)
