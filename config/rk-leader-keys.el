@@ -38,17 +38,15 @@
 (use-package which-key
   :straight t
   :preface
-  (progn
-    (autoload 'which-key-mode "which-key")
-    (autoload 'which-key-add-key-based-replacements "which-key")
+  (autoload 'which-key-mode "which-key")
+  (autoload 'which-key-add-key-based-replacements "which-key")
 
-    (defun rk-leader-keys-set-up-which-key-buffer (&rest _)
-      (when-let (buf (get-buffer which-key-buffer-name))
-        (when (buffer-live-p buf)
-          (with-current-buffer buf
-            (setq-local mode-line-format nil)
-            (setq-local header-line-format nil)
-            (force-mode-line-update))))))
+  (defun rk-leader-keys-set-up-which-key-buffer (&rest _)
+    (when-let (buf (get-buffer which-key-buffer-name))
+      (when (buffer-live-p buf)
+        (with-current-buffer buf
+          (setq-local mode-line-format nil)
+          (force-mode-line-update)))))
   :config
   (general-setq which-key-special-keys nil)
   (general-setq which-key-use-C-h-commands t)

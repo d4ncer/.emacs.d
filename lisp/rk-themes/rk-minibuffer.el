@@ -15,7 +15,7 @@
         `((left . 0.5)
           (top . 1.0)
           (width . 1.0)
-          (height . 8)
+          (height . 10)
           (left-fringe . 0)
           (right-fringe . 0)
           (child-frame-border-width . 16)
