@@ -332,6 +332,7 @@ Optional arg JUSTIFY will justify comments and strings."
 
 (use-package page-break-lines
   :straight t
+  :disabled t
   :config
   (progn
     (with-eval-after-load 'eshell
