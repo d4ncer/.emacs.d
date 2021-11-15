@@ -20,6 +20,7 @@
 (require 'dash)
 (require 'subr-x)
 (require 'transient)
+(require 'pretty-hydra)
 
 (autoload 'evil-define-key "evil")
 
@@ -804,6 +805,17 @@ table tr.tr-even td {
     (interactive)
     (let ((current-prefix-arg t))
       (call-interactively 'org-roam-grep-visit)))
+  (pretty-hydra-define rk-org-roam--utils
+    (:title "Roam Utilities" :quit-key "q")
+    ("Refs"
+     (("r" org-roam-ref-add "add")
+      ("R" org-roam-ref-remove "remove"))
+     "Tags"
+     (("t" org-roam-tag-add "add")
+      ("T" org-roam-tag-remove "remove"))
+     "Aliases"
+     (("a" org-roam-alias-add "add")
+      ("A" org-roam-alias-remove "remove"))))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'org-roam-node-insert)
@@ -825,7 +837,11 @@ table tr.tr-even td {
   (org-roam-directory rk-org-roam-dir)
   :init
   (rk-leader-def
+    "ob"  '(org-roam-buffer-toggle :wk "toggle buffer")
     "of"  '(org-roam-node-find :wk "find file node")
+
+    "or"  '(rk-org-roam--utils/body :wk "roam utils")
+
     "od"  '(:ignore t :wk "date")
     "odt" '(org-roam-dailies-goto-today :wk "today")
     "odd" '(org-roam-dailies-goto-date :wk "for date")
