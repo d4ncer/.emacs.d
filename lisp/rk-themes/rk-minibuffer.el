@@ -33,7 +33,7 @@
                         :background nano-color-faded))
 
   (setq mini-frame-ignore-commands
-        '("edebug-eval-expression" debugger-eval-expression))
+        '(eval-expression edebug-eval-expression debugger-eval-expression ledger-add-transaction))
 
   (setq mini-frame-internal-border-color nano-color-subtle)
   ;; (setq mini-frame-resize 'grow-only) ;; -> buggy as of 01/05/2021
