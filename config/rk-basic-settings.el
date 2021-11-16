@@ -351,8 +351,7 @@ Optional arg JUSTIFY will justify comments and strings."
   (window-numbering-mode -1))
 
 (use-package menu-bar
-  :bind (("C-c e e" . toggle-debug-on-error))
-  :if (bound-and-true-p menu-bar-mode)
+  :general ("C-c e e" #'toggle-debug-on-error)
   :config
   (menu-bar-mode -1))
 
