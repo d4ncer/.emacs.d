@@ -19,6 +19,12 @@
   (when (executable-find "aspell")
     (setq ispell-program-name "aspell")))
 
+(use-package flyspell
+  :general
+  (:keymaps 'flyspell-mode-map
+            "C-." nil
+            "C-;" nil))
+
 (use-package flyspell-correct
   :straight t
   :general
