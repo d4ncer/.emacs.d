@@ -69,6 +69,9 @@
 (set-face-attribute 'default nil
                     :weight 'regular)
 
+(set-face-attribute 'bold nil
+                    :weight 'bold)
+
 (set-face-attribute 'font-lock-keyword-face nil
                     :weight 'light
                     :inherit 'default)
@@ -114,6 +117,11 @@
                       :foreground nano-color-salient
                       :background nano-color-background
                       :weight 'normal))
+
+(with-eval-after-load 'org
+  (set-face-attribute 'org-verbatim nil
+                      :foreground nano-color-salient
+                      :weight 'semi-bold))
 
 (provide 'rk-theme-nano)
 
