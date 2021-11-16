@@ -35,6 +35,7 @@
   :demand t
   :general
   (:keymaps 'org-mode-map
+            "C-;" #'insert-char
             "C-c C-." #'org-time-stamp-inactive
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
@@ -45,6 +46,11 @@
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "?" #'counsel-org-goto
+            "B" #'rk-org--embolden
+            "_" #'rk-org--underline
+            "/" #'rk-org--italicize
+            "+" #'rk-org--strike-through
+            "=" #'rk-org--quote
             "gb" #'org-mark-ring-goto)
   :defines (org-state
             org-log-states
@@ -84,71 +90,83 @@
             org-todo-keywords)
 
   :preface
-  (progn
-    (autoload 'outline-forward-same-level "outline")
-    (autoload 's-matches? "s")
+  (autoload 'outline-forward-same-level "outline")
+  (defun rk-org--embolden ()
+    (interactive)
+    (org-emphasize (string-to-char "*")))
+  (defun rk-org--italicize ()
+    (interactive)
+    (org-emphasize (string-to-char "/")))
+  (defun rk-org--underline ()
+    (interactive)
+    (org-emphasize (string-to-char "_")))
+  (defun rk-org--quote ()
+    (interactive)
+    (org-emphasize (string-to-char "=")))
+  (defun rk-org--strike-through ()
+    (interactive)
+    (org-emphasize (string-to-char "+")))
+  (defun rk-org--tag-headline-or-region ()
+    (interactive)
+    (if (region-active-p)
+        (call-interactively #'org-change-tag-in-region)
+      (counsel-org-tag)))
 
-    (defun rk-org--tag-headline-or-region ()
-      (interactive)
-      (if (region-active-p)
-          (call-interactively #'org-change-tag-in-region)
-        (counsel-org-tag)))
+  (defun rk-org--exit-minibuffer (&rest _)
+    "Exit minibuffer before adding notes."
+    (when (minibufferp (window-buffer (selected-window)))
+      (other-window 1)))
 
-    (defun rk-org--exit-minibuffer (&rest _)
-      "Exit minibuffer before adding notes."
-      (when (minibufferp (window-buffer (selected-window)))
-        (other-window 1)))
+  (defun rk-org--toggle-heading-goto-eol (&rest _)
+    "Prevent point from moving to BOL when toggling headings."
+    (when (s-matches? (rx bol (+ "*") (* space) eol)
+                      (buffer-substring (line-beginning-position) (line-end-position)))
+      (goto-char (line-end-position))))
 
-    (defun rk-org--toggle-heading-goto-eol (&rest _)
-      "Prevent point from moving to BOL when toggling headings."
-      (when (s-matches? (rx bol (+ "*") (* space) eol)
-                        (buffer-substring (line-beginning-position) (line-end-position)))
-        (goto-char (line-end-position))))
+  (defun rk-org--mark-first-child-next ()
+    "Mark first task in a project as NEXT when refiling."
+    (when (org-first-sibling-p)
+      (org-todo "NEXT")))
 
-    (defun rk-org--mark-first-child-next ()
-      "Mark first task in a project as NEXT when refiling."
-      (when (org-first-sibling-p)
-        (org-todo "NEXT")))
+  (defun rk-org--remove-todo-tickler-or-reference ()
+    (let ((last-refile (-first-item org-refile-history)))
+      (when (or (s-contains-p "tickler.org" last-refile)
+                (s-contains-p "reference.org" last-refile))
+        (org-todo ""))))
 
-    (defun rk-org--remove-todo-tickler-or-reference ()
-      (let ((last-refile (-first-item org-refile-history)))
-        (when (or (s-contains-p "tickler.org" last-refile)
-                  (s-contains-p "reference.org" last-refile))
-          (org-todo ""))))
+  (defun rk-org--mark-next-parent-tasks-todo ()
+    "Visit each parent task and change state to TODO."
+    (let ((mystate (or (and (fboundp 'org-state)
+                            state)
+                       (nth 2 (org-heading-components)))))
+      (when mystate
+        (save-excursion
+          (while (org-up-heading-safe)
+            (when (member (nth 2 (org-heading-components)) (list "NEXT"))
+              (org-todo "TODO")))))))
 
-    (defun rk-org--mark-next-parent-tasks-todo ()
-      "Visit each parent task and change state to TODO."
-      (let ((mystate (or (and (fboundp 'org-state)
-                              state)
-                         (nth 2 (org-heading-components)))))
-        (when mystate
-          (save-excursion
-            (while (org-up-heading-safe)
-              (when (member (nth 2 (org-heading-components)) (list "NEXT"))
-                (org-todo "TODO")))))))
+  (defun rk-org--disable-flycheck ()
+    "Disable Flycheck in org buffers."
+    (with-eval-after-load 'flycheck
+      (flycheck-mode -1)))
 
-    (defun rk-org--disable-flycheck ()
-      "Disable Flycheck in org buffers."
-      (with-eval-after-load 'flycheck
-        (flycheck-mode -1)))
+  (defun rk-org--disable-ligatures ()
+    (when (fboundp 'mac-auto-operator-composition-mode)
+      (mac-auto-operator-composition-mode -1)))
 
-    (defun rk-org--disable-ligatures ()
-      (when (fboundp 'mac-auto-operator-composition-mode)
-        (mac-auto-operator-composition-mode -1)))
+  (defun rk-org--setup-org ()
+    (rk-org--disable-flycheck)
+    (rk-org--disable-ligatures))
 
-    (defun rk-org--setup-org ()
-      (rk-org--disable-flycheck)
-      (rk-org--disable-ligatures))
-
-    (defun rk-org--set-next-todo-state ()
-      "When marking a todo to DONE, set the next TODO as NEXT.
+  (defun rk-org--set-next-todo-state ()
+    "When marking a todo to DONE, set the next TODO as NEXT.
 Do not scheduled items or repeating todos."
-      (save-excursion
-        (when (and (string= org-state "DONE")
-                   (org-goto-sibling)
-                   (-contains? '("TODO") (org-get-todo-state))
-                   (not (-contains-p (org-get-tags) "project")))
-          (org-todo "NEXT")))))
+    (save-excursion
+      (when (and (string= org-state "DONE")
+                 (org-goto-sibling)
+                 (-contains? '("TODO") (org-get-todo-state))
+                 (not (-contains-p (org-get-tags) "project")))
+        (org-todo "NEXT"))))
 
   :init
   (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
@@ -161,82 +179,82 @@ Do not scheduled items or repeating todos."
          (org-mode . rk-org--setup-org)
          (org-babel-after-execute . org-display-inline-images))
   :config
-  (progn
-    (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
-    (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
-    (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
-    (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
-    (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
-    (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
-    (add-hook 'org-after-refile-insert-hook #'rk-org--remove-todo-tickler-or-reference)
-    (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
+  (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
+  (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
+  (add-hook 'org-mode-hook #'auto-fill-mode)
+  (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
+  (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
+  (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
+  (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
+  (add-hook 'org-after-refile-insert-hook #'rk-org--remove-todo-tickler-or-reference)
+  (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
 
-    (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
-    (rk-local-leader-def :keymaps 'org-mode-map
-      "A" '(org-align-tags :wk "align tags")
-      "r" '(org-refile :wk "refile")
-      "d" '(org-deadline :wk "add deadline")
-      "C" '(org-ctrl-c-ctrl-c :wk "magic C")
-      "f" '(org-fill-paragraph :wk "wrap text")
-      "L" '(org-insert-link :wk "insert link")
-      "t" '(rk-org--tag-headline-or-region :wk "edit tags")
-      "p" '(org-set-property :wk "set property")
-      "s" '(org-schedule :wk "schedule"))
+  (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "A" '(org-align-tags :wk "align tags")
+    "r" '(org-refile :wk "refile")
+    "d" '(org-deadline :wk "add deadline")
+    "C" '(org-ctrl-c-ctrl-c :wk "magic C")
+    "f" '(org-fill-paragraph :wk "wrap text")
+    "L" '(org-insert-link :wk "insert link")
+    "t" '(rk-org--tag-headline-or-region :wk "edit tags")
+    "p" '(org-set-property :wk "set property")
+    "s" '(org-schedule :wk "schedule"))
 
-    (general-def :keymaps 'org-mode-map :states 'normal
-      "RET" #'org-return)
+  (general-def :keymaps 'org-mode-map :states 'normal
+    "RET" #'org-return)
 
-    (setq org-refile-targets nil)
-    (add-to-list 'org-refile-targets '(nil :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--work-projects-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--personal-projects-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
-    (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
-    (add-to-list 'org-tags-exclude-from-inheritance "project")
+  (setq org-refile-targets nil)
+  (add-to-list 'org-refile-targets '(nil :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--work-projects-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--personal-projects-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
+  (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
+  (add-to-list 'org-tags-exclude-from-inheritance "project")
 
-    (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
+  (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
-    (setq org-M-RET-may-split-line nil)
-    (setq org-catch-invisible-edits 'smart)
-    (setq org-cycle-separator-lines 1)
-    (setq org-enforce-todo-dependencies t)
-    (setq org-footnote-auto-adjust t)
-    (setq org-indirect-buffer-display 'current-window)
-    (setq org-insert-heading-respect-content t)
-    (setq org-link-abbrev-alist '(("att" . org-attach-expand-link)))
-    (setq org-log-done 'time)
-    (setq org-use-sub-superscripts '{})
-    (setq org-log-into-drawer t)
-    (setq org-hide-emphasis-markers t)
-    (setq org-outline-path-complete-in-steps nil)
-    (setq org-pretty-entities t)
-    (setq org-refile-allow-creating-parent-nodes 'confirm)
-    (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
-    (setq org-agenda-diary-file rk-org--inbox-file)
+  (setq org-M-RET-may-split-line nil)
+  (setq org-catch-invisible-edits 'smart)
+  (setq org-cycle-separator-lines 1)
+  (setq org-enforce-todo-dependencies t)
+  (setq org-footnote-auto-adjust t)
+  (setq org-indirect-buffer-display 'current-window)
+  (setq org-insert-heading-respect-content t)
+  (setq org-link-abbrev-alist '(("att" . org-attach-expand-link)))
+  (setq org-log-done 'time)
+  (setq org-use-sub-superscripts '{})
+  (setq org-log-into-drawer t)
+  (setq org-hide-emphasis-markers t)
+  (setq org-outline-path-complete-in-steps nil)
+  (setq org-pretty-entities t)
+  (setq org-refile-allow-creating-parent-nodes 'confirm)
+  (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
+  (setq org-agenda-diary-file rk-org--inbox-file)
 
-    (setq org-refile-use-outline-path t)
-    (setq org-return-follows-link t)
-    (setq org-reverse-note-order nil)
-    (setq org-confirm-elisp-link-function nil)
-    (setq org-startup-indented t)
-    (setq org-startup-with-inline-images t)
-    (setq org-hierarchical-todo-statistics nil)
-    (setq org-checkbox-hierarchical-statistics t)
-    (setq org-log-repeat nil)
-    (setq org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
+  (setq org-refile-use-outline-path t)
+  (setq org-return-follows-link t)
+  (setq org-reverse-note-order nil)
+  (setq org-confirm-elisp-link-function nil)
+  (setq org-startup-indented t)
+  (setq org-startup-with-inline-images t)
+  (setq org-hierarchical-todo-statistics nil)
+  (setq org-checkbox-hierarchical-statistics t)
+  (setq org-log-repeat nil)
+  (setq org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
 
-    (setq org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
-                              (sequence "SOMEDAY(o)" "|")
-                              (sequence "SCHEDULE(s)" "|")))
+  (setq org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
+                            (sequence "SOMEDAY(o)" "|")
+                            (sequence "SCHEDULE(s)" "|")))
 
-    (setq org-confirm-babel-evaluate nil)
+  (setq org-confirm-babel-evaluate nil)
 
-    (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
-    (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol)))
+  (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
+  (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol))
 
 (use-package ob-python
   :after org
