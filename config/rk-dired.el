@@ -73,7 +73,7 @@
   :hook (dired-mode . dired-omit-mode)
   :custom
   (dired-omit-verbose nil)
-  (dired-clean-up-buffers-too t)
+  (dired-clean-up-buffers-too nil)
   :general
   (:keymaps 'dired-mode-map :states '(normal)
             "h" #'dired-omit-mode))
