@@ -15,78 +15,84 @@
 (require 'definers)
 
 (use-package dired
-  :commands (dired dired-hide-details-mode)
+  :general
+  (:states 'normal :keymaps 'dired-mode-map
+           "$" #'end-of-line
+           "i" nil
+           "i i" 'dired-insert-subdir
+           "i q" 'dired-kill-subdir
+           "TAB" 'dired-hide-subdir)
   :preface
-  (progn
-    (general-setq dired-omit-files (rx bol (or (+ ".")
-                                               (and "__pycache__" eol))))
-    (autoload 'diredp-next-line "dired+")
-    (autoload 'diredp-previous-line "dired+")
-    (autoload 'diredp-up-directory-reuse-dir-buffer "dired+")
-    (autoload 'wdired-change-to-wdired-mode "wdired")
-    (autoload 'diff-hl-dired-mode-unless-remote "diff-hl-dired")
-
-    (defun rk-dired--sort-directories-first (&rest _)
-      "Sort dired listings with directories first."
-      (save-excursion
-        (let (buffer-read-only)
-          (forward-line 2) ;; beyond dir. header
-          (sort-regexp-fields t "^.*$" "[ ]*." (point) (point-max)))
-        (set-buffer-modified-p nil))))
-
-  :init
-  (progn
-    (rk-leader-def
-      "d" '(dired :wk "dired"))
-    (add-hook 'dired-mode-hook #'diff-hl-dired-mode-unless-remote)
-    (add-hook 'dired-mode-hook #'dired-hide-details-mode))
-
+  (defun rk-dired--sort-directories-first (&rest _)
+    "Sort dired listings with directories first."
+    (save-excursion
+      (let (buffer-read-only)
+        (forward-line 2) ;; beyond dir. header
+        (sort-regexp-fields t "^.*$" "[ ]*." (point) (point-max)))
+      (set-buffer-modified-p nil)))
+  :custom
+  (dired-listing-switches "-alhv")
+  (dired-dwim-target t)
+  (dired-auto-revert-buffer t)
+  (dired-hide-details-hide-symlink-targets nil)
+  (dired-omit-files (rx bol (or (+ ".") (and "__pycache__" eol))))
   :config
-  (progn
-    (rk-local-leader-def :keymaps 'dired-mode-map
-      "s" '(nil :ignore t :wk "subdir")
-      "d" '(dired-hide-details-mode :wk "toggle details")
-      "si" '(dired-insert-subdir :wk "make subdir")
-      "sd" '(dired-kill-subdir :wk "kill subdir")
-      "w" '(wdired-change-to-wdired-mode :wk "edit as buffer"))
-    (put 'dired-find-alternate-file 'disabled nil)
-    (setq-default dired-listing-switches "-alhv")
-    (setq dired-dwim-target t)
-    (setq dired-auto-revert-buffer t)
-    (advice-add 'dired-readin :after #'rk-dired--sort-directories-first)
-    (general-def 'normal dired-mode-map
-      "C-;" #'diredp-up-directory-reuse-dir-buffer
-      "j" #'diredp-next-line
-      "k" #'diredp-previous-line)))
+  (advice-add 'dired-readin :after #'rk-dired--sort-directories-first)
+  (add-hook 'dired-mode-hook #'hl-line-mode)
+  (put 'dired-find-alternate-file 'disabled nil)
+  (rk-leader-def
+    "d" '(dired :wk "dired"))
+  (rk-local-leader-def :keymaps 'dired-mode-map
+    "?" '(dired-hide-details-mode :wk "toggle details")
+    "." '(dired-omit-mode :wk "toggle hidden")
+    "e" '(wdired-change-to-wdired-mode :wk "wdired")
+    "s" '(dired-sort-toggle-or-edit :wk "toggle sort")
+
+    "f" 'dired
+    "F" '(dired-other-window :wk "dired (other window)")
+
+    "m" '(:ignore t :wk "mark")
+    "m a" '(dired-mark-unmarked-files :wk "unmarked")
+    "m c" '(dired-change-marks :wk "change")
+    "m r" '(dired-mark-files-regexp :wk "by regexp")
+    "m l" '(dired-mark-symlinks :wk "symlinks")
+    "m d" '(dired-mark-directories :wk "directories")
+    "U" '(dired-unmark-all-marks :wk "unmark all")
+
+    "!" '(dired-do-shell-command :wk "shell command...")
+
+    "d" '(:ignore t :wk "execute (marked)")
+    "d c" '(dired-do-copy :wk "copy")
+    "d D" '(dired-do-delete :wk "delete")
+    "d h" '(dired-do-hardlink :wk "hardlink")
+    "d s" '(dired-do-relsymlink :wk "symlink (relative)")
+    "d S" '(dired-do-symlink :wk "symlink (absolute)")
+    "d /" '(dired-do-search :wk "search")))
 
 (use-package dired-x
-  :after dired
-  :commands (dired-omit-mode)
-  :init
-  (progn
-    (add-hook 'dired-load-hook (lambda () (load "dired-x")))
-    (add-hook 'dired-mode-hook #'dired-omit-mode))
+  :hook (dired-mode . dired-omit-mode)
+  :custom
+  (dired-omit-verbose nil)
+  (dired-clean-up-buffers-too t)
   :general
   (:keymaps 'dired-mode-map :states '(normal)
-            "h" #'dired-omit-mode)
-  :config
-  (rk-local-leader-def :keymaps 'dired-mode-map
-    "h" '(dired-omit-mode :wk "switch to omit mode")))
+            "h" #'dired-omit-mode))
 
 (use-package dired-plus
   :straight t
-  :defer t
   :custom
   (diredp-wrap-around-flag nil)
   :general
   (:states 'normal :keymaps 'dired-mode-map
+           "C-'" #'diredp-up-directory-reuse-dir-buffer
            "j" #'diredp-next-line
            "k" #'diredp-previous-line)
   :hook (dired-mode . dired-hide-details-mode))
 
 (use-package wdired
-  :after dired
   :config
+  (rk-local-leader-def :keymaps 'dired-mode-map
+    "w" '(wdired-change-to-wdired-mode :wk "edit as buffer"))
   (rk-local-leader-def :keymaps 'wdired-mode-map
     "c" '(wdired-finish-edit :wk "commit changes")
     "k" '(wdired-abort-changes :wk "abort edit")))
