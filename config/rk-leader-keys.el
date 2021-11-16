@@ -91,7 +91,6 @@
 
     "f"     '(:ignore t :wk "file")
     "f f"   '(find-file :wk "find file")
-    "f d"   '(dired :wk "dired")
     "f D"   '(rk-delete-current-buffer-and-file :wk "delete file & buffer")
     "f F"   '(find-file-other-window :wk "open file (new window)")
     "f R"   '(rk-rename-file-and-buffer :wk "rename file")
