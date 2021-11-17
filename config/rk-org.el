@@ -45,13 +45,14 @@
   (:keymaps 'org-mode-map :states '(normal visual motion)
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
-            "?" #'counsel-org-goto
+            "gb" #'org-mark-ring-goto)
+  (:keymaps 'org-mode-map :states '(visual)
+            "-" #'rk-org--deemphasize
             "B" #'rk-org--embolden
             "_" #'rk-org--underline
             "/" #'rk-org--italicize
             "+" #'rk-org--strike-through
-            "=" #'rk-org--quote
-            "gb" #'org-mark-ring-goto)
+            "=" #'rk-org--quote)
   :defines (org-state
             org-log-states
             org-log-done
@@ -91,6 +92,10 @@
 
   :preface
   (autoload 'outline-forward-same-level "outline")
+  (defun rk-org--deemphasize ()
+    (interactive)
+    (when (use-region-p)
+      (replace-regexp-in-region (rx (or "*" "_" "/" "+" "=" "~")) "" (region-beginning) (region-end))))
   (defun rk-org--embolden ()
     (interactive)
     (org-emphasize (string-to-char "*")))
@@ -784,7 +789,7 @@ table tr.tr-even td {
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
             (lambda ()
-              (evil-org-set-key-theme '(textobjects navigation additional shift heading))))
+              (evil-org-set-key-theme '(textobjects navigation additional shift heading todo return))))
   (require 'evil-org-agenda)
   (evil-org-agenda-set-keys))
 
@@ -829,11 +834,14 @@ table tr.tr-even td {
      (("r" org-roam-ref-add "add")
       ("R" org-roam-ref-remove "remove"))
      "Tags"
-     (("t" org-roam-tag-add "add")
-      ("T" org-roam-tag-remove "remove"))
+     (("g" org-roam-tag-add "add")
+      ("G" org-roam-tag-remove "remove"))
      "Aliases"
      (("a" org-roam-alias-add "add")
-      ("A" org-roam-alias-remove "remove"))))
+      ("A" org-roam-alias-remove "remove"))
+     "Dailies"
+     (("C-j" org-roam-dailies-goto-next-note "next")
+      ("C-k" org-roam-dailies-goto-previous-note "previous"))))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'org-roam-node-insert)
@@ -858,13 +866,13 @@ table tr.tr-even td {
     "ob"  '(org-roam-buffer-toggle :wk "toggle buffer")
     "of"  '(org-roam-node-find :wk "find file node")
 
-    "or"  '(rk-org-roam--utils/body :wk "roam utils")
-
     "od"  '(:ignore t :wk "date")
     "odt" '(org-roam-dailies-goto-today :wk "today")
     "odd" '(org-roam-dailies-goto-date :wk "for date")
     "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
     "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "." '(rk-org-roam--utils/body :wk "roam utils"))
   :config
   (org-roam-db-autosync-mode)
   (add-to-list 'display-buffer-alist
