@@ -15,7 +15,7 @@
 
 (use-package company
   :straight t
-  :demand t
+  :disabled t
   :hook (after-init . global-company-mode)
 
   :general
@@ -39,14 +39,13 @@
 
 (use-package company-dabbrev
   :after company
-  :config
-  (progn
-    (setq company-dabbrev-ignore-case nil)
-    (setq company-dabbrev-downcase nil)))
+  :disabled t
+  :custom
+  (company-dabbrev-ignore-case nil)
+  (company-dabbrev-downcase nil))
 
 (use-package corfu
   :straight t
-  :disabled t
   :custom
   (corfu-auto t)
   :general
