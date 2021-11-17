@@ -127,6 +127,13 @@
                       :foreground nano-color-salient
                       :weight 'semi-bold))
 
+(with-eval-after-load 'corfu
+  (set-face-attribute 'corfu-border nil
+                      :background nano-color-salient)
+
+  (set-face-attribute 'corfu-default nil
+                      :background nano-color-background))
+
 (provide 'rk-theme-nano)
 
 ;;; rk-theme-nano.el ends here
