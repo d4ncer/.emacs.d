@@ -18,10 +18,12 @@
   :general
   (:states 'normal :keymaps 'dired-mode-map
            "$" #'end-of-line
+           "C-'" #'dired-up-directory
            "i" nil
            "i i" 'dired-insert-subdir
            "i q" 'dired-kill-subdir
            "TAB" 'dired-hide-subdir)
+  :hook (dired-mode . dired-hide-details-mode)
   :preface
   (defun rk-dired--sort-directories-first (&rest _)
     "Sort dired listings with directories first."
@@ -77,17 +79,6 @@
   :general
   (:keymaps 'dired-mode-map :states '(normal)
             "h" #'dired-omit-mode))
-
-(use-package dired-plus
-  :straight t
-  :custom
-  (diredp-wrap-around-flag nil)
-  :general
-  (:states 'normal :keymaps 'dired-mode-map
-           "C-'" #'diredp-up-directory-reuse-dir-buffer
-           "j" #'diredp-next-line
-           "k" #'diredp-previous-line)
-  :hook (dired-mode . dired-hide-details-mode))
 
 (use-package wdired
   :config
