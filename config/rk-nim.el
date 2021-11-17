@@ -13,7 +13,6 @@
 
 (require 'general)
 (require 'lsp)
-(require 'company)
 
 (use-package nim-mode
   :straight t
@@ -40,7 +39,8 @@
     (nimsuggest-mode 1)
     (flycheck-mode 1)
 
-    (add-to-list 'company-backends 'company-nimsuggest)
+    (with-eval-after-load 'company
+      (add-to-list 'company-backends 'company-nimsuggest))
 
     (auto-fill-mode 0)
     (electric-indent-local-mode 0))
