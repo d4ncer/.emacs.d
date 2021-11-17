@@ -41,13 +41,11 @@ ARG is the same as for `backward-kill-sexp'."
   (selectrum-prescient-mode +1)
   (prescient-persist-mode +1))
 
-
 (use-package consult
   :straight t
   :general
   (:states '(motion normal)
-           "/" #'consult-line
-           "?" #'consult-line-multi)
+           "/" #'consult-line)
   :custom
   (consult-project-root-function #'projectile-project-root)
   (consult-narrow-key (kbd ">"))
@@ -116,6 +114,13 @@ ARG is the same as for `backward-kill-sexp'."
    "C-;" #'embark-dwim)
   :init
   (setq prefix-help-command #'embark-prefix-help-command))
+
+(use-package consult
+  :straight t
+  :after org
+  :general
+  (:keymaps 'org-mode-map :states '(normal visual motion)
+            "?" #'consult-org-heading))
 
 (use-package embark-consult
   :straight t
