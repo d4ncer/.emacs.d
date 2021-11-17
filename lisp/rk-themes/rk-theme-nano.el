@@ -6,7 +6,8 @@
 
 (eval-when-compile
   (require 'use-package)
-  (require 'straight))
+  (require 'straight)
+  (require 'definers))
 
 (defconst rk-theme-cursor-yellow "#f1c40f")
 (defconst rk-theme-cursor-blue "#3498db")
@@ -65,6 +66,9 @@
 (require 'nano-modeline)
 (use-package 'rk-minibuffer
   :disabled t)
+
+(rk-leader-def
+  "i f" #'nano-what-faces)
 
 (set-face-attribute 'default nil
                     :weight 'regular)
