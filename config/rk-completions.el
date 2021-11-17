@@ -55,7 +55,7 @@ ARG is the same as for `backward-kill-sexp'."
     (consult-line (thing-at-point 'symbol)))
   (defun rk-comp--consult-rg-at-point ()
     (interactive)
-    (consult-ripgrep default-directory (thing-at-point 'symbol)))
+    (consult-ripgrep (or (projectile-project-root) default-directory) (thing-at-point 'symbol)))
   (defun rk-comp--consult-rg-at-point-custom-dir (dir input)
     (interactive (list (read-directory-name "Start from directory: ")
                        (or (thing-at-point 'symbol) "")))
