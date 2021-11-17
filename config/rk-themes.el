@@ -40,11 +40,11 @@
 (use-package rk-theme-nano)
 
 (use-package tree-sitter
-  :disabled
+  :disabled t
   :straight t)
 
 (use-package tree-sitter-langs
-  :disabled
+  :disabled t
   :after tree-sitter)
 
 (provide 'rk-themes)
