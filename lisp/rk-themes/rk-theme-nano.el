@@ -68,6 +68,7 @@
 ;; KLUDGE: Fix modeline update to be window specific
 
 (remove-hook 'window-configuration-change-hook #'nano-modeline-update-windows)
+
 (defun rk-modeline--update-windows ()
   "Update modeline as required"
   (dolist (window (window-list))
@@ -75,11 +76,13 @@
       (with-current-buffer (window-buffer window)
         (if (or (not (boundp 'no-mode-line)) (not no-mode-line))
             (set-window-parameter window 'mode-line-format
-                                  (cond ((not mode-line-format) 'none)
+                                  (cond ((bound-and-true-p mode-line-format) mode-line-format)
+                                        ((not mode-line-format) 'none)
                                         ((one-window-p t 'visible) (list ""))
                                         ((eq (window-in-direction 'below) (minibuffer-window)) (list ""))
                                         ((not (window-in-direction 'below)) (list ""))
                                         (t 'none))))))))
+
 (add-hook 'window-configuration-change-hook #'rk-modeline--update-windows)
 
 (use-package rk-minibuffer
