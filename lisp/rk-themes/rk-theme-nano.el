@@ -94,6 +94,9 @@
 (set-face-attribute 'bold nil
                     :weight 'bold)
 
+(set-face-attribute 'italic nil
+                    :slant 'italic)
+
 (set-face-attribute 'font-lock-keyword-face nil
                     :weight 'light
                     :inherit 'default)
