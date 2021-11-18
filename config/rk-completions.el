@@ -128,6 +128,58 @@ ARG is the same as for `backward-kill-sexp'."
   :demand t
   :hook (embark-collect-mode . consult-preview-at-point-mode))
 
+(use-package company
+  :straight t
+  :hook (after-init . global-company-mode)
+
+  :general
+  (:keymaps 'company-active-map
+            "C-w" nil
+            "C-j" #'company-select-next-or-abort
+            "C-k" #'company-select-previous-or-abort
+            "<tab>" #'company-complete-selection)
+  (:keymaps 'company-search-map
+            "C-w" nil
+            "C-j" #'company-select-next-or-abort
+            "C-k" #'company-select-previous-or-abort
+            "<tab>" #'company-complete-selection)
+
+  :commands (company-select-next-or-abort
+             company-select-previous-or-abort
+             company-show-doc-buffer)
+  :custom
+  (company-tooltip-align-annotations t)
+  (company-idle-delay 0.2)
+  (company-require-match nil))
+
+(use-package company-dabbrev
+  :after company
+  :custom
+  (company-dabbrev-ignore-case nil)
+  (company-dabbrev-downcase nil))
+
+(use-package corfu
+  :straight t
+  :disabled t
+  :custom
+  (corfu-auto t)
+  (corfu-quit-no-match t)
+  :preface
+  (autoload 'company-show-doc-buffer "company")
+  :general
+  (:keymaps 'corfu-map
+            "C-<return>" #'corfu-insert
+            "C-j" #'corfu-next
+            "C-k" #'corfu-previous
+            "C-h" #'corfu-show-documentation)
+  :init
+  (corfu-global-mode))
+
+(use-package emacs
+  :init
+  (setq completion-cycle-threshold 3)
+  (setq tab-always-indent 'complete))
+
 (provide 'rk-completions)
 
 ;;; rk-completions.el ends here
