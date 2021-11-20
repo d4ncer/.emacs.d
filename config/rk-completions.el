@@ -128,10 +128,13 @@ ARG is the same as for `backward-kill-sexp'."
   :demand t
   :hook (embark-collect-mode . consult-preview-at-point-mode))
 
+;; Company / Corfu
+
 (use-package company
   :straight t
   :hook (after-init . global-company-mode)
 
+  :disabled t
   :general
   (:keymaps 'company-active-map
             "C-w" nil
@@ -154,13 +157,13 @@ ARG is the same as for `backward-kill-sexp'."
 
 (use-package company-dabbrev
   :after company
+  :disabled t
   :custom
   (company-dabbrev-ignore-case nil)
   (company-dabbrev-downcase nil))
 
 (use-package corfu
   :straight t
-  :disabled t
   :custom
   (corfu-auto t)
   (corfu-quit-no-match t)
