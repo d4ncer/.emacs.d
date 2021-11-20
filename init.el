@@ -134,7 +134,6 @@
 (use-package rk-org)
 (use-package rk-spelling)
 (use-package rk-string)
-(use-package rk-lobsters)
 (use-package rk-expand-region)
 (use-package rk-yasnippet)
 (use-package rk-prodigy)
