@@ -13,7 +13,6 @@
 
 (require 'f)
 (require 's)
-(require 'noflet)
 (require 'definers)
 
 (require 'paths)
@@ -52,24 +51,11 @@
   "PR" '(straight-rebuild-package :wk "rebuild package")
   "Pf" '(straight-freeze-versions :wk "freeze packages"))
 
-;; Make <escape> quit as much as possible
-
-(define-key minibuffer-local-map (kbd "<escape>") #'keyboard-escape-quit)
-(define-key minibuffer-local-ns-map (kbd "<escape>") #'keyboard-escape-quit)
-(define-key minibuffer-local-completion-map (kbd "<escape>") #'keyboard-escape-quit)
-(define-key minibuffer-local-must-match-map (kbd "<escape>") #'keyboard-escape-quit)
-(define-key minibuffer-local-isearch-map (kbd "<escape>") #'keyboard-escape-quit)
-
 ;; Write custom settings outside init.el
 
 (setq custom-file (concat user-emacs-directory "custom.el"))
 (when (file-exists-p custom-file)
   (load-file custom-file))
-
-;; Fix colour issues for Spaceline
-;; TODO: Enable this if we go back to Spaceline
-
-;; (setq ns-use-srgb-colorspace nil)
 
 ;; Scroll smoothly.
 
@@ -106,40 +92,6 @@
 
 ;; Don't prompt when following symlinks to vc files.
 (setq vc-follow-symlinks t)
-
-;; This should really be a thing out-of-the-box.
-
-(defun rk-indent-buffer ()
-  "Indent the entire buffer."
-  (interactive "*")
-  (save-excursion
-    (delete-trailing-whitespace)
-    (indent-region (point-min) (point-max) nil)
-    (untabify (point-min) (point-max))))
-
-(defun rk-indent-dwim (&optional justify)
-  "Indent the thing at point.
-Knows how to fill strings and comments, or indent code.
-Optional arg JUSTIFY will justify comments and strings."
-  (interactive "*P")
-  (-let [(_ _ _ string-p comment-p) (syntax-ppss)]
-    (cond
-     (string-p
-      (let ((progress (make-progress-reporter "Filling paragraph")))
-        (fill-paragraph justify)
-        (progress-reporter-done progress)))
-     (comment-p
-      (let ((progress (make-progress-reporter "Filling comment")))
-        (fill-comment-paragraph justify)
-        (progress-reporter-done progress)))
-     ((region-active-p)
-      (indent-region (region-beginning) (region-end)))
-     (t
-      (let ((progress (make-progress-reporter "Indenting buffer")))
-        (rk-indent-buffer)
-        (progress-reporter-done progress))))))
-
-(define-key prog-mode-map (kbd "C-`") #'rk-indent-dwim)
 
 ;; Window move hotkeys
 
@@ -178,11 +130,7 @@ Optional arg JUSTIFY will justify comments and strings."
 
 ;; Do not prompt for confirmation for active processes.
 
-(defun rk-basic-settings--suppress-no-process-prompt (fn &rest args)
-  (noflet ((process-list () nil))
-    (apply fn args)))
-
-(advice-add #'save-buffers-kill-emacs :around #'rk-basic-settings--suppress-no-process-prompt)
+(setq confirm-kill-processes nil)
 
 ;; Insert a leading space after comment start for new comment lines.
 
@@ -302,6 +250,7 @@ Optional arg JUSTIFY will justify comments and strings."
 (add-hook 'find-file-hook #'rk-basic-settings--prompt-to-open-large-files-in-fundamental-mode)
 
 ;;; General variables
+(defvar org-roam-v2-ack)
 (setq org-roam-v2-ack t)
 
 (setq-default fill-column 80)
