@@ -113,7 +113,7 @@
             "C-p" #'lsp-ui-peek--select-prev-file
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
   :custom
-  (lsp-ui-doc-enable t)
+  (lsp-ui-doc-enable nil)
   (lsp-ui-doc-border nano-color-subtle)
   (lsp-ui-doc-delay 0.75)
   (lsp-ui-sideline-enable nil)
