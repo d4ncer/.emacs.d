@@ -610,10 +610,10 @@ Do not scheduled items or repeating todos."
     (append
      (list key label 'entry form template
            :clock-keep t
-           :empty-lines 0
+           :empty-lines 1
            :prepend t)
      kws))
-  :config
+  :init
   (setq org-capture-templates
         (list
          ;; Reg org
@@ -917,9 +917,6 @@ table tr.tr-even td {
   :after org
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
-
-(use-package ox-slack
-  :straight t)
 
 (provide 'rk-org)
 

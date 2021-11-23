@@ -389,9 +389,6 @@
   (setq backup-directory-alist `((".*" . ,(concat paths-cache-directory "/autosave"))))
   (setq version-control t))
 
-(use-package highlight
-  :straight t)
-
 (use-package select
   :config
   (setq select-enable-clipboard t))
@@ -508,11 +505,6 @@
   :after sql
   :config
   (add-hook 'sql-mode-hook #'sqlind-minor-mode))
-
-(use-package tiny
-  :straight t
-  :config
-  (tiny-setup-default))
 
 (use-package autoinsert
   :preface

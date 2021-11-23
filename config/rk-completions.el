@@ -123,7 +123,6 @@ ARG is the same as for `backward-kill-sexp'."
             "?" #'consult-org-heading))
 
 (use-package embark-consult
-  :straight t
   :after (embark consult)
   :demand t
   :hook (embark-collect-mode . consult-preview-at-point-mode))

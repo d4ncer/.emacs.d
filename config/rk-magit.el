@@ -64,10 +64,8 @@
 
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
-  :defer t
   :commands
-  (git-timemachine
-   git-timemachine-show-current-revision
+  (git-timemachine-show-current-revision
    git-timemachine-show-nth-revision
    git-timemachine-show-previous-revision
    git-timemachine-show-next-revision
