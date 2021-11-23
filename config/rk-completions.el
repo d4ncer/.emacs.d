@@ -42,7 +42,7 @@ ARG is the same as for `backward-kill-sexp'."
   (prescient-persist-mode +1))
 
 (use-package consult
-  :straight t
+  :straight (:files (:defaults))
   :general
   (:states '(motion normal)
            "/" #'consult-line)
