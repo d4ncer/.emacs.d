@@ -133,6 +133,7 @@ ARG is the same as for `backward-kill-sexp'."
     "o /" '(rk-org-roam--search-work-projects :wk "search work headings")))
 
 (use-package embark-consult
+  :straight t
   :after (embark consult)
   :demand t
   :hook (embark-collect-mode . consult-preview-at-point-mode))
