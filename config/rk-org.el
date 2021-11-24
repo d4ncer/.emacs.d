@@ -898,6 +898,13 @@ table tr.tr-even td {
                  (window-height . fit-window-to-buffer)))
   (add-hook 'org-roam-find-file-hook #'rk-org-roam--open-with-buffer-maybe :append))
 
+(use-package vulpea
+  :straight (vulpea
+             :type git
+             :host github
+             :repo "d12frosted/vulpea")
+  :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
+
 (use-package org-roam-ui
   :straight
   (:host github :repo "org-roam/org-roam-ui" :branch "main" :files ("*.el" "out"))
