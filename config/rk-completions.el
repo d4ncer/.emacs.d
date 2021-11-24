@@ -7,7 +7,8 @@
 (eval-when-compile
   (require 'use-package)
   (require 'definers)
-  (require 'general))
+  (require 'general)
+  (require 'paths))
 
 (use-package selectrum
   :straight t
@@ -118,12 +119,18 @@ ARG is the same as for `backward-kill-sexp'."
 (use-package consult
   :straight t
   :after org
+  :preface
+  (defun rk-org-roam--search-work-projects ()
+    (interactive)
+    (let ((org-agenda-files (list rk-org--work-projects-file)))
+      (call-interactively 'consult-org-agenda)))
   :general
   (:keymaps 'org-mode-map :states '(normal visual motion)
             "?" #'consult-org-heading)
   :init
   (rk-leader-def
-    "o /" '(consult-org-agenda :wk "search agenda files")))
+    "o ?" '(consult-org-agenda :wk "search all agenda")
+    "o /" '(rk-org-roam--search-work-projects :wk "search work headings")))
 
 (use-package embark-consult
   :after (embark consult)
