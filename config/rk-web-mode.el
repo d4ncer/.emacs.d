@@ -22,7 +22,7 @@
 (require 'rk-utils)
 (require 'projectile)
 
-(defconst rk-web--node-js-lts-version "v10.15.1"
+(defconst rk-web--node-js-lts-version "v16.13.0"
   "The version of Node to use by default if .nvmrc isn't found.")
 
 (defconst rk-web--prettier-default-args
@@ -170,6 +170,19 @@
   :init
   (setq lsp-tailwindcss-add-on-mode t)
   (setq lsp-tailwindcss-major-modes '(rk-web-tsx-mode)))
+
+(use-package nvm
+  :straight t
+  :after rk-web-modes
+  :preface
+  (defun rk-web--maybe-use-nvm ()
+    (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
+               (file-p (f-exists-p project-nvmrc)))
+        (nvm-use-for-buffer)
+      (nvm-use rk-web--node-js-lts-version)))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-nvm)
+  (add-hook 'rk-web-tsx-mode-hook #'rk-web--maybe-use-nvm))
 
 (provide 'rk-web-mode)
 
