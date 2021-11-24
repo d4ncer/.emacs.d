@@ -169,6 +169,7 @@ ARG is the same as for `backward-kill-sexp'."
   :custom
   (corfu-auto t)
   (corfu-quit-no-match t)
+  (corfu-quit-at-boundary t)
   :preface
   (autoload 'company-show-doc-buffer "company")
   :general
