@@ -341,142 +341,141 @@ Do not scheduled items or repeating todos."
             org-agenda-diary-file)
 
   :config
-  (progn
-    (rk-leader-def
-      "oA" '(org-agenda :wk "agendas"))
+  (rk-leader-def
+    "oA" '(org-agenda :wk "agendas"))
 
-    (rk-local-leader-def :keymaps 'org-agenda-mode-map
-      "d" '(org-agenda-deadline :wk "deadline")
-      "p" '(org-agenda-set-property :wk "set property")
-      "r" '(org-agenda-refile :wk "refile"))
+  (rk-local-leader-def :keymaps 'org-agenda-mode-map
+    "d" '(org-agenda-deadline :wk "deadline")
+    "p" '(org-agenda-set-property :wk "set property")
+    "r" '(org-agenda-refile :wk "refile"))
 
-    ;; Match projects that do not have a scheduled action or NEXT action.
-    (setq org-stuck-projects '("+project-ignore-maybe-done"
-                               ("NEXT") nil
-                               "SCHEDULED:"))
+  ;; Match projects that do not have a scheduled action or NEXT action.
+  (setq org-stuck-projects '("+project-ignore-maybe-done"
+                             ("NEXT") nil
+                             "SCHEDULED:"))
 
-    (setq org-agenda-include-diary nil)
-    (setq org-agenda-start-on-weekday nil)
-    (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
-    (setq org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
-    (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
-    (setq org-agenda-insert-diary-extract-time t)
-    (setq org-agenda-span 'week)
-    (setq org-agenda-search-view-always-boolean t)
-    (setq org-agenda-show-all-dates nil)
-    (setq org-agenda-show-inherited-tags nil)
-    (setq org-agenda-skip-deadline-if-done t)
-    (setq org-agenda-skip-deadline-prewarning-if-scheduled t)
-    (setq org-agenda-skip-scheduled-if-done t)
-    (setq org-agenda-sorting-strategy
-          '((agenda time-up priority-down category-keep)
-            (todo priority-down category-keep scheduled-up)
-            (tags priority-down category-keep)
-            (search category-keep)))
-    (setq org-agenda-text-search-extra-files '(agenda-archives))
-    (setq org-agenda-use-time-grid nil)
-    (setq org-agenda-inhibit-startup t)
-    (setq org-agenda-tags-column -100)
+  (setq org-agenda-include-diary nil)
+  (setq org-agenda-start-on-weekday nil)
+  (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
+  (setq org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
+  (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
+  (setq org-agenda-insert-diary-extract-time t)
+  (setq org-agenda-span 'week)
+  (setq org-agenda-search-view-always-boolean t)
+  (setq org-agenda-show-all-dates nil)
+  (setq org-agenda-show-inherited-tags nil)
+  (setq org-agenda-skip-deadline-if-done t)
+  (setq org-agenda-skip-deadline-prewarning-if-scheduled t)
+  (setq org-agenda-skip-scheduled-if-done t)
+  (setq org-agenda-sorting-strategy
+        '((agenda time-up priority-down category-keep)
+          (todo priority-down category-keep scheduled-up)
+          (tags priority-down category-keep)
+          (search category-keep)))
+  (setq org-agenda-text-search-extra-files '(agenda-archives))
+  (setq org-agenda-use-time-grid nil)
+  (setq org-agenda-inhibit-startup t)
+  (setq org-agenda-tags-column -100)
 
-    (setq org-agenda-clockreport-parameter-plist
-          (list
-           :compact t
-           :maxlevel 5
-           :fileskip0 t
-           :step 'week))
+  (setq org-agenda-clockreport-parameter-plist
+        (list
+         :compact t
+         :maxlevel 5
+         :fileskip0 t
+         :step 'week))
 
-    (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
+  (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
 
-    (setq org-agenda-custom-commands
-          '(("A" "All"
-             ((tags-todo "inbox"
-                         ((org-agenda-overriding-header "To Refile")))
-              (tags-todo "-someday/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")))
-              (stuck "")
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Waiting")))
-              (agenda ""))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-properties '(effort appt))))
+  (setq org-agenda-custom-commands
+        '(("A" "All"
+           ((tags-todo "inbox"
+                       ((org-agenda-overriding-header "To Refile")))
+            (tags-todo "-someday/NEXT"
+                       ((org-agenda-overriding-header "Next Actions")))
+            (stuck "")
+            (todo "WAITING"
+                  ((org-agenda-overriding-header "Waiting")))
+            (agenda ""))
+           ((org-agenda-tag-filter-preset '("-ignore"))
+            (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
+            (org-agenda-dim-blocked-tasks nil)
+            (org-agenda-archives-mode nil)
+            (org-agenda-ignore-properties '(effort appt))))
 
-            ("w" "Work"
-             ((tags-todo "inbox"
-                         ((org-agenda-overriding-header "To Refile")))
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Delegated / Follow Up")
-                     (org-agenda-breadcrumbs-separator "")
-                     (org-agenda-prefix-format '((todo . "  %i %-15b")))))
-              (todo "TODO"
-                    ((org-agenda-overriding-header "Notes to synthesise")
-                     (org-agenda-breadcrumbs-separator "")
-                     (org-agenda-files (list rk-org--tickler-file))))
-              (agenda "")
-              (tags-todo "-someday-media-study/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")
-                          (org-agenda-breadcrumbs-separator "")
-                          (org-agenda-prefix-format '((tags . "  %i %-15b")))))
-              (stuck ""))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
-              (org-agenda-show-inherited-tags nil)
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-drawer-properties '(effort appt))))
+          ("w" "Work"
+           ((tags-todo "inbox"
+                       ((org-agenda-overriding-header "To Refile")))
+            (todo "WAITING"
+                  ((org-agenda-overriding-header "Delegated / Follow Up")
+                   (org-agenda-breadcrumbs-separator "")
+                   (org-agenda-prefix-format '((todo . "  %i %-15b")))))
+            (todo "TODO"
+                  ((org-agenda-overriding-header "Notes to synthesise")
+                   (org-agenda-breadcrumbs-separator "")
+                   (org-agenda-files (list rk-org--tickler-file))))
+            (agenda "")
+            (tags-todo "-someday-media-study/NEXT"
+                       ((org-agenda-overriding-header "Next Actions")
+                        (org-agenda-breadcrumbs-separator "")
+                        (org-agenda-prefix-format '((tags . "%i %-24b")))))
+            (stuck ""))
+           ((org-agenda-tag-filter-preset '("-ignore"))
+            (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
+            (org-agenda-show-inherited-tags nil)
+            (org-agenda-dim-blocked-tasks nil)
+            (org-agenda-archives-mode nil)
+            (org-agenda-ignore-drawer-properties '(effort appt))))
 
-            ("p" "Personal"
-             ((tags-todo "inbox"
-                         ((org-agenda-overriding-header "To Refile")))
-              (tags-todo "-someday-media-study/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")
-                          (org-agenda-breadcrumbs-separator "")
-                          (org-agenda-prefix-format '((tags . "  %i %-15b")))))
-              (stuck "")
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Waiting")))
-              (agenda ""))
-             ((org-agenda-tag-filter-preset '("-ignore"))
-              (org-agenda-files (list rk-org--personal-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
-              (org-agenda-show-inherited-tags nil)
-              (org-agenda-dim-blocked-tasks nil)
-              (org-agenda-archives-mode nil)
-              (org-agenda-ignore-drawer-properties '(effort appt))))
+          ("p" "Personal"
+           ((tags-todo "inbox"
+                       ((org-agenda-overriding-header "To Refile")))
+            (tags-todo "-someday-media-study/NEXT"
+                       ((org-agenda-overriding-header "Next Actions")
+                        (org-agenda-breadcrumbs-separator "")
+                        (org-agenda-prefix-format '((tags . "  %i %-15b")))))
+            (stuck "")
+            (todo "WAITING"
+                  ((org-agenda-overriding-header "Waiting")))
+            (agenda ""))
+           ((org-agenda-tag-filter-preset '("-ignore"))
+            (org-agenda-files (list rk-org--personal-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
+            (org-agenda-show-inherited-tags nil)
+            (org-agenda-dim-blocked-tasks nil)
+            (org-agenda-archives-mode nil)
+            (org-agenda-ignore-drawer-properties '(effort appt))))
 
-            ("n" "Next"
-             ((tags-todo "-someday/NEXT"))
-             ((org-agenda-overriding-header "Next Actions")))
+          ("n" "Next"
+           ((tags-todo "-someday/NEXT"))
+           ((org-agenda-overriding-header "Next Actions")))
 
-            ("r" "Weekly Review"
-             ((agenda ""
-                      ((org-agenda-overriding-header "Review Previous Week")
-                       (org-agenda-ndays 7)
-                       (org-agenda-start-day "-7d")))
-              (agenda ""
-                      ((org-agenda-overriding-header "Review Upcoming Events")
-                       (org-agenda-ndays 14)))
-              (stuck ""
-                     ((org-agenda-overriding-header "Review Stuck Projects")))
-              (todo "WAITING"
-                    ((org-agenda-overriding-header "Review Tasks on Hold")))
-              (tags-todo "-someday/NEXT"
-                         ((org-agenda-overriding-header "Next Actions")))
-              (tags-todo "+goals+3m+project"
-                         ((org-agenda-overriding-header "Review 3 Month Goals")))
-              (tags-todo "+goals+1y+project"
-                         ((org-agenda-overriding-header "Review 1 Year Goals")))
-              (tags-todo "+goals+3y+project"
-                         ((org-agenda-overriding-header "Review 3 Year Goals")))
-              (tags-todo "someday"
-                         ((org-agenda-overriding-header "Someday"))))
-             ((org-agenda-tag-filter-preset
-               '("-ignore"))
-              (org-agenda-show-log t)
-              (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file rk-org--tickler-file))
-              (org-agenda-archives-mode nil)
-              (org-agenda-dim-blocked-tasks nil)))))))
+          ("r" "Weekly Review"
+           ((agenda ""
+                    ((org-agenda-overriding-header "Review Previous Week")
+                     (org-agenda-ndays 7)
+                     (org-agenda-start-day "-7d")))
+            (agenda ""
+                    ((org-agenda-overriding-header "Review Upcoming Events")
+                     (org-agenda-ndays 14)))
+            (stuck ""
+                   ((org-agenda-overriding-header "Review Stuck Projects")))
+            (todo "WAITING"
+                  ((org-agenda-overriding-header "Review Tasks on Hold")))
+            (tags-todo "-someday/NEXT"
+                       ((org-agenda-overriding-header "Next Actions")))
+            (tags-todo "+goals+3m+project"
+                       ((org-agenda-overriding-header "Review 3 Month Goals")))
+            (tags-todo "+goals+1y+project"
+                       ((org-agenda-overriding-header "Review 1 Year Goals")))
+            (tags-todo "+goals+3y+project"
+                       ((org-agenda-overriding-header "Review 3 Year Goals")))
+            (tags-todo "someday"
+                       ((org-agenda-overriding-header "Someday"))))
+           ((org-agenda-tag-filter-preset
+             '("-ignore"))
+            (org-agenda-show-log t)
+            (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file rk-org--tickler-file))
+            (org-agenda-archives-mode nil)
+            (org-agenda-dim-blocked-tasks nil))))))
 
 (use-package rk-org-agenda-transient-state
   :after (org org-agenda)
