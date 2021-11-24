@@ -120,7 +120,10 @@ ARG is the same as for `backward-kill-sexp'."
   :after org
   :general
   (:keymaps 'org-mode-map :states '(normal visual motion)
-            "?" #'consult-org-heading))
+            "?" #'consult-org-heading)
+  :init
+  (rk-leader-def
+    "o /" '(consult-org-agenda :wk "search agenda files")))
 
 (use-package embark-consult
   :after (embark consult)
