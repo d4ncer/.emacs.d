@@ -1,4 +1,4 @@
-;;; rk-theme-nano.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; rk-theme-nano.el --- Nano theme config  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
