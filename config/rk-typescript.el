@@ -109,18 +109,6 @@
   :init
   (add-hook 'typescript-mode-hook #'prettier-mode))
 
-(use-package nvm
-  :straight t
-  :after typescript-mode
-  :preface
-  (defun rk-web--maybe-use-nvm ()
-    (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
-               (file-p (f-exists-p project-nvmrc)))
-        (nvm-use-for-buffer)
-      (nvm-use rk-web--node-js-lts-version)))
-  :config
-  (add-hook 'typescript-mode-hook #'rk-web--maybe-use-nvm))
-
 (provide 'rk-typescript)
 
 ;;; rk-typescript.el ends here

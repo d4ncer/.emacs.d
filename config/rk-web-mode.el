@@ -169,19 +169,6 @@
   (setq lsp-tailwindcss-add-on-mode t)
   (setq lsp-tailwindcss-major-modes '(rk-web-tsx-mode)))
 
-(use-package nvm
-  :straight t
-  :after rk-web-modes
-  :preface
-  (defun rk-web--maybe-use-nvm ()
-    (-if-let* ((project-nvmrc (locate-dominating-file default-directory ".nvmrc"))
-               (file-p (f-exists-p project-nvmrc)))
-        (nvm-use-for-buffer)
-      (nvm-use rk-web--node-js-lts-version)))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'rk-web--maybe-use-nvm)
-  (add-hook 'rk-web-tsx-mode-hook #'rk-web--maybe-use-nvm))
-
 (provide 'rk-web-mode)
 
 ;;; rk-web-mode.el ends here
