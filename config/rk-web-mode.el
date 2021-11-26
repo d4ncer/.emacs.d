@@ -42,19 +42,18 @@
   (autoload 'sp-local-pair "smartparens")
 
   :config
-  (progn
-    (setq web-mode-code-indent-offset 2)
-    (setq web-mode-css-indent-offset 2)
-    (setq web-mode-markup-indent-offset 2)
-    (setq web-mode-enable-auto-quoting nil)
+  (setq web-mode-code-indent-offset 2)
+  (setq web-mode-css-indent-offset 2)
+  (setq web-mode-markup-indent-offset 2)
+  (setq web-mode-enable-auto-quoting nil)
 
-    (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
+  (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
 
-    ;; Change default indentation behaviour.
+  ;; Change default indentation behaviour.
 
-    (setf (cdr (assoc "lineup-args" web-mode-indentation-params)) nil)
-    (setf (cdr (assoc "lineup-concats" web-mode-indentation-params)) nil)
-    (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil)))
+  (setf (cdr (assoc "lineup-args" web-mode-indentation-params)) nil)
+  (setf (cdr (assoc "lineup-concats" web-mode-indentation-params)) nil)
+  (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil))
 
 (use-package rk-web-modes
   :defer t
@@ -135,9 +134,8 @@
         (setq-local flycheck-stylelintrc root-rc))
     (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
   :config
-  (progn
-    (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
-    (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc)))
+  (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
+  (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc))
 
 (use-package prettier
   :straight t
