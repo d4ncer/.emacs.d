@@ -8,7 +8,7 @@
 
 ;;; Code:
 
-(when (version< emacs-version "26")
+(when (version< emacs-version "28")
   (error "This version of Emacs is not supported"))
 
 (setq gc-cons-threshold (* 800 1024))
