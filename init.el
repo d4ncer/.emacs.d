@@ -108,6 +108,7 @@
 
 (use-package rk-leader-keys)
 (use-package rk-basic-settings)
+(use-package rk-envrc)
 (use-package rk-darwin :if (equal system-type 'darwin))
 
 ;; Editor capabilities
@@ -184,25 +185,11 @@
 (general-unbind org-mode-map "M-<return>")
 (general-unbind org-capture-mode-map "M-<return>")
 
-(use-package rk-envrc)
-
-(unless (file-directory-p org-directory)
-  (when (y-or-n-p (format "`org-directory' does not exist. Create at %s? " org-directory))
-    (mkdir org-directory)))
-
 ;;; Print overall startup time.
 
 (unless noninteractive
   (let ((elapsed (float-time (time-subtract (current-time) emacs-start-time))))
-    (message "Loading %s...done (%.3fs)" load-file-name elapsed))
-
-  (add-hook 'after-init-hook
-            `(lambda ()
-               (let ((elapsed (float-time (time-subtract (current-time)
-                                                         emacs-start-time))))
-                 (message "Loading %s...done (%.3fs) [after-init]"
-                          ,load-file-name elapsed)))
-            t))
+    (message "Loading %s...done (%.3fs)" load-file-name elapsed)))
 
 (provide 'init)
 
