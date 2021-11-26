@@ -686,6 +686,10 @@
   :config
   (delete-selection-mode +1))
 
+(use-package emacs
+  :general
+  ("C-c I" #'insert-char))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
