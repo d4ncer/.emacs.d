@@ -137,7 +137,6 @@
 (use-package rk-aggressive-indent)
 (use-package rk-flycheck)
 (use-package rk-ibuffer)
-(use-package rk-treemacs)
 (use-package rk-org)
 (use-package rk-spelling)
 (use-package rk-string)
