@@ -768,6 +768,19 @@ table tr.tr-even td {
   :straight t
   :after org
   :demand t
+  :preface
+  (defun rk-org--return (arg)
+    "Like `evil-org-return', but doesn't indent otherwise"
+    (interactive "P")
+    (cond ((and (not arg) (evil-org--empty-element-p))
+           (delete-region (line-beginning-position) (line-end-position)))
+          ((eolp)
+           (if (bolp)
+               (org-return nil)
+             (call-interactively #'evil-org-open-below)))
+          ('otherwise
+           (org-return nil))))
+
   :general
   (:keymaps 'org-agenda-mode-map :states 'motion
             "j" #'org-agenda-next-line
@@ -783,12 +796,13 @@ table tr.tr-even td {
             "M-RET" #'org-agenda-show-and-scroll-up
             "J" #'org-agenda-goto-date)
   (:keymaps 'org-mode-map :states '(insert normal)
-            "M-o" #'evil-org-org-insert-subheading-below)
+            "M-o" #'evil-org-org-insert-subheading-below
+            "RET" #'rk-org--return)
   :config
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
             (lambda ()
-              (evil-org-set-key-theme '(textobjects navigation additional shift heading todo return))))
+              (evil-org-set-key-theme '(textobjects navigation additional shift heading todo))))
   (require 'evil-org-agenda)
   (evil-org-agenda-set-keys))
 
