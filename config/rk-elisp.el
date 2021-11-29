@@ -32,7 +32,7 @@
   (progn
     (rk-local-leader-def :keymaps 'emacs-lisp-mode-map
       "e" '(nil :ignore t :wk "eval")
-      "eb" '(rk/elisp/eval-buffer :wk "eval buffer")
+      "eb" '(rk-elisp-eval-buffer :wk "eval buffer")
       "ee" '(eval-expression :wk "eval expression")
       "es" '(eval-last-sexp :wk "eval last sexp"))
     (advice-add #'eval-buffer :after #'rk-elisp--message-on-eval-buffer)))

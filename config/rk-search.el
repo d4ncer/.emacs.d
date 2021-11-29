@@ -11,7 +11,6 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'general)
 (require 'rk-misc-utils)
 
 (use-package ag

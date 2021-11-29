@@ -14,7 +14,6 @@
 (require 'f)
 (require 's)
 (require 'definers)
-
 (require 'paths)
 
 (autoload 'thing-at-point-looking-at "thingatpt")

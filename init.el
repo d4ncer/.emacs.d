@@ -43,18 +43,24 @@
 
 (require 'straight bootstrap-file t)
 
-;; Install some basic packages
+;; Install & require some basic packages
 
 (straight-use-package 'dash)
-(straight-use-package 'dash-functional)
 (straight-use-package 'f)
 (straight-use-package 's)
-(straight-use-package 'noflet)
-(straight-use-package 'memoize)
 (straight-use-package 'general)
 (straight-use-package 'el-patch)
 (straight-use-package 'pretty-hydra)
 (straight-use-package 'selectrum)
+
+(require 'selectrum)
+(require 'dash)
+(require 'f)
+(require 's)
+(require 'general)
+(require 'el-patch)
+(require 'pretty-hydra)
+(require 'selectrum)
 
 ;; Set up selectrum
 

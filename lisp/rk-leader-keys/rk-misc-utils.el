@@ -226,7 +226,7 @@ With prefix argument ARG, prompt for a file."
         (select-window w1)
         (when w2 (other-window 1)))))))
 
-(defun rk/elisp/eval-buffer ()
+(defun rk-elisp-eval-buffer ()
   "Evaluate the current buffer as Elisp code, within a straight transaction."
   (interactive)
   (message "Evaluating %s..." (buffer-name))
