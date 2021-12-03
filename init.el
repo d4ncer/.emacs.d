@@ -61,6 +61,7 @@
 (require 'el-patch)
 (require 'pretty-hydra)
 (require 'selectrum)
+(require 'cl-lib)
 
 ;; Set up selectrum
 
