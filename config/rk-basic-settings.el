@@ -376,8 +376,8 @@
 
 (use-package iedit
   :straight t
-  :config
-  (setq iedit-toggle-key-default nil))
+  :custom
+  (iedit-toggle-key-default nil))
 
 (use-package files
   :config
