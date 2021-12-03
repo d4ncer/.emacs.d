@@ -144,7 +144,6 @@ ARG is the same as for `backward-kill-sexp'."
   :straight t
   :hook (after-init . global-company-mode)
 
-  :disabled t
   :general
   (:keymaps 'company-active-map
             "C-w" nil
@@ -174,6 +173,7 @@ ARG is the same as for `backward-kill-sexp'."
 
 (use-package corfu
   :straight t
+  :disabled t
   :custom
   (corfu-auto t)
   (corfu-quit-no-match t)
