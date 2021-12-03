@@ -121,7 +121,7 @@
     (global-evil-surround-mode +1)))
 
 (use-package evil-iedit-state
-  :straight t
+  :straight (:host github :repo "d4ncer/evil-iedit-state" :branch "master")
   :after evil
   :init
   (rk-leader-def
