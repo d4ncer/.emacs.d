@@ -166,10 +166,15 @@ ARG is the same as for `backward-kill-sexp'."
 
 (use-package company-dabbrev
   :after company
-  :disabled t
   :custom
   (company-dabbrev-ignore-case nil)
   (company-dabbrev-downcase nil))
+
+(use-package company-box
+  :straight t
+  :custom
+  (company-box-scrollbar nil)
+  :hook (company-mode . company-box-mode))
 
 (use-package corfu
   :straight t

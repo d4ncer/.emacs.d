@@ -138,6 +138,23 @@
   (set-face-attribute 'corfu-default nil
                       :background nano-color-background))
 
+(with-eval-after-load 'company
+  (set-face-attribute 'company-tooltip nil
+                      :background nano-color-subtle)
+  (set-face-attribute 'company-tooltip-common-selection nil
+                      :foreground nano-color-subtle
+                      :background nano-color-salient
+                      :weight 'bold))
+
+(with-eval-after-load 'company-box
+  (set-face-attribute 'company-box-candidate nil
+                      :weight 'light)
+  (set-face-attribute 'company-box-background nil
+                      :background nano-color-subtle)
+  (set-face-attribute 'company-box-selection nil
+                      :background nano-color-salient
+                      :foreground nano-color-subtle))
+
 (provide 'rk-theme-nano)
 
 ;;; rk-theme-nano.el ends here
