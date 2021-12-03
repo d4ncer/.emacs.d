@@ -58,9 +58,13 @@
                 magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1))
 
 (use-package git-commit-clubhouse-prefix
-  :demand t
+  :disabled t
   :commands git-commit-clubhouse-prefix-init
   :config (git-commit-clubhouse-prefix-init))
+
+(use-package git-commit-jira-prefix
+  :commands git-commit-jira-prefix-init
+  :config (git-commit-jira-prefix-init))
 
 (use-package git-timemachine
   :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
