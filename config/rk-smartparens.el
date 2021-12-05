@@ -18,8 +18,6 @@
 
 (use-package smartparens
   :straight t
-  :demand t
-
   :hook ((prog-mode . smartparens-strict-mode)
          (eshell-mode . smartparens-strict-mode)
          (text-mode . smartparens-strict-mode))
