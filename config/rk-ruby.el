@@ -9,12 +9,13 @@
 
 (use-package ruby-mode
   :straight t
-  :after lsp-mode
+  :after lsp
   :config
   (add-hook 'ruby-mode-hook #'lsp))
 
 (use-package rvm
   :straight t
+  :if (executable-find "rvm")
   :config
   (rvm-use-default))
 
