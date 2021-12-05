@@ -141,6 +141,9 @@
 (with-eval-after-load 'company
   (set-face-attribute 'company-tooltip nil
                       :background nano-color-subtle)
+  (set-face-attribute 'company-tooltip-annotation nil
+                      :background nano-color-subtle
+                      :weight 'bold)
   (set-face-attribute 'company-tooltip-common-selection nil
                       :foreground nano-color-subtle
                       :background nano-color-salient
