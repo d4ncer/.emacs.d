@@ -56,16 +56,12 @@
   (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil))
 
 (use-package rk-web-modes
-  :defer t
   :mode (("\\.es6\\'"  . rk-web-js-mode)
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
          ("\\.html\\'" . rk-web-html-mode)
          ("\\.tsx\\'" . rk-web-tsx-mode))
-
-  :hook
-  (rk-web-tsx-mode . lsp)
 
   :preface
   (defun rk-web--add-custom-eslint-rules-dir ()
@@ -79,18 +75,23 @@
     "J" #'rk-utils--chainable-aware-join-line)
 
   ;; Use custom ESLint rules if a "rules" dir exists in project root
+  (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir))
 
-  (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir)
+(use-package rk-web-modes
+  :after flycheck
+  :config
+  (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
+  (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
+  (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
+  (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
+  (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
+  (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
 
-  ;; Setup post flycheck load
-
-  (with-eval-after-load 'flycheck
-    (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
-    (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
-    (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
-    (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
-    (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
-    (flycheck-add-mode 'html-tidy 'rk-web-html-mode)))
+(use-package rk-web-modes
+  :after lsp
+  :disabled t
+  :config
+  (add-hook 'rk-web-tsx-mode-hook #'lsp))
 
 (use-package emmet-mode
   :straight t

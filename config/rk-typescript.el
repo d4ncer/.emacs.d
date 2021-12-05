@@ -12,20 +12,23 @@
 
 (use-package typescript-mode
   :straight t
-  :after lsp
   :custom
   (typescript-indent-level 2)
   :mode ("\\.ts\\'" . typescript-mode)
   :config
   (dolist (lang '("node" "nodejs" "gjs" "rhino"))
-    (setf (alist-get lang interpreter-mode-alist) 'typescript-mode))
+    (setf (alist-get lang interpreter-mode-alist) 'typescript-mode)))
+
+(use-package typescript-mode
+  :straight t
+  :disabled t
+  :after lsp
   :hook (typescript-mode . lsp)
   :init
   (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
 
 (use-package tide
   :straight t
-  :disabled t
   :commands (tide-setup)
   :custom
   (tide-server-max-response-length 999999999)
