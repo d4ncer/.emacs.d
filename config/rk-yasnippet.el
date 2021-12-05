@@ -96,12 +96,15 @@ Otherwise delete backwards."
 (use-package yas-funcs
   :after yasnippet)
 
-(use-package ivy-yasnippet
+(use-package consult-yasnippet
   :straight t
+  :after (yasnippet consult)
+  :general
+  (:states '(insert)
+           "C-y" #'consult-yasnippet)
   :init
-  (progn
-    (rk-leader-def
-      "yy" '(ivy-yasnippet :wk "list snippets"))))
+  (rk-leader-def
+    "y y" '(consult-yasnippet :wk "insert snippet")))
 
 (use-package doom-snippets
   :straight (:host github :repo "hlissner/doom-snippets"
