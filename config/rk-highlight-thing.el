@@ -11,15 +11,12 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'seq)
-(require 'subr-x)
-
 (use-package highlight-thing
   :straight t
-  :commands (highlight-thing-mode)
   :init
   (add-hook 'prog-mode-hook #'highlight-thing-mode)
   :preface
+  (require 'seq)
   (defun rk-highlight-thing--face-ancestors (face)
     (let (result)
       (while (and face (not (equal face 'unspecified)))

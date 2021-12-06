@@ -22,8 +22,6 @@
 (use-package osx-trash
   :straight t
   :config
-  (osx-trash-setup)
-  :functions
   (osx-trash-setup))
 
 (provide 'rk-darwin)

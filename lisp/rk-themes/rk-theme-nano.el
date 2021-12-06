@@ -124,12 +124,12 @@
   (set-face-attribute 'highlight-thing nil
                       :foreground nano-color-salient
                       :background nano-color-background
-                      :weight 'normal))
+                      :weight 'semi-bold))
 
 (with-eval-after-load 'org
   (set-face-attribute 'org-verbatim nil
                       :foreground nano-color-salient
-                      :weight 'semi-bold))
+                      :weight 'medium))
 
 (with-eval-after-load 'corfu
   (set-face-attribute 'corfu-border nil
