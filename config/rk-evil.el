@@ -32,6 +32,7 @@
            "C-." nil)
   (:states 'motion
            "gd" #'xref-find-definitions
+           "gD" #'xref-find-definitions-other-window
            "gb" #'xref-pop-marker-stack)
   (:keymaps 'help-mode-map
             :states 'motion
