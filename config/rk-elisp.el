@@ -25,9 +25,6 @@
   (defun rk-elisp--message-on-eval-buffer (&rest _)
     (when (called-interactively-p nil)
       (message "Buffer evaluated.")))
-  :general
-  (:keymaps 'emacs-lisp-mode-map :states '(normal motion)
-            "gd" #'xref-find-definitions)
   :config
   (progn
     (rk-local-leader-def :keymaps 'emacs-lisp-mode-map
