@@ -187,7 +187,7 @@
   :straight t
   :after evil
   :custom
-  (evil-collection-mode-list '(ivy dired racer company git-timemachine ibuffer help info docker magit forge doc-view ediff))
+  (evil-collection-mode-list '(dired racer company git-timemachine ibuffer help info docker magit forge doc-view ediff deadgrep))
   :config
   (evil-collection-init))
 
