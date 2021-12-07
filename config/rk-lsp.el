@@ -24,9 +24,6 @@
   (defun rk-lsp--lsp-company-mode-p ()
     (and (bound-and-true-p lsp-mode)
          (bound-and-true-p company-mode)))
-  (defun rk-lsp--setup-company-backend ()
-    (when (rk-lsp--lsp-company-mode-p)
-      (set (make-local-variable 'company-backends) '(company-files company-capf))))
   (defun rk-lsp--maybe-disable-highlight-thing ()
     (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
       (highlight-thing-mode -1)))
@@ -47,10 +44,11 @@
      :keymaps 'local
      "gd" #'lsp-find-definition
      "K" #'lsp-describe-thing-at-point)
-    (general-define-key
-     :states 'insert
-     :keymaps 'local
-     "C-." #'company-complete))
+    (when (rk-lsp--lsp-company-mode-p)
+      (general-define-key
+       :states 'insert
+       :keymaps 'local
+       "C-." #'company-complete)))
   (defun rk-lsp--setup-lsp ()
     (rk-lsp--maybe-setup-organize-imports)
     (rk-lsp--maybe-disable-highlight-thing)
@@ -81,15 +79,23 @@
     "lsr" '(lsp-restart-workspace :wk "restart")
     "lsa" '(lsp-workspace-folders-add :wk "add folder")
     "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
-    "lss" '(lsp-workspace-folders-switch :wk "switch folder"))
+    "lss" '(lsp-workspace-folders-switch :wk "switch folder")))
+
+(use-package lsp-mode
+  :straight t
+  :after company
+  :preface
+  (defun rk-lsp--setup-company-backend ()
+    (when (rk-lsp--lsp-company-mode-p)
+      (set (make-local-variable 'company-backends) '(company-files company-capf))))
   :config
-  (with-eval-after-load 'company
-    (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend)))
+  (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend))
 
 (use-package lsp-ui
   :straight t
   :after lsp-mode
   :preface
+  (autoload 'dumb-jump-go "dump-jump")
   (defun rk-lsp-ui--goto-impl ()
     (interactive)
     (if (gethash "implementationProvider" (lsp--server-capabilities))
