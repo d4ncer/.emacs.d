@@ -13,7 +13,6 @@
 
 (use-package aggressive-indent
   :straight t
-  :commands (aggressive-indent-mode)
   :init
   (add-hook 'emacs-lisp-mode-hook #'aggressive-indent-mode))
 
