@@ -13,7 +13,7 @@
 
 (require 'definers)
 
-(use-package help-fns-plus
+(use-package help-fns+
   :straight t
   :init
   (rk-leader-def
