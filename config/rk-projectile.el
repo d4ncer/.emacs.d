@@ -12,22 +12,10 @@
   (require 'use-package))
 
 (require 'definers)
-(require 'general)
 (require 'paths)
 
 (use-package projectile
   :straight t
-  :commands (projectile-compile-project
-             projectile-invalidate-cache
-             projectile-mode
-             projectile-replace
-             projectile-run-async-shell-command-in-root
-             projectile-run-project
-             projectile-run-shell-command-in-root
-             projectile-cleanup-known-projects
-             projectile-switch-project
-             projectile-test-project)
-
   :preface
   (autoload 'magit-status "magit")
 
@@ -75,25 +63,15 @@
   :config
   (projectile-mode +1))
 
-
 (use-package counsel-projectile
   :straight t
   :disabled
-  :defer t
-  :commands (counsel-projectile-mode
-             counsel-projectile-find-file
-             counsel-projectile-find-dir
-             counsel-projectile-switch-project
-             counsel-projectile-switch-to-buffer
-             counsel-projectile-rg)
-
   :custom
   (counsel-projectile-remove-current-buffer t)
   (counsel-projectile-remove-current-project t)
-  (counsel-projectile-switch-project-action 'rk-counsel-switch-project-action)
-
+  (counsel-projectile-switch-project-action 'rk-counsel-projectile--switch-project-action)
   :preface
-  (defun rk-counsel-switch-project-action (project)
+  (defun rk-counsel-projectile--switch-project-action (project)
     (if (f-exists-p (f-join project ".git"))
         (magit-status project)
       (dired project)))
@@ -113,7 +91,6 @@
   :config
   (advice-add #'counsel-projectile-rg :around #'rk-counsel-projectile--ad-read-args)
   (counsel-projectile-mode +1))
-
 
 (provide 'rk-projectile)
 
