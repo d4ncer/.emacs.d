@@ -185,6 +185,53 @@
 
 ;;; Post init setup.
 
+;;; Improve eval-expression
+
+(defvar eval-expression-interactively-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map read-expression-map)
+    (define-key map (kbd "<escape>") #'abort-minibuffers)
+    (define-key map (kbd "C-g") #'abort-minibuffers)
+    map))
+
+(defun eval-expression-interactively--read (prompt &optional initial-contents)
+  (let ((minibuffer-completing-symbol t))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (let ((inhibit-message t))
+            (emacs-lisp-mode)
+            (use-local-map eval-expression-interactively-map)
+            (setq font-lock-mode t)
+            (funcall font-lock-function 1)))
+      (read-from-minibuffer prompt initial-contents
+                            eval-expression-interactively-map nil
+                            'read-expression-history))))
+
+(autoload 'pp-display-expression "pp")
+(autoload 'pp-to-string "pp")
+
+(defun eval-expression-interactively (expression &optional arg)
+  "Like `eval-expression' with nicer input handling.
+
+- Use `emacs-lisp-mode' to provide font locking and better
+  integration with other packages.
+
+- Use the `pp' library to display the output in a readable form.
+
+EXPRESSION is a Lisp form to evaluate.
+
+With optional prefix ARG, insert the results into the buffer at
+point."
+  (interactive (list (read (eval-expression-interactively--read "Eval: "))
+                     current-prefix-arg))
+  (if arg
+      (insert (pp-to-string (eval expression lexical-binding)))
+    (pp-display-expression (eval expression lexical-binding)
+                           "*Pp Eval Output*")))
+
+(general-define-key :keymaps 'override :states '(normal motion visual)
+                    "M-:" 'eval-expression-interactively)
+
 ;;; Hack
 
 (general-unbind global-map "M-<return>")
