@@ -137,6 +137,7 @@
 
 (use-package lsp-ivy
   :straight t
+  :disabled
   :after lsp-mode
   :preface
   (defun rk-lsp-ivy--setup-local-keybinds ()
@@ -150,7 +151,7 @@
 (use-package dumb-jump
   :straight t
   :custom
-  (dumb-jump-selector 'ivy)
+  (dumb-jump-selector 'completing-read)
   (dumb-jump-force-searcher 'rg))
 
 (provide 'rk-lsp)
