@@ -15,15 +15,11 @@
 
 (use-package help-fns-plus
   :straight t
-  :commands (describe-buffer
-             describe-file
-             describe-keymap)
   :init
-  (progn
-    (rk-leader-def
-      "h d K" '(describe-keymap :wk "describe keymap")
-      "h d F" '(describe-file :wk "describe file")
-      "h d B" '(describe-buffer :wk "describe buffer"))))
+  (rk-leader-def
+    "h d K" '(describe-keymap :wk "describe keymap")
+    "h d F" '(describe-file :wk "describe file")
+    "h d B" '(describe-buffer :wk "describe buffer")))
 
 (provide 'rk-help)
 
