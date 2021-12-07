@@ -11,105 +11,154 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'general)
 (require 'definers)
 
-(autoload 'evil-set-initial-state "evil-core")
-
 (defvar rk-flycheck--redundant-checkers
-  '(javascript-jshint))
+  '(javascript-jshint)
+  "Checkers that serve no purpose.")
+
+(use-package flycheck
+  :hook
+  (after-init . global-flycheck-mode)
+  (prog-mode . flycheck-mode-on-safe)
+
+  :general
+  (:keymaps
+   'flycheck-mode-map
+   "M-n" #'flycheck-next-error
+   "M-p" #'flycheck-previous-error
+   "M-j" #'flycheck-next-error
+   "M-k" #'flycheck-previous-error)
+  (:keymaps 'flycheck-error-list-mode-map :states 'normal
+            "n" #'flycheck-error-list-next-error
+            "j" #'flycheck-error-list-next-error
+            "p" #'flycheck-error-list-previous-error
+            "k" #'flycheck-error-list-previous-error
+            "q" #'quit-window)
+
+  (:states 'motion
+           :keymaps 'flycheck-error-list-mode-map
+           "j" #'flycheck-error-list-next-error
+           "k" #'flycheck-error-list-previous-error
+           "RET" #'flycheck-error-list-goto-error
+           "n" #'flycheck-error-list-next-error
+           "p" #'flycheck-error-list-previous-error
+           "q" #'quit-window)
+
+  :custom
+  (flycheck-display-errors-delay 0.1)
+  (flycheck-emacs-lisp-load-path 'inherit)
+  (flycheck-python-pycompile-executable "python")
+  (flycheck-global-modes '(not text-mode
+                               org-mode
+                               org-agenda-mode))
+
+  :init
+  (rk-leader-def
+    "ec" '(flycheck-clear :wk "clear errors")
+    "eh" '(flycheck-describe-checker :wk "describe checker")
+    "ee" '(flycheck-buffer :wk "check buffer")
+    "es" '(flycheck-select-checker :wk "select checker")
+    "eS" '(flycheck-set-checker-executable :wk "set checker binary")
+    "ev" '(flycheck-verify-setup :wk "verify setup"))
+
+  :config
+  (dolist (checker rk-flycheck--redundant-checkers)
+    (add-to-list 'flycheck-disabled-checkers checker))
+
+  (add-to-list 'display-buffer-alist
+               `(,(rx bos "*Flycheck errors*" eos)
+                 (display-buffer-reuse-window display-buffer-in-side-window)
+                 (slot . 1)
+                 (reusable-frames . visible)
+                 (side . bottom)
+                 (window-height . 0.4))))
 
 (use-package flycheck
   :straight t
-  :defer t
-  :commands (global-flycheck-mode
-             flycheck-list-errors
-             flycheck-error-list-next-error
-             flycheck-error-list-previous-error
-             flycheck-error-list-goto-error)
-  :general
-  (:keymaps 'flycheck-mode-map
-            "M-n" #'flycheck-next-error
-            "M-p" #'flycheck-previous-error
-            "M-j" #'flycheck-next-error
-            "M-k" #'flycheck-previous-error)
-  :preface
-  (progn
-    (autoload 'flycheck-buffer "flycheck")
-    (autoload 'flycheck-error-format-message-and-id "flycheck")
-    (autoload 'flycheck-get-error-list-window "flycheck")
-    (autoload 'flycheck-may-use-echo-area-p "flycheck")
-    (autoload 'projectile-project-p "projectile")
-    (autoload 'projectile-process-current-project-buffers "projectile")
-
-    (defun rk-flycheck-display-error-messages (errors)
-      (unless (flycheck-get-error-list-window 'current-frame)
-        (when (and errors (flycheck-may-use-echo-area-p))
-          (let ((messages (seq-map #'flycheck-error-format-message-and-id errors)))
-            (display-message-or-buffer (string-join messages "\n\n")
-                                       flycheck-error-message-buffer
-                                       'display-buffer-popup-window))))))
-
+  :after projectile
   :config
-  (progn
-    (global-flycheck-mode +1)
+  (defun rk-flycheck--check-all-project-buffers ()
+    (when (and (bound-and-true-p projectile-mode) (projectile-project-p))
+      (projectile-process-current-project-buffers
+       (lambda (buf)
+         (with-current-buffer buf
+           (when (bound-and-true-p flycheck-mode)
+             ;; HACK: Inhibit checks for elisp, otherwise flycheck will
+             ;; spawn a bunch of thrashing Emacs processes.
+             (unless (derived-mode-p 'emacs-lisp-mode)
+               (flycheck-buffer))))))))
 
-    ;; Remove redundant checkers from list
+  (add-hook 'after-save-hook #'rk-flycheck--check-all-project-buffers))
 
-    (dolist (checker rk-flycheck--redundant-checkers)
-      (add-to-list 'flycheck-disabled-checkers checker))
+(use-package flycheck
+  :straight t
+  :after evil
+  :config
+  (evil-set-initial-state 'flycheck-error-list-mode 'motion))
 
-    ;; Config
+(use-package flycheck
+  :straight t
+  :after nano-modeline
+  :config
+  (defun rk-flycheck--custom-mode-line-status-text (&optional status)
+    (pcase (or status flycheck-last-status-change)
+      (`no-checker "Checks[-]")
+      (`errored "Checks[ERROR]")
+      (`finished
+       (let-alist (flycheck-count-errors flycheck-current-errors)
+         (cond
+          ((and .error .warning)
+           (format "✖ (%s error%s, %s warn%s)"
+                   .error
+                   (if (equal .error 1) "" "s")
+                   .warning
+                   (if (equal .warning 1) "" "s")))
+          (.error
+           (format "✖ (%s error%s)" .error (if (equal .error 1) "" "s")))
 
-    (setq flycheck-display-errors-function 'rk-flycheck-display-error-messages)
-    (setq flycheck-display-errors-delay 0.5)
-    (setq flycheck-emacs-lisp-load-path 'inherit)
-    (setq flycheck-check-syntax-automatically '(save))
+          (.warning
+           (format "! (%s warning%s)" .warning (if (equal .warning 1) "" "s")))
+          (t
+           "✔"))))
+      (`interrupted "? (interrupted)")
+      (`suspicious "? (suspicious)")
+      (`running "···")
+      (_
+       "")))
 
-    (rk-leader-def
-      "ec" '(flycheck-clear :wk "clear errors")
-      "eh" '(flycheck-describe-checker :wk "describe checker")
-      "ee" '(flycheck-buffer :wk "check buffer")
-      "en" '(flycheck-next-error :wk "next error")
-      "ep" '(flycheck-previous-error :wk "prev error")
-      "es" '(flycheck-select-checker :wk "select checker")
-      "eS" '(flycheck-set-checker-executable :wk "set checker binary")
-      "ev" '(flycheck-verify-setup :wk "verify setup"))
+  (defun rk-nano-modeline--default-mode ()
+    (let ((buffer-name (format-mode-line "%b"))
+          (mode-name   (nano-mode-name))
+          (branch      (vc-branch))
+          (position    (format-mode-line "%l:%c")))
+      (nano-modeline-compose (nano-modeline-status)
+                             buffer-name
+                             (concat "(" mode-name
+                                     (if branch (concat ", "
+                                                        (propertize branch 'face 'italic)))
+                                     ") " (rk-flycheck--custom-mode-line-status-text))
+                             position)))
+  (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode)
+  :custom
+  (flycheck-mode-line '(:eval (rk-flycheck--custom-mode-line-status-text))))
 
-    (with-eval-after-load 'evil
-      (evil-set-initial-state 'flycheck-error-list-mode 'motion)
-      (general-def 'normal flycheck-error-list-mode-map
-        "n" #'flycheck-error-list-next-error
-        "p" #'flycheck-error-list-previous-error
-        "q" #'quit-window))
+(use-package flycheck
+  :straight t
+  :config
+  (defun rk-flycheck--maybe-inhibit (result)
+    (unless (or (equal (buffer-name) "*ediff-merge*")
+                (string-suffix-p ".dir-locals.el" (buffer-file-name))
+                (string-match-p (rx bol "*Pp ") (buffer-name))
+                (string-match-p (rx "/node_modules/") default-directory))
+      result))
 
-    (add-to-list 'display-buffer-alist
-                 `(,(rx bos "*Flycheck errors*" eos)
-                   (display-buffer-reuse-window
-                    display-buffer-in-side-window)
-                   (reusable-frames . visible)
-                   (side            . bottom)
-                   (slot            . 1)
-                   (window-height   . 0.2)))))
+  (advice-add 'flycheck-may-enable-mode :filter-return #'rk-flycheck--maybe-inhibit))
 
 (use-package flycheck-transient-state
   :init
   (rk-leader-def
-    "el" '(rk-flycheck-ts-transient-state/body :wk "error hydra")))
-
-(use-package flycheck-posframe
-  :straight t
-  :after flycheck
-  :commands (flycheck-posframe-mode)
-  :custom
-  (flycheck-posframe-border-width 7)
-  (flycheck-posframe-override-parameters '((alpha 100 100)))
-  :config
-  (progn
-    (set-face-attribute 'flycheck-posframe-background-face nil :inherit 'ivy-posframe :background nil)
-    (flycheck-posframe-configure-pretty-defaults)
-    (with-eval-after-load 'flycheck
-      (add-hook 'flycheck-mode-hook #'flycheck-posframe-mode))))
+    "el" '(rk-flycheck/body :wk "error hydra")))
 
 (provide 'rk-flycheck)
 
