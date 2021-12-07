@@ -13,13 +13,11 @@
 
 (use-package paren-face
   :straight t
-  :demand t
-  :commands (global-paren-face-mode)
+  :custom
+  (paren-face-regexp (rx (any "{}();,")))
   :config
-  (progn
-    (add-to-list 'paren-face-modes 'web-mode)
-    (setq paren-face-regexp (rx (any "{}();,")))
-    (global-paren-face-mode +1)))
+  (add-to-list 'paren-face-modes 'web-mode)
+  (global-paren-face-mode +1))
 
 (provide 'rk-parentheses)
 
