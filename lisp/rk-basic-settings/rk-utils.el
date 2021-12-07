@@ -14,6 +14,20 @@
   (when (thing-at-point-looking-at (rx (not space) (* space) "."))
     (delete-horizontal-space)))
 
+(defun bounds-of-surrounding-lines (lines-before lines-after)
+  (let ((start
+         (save-excursion
+           (ignore-errors
+             (forward-line (- lines-before)))
+           (line-beginning-position)))
+        (end
+         (save-excursion
+           (ignore-errors
+             (forward-line lines-after))
+           (line-end-position))))
+    (list start end)))
+
+
 (provide 'rk-utils)
 
 ;;; rk-utils.el ends here
