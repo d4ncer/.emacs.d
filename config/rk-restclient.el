@@ -15,31 +15,28 @@
 
 (use-package restclient
   :straight t
-  :commands (restclient-mode
-             restclient-http-send-current
-             restclient-jump-next
-             restclient-jump-prev
-             restclient-http-send-current-stay-in-window)
+  :commands (restclient-jump-next
+             restclient-jump-prev)
+  :custom
+  (restclient-same-buffer-response-name "*restclient*")
   :general
   (:keymaps 'restclient-mode-map :states '(normal)
             "C-n" #'restclient-jump-next
+            "C-j" #'restclient-jump-next
+            "C-k" #'restclient-jump-prev
             "C-p" #'restclient-jump-prev)
   :config
-  (progn
-    (rk-local-leader-def :keymaps 'restclient-mode-map
-      "c" '(restclient-http-send-current :wk "execute current")
-      "o" '(restclient-http-send-current-stay-in-window :wk "execute current (stay)"))
+  (rk-local-leader-def :keymaps 'restclient-mode-map
+    "c" '(restclient-http-send-current :wk "execute current")
+    "o" '(restclient-http-send-current-stay-in-window :wk "execute current (stay)"))
 
-    (setq restclient-same-buffer-response-name "*restclient*")
-
-    (add-to-list 'display-buffer-alist
-                 `(,(rx bos "*restclient*" eos)
-                   (display-buffer-reuse-window
-                    display-buffer-pop-up-window)
-                   (reusable-frames . visible)
-                   (side            . bottom)
-                   (window-height   . 0.66)))))
-
+  (add-to-list 'display-buffer-alist
+               `(,(rx bos "*restclient*" eos)
+                 (display-buffer-reuse-window
+                  display-buffer-pop-up-window)
+                 (reusable-frames . visible)
+                 (side            . bottom)
+                 (window-height   . 0.66))))
 
 (provide 'rk-restclient)
 
