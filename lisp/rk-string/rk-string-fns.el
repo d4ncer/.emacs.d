@@ -28,28 +28,32 @@
     (user-error "No symbol at point")))
 
 (defun rk-word-or-region-to-camel-lower (beg end text)
-  "Convert TEXT in selected region or symbol in bounds BEG to END to lower camel case."
+  "Convert TEXT in selected region or symbol in bounds
+BEG to END to lower camel case."
   (interactive (rk--bounds-and-symbol))
   (save-excursion
     (delete-region beg end)
     (insert (s-lower-camel-case text))))
 
 (defun rk-word-or-region-to-camel-upper (beg end text)
-  "Convert TEXT in selected region or symbol in bounds BEG to END to upper camel case."
+  "Convert TEXT in selected region or symbol in bounds
+BEG to END to upper camel case."
   (interactive (rk--bounds-and-symbol))
   (save-excursion
     (delete-region beg end)
     (insert (s-upper-camel-case text))))
 
 (defun rk-word-or-region-to-snake (beg end text)
-  "Convert TEXT in selected region or symbol in bounds BEG to END to snake case."
+  "Convert TEXT in selected region or symbol in bounds
+BEG to END to snake case."
   (interactive (rk--bounds-and-symbol))
   (save-excursion
     (delete-region beg end)
     (insert (s-snake-case text))))
 
 (defun rk-word-or-region-to-dashed (beg end text)
-  "Convert TEXT in selected region or symbol in bounds BEG to END to dashed case."
+  "Convert TEXT in selected region or symbol in bounds
+BEG to END to dashed case."
   (interactive (rk--bounds-and-symbol))
   (save-excursion
     (delete-region beg end)

@@ -14,12 +14,6 @@
 (require 'definers)
 
 (use-package rk-string-fns
-  :commands
-  (rk-word-or-region-to-camel-lower
-   rk-word-or-region-to-camel-upper
-   rk-word-or-region-to-snake
-   rk-word-or-region-to-dashed)
-
   :init
   (rk-leader-def
     "t l" '(rk-word-or-region-to-camel-lower :wk "to lower camel")
