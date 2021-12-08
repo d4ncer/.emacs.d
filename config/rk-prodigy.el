@@ -11,7 +11,6 @@
 
 (use-package prodigy
   :straight t
-  :commands (prodigy)
   :general
   (:keymaps 'prodigy-view-mode-map :states '(normal motion)
             "C-l" #'prodigy-view-clear-buffer)
@@ -31,13 +30,12 @@
             "J m" #'prodigy-jump-magit
             "s" #'prodigy-start
             "m" #'prodigy-mark)
+  :custom
+  (prodigy-view-truncate-by-default t)
+  (prodigy-completion-system 'default)
   :init
   (rk-leader-def
-    "x p" '(prodigy :wk "prodigy"))
-  :config
-  (progn
-    (setq prodigy-view-truncate-by-default t)
-    (setq prodigy-completion-system 'default)))
+    "x p" '(prodigy :wk "prodigy")))
 
 (provide 'rk-prodigy)
 
