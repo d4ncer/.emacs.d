@@ -15,15 +15,11 @@
 
 (use-package expand-region
   :straight t
-  :commands
-  (er/expand-region)
-
   :init
   (rk-leader-def "v" '(er/expand-region :wk "expand"))
-
-  :config
-  (setq expand-region-contract-fast-key "V"
-        expand-region-reset-fast-key "r"))
+  :custom
+  (expand-region-contract-fast-key "V")
+  (expand-region-reset-fast-key "r"))
 
 (provide 'rk-expand-region)
 
