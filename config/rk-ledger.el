@@ -15,7 +15,6 @@
 
 (use-package ledger-mode
   :straight t
-  :demand t
   :mode ("\\.ledger$" . ledger-mode)
   :init
   (rk-local-leader-def :keymaps 'ledger-mode-map
@@ -33,6 +32,10 @@
 (use-package org-capture
   :after ledger-mode
   :preface
+  (autoload 'ledger-payees-in-buffer "ledger-complete")
+  (autoload 'ledger-accounts-list "ledger-complete")
+  (autoload 'ledger-mode-clean-buffer "ledger-mode")
+  (defvar ledger-accounts-file nil)
   (defvar rk-org--ledger-base-template "%%(org-read-date) %%^{Payee%s}\n\tExpenses:%%^{Account%s}    %%^{Amount} NZD\n\t%s"
     "Base template")
   (defun rk-org--ledger-payees-list ()
@@ -91,7 +94,7 @@
 
 (use-package flycheck-ledger
   :straight t
-  :after flycheck)
+  :after (flycheck ledger))
 
 (provide 'rk-ledger)
 
