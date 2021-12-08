@@ -37,25 +37,24 @@
 
 (use-package which-key
   :straight t
-  :preface
-  (autoload 'which-key-mode "which-key")
-  (autoload 'which-key-add-key-based-replacements "which-key")
+  :custom
+  (which-key-special-keys nil)
+  (which-key-use-C-h-commands t)
+  (which-key-echo-keystrokes 0.02)
+  (which-key-max-description-length 32)
+  (which-key-sort-order 'which-key-key-order-alpha)
+  (which-key-idle-delay 0.4)
+  (which-key-allow-evil-operators t)
 
+  :preface
   (defun rk-leader-keys-set-up-which-key-buffer (&rest _)
     (when-let (buf (get-buffer which-key-buffer-name))
       (when (buffer-live-p buf)
         (with-current-buffer buf
           (setq-local mode-line-format nil)
-          (force-mode-line-update)))))
-  :config
-  (general-setq which-key-special-keys nil)
-  (general-setq which-key-use-C-h-commands t)
-  (general-setq which-key-echo-keystrokes 0.02)
-  (general-setq which-key-max-description-length 32)
-  (general-setq which-key-sort-order 'which-key-key-order-alpha)
-  (general-setq which-key-idle-delay 0.4)
-  (general-setq which-key-allow-evil-operators t)
+          (force-mode-line-update t)))))
 
+  :config
   (advice-add 'which-key--create-buffer-and-show
               :after #'rk-leader-keys-set-up-which-key-buffer)
 
@@ -166,17 +165,6 @@
   :init
   (rk-leader-def
     "zx" '(rk-general--scale-font/body :wk "font scale hydra")))
-
-(use-package rk-buffer-transient-state
-  :commands (rk-buffer-transient-state/body
-             rk-buffer-transient-state/next-buffer
-             rk-buffer-transient-state/previous-buffer)
-  :init
-  (rk-leader-def
-    "bn" '(rk-buffer-transient-state/next-buffer :wk "next buffer")
-    "bN" '(rk-buffer-transient-state/previous-buffer :wk "prev buffer")
-    "bp" '(rk-buffer-transient-state/previous-buffer :wk "prev buffer")))
-
 
 (provide 'rk-leader-keys)
 
