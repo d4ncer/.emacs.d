@@ -20,74 +20,71 @@
 
 (use-package yasnippet
   :straight t
-  :preface
-  (progn
-    (autoload 'sp-backward-delete-char "smartparens")
-    (autoload 'ivy-completing-read "ivy")
+  :hook
+  (prog-mode . (lambda () (require 'yasnippet)))
+  (text-mode . (lambda () (require 'yasnippet)))
 
-    (defun rk-yasnippet--ivy-yas-prompt (prompt choices &optional display-fn)
-      (yas-completing-prompt prompt choices display-fn #'ivy-completing-read))
+  :custom
+  (yas-wrap-around-region t)
+  (yas-alias-to-yas/prefix-p nil)
+  (yas-prompt-functions '(yas-completing-prompt))
+  (yas-verbosity 0)
+  (yas-minor-mode-map (make-sparse-keymap))
 
-    (defun rk-yasnippet--current-field ()
-      "Return the current active field."
-      (and (boundp 'yas--active-field-overlay)
-           yas--active-field-overlay
-           (overlay-buffer yas--active-field-overlay)
-           (overlay-get yas--active-field-overlay 'yas--field)))
+  (yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
 
-    (defun rk-yasnippet-backspace ()
-      "Clear the current field if the current snippet is unmodified.
-Otherwise delete backwards."
-      (interactive "*")
-      (let ((field (rk-yasnippet--current-field))
-            (sp-mode? (and (boundp 'smartparens-mode) smartparens-mode)))
-        (cond ((and field
-                    (not (yas--field-modified-p field))
-                    (eq (point) (marker-position (yas--field-start field))))
-               (yas--skip-and-clear field)
-               (yas-next-field 1))
-              (sp-mode?
-               (call-interactively #'sp-backward-delete-char))
-              (t
-               (call-interactively #'backward-delete-char))))))
+
+  :general
+  (:keymaps 'yas-minor-mode-map :states 'insert
+            "TAB"
+            (general-predicate-dispatch 'indent-for-tab-command
+              (yas-maybe-expand-abbrev-key-filter t) 'yas-expand))
+  (:keymaps 'yas-keymap :states 'insert
+            "SPC"
+            (general-predicate-dispatch 'self-insert-command
+              (yas--maybe-clear-field-filter t) 'yas-skip-and-clear-field)
+            )
 
   :init
-  (progn
-    (rk-leader-def
-      "yf" '(yas-visit-snippet-file :wk "visit snippet file")
-      "ye" '(yas-expand :wk "expand snippet")
-      "yn" '(yas-new-snippet :wk "new snippet"))
-
-    ;; Fix malformed face decl
-    (defface yas-field-highlight-face
-      '((t (:inherit region)))
-      "The face used to highlight the currently active field of a snippet"))
+  (rk-leader-def
+    "yf" '(yas-visit-snippet-file :wk "visit snippet file")
+    "ye" '(yas-expand :wk "expand snippet")
+    "yn" '(yas-new-snippet :wk "new snippet"))
 
   :config
-  (progn
-    (setq doom-snippets-dir (f-join straight-base-dir "straight/build/doom-snippets"))
-    (setq yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
-    (setq yas-wrap-around-region t)
-    (setq yas-prompt-functions '(rk-yasnippet--ivy-yas-prompt))
-    (setq yas-verbosity 0)
+  (yas-global-mode +1))
 
-    (yas-global-mode +1)
+(use-package yasnippet
+  :straight t
+  :after smartparens
+  :general
+  (:keymaps 'yas-keymap :states 'insert
+            "<backspace>"
+            (general-predicate-dispatch 'backward-delete-char
+              (yas--maybe-clear-field-filter t) 'yas-skip-and-clear-field
+              (bound-and-true-p smartparens-mode) 'sp-backward-delete-char)))
 
-    (add-to-list 'yas-dont-activate-functions (lambda () (derived-mode-p 'term-mode)))
-    ;; Define key bindings for fancy snippet navigation.
+(use-package yasnippet
+  :straight t
+  :config
+  (defun rk-yasnippet--end-of-field ()
+    (when-let* ((field (yas-current-field)))
+      (marker-position (yas--field-end field))))
 
-    (general-def :keymaps 'yas-minor-mode-map :states '(insert normal motion)
-      "C-," #'yas-expand)
+  (defun rk-yasnippet--maybe-goto-field-end ()
+    "Move to the end of the current field if it has been modified."
+    (when-let* ((field (yas-current-field)))
+      (when (and (yas--field-modified-p field)
+                 (yas--field-contains-point-p field))
+        (goto-char (rk-yasnippet--end-of-field)))))
 
-    (general-def :keymaps 'yas-keymap :states 'insert
-      "SPC" #'rk-yasnippet-space)
-    (general-def :keymaps 'yas-keymap :states '(insert normal motion)
-      "<backspace>" #'rk-yasnippet-backspace))
+  (defun yasnippet-goto-field-end (&rest _)
+    (rk-yasnippet--maybe-goto-field-end)
+    (when (and (boundp 'evil-mode) evil-mode (fboundp 'evil-insert-state))
+      (evil-insert-state)))
 
-  :functions
-  (yas--skip-and-clear
-   yas--field-contains-point-p
-   yas--field-text-for-display))
+  (advice-add 'yas-next-field :after #'yasnippet-goto-field-end)
+  (advice-add 'yas-prev-field :after #'yasnippet-goto-field-end))
 
 (use-package warnings
   :config
@@ -110,6 +107,8 @@ Otherwise delete backwards."
   :straight (:host github :repo "hlissner/doom-snippets"
                    :branch "master"
                    :files ("*"))
+  :custom
+  (doom-snippets-dir (f-join straight-base-dir "straight/build/doom-snippets"))
   :after yasnippet)
 
 (provide 'rk-yasnippet)
