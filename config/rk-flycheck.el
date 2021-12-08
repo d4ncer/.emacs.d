@@ -43,7 +43,8 @@
            "RET" #'flycheck-error-list-goto-error
            "n" #'flycheck-error-list-next-error
            "p" #'flycheck-error-list-previous-error
-           "q" #'quit-window)
+           "q" #'quit-window
+           "C-g" #'flycheck-toggle-error-list)
 
   :custom
   (flycheck-display-errors-delay 0.1)
@@ -53,10 +54,24 @@
                                org-mode
                                org-agenda-mode))
 
+  :preface
+  (autoload 'flycheck-list-errors "flycheck")
+  (defun flycheck-toggle-error-list ()
+    "Show or hide the error list."
+    (interactive)
+    (if-let* ((window (seq-find (lambda (it)
+                                  (equal flycheck-error-list-buffer
+                                         (buffer-name (window-buffer it))))
+                                (window-list))))
+        (delete-window window)
+      (flycheck-list-errors)
+      (pop-to-buffer flycheck-error-list-buffer)))
+
   :init
   (rk-leader-def
     "ec" '(flycheck-clear :wk "clear errors")
     "eh" '(flycheck-describe-checker :wk "describe checker")
+    "el" '(flycheck-toggle-error-list :wk "list errors")
     "ee" '(flycheck-buffer :wk "check buffer")
     "es" '(flycheck-select-checker :wk "select checker")
     "eS" '(flycheck-set-checker-executable :wk "set checker binary")
@@ -72,7 +87,7 @@
                  (slot . 1)
                  (reusable-frames . visible)
                  (side . bottom)
-                 (window-height . 0.4))))
+                 (window-height . 0.2))))
 
 (use-package flycheck
   :straight t
@@ -154,11 +169,6 @@
       result))
 
   (advice-add 'flycheck-may-enable-mode :filter-return #'rk-flycheck--maybe-inhibit))
-
-(use-package flycheck-transient-state
-  :init
-  (rk-leader-def
-    "el" '(rk-flycheck/body :wk "error hydra")))
 
 (provide 'rk-flycheck)
 
