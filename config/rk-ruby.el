@@ -9,9 +9,14 @@
 
 (use-package ruby-mode
   :straight t
-  :after lsp
+  :after lsp-mode
   :config
   (add-hook 'ruby-mode-hook #'lsp))
+
+(use-package lsp-mode
+  :straight t
+  :custom
+  (lsp-solargraph-use-bundler t))
 
 (use-package rvm
   :straight t
