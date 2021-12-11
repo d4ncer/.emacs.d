@@ -24,8 +24,14 @@
     (set-mark (point))
     (end-of-line)
     (backward-char 1))
+  (defun rk-evil--find-refs-at-point ()
+    (interactive)
+    (if-let ((sym (thing-at-point 'symbol)))
+        (xref-find-references sym)
+      (call-interactively #'xref-find-references)))
   :general
   (:states '(normal motion)
+           "R" #'rk-evil--find-refs-at-point
            "C-l" #'rk-evil--select-non-empty-line
            "C-u" #'evil-scroll-page-up
            "C-d" #'evil-scroll-page-down
