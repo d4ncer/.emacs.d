@@ -57,7 +57,6 @@ Switch projects and subprojects from NEXT back to TODO."
            (rk-org-clock-cascade--at-todo-parent?))
       "TODO"))))
 
-;;;###autoload
 (defun rk-org-clock-cascade-init ()
   (setq org-clock-in-switch-to-state #'rk-org-clock-cascade-clock-in-to-next-state))
 

@@ -12,10 +12,7 @@
   (require 'use-package))
 
 (require 'definers)
-(require 'subr-x)
 (require 'rk-misc-utils)
-
-(autoload 'org-narrow-to-subtree "org")
 
 ;;; Misc functions
 
@@ -23,14 +20,11 @@
 
 (use-package rk-delete-current-buffer-and-file
   :commands (rk-delete-current-buffer-and-file)
+  :after projectile
   :preface
-  (progn
-    (autoload 'projectile-invalidate-cache "projectile")
-    (autoload 'projectile-project-p "projectile")
-
-    (defun rk-leader-keys--invalidate-cache (_path)
-      (when (and (featurep 'projectile) (projectile-project-p))
-        (call-interactively #'projectile-invalidate-cache))))
+  (defun rk-leader-keys--invalidate-cache (_path)
+    (when (and (featurep 'projectile) (projectile-project-p))
+      (call-interactively #'projectile-invalidate-cache)))
 
   :config
   (add-hook 'rk-delete-current-buffer-and-file-functions #'rk-leader-keys--invalidate-cache))
@@ -130,7 +124,6 @@
     "n"     '(:ignore t :wk "narrow/widen")
     "n f"   '(narrow-to-defun :wk "narrow to function")
     "n r"   '(narrow-to-region :wk "narrow to region")
-    "n s"   '(org-narrow-to-subtree :wk "narrow to subtree")
     "n w"   '(widen :wk "widen")
 
     "o"     '(:ignore t :wk "org")

@@ -176,6 +176,7 @@ Do not scheduled items or repeating todos."
   :init
   (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
   (rk-leader-def
+    "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
     "ok" '(org-capture :wk "capture")
     "ol" '(org-store-link :wk "store link")
     "os" '(org-search-view :wk "search"))
@@ -305,9 +306,8 @@ Do not scheduled items or repeating todos."
 
 (use-package org-attach
   :after org
-  :defines (org-attach-directory)
-  :config
-  (setq org-attach-directory (f-join paths--org-dir "data")))
+  :custom
+  (org-attach-id-dir (f-join paths--org-dir "data")))
 
 (use-package org-agenda
   :after org
@@ -572,7 +572,7 @@ Do not scheduled items or repeating todos."
   (progn
     (autoload 'org-remove-empty-drawer-at "org")
 
-    (define-transient-command org-clock-transient ()
+    (transient-define-prefix org-clock-transient ()
       "Org clock transient"
       ["Actions"
        ("i" "In" org-clock-in)
@@ -736,8 +736,8 @@ table tr.tr-even td {
 
 (use-package rk-org-clock-cascade
   :after org
-  :functions (rk-org-clock-cascade-init)
-  :init (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
+  :commands rk-org-clock-cascade-init
+  :config (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
 
 (use-package typopunct
   :straight t

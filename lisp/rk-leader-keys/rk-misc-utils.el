@@ -1,15 +1,10 @@
-;;; rk-misc-utils.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; rk-misc-utils.el --- Random fns that I use -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
 ;;; Code:
 
-(require 'seq)
-(require 'subr-x)
 (require 'paths)
-(require 'dash)
-(require 'f)
-(require 's)
 
 (autoload 'wgrep-finish-edit "wgrep")
 (autoload 'wgrep-abort-changes "wgrep")
@@ -22,18 +17,18 @@
 Each function is passed the path of the file that was deleted.")
 
 (defun rk-search-wgrep-finish-edit-kill-buffer ()
-      "Finish the current wgrep edit and kill the wgrep buffer."
-      (interactive)
-      (let ((buf (current-buffer)))
-        (prog1 (wgrep-finish-edit)
-          (kill-buffer buf))))
+  "Finish the current wgrep edit and kill the wgrep buffer."
+  (interactive)
+  (let ((buf (current-buffer)))
+    (prog1 (wgrep-finish-edit)
+      (kill-buffer buf))))
 
 (defun rk-search-wgrep-abort-changes-kill-buffer ()
-      "Abort the current wgrep edit and kill the wgrep buffer."
-      (interactive)
-      (let ((buf (current-buffer)))
-        (prog1 (wgrep-abort-changes)
-          (kill-buffer buf))))
+  "Abort the current wgrep edit and kill the wgrep buffer."
+  (interactive)
+  (let ((buf (current-buffer)))
+    (prog1 (wgrep-abort-changes)
+      (kill-buffer buf))))
 
 (defun rk-insert-iso-timestamp ()
   "Insert current ISO timestamp at position."
