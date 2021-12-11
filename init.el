@@ -77,9 +77,7 @@
 (setq user-mail-address "raghuvir.kasturi@gmail.com")
 
 (defconst use-package-verbose t)
-
 (straight-use-package 'use-package)
-(straight-use-package 'bind-map)
 
 (eval-when-compile
   (require 'recentf)
