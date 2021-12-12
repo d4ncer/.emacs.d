@@ -94,9 +94,15 @@
 
 (setq read-process-output-max (* 1024 1024))
 
-;; Aggressively load in org-plus-contrib to avoid shadowing
+;; Aggressively load in org to avoid shadowing
 
 (straight-use-package 'org)
+
+;;; Ack org-roam V2
+
+(defvar org-roam-v2-ack)
+(setq org-roam-v2-ack t)
+
 
 ;; Aggressively load themes
 
@@ -111,8 +117,10 @@
 
 ;; Base setup
 
-(use-package rk-leader-keys)
+(use-package rk-emacs)
 (use-package rk-basic-settings)
+(use-package rk-auto-insert)
+(use-package rk-leader-keys)
 (use-package rk-envrc)
 (use-package rk-darwin :if (equal system-type 'darwin))
 
@@ -149,6 +157,7 @@
 (use-package rk-elisp)
 (use-package rk-web-mode)
 (use-package rk-typescript)
+(use-package rk-graphql)
 (use-package rk-coffeescript)
 (use-package rk-haskell)
 (use-package rk-go)
