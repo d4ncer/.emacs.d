@@ -230,6 +230,14 @@ With prefix argument ARG, prompt for a file."
     (load buffer-file-name nil 'nomessage))
   (message "Evaluating %s... done." (buffer-name)))
 
+;; Generate random passwords.
+(defun rk-generate-password ()
+  "Generate a random password and copy it to the kill ring."
+  (interactive)
+  (kill-new (s-trim (shell-command-to-string "gpg --gen-random --armor 1 30")))
+  (message "Password copied to kill-ring."))
+
+
 (provide 'rk-misc-utils)
 
 ;;; rk-misc-utils.el ends here

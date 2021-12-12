@@ -65,6 +65,7 @@
     "a"     '(:ignore t :wk "applications")
     "a m"   '(:ignore t :wk "misc")
     "a m t" '(rk-insert-iso-timestamp :wk "insert ISO timestap")
+    "a m p" '(rk-generate-password :wk "generate random password")
 
     "b"     '(:ignore t :wk "buffer")
     "b a"   '(mark-whole-buffer :wk "select all")
