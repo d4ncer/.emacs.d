@@ -862,7 +862,8 @@ table tr.tr-even td {
             "<tab>" #'magit-section-toggle
             "n" #'magit-section-forward
             "p" #'magit-section-backward
-            "<return>" #'org-roam-buffer-visit-thing)
+            "<return>" #'org-roam-buffer-visit-thing
+            "q" #'quit-window)
   (:keymaps 'org-roam-preview-map
             "SPC" nil
             "<return>" #'rk-org-roam--visit-preview-other-window)
