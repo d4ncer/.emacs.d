@@ -878,6 +878,7 @@ table tr.tr-even td {
   :init
   (rk-leader-def
     "ob"  '(org-roam-buffer-toggle :wk "toggle buffer")
+    "oB"  '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
     "of"  '(org-roam-node-find :wk "find file node")
 
     "od"  '(:ignore t :wk "date")
