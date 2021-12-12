@@ -11,18 +11,27 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'general)
-
-(general-def "s-q" #'save-buffers-kill-emacs)
-(general-def "s-v" #'yank)
-(general-def "s-c" #'copy-region-as-kill)
-(general-def "s-n" #'new-frame)
-(general-def "s-w" #'delete-frame)
-
 (use-package osx-trash
   :straight t
   :config
   (osx-trash-setup))
+
+(use-package emacs
+  :custom
+  (frame-title-format nil)
+  (ns-use-native-fullscreen nil)
+  :general
+  ("s-q" #'save-buffers-kill-emacs
+   "s-v" #'yank
+   "s-c" #'copy-region-as-kill
+   "s-n" #'make-frame-command
+   "s-w" #'delete-frame)
+  :config
+  (when (executable-find "gls")
+    (setq insert-directory-program "gls"))
+  (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
+  (add-to-list 'default-frame-alist '(ns-appearance . light)))
+
 
 (provide 'rk-darwin)
 
