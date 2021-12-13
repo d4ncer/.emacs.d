@@ -13,19 +13,15 @@
 
 (use-package coffee-mode
   :straight t
-  :defer t
   :mode
   (("\\.coffee\\'" . coffee-mode)
    ("\\.iced\\'" . coffee-mode)
    ("Cakefile\\'" . coffee-mode)
    ("\\.cson\\'" . coffee-mode))
-
-  :defines (coffee-tab-width)
   :interpreter ("coffee" . coffee-mode)
-  :config
-  (progn
-    (setq coffee-tab-width 2)
-    (setq coffee-indent-like-python-mode t)))
+  :custom
+  (coffee-tab-width 2)
+  (coffee-indent-like-python-mode t))
 
 (provide 'rk-coffeescript)
 
