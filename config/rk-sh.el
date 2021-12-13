@@ -7,11 +7,7 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'lsp)
-
-(use-package sh-script
-  :hook
-  (sh-mode . lsp))
+(use-package sh-script)
 
 (provide 'rk-sh)
 
