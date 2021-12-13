@@ -21,6 +21,7 @@
 (require 'subr-x)
 (require 'transient)
 (require 'pretty-hydra)
+(require 'rk-misc-utils)
 
 (autoload 'evil-define-key "evil")
 
@@ -36,6 +37,7 @@
   :general
   (:keymaps 'org-mode-map
             "C-;" #'insert-char
+            "C-c l" #'rkca-insert-TKISS-link
             "C-c C-." #'org-time-stamp-inactive
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading

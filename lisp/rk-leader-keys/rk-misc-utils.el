@@ -11,6 +11,7 @@
 (autoload 'projectile-invalidate-cache "projectile")
 (autoload 'projectile-project-p "projectile")
 (autoload 'recentf-cleanup "recentf")
+(autoload 'org-insert-link "org")
 
 (defvar rk-delete-current-buffer-and-file-file-deleted-functions nil
   "Hook called after a file is deleted by `rk-delete-current-buffer-and-file'.
@@ -236,6 +237,16 @@ With prefix argument ARG, prompt for a file."
   (interactive)
   (kill-new (s-trim (shell-command-to-string "gpg --gen-random --armor 1 30")))
   (message "Password copied to kill-ring."))
+
+;; Work stuff
+(defconst rkca--jira-url-template
+  "https://cultureamp.atlassian.net/browse/%s")
+
+(defun rkca-insert-TKISS-link (ticket)
+  "Generate a link to a TKISS JIRA ticket."
+  (interactive (let ((ticket (read-string "Ticket number: ")))
+                 (list ticket)))
+  (org-insert-link nil (format rkca--jira-url-template ticket) (format "TKISS-%s" ticket)))
 
 
 (provide 'rk-misc-utils)
