@@ -18,11 +18,16 @@
   :straight t
   :preface
   (autoload 'magit-status "magit")
+  (defun rk-projectile--switch-project-action ()
+    (let ((project-root (projectile-acquire-root)))
+      (if (f-exists-p (f-join project-root ".git"))
+          (magit-status project-root)
+        (dired project-root))))
 
   :custom
   (projectile-indexing-method 'alien)
   (projectile-completion-system 'default)
-  (projectile-switch-project-action 'magit-status)
+  (projectile-switch-project-action #'rk-projectile--switch-project-action)
   (projectile-enable-caching t)
   (projectile-cache-file (concat paths-cache-directory "/projectile.cache"))
   (projectile-globally-ignored-files '("TAGS" ".DS_Store"))
