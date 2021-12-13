@@ -11,6 +11,12 @@
   :straight t
   :mode "\\.nix\\'")
 
+(use-package nix-mode
+  :straight t
+  :after lsp
+  :hook
+  (nix-mode . lsp))
+
 (provide 'rk-nix)
 
 ;;; rk-nix.el ends here
