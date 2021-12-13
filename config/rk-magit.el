@@ -45,8 +45,8 @@
   (pretty-hydra-define rk-git--git-blame
     (:title "Git Blame" :pre (unless (bound-and-true-p magit-blame-mode) (call-interactively 'magit-blame-addition)) :post (when (bound-and-true-p magit-blame-mode) (magit-blame-quit)) :foreign-keys run)
     ("Blame"
-     (("j" magit-blame-addition "More")
-      ("k" magit-blame-removal "Less")
+     (("C-n" magit-blame-addition "More")
+      ("C-p" magit-blame-removal "Less")
       ("q" magit-blame-quit "quit" :exit t))))
   :init
   (rk-leader-def
