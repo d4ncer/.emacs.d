@@ -942,6 +942,16 @@ table tr.tr-even td {
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
+;; Disable yasnippet in org mode buffers
+(use-package yasnippet
+  :straight t
+  :after org
+  :preface
+  (defun rk-yas--disable-yas ()
+    (yas-minor-mode -1))
+  :config
+  (add-hook 'org-mode-hook #'rk-yas--disable-yas))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
