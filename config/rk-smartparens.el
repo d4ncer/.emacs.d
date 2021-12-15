@@ -109,7 +109,7 @@
                   (looking-at (sp--get-opening-regexp)))
           (insert " ")))))
 
-;;;; Allow ES6 arrow '=>' in react-mode
+  ;; Allow ES6 arrow '=>' in react-mode
   (defun rk-smartparens--after-equals-p (_id action _context)
     (when (memq action '(insert navigate))
       (sp--looking-back-p "=>" 2)))
@@ -137,9 +137,7 @@
            :pre-handlers '(:add (rk-smartparens--add-space-before-sexp-insertion)))
 
   (sp-with-modes (list 'rk-web-js-mode 'rk-web-tsx-mode 'typescript-mode)
-    (sp-local-pair "<" nil
-                   :unless '(:add rk-smartparens--after-equals-p)
-                   :skip-match 'rk-smartparens--after-equals-skip))
+    (sp-local-pair "<" ">" :actions nil))
   (sp-with-modes (cons 'lisp-data-mode sp-lisp-modes)
     (sp-local-pair "(" nil
                    :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
