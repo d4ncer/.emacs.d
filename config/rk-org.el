@@ -908,7 +908,7 @@ table tr.tr-even td {
   (setq org-roam-node-display-template (concat (propertize "${tags:20}" 'face 'org-tag) " ${title:80} " (propertize "${backlinkscount:6}" 'face 'org-tag)))
   (org-roam-db-autosync-mode)
   (add-to-list 'display-buffer-alist
-               `(,(rx "*" "org-roam" (one-or-more anything) "*")
+               `(,(rx "*" "org-roam" (zero-or-more anything) "*")
                  (display-buffer-in-direction)
                  (direction . right)
                  (window-width . 0.33)
