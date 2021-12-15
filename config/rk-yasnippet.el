@@ -42,8 +42,7 @@
   (:keymaps 'yas-keymap :states 'insert
             "SPC"
             (general-predicate-dispatch 'self-insert-command
-              (yas--maybe-clear-field-filter t) 'yas-skip-and-clear-field)
-            )
+              (yas--maybe-clear-field-filter t) 'yas-skip-and-clear-field))
 
   :init
   (rk-leader-def
