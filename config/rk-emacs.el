@@ -104,11 +104,6 @@
   ;; Save place
   (save-place-file (concat paths-cache-directory "/saveplace"))
 
-  ;; Tramp
-  (tramp-default-method "ssh")
-  (tramp-auto-save-directory "/tmp")
-  (tramp-persistency-file-name (concat paths-cache-directory "/tramp"))
-
   ;; Auto revert
   (global-auto-revert-non-file-buffers t)
   (auto-revert-verbose nil)
@@ -357,6 +352,13 @@
       (transpose-lines 1)
       (forward-line -1)
       (indent-according-to-mode))))
+
+(use-package tramp
+  :custom
+  (tramp-default-method "ssh")
+  (tramp-auto-save-directory "/tmp")
+  (tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
+
 
 
 (provide 'rk-emacs)
