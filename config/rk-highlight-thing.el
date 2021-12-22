@@ -41,6 +41,9 @@
   (highlight-thing-limit-to-defun nil)
   (highlight-thing-case-sensitive-p t)
   :config
+  ;; KLUDGE This face isn't properly setup for some reason
+  (set-face-attribute 'highlight-thing nil
+                      :inherit 'hi-yellow)
   (advice-add 'highlight-thing-should-highlight-p :filter-return
               #'rk-highlight-thing--should-highlight-p))
 
