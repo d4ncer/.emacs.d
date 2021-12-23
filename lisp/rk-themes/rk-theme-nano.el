@@ -128,9 +128,9 @@
 
 (with-eval-after-load 'org
   (set-face-attribute 'org-level-1 nil
-                      :inherit 'nano-face-strong
+                      :inherit nil
                       :weight 'bold
-                      :height 190)
+                      :height 200)
   (set-face-attribute 'org-verbatim nil
                       :foreground nano-color-salient
                       :weight 'medium))
