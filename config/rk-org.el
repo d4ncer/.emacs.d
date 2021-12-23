@@ -818,8 +818,25 @@ table tr.tr-even td {
 
 (use-package org-bullets
   :straight t
+  :disabled t
   :after org
   :hook (org-mode . org-bullets-mode))
+
+(use-package org-superstar
+  :straight t
+  :hook (org-mode . org-superstar-mode)
+  :custom
+  (org-indent-mode-turns-on-hiding-stars nil)
+  (org-superstar-headline-bullets-list '(?○))
+  (org-superstar-leading-bullet ?\s)
+  (org-superstar-special-todo-items t)
+  (org-superstar-todo-bullet-alist '(("TODO" . ?☐)
+                                     ("NEXT" . ?☐)
+                                     ("WAITING" . ?◹)
+                                     ("CANCELLED" . ?☒)
+                                     ("DONE" . ?☑)))
+  :config
+  (setf (alist-get 45 org-superstar-item-bullet-alist) ?•))
 
 ;; Roam config
 
