@@ -114,14 +114,8 @@
   :straight t
   :if window-system
   :config
-  (setq exec-path-from-shell-check-startup-files nil)
-  (exec-path-from-shell-copy-env "GOPATH")
-  (exec-path-from-shell-copy-env "RUST_SRC_PATH")
-  (exec-path-from-shell-copy-env "LANG")
-  (exec-path-from-shell-copy-env "LC_ALL")
-  (exec-path-from-shell-initialize)
-
-  :functions
+  ;; (exec-path-from-shell-copy-env "LANG")
+  ;; (exec-path-from-shell-copy-env "LC_ALL")
   (exec-path-from-shell-initialize))
 
 (use-package request
