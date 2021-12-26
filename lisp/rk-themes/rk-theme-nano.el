@@ -5,9 +5,10 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package)
-  (require 'straight)
-  (require 'definers))
+  (require 'use-package))
+
+(require 'straight)
+(require 'definers)
 
 (defconst rk-theme-cursor-yellow "#f1c40f")
 (defconst rk-theme-cursor-blue "#3498db")
@@ -60,7 +61,6 @@
 (nano-faces)
 (nano-theme)
 
-(require 'nano-theme-light)
 (require 'nano-layout)
 
 (require 'nano-modeline)
@@ -161,6 +161,16 @@
   (set-face-attribute 'company-box-selection nil
                       :background nano-color-salient
                       :foreground nano-color-subtle))
+
+(with-eval-after-load 'tree-sitter-hl
+  (set-face-attribute 'tree-sitter-hl-face:function.call nil
+                      :inherit nil
+                      :weight 'semi-bold
+                      :underline nil
+                      :foreground nano-color-foreground
+                      :slant 'normal)
+  (set-face-attribute 'tree-sitter-hl-face:property nil
+                      :slant 'normal))
 
 (provide 'rk-theme-nano)
 
