@@ -13,6 +13,7 @@
 
 (use-package highlight-thing
   :straight t
+  :disabled t
   :init
   (add-hook 'prog-mode-hook #'highlight-thing-mode)
   :preface
