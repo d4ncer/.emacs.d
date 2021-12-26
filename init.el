@@ -127,6 +127,7 @@
 ;; Editor capabilities
 
 (use-package rk-evil)
+(use-package rk-tree-sitter)
 (use-package rk-completions)
 (use-package rk-highlight-thing)
 (use-package rk-auto-save)
