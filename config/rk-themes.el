@@ -40,12 +40,16 @@
 (use-package rk-theme-nano)
 
 (use-package tree-sitter
-  :disabled t
-  :straight t)
-
-(use-package tree-sitter-langs
-  :disabled t
-  :after tree-sitter)
+  :custom
+  (tsc-dyn-get-from '(:compilation))
+  :commands (global-tree-sitter-mode tree-sitter-hl-mode)
+  :config
+  (require 'tree-sitter-hl)
+  (require 'tree-sitter-langs)
+  (require 'tree-sitter-debug)
+  (require 'tree-sitter-query)
+  (global-tree-sitter-mode 1)
+  (add-hook 'tree-sitter-mode-hook #'tree-sitter-hl-mode))
 
 (provide 'rk-themes)
 
