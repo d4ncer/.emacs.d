@@ -12,9 +12,24 @@
 
 (use-package typescript-mode
   :straight t
+  :mode
+  ("\\.tsx\\'" . rk-ts-tsx-mode)
+  :init
+  (define-derived-mode rk-ts-tsx-mode typescript-mode "TSX"
+    "Derived mode for editing TSX files."))
+
+(use-package typescript-mode
+  :after lsp
+  :disabled t
+  :config
+  (add-hook 'rk-ts-tsx-mode-hook #'lsp))
+
+(use-package typescript-mode
+  :straight t
   :custom
   (typescript-indent-level 2)
-  :mode ("\\.ts\\'" . typescript-mode)
+  :mode
+  ("\\.ts\\'" . typescript-mode)
   :config
   (dolist (lang '("node" "nodejs" "gjs" "rhino"))
     (setf (alist-get lang interpreter-mode-alist) 'typescript-mode)))
@@ -110,7 +125,22 @@
   :straight t
   :after typescript-mode
   :init
+  (add-hook 'rk-ts-tsx-mode-hook #'prettier-mode)
   (add-hook 'typescript-mode-hook #'prettier-mode))
+
+(use-package lsp-tailwindcss
+  :straight (:type git :host github :repo "merrickluo/lsp-tailwindcss")
+  :after typescript-mode
+  :disabled t
+  :init
+  (setq lsp-tailwindcss-add-on-mode t)
+  (setq lsp-tailwindcss-major-modes '(rk-ts-tsx-mode)))
+
+(use-package tree-sitter-langs
+  :after typescript-mode
+  :init
+  :config
+  (add-to-list 'tree-sitter-major-mode-language-alist '(rk-ts-tsx-mode . tsx)))
 
 (provide 'rk-typescript)
 

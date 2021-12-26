@@ -60,8 +60,7 @@
          ("\\.jsx?\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
-         ("\\.html\\'" . rk-web-html-mode)
-         ("\\.tsx\\'" . rk-web-tsx-mode))
+         ("\\.html\\'" . rk-web-html-mode))
 
   :preface
   (defun rk-web--add-custom-eslint-rules-dir ()
@@ -82,16 +81,9 @@
   :config
   (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
   (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
-  (flycheck-add-mode 'javascript-eslint 'rk-web-tsx-mode)
   (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
   (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
   (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
-
-(use-package rk-web-modes
-  :after lsp
-  :disabled t
-  :config
-  (add-hook 'rk-web-tsx-mode-hook #'lsp))
 
 (use-package emmet-mode
   :straight t
@@ -115,9 +107,8 @@
      ((derived-mode-p 'rk-web-html-mode 'html-mode 'nxml-mode)
       (emmet-mode +1))
 
-     ((or (and (derived-mode-p 'rk-web-js-mode)
-               (rk-web--react-in-buffer-p))
-          (derived-mode-p 'rk-web-tsx-mode))
+     ((and (derived-mode-p 'rk-web-js-mode)
+           (rk-web--react-in-buffer-p))
       (progn
         (setq-local emmet-expand-jsx-className? t)
         (emmet-mode +1)))))
@@ -144,8 +135,7 @@
   :init
   (add-hook 'rk-web-js-mode-hook #'prettier-mode)
   (add-hook 'rk-web-css-mode-hook #'prettier-mode)
-  (add-hook 'rk-web-html-mode-hook #'prettier-mode)
-  (add-hook 'rk-web-tsx-mode-hook #'prettier-mode))
+  (add-hook 'rk-web-html-mode-hook #'prettier-mode))
 
 (use-package add-node-modules-path
   :straight t
