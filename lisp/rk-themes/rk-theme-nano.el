@@ -170,7 +170,11 @@
                       :foreground nano-color-foreground
                       :slant 'normal)
   (set-face-attribute 'tree-sitter-hl-face:property nil
-                      :slant 'normal))
+                      :slant 'normal)
+  (set-face-attribute 'tree-sitter-hl-face:tag nil
+                      :weight 'medium)
+  (set-face-attribute 'tree-sitter-hl-face:attribute nil
+                      :foreground nano-color-faded))
 
 (provide 'rk-theme-nano)
 
