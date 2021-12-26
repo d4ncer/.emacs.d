@@ -7,9 +7,16 @@
   (require 'use-package))
 
 (require 'straight)
-(require 'f)
 (require 'subr-x)
+(require 'f)
+(require 'gnus)
 (require 'seq)
+
+(defconst paths-tree-sitter-src-dir (f-join gnus-home-directory "code/elisp-tree-sitter")
+  "Directory for elisp-tree-sitter source code.")
+
+(defconst paths-tree-sitter-paths (seq-map (lambda (dir) (f-join paths-tree-sitter-src-dir dir)) (list "core" "lisp" "langs"))
+  "Load paths for tree-sitter")
 
 (defconst paths-cache-directory
   (concat user-emacs-directory "var"))
@@ -42,10 +49,11 @@ If argument INTERACTIVE-P is set, log additional information."
                 paths-config-directory
                 paths-hacks-directory
                 paths-themes-directory))
+         (extra-dirs paths-tree-sitter-paths)
          (subdirs
           (f-directories paths-lisp-directory))
          (updated-load-path
-          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs load-path)))))
+          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs extra-dirs load-path)))))
 
     (setq load-path updated-load-path)
 
