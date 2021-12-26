@@ -13,38 +13,38 @@
 
 (use-package highlight-thing
   :straight t
-  :disabled t
-  :init
-  (add-hook 'prog-mode-hook #'highlight-thing-mode)
+  :hook (prog-mode . highlight-thing-mode)
+  :custom
+  (highlight-thing-what-thing 'symbol)
+  (highlight-thing-delay-seconds 0.1)
+  (highlight-thing-limit-to-defun nil)
+  (highlight-thing-case-sensitive-p t)
+  :config
+  (set-face-attribute 'highlight-thing nil :inherit 'highlight))
+
+(use-package highlight-thing
+  :straight t
   :preface
-  (require 'seq)
-  (defun rk-highlight-thing--face-ancestors (face)
+  (defun face-ancestors (face)
+    "List all faces that FACE transitively inherits from."
     (let (result)
       (while (and face (not (equal face 'unspecified)))
         (setq result (cons face result))
         (setq face (face-attribute face :inherit)))
       (nreverse result)))
-
   (defun rk-highlight-thing--should-highlight-p (res)
-    "Do not highlight symbol if looking at certain faces."
-    (when res
-      (let ((excluded-faces '(font-lock-string-face
-                              font-lock-keyword-face
-                              font-lock-comment-face
-                              font-lock-preprocessor-face
-                              font-lock-builtin-face))
-            (faces (seq-mapcat #'rk-highlight-thing--face-ancestors (face-at-point nil t))))
-        (null (seq-intersection faces excluded-faces)))))
+    (unless (or (bound-and-true-p lsp-ui-mode)
+                (bound-and-true-p tide-mode))
+      (when res
+        (let ((excluded-faces '(font-lock-string-face
+                                font-lock-keyword-face
+                                font-lock-comment-face
+                                font-lock-preprocessor-face
+                                font-lock-builtin-face))
+              (faces (seq-mapcat #'face-ancestors (face-at-point nil t))))
+          (null (seq-intersection faces excluded-faces))))))
 
-  :custom
-  (highlight-thing-what-thing 'symbol)
-  (highlight-thing-delay-seconds 0.5)
-  (highlight-thing-limit-to-defun nil)
-  (highlight-thing-case-sensitive-p t)
   :config
-  ;; KLUDGE This face isn't properly setup for some reason
-  (set-face-attribute 'highlight-thing nil
-                      :inherit 'hi-yellow)
   (advice-add 'highlight-thing-should-highlight-p :filter-return
               #'rk-highlight-thing--should-highlight-p))
 
