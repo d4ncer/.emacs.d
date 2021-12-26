@@ -152,13 +152,10 @@
   (rk-local-leader-def :keymaps 'rk-web-css-mode-map
     "." '(stylefmt-format-buffer :wk "format")))
 
-(use-package lsp-tailwindcss
-  :straight (:type git :host github :repo "merrickluo/lsp-tailwindcss")
+(use-package tree-sitter-langs
   :after rk-web-modes
-  :disabled t
-  :init
-  (setq lsp-tailwindcss-add-on-mode t)
-  (setq lsp-tailwindcss-major-modes '(rk-web-tsx-mode)))
+  :config
+  (dolist (entry '((rk-web-css-mode . css) (rk-web-html-mode . html) (rk-web-js-mode . javascript))) (add-to-list 'tree-sitter-major-mode-language-alist entry)))
 
 (provide 'rk-web-mode)
 
