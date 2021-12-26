@@ -43,6 +43,10 @@
 
 (require 'straight bootstrap-file t)
 
+;; Setup cl-lib
+
+(require 'cl-lib)
+
 ;; Install & require some basic packages
 
 (straight-use-package 'dash)
@@ -51,20 +55,18 @@
 (straight-use-package 'general)
 (straight-use-package 'el-patch)
 (straight-use-package 'pretty-hydra)
-(straight-use-package 'selectrum)
 
-(require 'selectrum)
 (require 'dash)
 (require 'f)
 (require 's)
 (require 'general)
 (require 'el-patch)
 (require 'pretty-hydra)
-(require 'selectrum)
-(require 'cl-lib)
 
 ;; Set up selectrum
 
+(straight-use-package 'selectrum)
+(require 'selectrum)
 (selectrum-mode +1)
 
 ;; Set up general to auto unbind keys (override everything)
