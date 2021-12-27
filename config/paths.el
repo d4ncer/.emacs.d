@@ -15,6 +15,9 @@
 (defconst paths-tree-sitter-load-paths (seq-map (lambda (dir) (f-join paths-tree-sitter-src-dir dir)) (list "core" "lisp" "langs"))
   "Load paths for tree-sitter")
 
+(defconst paths-evil-textobj-src-dir (f-join gnus-home-directory "code/evil-textobj-tree-sitter")
+  "Directory for evil-textobj-tree-sitter source code.")
+
 (defconst paths-cache-directory
   (concat user-emacs-directory "var"))
 
@@ -46,7 +49,7 @@ If argument INTERACTIVE-P is set, log additional information."
                 paths-config-directory
                 paths-hacks-directory
                 paths-themes-directory))
-         (extra-dirs paths-tree-sitter-load-paths)
+         (extra-dirs (append paths-tree-sitter-load-paths `(,paths-evil-textobj-src-dir)))
          (subdirs
           (f-directories paths-lisp-directory))
          (updated-load-path
