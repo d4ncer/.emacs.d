@@ -202,6 +202,9 @@ ARG is the same as for `backward-kill-sexp'."
   (corfu-global-mode))
 
 (use-package emacs
+  :general
+  (:keymaps 'minibuffer-mode-map
+            "S-<backspace>" #'backward-kill-sentence)
   :init
   (setq completion-cycle-threshold 3)
   (setq tab-always-indent 'complete))
