@@ -130,6 +130,10 @@
   (forge-add-default-sections nil)
   (forge-add-default-bindings nil))
 
+(use-package orgit
+  :straight t
+  :after (org magit))
+
 (provide 'rk-magit)
 
 ;;; rk-magit.el ends here
