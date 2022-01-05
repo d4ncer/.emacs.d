@@ -969,6 +969,17 @@ table tr.tr-even td {
   :config
   (add-hook 'org-mode-hook #'rk-yas--disable-yas))
 
+(use-package svg-tag-mode
+  :straight t
+  :after org
+  :init
+  (setq svg-tag-tags
+        '(("\\(:[a-z]+:\\)" . ((lambda (tag)
+                                 (svg-tag-make tag :beg 1 :end -1))))))
+  :config
+  (add-hook 'org-mode-hook #'svg-tag-mode))
+
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
