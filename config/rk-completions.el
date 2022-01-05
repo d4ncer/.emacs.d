@@ -6,9 +6,10 @@
 
 (eval-when-compile
   (require 'use-package)
-  (require 'definers)
-  (require 'general)
   (require 'paths))
+
+(require 'definers)
+(require 'general)
 
 (use-package selectrum
   :straight t

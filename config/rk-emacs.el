@@ -359,8 +359,6 @@
   (tramp-auto-save-directory "/tmp")
   (tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
 
-
-
 (provide 'rk-emacs)
 
 ;;; rk-emacs.el ends here
