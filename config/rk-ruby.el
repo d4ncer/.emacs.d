@@ -10,13 +10,18 @@
 (use-package ruby-mode
   :straight t
   :after lsp-mode
+  :preface
+  (defun  rk-ruby--setup-lsp ()
+    (setq-local lsp-diagnostics-provider :none)
+    (setq-local flycheck-disabled-checkers '(lsp ruby))
+    (lsp))
   :config
-  (add-hook 'ruby-mode-hook #'lsp))
+  (add-hook 'ruby-mode-hook #'rk-ruby--setup-lsp))
 
 (use-package lsp-mode
   :straight t
   :custom
-  (lsp-solargraph-use-bundler t))
+  (lsp-solargraph-use-bundler nil))
 
 (use-package rvm
   :straight t
