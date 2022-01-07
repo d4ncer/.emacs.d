@@ -953,6 +953,8 @@ table tr.tr-even td {
         org-roam-ui-update-on-save t
         org-roam-ui-open-on-start t))
 
+;; Misc
+
 (use-package verb
   :straight t
   :after org
@@ -978,6 +980,31 @@ table tr.tr-even td {
                                  (svg-tag-make tag :beg 1 :end -1))))))
   :config
   (add-hook 'org-mode-hook #'svg-tag-mode))
+
+(use-package citar
+  :straight t
+  :general
+  (:keymaps 'org-mode-map :states '(insert)
+            "C-c b" #'citar-insert-citation)
+  (:keymaps 'minibuffer-local-map
+            "C-b" #'citar-insert-preset)
+  :preface
+  (defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
+  (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
+  (defun rk-citar--idle-refresh-cache ()
+    "Generate bib item caches with idle timer."
+    (run-with-idle-timer 0.5 nil #'citar-refresh))
+  :custom
+  (citar-notes-paths `(,rk-roam-refs-dir))
+  (org-cite-global-bibliography `(,rk-bib-refs-file))
+  (org-cite-insert-processor 'citar)
+  (org-cite-follow-processor 'citar)
+  (org-cite-activate-processor 'citar)
+  (citar-bibliography `(,rk-bib-refs-file))
+  :config
+  (add-hook 'org-mode-hook #'rk-citar--idle-refresh-cache)
+  (add-hook 'LaTeX-mode-hook #'rk-citar--idle-refresh-cache)
+  (require 'citar-org))
 
 
 (provide 'rk-org)
