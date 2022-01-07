@@ -359,6 +359,17 @@
   (tramp-auto-save-directory "/tmp")
   (tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
 
+(use-package bibtex
+  :custom
+  (bibtex-dialect 'biblatex)
+  (bibtex-user-optional-fields '(("keywords" "Keywords to describe the entry" "")
+                                 ("file" "Link to document file." ":")))
+  (bibtex-align-at-equal-sign t))
+
+(use-package bibtex
+  :after flyspell
+  :hook (bibtex-mode . flyspell-mode))
+
 (provide 'rk-emacs)
 
 ;;; rk-emacs.el ends here
