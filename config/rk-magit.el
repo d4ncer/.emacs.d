@@ -50,8 +50,8 @@
       ("q" magit-blame-quit "quit" :exit t))))
   :init
   (rk-leader-def
-    "gs" #'magit-status
-    "gb" #'rk-git--git-blame/body))
+    "gs" '(magit-status :wk "git status")
+    "gb" '(rk-git--git-blame/body :wk "git blame")))
 
 (use-package git-commit-clubhouse-prefix
   :disabled t
@@ -84,7 +84,7 @@
      (("Y" git-timemachine-kill-revision "copy hash"))))
   :init
   (rk-leader-def
-    "gt" #'rk-git--timemachine/body))
+    "gt" '(rk-git--timemachine/body :wk "timemachine")))
 
 (use-package diff-hl
   :straight t
@@ -100,7 +100,7 @@
       ("x" diff-hl-revert-hunk "Revert"))))
   :init
   (rk-leader-def
-    "g." 'rk-git--git-hunks/body)
+    "g."'(rk-git--git-hunks/body :wk "hunks"))
   :config
   (global-diff-hl-mode))
 
