@@ -898,7 +898,6 @@ table tr.tr-even td {
   (rk-leader-def
     "ob"  '(org-roam-buffer-toggle :wk "toggle buffer")
     "oB"  '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
-    "of"  '(org-roam-node-find :wk "find file node")
 
     "od"  '(:ignore t :wk "date")
     "odt" '(org-roam-dailies-goto-today :wk "today")
@@ -937,7 +936,10 @@ table tr.tr-even td {
              :type git
              :host github
              :repo "d12frosted/vulpea")
-  :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
+  :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
+  :init
+  (rk-leader-def
+    "of" '(vulpea-find :wk "find file node")))
 
 (use-package org-roam-ui
   :straight
@@ -994,6 +996,10 @@ table tr.tr-even td {
   (defun rk-citar--idle-refresh-cache ()
     "Generate bib item caches with idle timer."
     (run-with-idle-timer 0.5 nil #'citar-refresh))
+  (defun rk-citar--goto-bib ()
+    "Open the bib file."
+    (interactive)
+    (find-file rk-bib-refs-file))
   :custom
   (citar-notes-paths `(,rk-roam-refs-dir))
   (org-cite-global-bibliography `(,rk-bib-refs-file))
@@ -1001,6 +1007,9 @@ table tr.tr-even td {
   (org-cite-follow-processor 'citar)
   (org-cite-activate-processor 'citar)
   (citar-bibliography `(,rk-bib-refs-file))
+  :init
+  (rk-leader-def
+    "G b" '(rk-citar--goto-bib :wk "goto bib refs"))
   :config
   (add-hook 'org-mode-hook #'rk-citar--idle-refresh-cache)
   (add-hook 'LaTeX-mode-hook #'rk-citar--idle-refresh-cache)
