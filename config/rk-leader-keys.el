@@ -97,9 +97,11 @@
     "f v"   '(rk-reload-file :wk "reload file")
     "f y"   '(rk-copy-buffer-path :wk "copy buffer path")
 
-    "g"     '(:ignore t :wk "goto/git")
-    "g m"   '(rk-goto-messages :wk "goto *Messages*")
-    "g l"   '(rk-goto--base-ledger :wk "goto ledger")
+    "g"     '(:ignore t :wk "git")
+
+    "G"     '(:ignore t :wk "goto")
+    "G m"   '(rk-goto-messages :wk "goto *Messages*")
+    "G l"   '(rk-goto--base-ledger :wk "goto ledger")
 
     "h"     '(:ignore t :wk "help/info")
     "h d"   '(:ignore t :wk "describe")
