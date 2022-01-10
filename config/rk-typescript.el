@@ -90,15 +90,15 @@
     (tide-hl-identifier-mode +1)
     (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
     (rk-ts--setup-tide-local-binds))
-
   :init
-  (add-hook 'typescript-mode-hook #'rk-ts--setup-tide)
   (advice-add 'tide-references :after #'rk-ts--switch-to-ref)
   (advice-add 'tide-project-errors :after #'rk-ts--switch-to-errors)
   (add-hook 'tide-references-mode-hook #'rk-ts--setup-tide-reference-local-binds)
   (add-hook 'tide-project-errors-mode-hook #'rk-ts--setup-tide-error-local-binds)
-  (with-eval-after-load 'rk-web-modes
-    (add-hook 'rk-web-tsx-mode-hook #'rk-ts--setup-tide))
+  (with-eval-after-load 'typescript-mode
+    (flycheck-add-mode 'typescript-tide 'rk-ts-tsx-mode)
+    (add-hook 'typescript-mode-hook #'rk-ts--setup-tide)
+    (add-hook 'rk-ts-tsx-mode-hook #'rk-ts--setup-tide))
 
   :config
   (with-eval-after-load 'flycheck
