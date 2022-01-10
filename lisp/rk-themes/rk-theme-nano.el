@@ -176,6 +176,26 @@
   (set-face-attribute 'tree-sitter-hl-face:attribute nil
                       :foreground nano-color-faded))
 
+(with-eval-after-load 'lsp-ui-peek
+  (set-face-attribute 'lsp-ui-peek-header nil
+                      :background nano-color-popout
+                      :foreground nano-color-background)
+  (set-face-attribute 'lsp-ui-peek-footer nil
+                      :background nano-color-popout)
+  (set-face-attribute 'lsp-ui-peek-peek nil
+                      :background nano-color-background)
+  (set-face-attribute 'lsp-ui-peek-list nil
+                      :background nano-color-background)
+  (set-face-attribute 'lsp-ui-peek-filename nil
+                      :foreground nano-color-faded
+                      :weight 'semi-bold)
+  (set-face-attribute 'lsp-ui-peek-selection nil
+                      :background nano-color-faded
+                      :foreground nano-color-background)
+  (set-face-attribute 'lsp-ui-peek-highlight nil
+                      :box nil
+                      :background nano-color-subtle))
+
 (provide 'rk-theme-nano)
 
 ;;; rk-theme-nano.el ends here
