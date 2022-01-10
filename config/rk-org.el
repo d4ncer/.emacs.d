@@ -993,6 +993,7 @@ table tr.tr-even td {
   :preface
   (defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
   (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
+  (defvar rk-bib-lib-dir (f-join paths--dropbox-dir "bib_files"))
   (defun rk-citar--idle-refresh-cache ()
     "Generate bib item caches with idle timer."
     (run-with-idle-timer 0.5 nil #'citar-refresh))
@@ -1002,6 +1003,7 @@ table tr.tr-even td {
     (find-file rk-bib-refs-file))
   :custom
   (citar-notes-paths `(,rk-roam-refs-dir))
+  (citar-library-paths `(,rk-bib-lib-dir))
   (org-cite-global-bibliography `(,rk-bib-refs-file))
   (org-cite-insert-processor 'citar)
   (org-cite-follow-processor 'citar)
