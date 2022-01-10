@@ -5,9 +5,9 @@
 ;;; Code:
 
 (eval-when-compile
-  (require 'use-package)
-  (require 'paths))
+  (require 'use-package))
 
+(require 'paths)
 (require 'definers)
 (require 'general)
 
