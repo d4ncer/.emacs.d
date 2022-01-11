@@ -10,16 +10,16 @@
 (use-package pdf-tools
   :straight t
   :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
-
+  :preface
+  (defun rk-pdf--unset-cursor ()
+    (setq-local evil-normal-state-cursor (list nil)))
   :custom
   (pdf-view-display-size 'fit-page)
-
   :init
   (use-package pdf-history
     :commands (pdf-history-minor-mode))
   (use-package pdf-occur
     :commands (pdf-occur-global-minor-mode))
-
   :config
   (require 'pdf-annot)
   (require 'pdf-sync)
@@ -28,6 +28,12 @@
   (require 'pdf-history)
   (require 'pdf-cache)
   (require 'pdf-view)
+
+  (add-hook 'pdf-view-mode-hook #'rk-pdf--unset-cursor)
+
+  ;; Enable hiDPI support, but at the cost of memory! See politza/pdf-tools#51
+  (setq pdf-view-use-scaling t
+        pdf-view-use-imagemagick nil)
 
   ;; Redefine a few macros as functions to work around byte compilation errors.
   (defun pdf-view-current-page (&optional window)
