@@ -1021,6 +1021,11 @@ table tr.tr-even td {
   (citar-refresh)
   (require 'citar-org))
 
+(use-package org-pdftools
+  :straight t
+  :after org
+  :hook (org-mode . org-pdftools-setup-link))
+
 
 (provide 'rk-org)
 
