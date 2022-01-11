@@ -1018,6 +1018,7 @@ table tr.tr-even td {
   :config
   (add-hook 'org-mode-hook #'rk-citar--idle-refresh-cache)
   (add-hook 'LaTeX-mode-hook #'rk-citar--idle-refresh-cache)
+  (citar-refresh)
   (require 'citar-org))
 
 
