@@ -176,6 +176,12 @@
   (set-face-attribute 'tree-sitter-hl-face:attribute nil
                       :foreground nano-color-faded))
 
+(with-eval-after-load 'flyspell
+  (set-face-attribute 'flyspell-incorrect nil
+                      :foreground nano-color-critical)
+  (set-face-attribute 'flyspell-duplicate nil
+                      :foreground nano-color-critical))
+
 (with-eval-after-load 'lsp-ui-peek
   (set-face-attribute 'lsp-ui-peek-header nil
                       :background nano-color-popout
