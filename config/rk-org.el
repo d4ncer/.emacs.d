@@ -1011,6 +1011,9 @@ table tr.tr-even td {
   (citar-bibliography `(,rk-bib-refs-file))
   :init
   (rk-leader-def
+    "o c"   '(:ignore t :wk "cite")
+    "o c o" '(citar-open :wk "open")
+
     "G b" '(rk-citar--goto-bib :wk "goto bib refs"))
   :config
   (add-hook 'org-mode-hook #'rk-citar--idle-refresh-cache)
