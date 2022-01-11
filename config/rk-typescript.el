@@ -101,7 +101,6 @@
   (add-hook 'tide-project-errors-mode-hook #'rk-ts--setup-tide-error-local-binds)
   (add-hook 'typescript-mode-hook #'rk-ts--setup-tide)
   (add-hook 'rk-ts-tsx-mode-hook #'rk-ts--setup-tide)
-  :config
   (rk-local-leader-def :keymaps '(typescript-mode-map rk-ts-tsx-mode-map)
     "x" '(tide-restart-server :wk "restart server")
     "f" '(tide-fix :wk "fix")
@@ -126,10 +125,12 @@
 
 (use-package prettier
   :straight t
-  :after typescript-mode
+  :after (typescript-mode tide)
   :init
   (add-hook 'rk-ts-tsx-mode-hook #'prettier-mode)
-  (add-hook 'typescript-mode-hook #'prettier-mode))
+  (add-hook 'typescript-mode-hook #'prettier-mode)
+  (rk-local-leader-def :keymaps '(typescript-mode-map rk-ts-tsx-mode-map)
+    "." '(prettier-prettify :wk "format")))
 
 (use-package tree-sitter-langs
   :after typescript-mode
