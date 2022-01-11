@@ -44,6 +44,15 @@
 
   (pdf-tools-install))
 
+(use-package pdf-tools
+  :straight t
+  :after evil
+  :preface
+  (defun rk-pdf--get-desc (file page &optional text)
+    (concat "p" page (when text (concat ";quoting:" text))))
+  :custom
+  (org-pdftools-get-desc-function #'rk-pdf--get-desc))
+
 (provide 'rk-pdf)
 
 ;;; rk-pdf.el ends here
