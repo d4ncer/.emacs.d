@@ -154,6 +154,7 @@
 (use-package rk-yasnippet)
 (use-package rk-prodigy)
 (use-package rk-ledger)
+(use-package rk-pdf)
 
 ;; Programming language support
 
