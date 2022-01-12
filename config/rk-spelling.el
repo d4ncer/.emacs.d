@@ -17,7 +17,8 @@
   (ispell-silently-savep t)
   :config
   (when (executable-find "aspell")
-    (setq ispell-program-name "aspell")))
+    (setq ispell-program-name "aspell")
+    (add-to-list 'ispell-extra-args "--sug-mode=ultra")))
 
 (use-package flyspell
   :general
