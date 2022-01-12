@@ -92,7 +92,6 @@
   (defun rk-ts--setup-tide ()
     (tide-setup)
     (tide-hl-identifier-mode +1)
-    (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
     (rk-ts--setup-tide-local-binds))
   :init
   (advice-add 'tide-references :after #'rk-ts--switch-to-ref)
@@ -115,6 +114,9 @@
   :straight t
   :after (flycheck typescript-mode)
   :config
+  (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
+  (flycheck-add-mode 'javascript-eslint 'typescript-mode)
+  (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
   (flycheck-add-mode 'typescript-tide 'rk-ts-tsx-mode))
 
 (use-package add-node-modules-path
