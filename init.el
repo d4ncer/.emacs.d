@@ -115,6 +115,18 @@
 
 (use-package rk-themes)
 
+;; Aggressively load flyspell-lazy
+;; It has to load before flyspell
+(use-package flyspell-lazy
+  :straight t
+  :demand t
+  :custom
+  (flyspell-lazy-idle-seconds 1)
+  (flyspell-lazy-window-idle-seconds 3)
+  :config
+  (flyspell-lazy-mode +1))
+
+
 ;; Load features.
 
 ;; Base setup
