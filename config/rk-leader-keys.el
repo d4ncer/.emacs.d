@@ -148,6 +148,7 @@
     "w ="   '(balance-windows :wk "balance windows")
     "w o"   '(delete-other-windows :wk "kill other windows")
     "w q"   '(delete-window :wk "kill window")
+    "w s"   '(window-swap-states :wk "swap")
 
     "x"     '(:ignore t :wk "processes")
 
