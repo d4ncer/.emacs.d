@@ -22,6 +22,7 @@
   :straight t
   :hook
   (prog-mode . (lambda () (require 'yasnippet)))
+  (org-mode . (lambda () (rquire 'yasnippet)))
   (text-mode . (lambda () (require 'yasnippet)))
 
   :custom
