@@ -360,11 +360,18 @@
   (tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
 
 (use-package bibtex
+  :general
+  (:keymaps 'bibtex-mode-map
+            "C-c ." #'bibtex-reformat)
   :custom
   (bibtex-dialect 'biblatex)
   (bibtex-user-optional-fields '(("keywords" "Keywords to describe the entry" "")
                                  ("file" "Link to document file." ":")))
-  (bibtex-align-at-equal-sign t))
+  (bibtex-align-at-equal-sign t)
+  :init
+  (rk-local-leader-def :keymaps 'bibtex-mode-map
+    "." '(bibtex-reformat :wk "format")
+    "c" '(bibtex-clean-entry :wk "clean entry")))
 
 (use-package bibtex
   :after flyspell
