@@ -277,6 +277,34 @@ Do not scheduled items or repeating todos."
   :straight t
   :defer t)
 
+(use-package ob
+  :custom
+  (org-confirm-babel-evaluate nil)
+  (org-babel-load-languages '((emacs-lisp . t)
+                              (sql . t)
+                              (ledger . t)
+                              (python . t)
+                              (http . t)
+                              (calc . t)
+                              (dot . t)
+                              (shell . t)))
+  (org-babel-python-command (executable-find "python3")))
+
+(use-package org
+  :config
+  (add-hook 'org-babel-after-execute-hook 'org-display-inline-images t))
+
+(use-package org
+  :config
+  (defun org-ad-suppress-final-newline ()
+    (setq-local require-final-newline nil))
+
+  (defun org-ad-delete-trailing-space-on-src-block-exit (&rest _)
+    (delete-trailing-whitespace))
+
+  (add-hook 'org-src-mode-hook 'org-ad-suppress-final-newline)
+  (advice-add 'org-edit-src-exit :before 'org-ad-delete-trailing-space-on-src-block-exit))
+
 (use-package ob-gnuplot
   :after org)
 
