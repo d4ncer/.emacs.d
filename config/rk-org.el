@@ -556,37 +556,39 @@ Do not scheduled items or repeating todos."
   :defines (org-src-fontify-natively)
 
   :preface
-  (progn
-    (defun rk-org--suppress-final-newline ()
-      "Remove trailing newline in src blocks."
-      (setq-local require-final-newline nil))
+  (defun rk-org--suppress-final-newline ()
+    "Remove trailing newline in src blocks."
+    (setq-local require-final-newline nil))
 
-    (defun rk-org--org-src-delete-trailing-space (&rest _)
-      "Delete trailing whitespace when exiting src blocks."
-      (delete-trailing-whitespace)))
+  (defun rk-org--org-src-delete-trailing-space (&rest _)
+    "Delete trailing whitespace when exiting src blocks."
+    (delete-trailing-whitespace))
+
+  (defun rk-org--disable-eldoc-check ()
+    (setq-local flycheck-disabled-checkers '(emacs-lisp-checkdoc)))
 
   :config
-  (progn
-    (setq org-src-lang-modes '(("ocaml" . tuareg)
-                               ("json" . rk-web-json)
-                               ("elisp" . emacs-lisp)
-                               ("ditaa" . artist)
-                               ("asymptote" . asy)
-                               ("dot" . fundamental)
-                               ("sqlite" . sql)
-                               ("calc" . fundamental)
-                               ("C" . c)
-                               ("cpp" . c++)
-                               ("C++" . c++)
-                               ("screen" . shell-script)
-                               ("shell" . sh)
-                               ("javascript" . rk-web-js)
-                               ("js" . rk-web-js)
-                               ("bash" . sh)))
-    (setq org-src-fontify-natively t)
-    (setq org-src-window-setup 'current-window)
-    (add-hook 'org-src-mode-hook #'rk-org--suppress-final-newline)
-    (advice-add 'org-edit-src-exit :before #'rk-org--org-src-delete-trailing-space)))
+  (setq org-src-lang-modes '(("ocaml" . tuareg)
+                             ("json" . rk-web-json)
+                             ("elisp" . emacs-lisp)
+                             ("ditaa" . artist)
+                             ("asymptote" . asy)
+                             ("dot" . fundamental)
+                             ("sqlite" . sql)
+                             ("calc" . fundamental)
+                             ("C" . c)
+                             ("cpp" . c++)
+                             ("C++" . c++)
+                             ("screen" . shell-script)
+                             ("shell" . sh)
+                             ("javascript" . rk-web-js)
+                             ("js" . rk-web-js)
+                             ("bash" . sh)))
+  (setq org-src-fontify-natively t)
+  (setq org-src-window-setup 'current-window)
+  (add-hook 'org-src-mode-hook #'rk-org--suppress-final-newline)
+  (add-hook 'org-src-mode-hook #'rk-org--disable-eldoc-check)
+  (advice-add 'org-edit-src-exit :before #'rk-org--org-src-delete-trailing-space))
 
 (use-package org-clock
   :after org
