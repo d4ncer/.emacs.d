@@ -958,8 +958,7 @@ table tr.tr-even td {
                  (display-buffer-in-direction)
                  (direction . right)
                  (window-width . 0.33)
-                 (window-height . fit-window-to-buffer)))
-  (add-hook 'org-roam-find-file-hook #'rk-org-roam--open-with-buffer-maybe :append))
+                 (window-height . fit-window-to-buffer))))
 
 (use-package vulpea
   :straight (vulpea
