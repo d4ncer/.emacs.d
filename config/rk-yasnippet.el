@@ -24,7 +24,6 @@
   (prog-mode . (lambda () (require 'yasnippet)))
   (org-mode . (lambda () (require 'yasnippet)))
   (text-mode . (lambda () (require 'yasnippet)))
-  (org-mode . (lambda () (require 'yasnippet)))
 
   :custom
   (yas-wrap-around-region t)
