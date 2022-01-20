@@ -1002,8 +1002,10 @@ table tr.tr-even td {
   :config
   (add-hook 'org-mode-hook #'rk-yas--disable-yas))
 
+;; Disable for now, cons outweigh pros.
 (use-package svg-tag-mode
   :straight t
+  :disabled t
   :after org
   :init
   (setq svg-tag-tags
