@@ -60,7 +60,7 @@
   (case-fold-search nil)
 
   ;; Recentf
-  (recentf-max-saved-items 1000)
+  (recentf-max-saved-items 50)
   (recentf-save-file (concat paths-cache-directory "/recentf"))
   (recentf-exclude '(rk-emacs-boring-filename-p
                      rk-emacs-boring-extension-p
