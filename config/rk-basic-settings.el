@@ -56,7 +56,7 @@
   ;; (let* ((trp (rx "*" (or "Cargo" "go" "Racer" "restclient" "lsp" "Ledger" "docker") (zero-or-more anything) "*"))
   ;;        (trp-1? (if (s-matches-p trp "*docker containers*") "YES" "NO")))
   ;;   (message trp-1?))
-  (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help" "tide") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
+  (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help" "tide" "helpful") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
   (popwin-mode 1))
 
 (use-package keychain-environment

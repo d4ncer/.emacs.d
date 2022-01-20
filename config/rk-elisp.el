@@ -34,8 +34,7 @@
   :straight t
   :general
   (:keymaps 'emacs-lisp-mode-map :states '(normal)
-            "gd" #'elisp-slime-nav-find-elisp-thing-at-point
-            "K" #'elisp-slime-nav-describe-elisp-thing-at-point)
+            "gd" #'elisp-slime-nav-find-elisp-thing-at-point)
   :config
   (add-hook 'emacs-lisp-mode-hook #'turn-on-elisp-slime-nav-mode))
 
