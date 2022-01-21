@@ -481,12 +481,6 @@ Do not scheduled items or repeating todos."
             (org-agenda-archives-mode nil)
             (org-agenda-dim-blocked-tasks nil))))))
 
-(use-package rk-org-agenda-transient-state
-  :after (org org-agenda)
-  :general
-  (:keymaps 'org-agenda-mode-map
-            "C-." #'rk-org-agenda-hydra-transient-state/body))
-
 (use-package appt
   :defer t
   :config
