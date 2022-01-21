@@ -345,77 +345,51 @@ Do not scheduled items or repeating todos."
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
 
-  :defines (org-duration-format
-            org-stuck-projects
-            org-agenda-mode-map
-            org-agenda-include-diary
-            org-agenda-start-on-weekday
-            org-agenda-auto-exclude-function
-            org-agenda-hide-tags-regexp
-            org-agenda-insert-diary-extract-time
-            org-agenda-span
-            org-agenda-search-view-always-boolean
-            org-agenda-show-all-dates
-            org-agenda-show-inherited-tags
-            org-agenda-skip-deadline-if-done
-            org-agenda-skip-deadline-prewarning-if-scheduled
-            org-agenda-skip-scheduled-if-done
-            org-agenda-sorting-strategy
-            org-agenda-text-search-extra-files
-            org-agenda-use-time-grid
-            org-agenda-inhibit-startup
-            org-agenda-tags-column
-            org-agenda-clockreport-parameter-plist
-            org-agenda-custom-commands
-            org-agenda-files
-            org-agenda-diary-file)
+  :custom
+  (org-stuck-projects '("+project-ignore-maybe-done"
+                        ("NEXT") nil
+                        "SCHEDULED:"))
 
-  :config
+  (org-agenda-include-diary nil)
+  (org-agenda-start-on-weekday nil)
+  (org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
+  (org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
+  (org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
+  (org-agenda-insert-diary-extract-time t)
+  (org-agenda-span 'week)
+  (org-agenda-search-view-always-boolean t)
+  (org-agenda-show-all-dates nil)
+  (org-agenda-show-inherited-tags nil)
+  (org-agenda-skip-deadline-if-done t)
+  (org-agenda-skip-deadline-prewarning-if-scheduled t)
+  (org-agenda-skip-scheduled-if-done t)
+  (org-agenda-sorting-strategy
+   '((agenda time-up priority-down category-keep)
+     (todo priority-down category-keep scheduled-up)
+     (tags priority-down category-keep)
+     (search category-keep)))
+  (org-agenda-text-search-extra-files '(agenda-archives))
+  (org-agenda-use-time-grid nil)
+  (org-agenda-inhibit-startup t)
+  (org-agenda-tags-column -100)
+  (org-agenda-clockreport-parameter-plist
+   (list
+    :compact t
+    :maxlevel 5
+    :fileskip0 t
+    :step 'week))
+  :init
   (rk-leader-def
     "oA" '(org-agenda :wk "agendas"))
-
+  :config
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
     "d" '(org-agenda-deadline :wk "deadline")
     "p" '(org-agenda-set-property :wk "set property")
     "r" '(org-agenda-refile :wk "refile"))
 
   ;; Match projects that do not have a scheduled action or NEXT action.
-  (setq org-stuck-projects '("+project-ignore-maybe-done"
-                             ("NEXT") nil
-                             "SCHEDULED:"))
-
-  (setq org-agenda-include-diary nil)
-  (setq org-agenda-start-on-weekday nil)
-  (setq org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
-  (setq org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
-  (setq org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
-  (setq org-agenda-insert-diary-extract-time t)
-  (setq org-agenda-span 'week)
-  (setq org-agenda-search-view-always-boolean t)
-  (setq org-agenda-show-all-dates nil)
-  (setq org-agenda-show-inherited-tags nil)
-  (setq org-agenda-skip-deadline-if-done t)
-  (setq org-agenda-skip-deadline-prewarning-if-scheduled t)
-  (setq org-agenda-skip-scheduled-if-done t)
-  (setq org-agenda-sorting-strategy
-        '((agenda time-up priority-down category-keep)
-          (todo priority-down category-keep scheduled-up)
-          (tags priority-down category-keep)
-          (search category-keep)))
-  (setq org-agenda-text-search-extra-files '(agenda-archives))
-  (setq org-agenda-use-time-grid nil)
-  (setq org-agenda-inhibit-startup t)
-  (setq org-agenda-tags-column -100)
-
-  (setq org-agenda-clockreport-parameter-plist
-        (list
-         :compact t
-         :maxlevel 5
-         :fileskip0 t
-         :step 'week))
 
   (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
-
   (setq org-agenda-custom-commands
         '(("A" "All"
            ((tags-todo "inbox"
