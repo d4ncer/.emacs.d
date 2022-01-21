@@ -842,6 +842,7 @@ table tr.tr-even td {
   :straight t
   :after org
   :preface
+  (defvar rk-org-roam--dailies-prev-buffer nil)
   (defun rk-org-roam--open-with-buffer-maybe ()
     (and (not org-roam-capture--node)
          (not (eq 'visible (org-roam-buffer--visibility)))
@@ -858,19 +859,16 @@ table tr.tr-even td {
     (interactive)
     (let ((current-prefix-arg t))
       (call-interactively 'org-roam-grep-visit)))
-  (pretty-hydra-define rk-org-roam--utils
-    (:title "Roam Utilities" :quit-key "q")
-    ("Refs"
-     (("r" org-roam-ref-add "add")
-      ("R" org-roam-ref-remove "remove"))
-     "Tags"
-     (("g" org-roam-tag-add "add")
-      ("G" org-roam-tag-remove "remove"))
-     "Aliases"
-     (("a" org-roam-alias-add "add")
-      ("A" org-roam-alias-remove "remove"))
-     "Dailies"
-     (("C-j" org-roam-dailies-goto-next-note "next")
+  (pretty-hydra-define rk-org-roam--daily-utils
+    (:title "Roam Utilities" :quit-key "q"
+            :foreign-keys run
+            :pre (if (not rk-org-roam--dailies-prev-buffer) (setq rk-org-roam--dailies-prev-buffer (current-buffer)))
+            :post (progn (if rk-org-roam--dailies-prev-buffer (switch-to-buffer rk-org-roam--dailies-prev-buffer)) (setq rk-org-roam--dailies-prev-buffer nil)))
+    ("Dailies"
+     (("C-n"  org-roam-dailies-goto-today "today")
+      ("C-y"  org-roam-dailies-goto-yesterday "yesterday")
+      ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
+      ("C-j" org-roam-dailies-goto-next-note "next")
       ("C-k" org-roam-dailies-goto-previous-note "previous"))))
   :general
   (:keymaps 'org-mode-map
@@ -903,7 +901,7 @@ table tr.tr-even td {
     "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
     "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
   (rk-local-leader-def :keymaps 'org-mode-map
-    "." '(rk-org-roam--utils/body :wk "roam utils"))
+    "." '(rk-org-roam--daily-utils/body :wk "daily utils"))
   :config
   (cl-defmethod org-roam-node-directories ((node org-roam-node))
     (if-let ((dirs (file-name-directory (file-relative-name (org-roam-node-file node) org-roam-directory))))
