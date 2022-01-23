@@ -22,7 +22,6 @@
   :straight t
   :hook
   (prog-mode . (lambda () (require 'yasnippet)))
-  (org-mode . (lambda () (require 'yasnippet)))
   (text-mode . (lambda () (require 'yasnippet)))
 
   :custom
@@ -34,11 +33,11 @@
 
   (yas-snippet-dirs (list (concat paths-etc-directory "/yasnippet/snippets")))
 
-
   :general
   (:keymaps 'yas-minor-mode-map :states 'insert
             "TAB"
             (general-predicate-dispatch 'indent-for-tab-command
+              (eq major-mode 'org-mode) 'org-cycle
               (yas-maybe-expand-abbrev-key-filter t) 'yas-expand))
   (:keymaps 'yas-keymap :states 'insert
             "SPC"
