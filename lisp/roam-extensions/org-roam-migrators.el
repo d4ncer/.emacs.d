@@ -1,4 +1,4 @@
-;;; org-roam-migrators.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; org-roam-migrators.el --- Custom migration scripts for org-roam  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -16,7 +16,8 @@
               (note (vulpea-db-get-by-id id)))
         (vulpea-utils-with-note note
           (vulpea-buffer-tags-set "daily")
-          (org-set-property "CATEGORY" "daily")
+          (goto-char (point-min))
+          (org-delete-property "CATEGORY")
           (save-buffer)))))
 
 (provide 'org-roam-migrators)
