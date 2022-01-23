@@ -11,19 +11,13 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'straight)
 (require 'paths)
 (require 'general)
 (require 'definers)
 (require 'f)
 (require 's)
 (require 'dash)
-(require 'subr-x)
 (require 'transient)
-(require 'pretty-hydra)
-(require 'rk-misc-utils)
-
-(autoload 'evil-define-key "evil")
 
 (defvar org-directory paths--org-dir)
 (defconst rk-org-gtd-dir (f-join paths--org-dir "gtd"))
@@ -36,17 +30,12 @@
   :demand t
   :general
   (:keymaps 'org-mode-map
-            "C-;" #'insert-char
             "C-c l" #'rkca-insert-TKISS-link
-            "C-c C-." #'org-time-stamp-inactive
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "M-p"     #'org-metaup
-            "M-n"     #'org-metadown
-            "C-c c"   #'org-columns)
+            "M-n"     #'org-metadown)
   (:keymaps 'org-mode-map :states '(normal visual motion)
-            "C-n" #'org-next-visible-heading
-            "C-p" #'org-previous-visible-heading
             "gb" #'org-mark-ring-goto)
   (:keymaps 'org-mode-map :states '(visual)
             "-" #'rk-org--deemphasize
@@ -55,43 +44,6 @@
             "/" #'rk-org--italicize
             "+" #'rk-org--strike-through
             "=" #'rk-org--quote)
-  :defines (org-state
-            org-log-states
-            org-log-done
-            org-tag-group-re
-            org-refile-targets
-            org-default-notes-file
-            org-tags-exclude-from-inheritance
-            org-link-frame-setup
-            org-mode-map
-            org-M-RET-may-split-line
-            org-catch-invisible-edits
-            org-cycle-separator-lines
-            org-enforce-todo-dependencies
-            org-footnote-auto-adjust
-            org-indirect-buffer-display
-            org-insert-heading-respect-content
-            org-link-abbrev-alist
-            org-use-sub-superscripts
-            org-log-into-drawer
-            org-hide-emphasis-markers
-            org-outline-path-complete-in-steps
-            org-pretty-entities
-            org-refile-allow-creating-parent-nodes
-            org-refile-target-verify-function
-            org-done-keywords
-            org-refile-use-outline-path
-            org-return-follows-link
-            org-reverse-note-order
-            org-confirm-elisp-link-function
-            org-startup-indented
-            org-startup-with-inline-images
-            org-hierarchical-todo-statistics
-            org-checkbox-hierarchical-statistics
-            org-log-repeat
-            org-blank-before-new-entry
-            org-todo-keywords)
-
   :preface
   (autoload 'outline-forward-same-level "outline")
   (defun rk-org--deemphasize ()
@@ -113,11 +65,6 @@
   (defun rk-org--strike-through ()
     (interactive)
     (org-emphasize (string-to-char "+")))
-  (defun rk-org--tag-headline-or-region ()
-    (interactive)
-    (if (region-active-p)
-        (call-interactively #'org-change-tag-in-region)
-      (counsel-org-tag)))
 
   (defun rk-org--exit-minibuffer (&rest _)
     "Exit minibuffer before adding notes."
@@ -129,28 +76,6 @@
     (when (s-matches? (rx bol (+ "*") (* space) eol)
                       (buffer-substring (line-beginning-position) (line-end-position)))
       (goto-char (line-end-position))))
-
-  (defun rk-org--mark-first-child-next ()
-    "Mark first task in a project as NEXT when refiling."
-    (when (org-first-sibling-p)
-      (org-todo "NEXT")))
-
-  (defun rk-org--remove-todo-tickler-or-reference ()
-    (let ((last-refile (-first-item org-refile-history)))
-      (when (or (s-contains-p "tickler.org" last-refile)
-                (s-contains-p "reference.org" last-refile))
-        (org-todo ""))))
-
-  (defun rk-org--mark-next-parent-tasks-todo ()
-    "Visit each parent task and change state to TODO."
-    (let ((mystate (or (and (fboundp 'org-state)
-                            state)
-                       (nth 2 (org-heading-components)))))
-      (when mystate
-        (save-excursion
-          (while (org-up-heading-safe)
-            (when (member (nth 2 (org-heading-components)) (list "NEXT"))
-              (org-todo "TODO")))))))
 
   (defun rk-org--disable-flycheck ()
     "Disable Flycheck in org buffers."
@@ -165,101 +90,60 @@
     (rk-org--disable-flycheck)
     (rk-org--disable-ligatures))
 
-  (defun rk-org--set-next-todo-state ()
-    "When marking a todo to DONE, set the next TODO as NEXT.
-Do not scheduled items or repeating todos."
-    (save-excursion
-      (when (and (string= org-state "DONE")
-                 (org-goto-sibling)
-                 (-contains? '("TODO") (org-get-todo-state))
-                 (not (-contains-p (org-get-tags) "project")))
-        (org-todo "NEXT"))))
+  :custom
+  (org-M-RET-may-split-line nil)
+  (org-catch-invisible-edits 'smart)
+  (org-cycle-separator-lines 1)
+  (org-enforce-todo-dependencies t)
+  (org-footnote-auto-adjust t)
+  (org-indirect-buffer-display 'current-window)
+  (org-insert-heading-respect-content t)
+  (org-link-abbrev-alist '(("att" . org-attach-expand-link)))
+  (org-log-done 'time)
+  (org-use-sub-superscripts '{})
+  (org-log-into-drawer t)
+  (org-hide-emphasis-markers t)
+  (org-outline-path-complete-in-steps nil)
+  (org-pretty-entities t)
+  (org-refile-allow-creating-parent-nodes 'confirm)
+
+  (org-return-follows-link t)
+  (org-reverse-note-order nil)
+  (org-confirm-elisp-link-function nil)
+  (org-startup-indented t)
+  (org-startup-with-inline-images t)
+  (org-hierarchical-todo-statistics nil)
+  (org-checkbox-hierarchical-statistics t)
+  (org-log-repeat nil)
+  (org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
+
+  (org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
+                       (sequence "SOMEDAY(o)" "|")
+                       (sequence "SCHEDULE(s)" "|")))
+
+  (org-confirm-babel-evaluate nil)
 
   :init
   (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
   (rk-leader-def
     "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
-    "ok" '(org-capture :wk "capture")
-    "ol" '(org-store-link :wk "store link")
-    "os" '(org-search-view :wk "search"))
+    "ol" '(org-store-link :wk "store link"))
 
-  :hook ((org-after-refile-insert . rk-org--remove-todo-tickler-or-reference)
-         (org-after-refile-insert . rk-org--mark-first-child-next)
-         (org-mode . rk-org--setup-org)
-         (org-babel-after-execute . org-display-inline-images))
+  :hook ((org-mode . rk-org--setup-org))
   :config
-  (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
   (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
   (add-hook 'org-mode-hook #'auto-fill-mode)
   (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
-  (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
-  (add-hook 'org-clock-in-hook #'rk-org--mark-next-parent-tasks-todo 'append)
-  (add-hook 'org-after-todo-state-change-hook #'rk-org--mark-next-parent-tasks-todo 'append)
-  (add-hook 'org-after-refile-insert-hook #'rk-org--mark-first-child-next)
-
-  (setq org-default-notes-file (f-join paths--org-dir "notes.org"))
   (rk-local-leader-def :keymaps 'org-mode-map
-    "A" '(org-align-tags :wk "align tags")
-    "r" '(org-refile :wk "refile")
-    "d" '(org-deadline :wk "add deadline")
-    "C" '(org-ctrl-c-ctrl-c :wk "magic C")
-    "f" '(org-fill-paragraph :wk "wrap text")
-    "L" '(org-insert-link :wk "insert link")
-    "t" '(rk-org--tag-headline-or-region :wk "edit tags")
-    "p" '(org-set-property :wk "set property")
-    "s" '(org-schedule :wk "schedule"))
+    "t"  '(:ignore t :wk "time")
+    "td" '(org-deadline :wk "deadline")
+    "ts" '(org-schedule :wk "schedule")
 
-  (general-def :keymaps 'org-mode-map :states 'normal
-    "RET" #'org-return)
+    "u"  '(:ignore t :wk "utils")
 
-  (setq org-refile-targets nil)
-  (add-to-list 'org-refile-targets '(nil :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--someday-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--consume-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--work-projects-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--personal-projects-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--next-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--reference-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--tickler-file :maxlevel . 1))
-  (add-to-list 'org-refile-targets '(rk-org--diary-file :maxlevel . 1))
-  (add-to-list 'org-tags-exclude-from-inheritance "project")
+    "l"  '(org-insert-link :wk "insert link"))
 
   (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
-
-  (setq org-M-RET-may-split-line nil)
-  (setq org-catch-invisible-edits 'smart)
-  (setq org-cycle-separator-lines 1)
-  (setq org-enforce-todo-dependencies t)
-  (setq org-footnote-auto-adjust t)
-  (setq org-indirect-buffer-display 'current-window)
-  (setq org-insert-heading-respect-content t)
-  (setq org-link-abbrev-alist '(("att" . org-attach-expand-link)))
-  (setq org-log-done 'time)
-  (setq org-use-sub-superscripts '{})
-  (setq org-log-into-drawer t)
-  (setq org-hide-emphasis-markers t)
-  (setq org-outline-path-complete-in-steps nil)
-  (setq org-pretty-entities t)
-  (setq org-refile-allow-creating-parent-nodes 'confirm)
-  (setq org-refile-target-verify-function (lambda () (not (member (nth 2 (org-heading-components)) org-done-keywords))))
-  (setq org-agenda-diary-file rk-org--inbox-file)
-
-  (setq org-refile-use-outline-path t)
-  (setq org-return-follows-link t)
-  (setq org-reverse-note-order nil)
-  (setq org-confirm-elisp-link-function nil)
-  (setq org-startup-indented t)
-  (setq org-startup-with-inline-images t)
-  (setq org-hierarchical-todo-statistics nil)
-  (setq org-checkbox-hierarchical-statistics t)
-  (setq org-log-repeat nil)
-  (setq org-blank-before-new-entry '((heading . always) (plain-list-item . nil)))
-
-  (setq org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
-                            (sequence "SOMEDAY(o)" "|")
-                            (sequence "SCHEDULE(s)" "|")))
-
-  (setq org-confirm-babel-evaluate nil)
 
   (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
   (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol))
@@ -274,8 +158,7 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-mode-hook #'rk-org-setup-python))
 
 (use-package gnuplot
-  :straight t
-  :defer t)
+  :straight t)
 
 (use-package ob
   :custom
@@ -296,14 +179,14 @@ Do not scheduled items or repeating todos."
 
 (use-package org
   :config
-  (defun org-ad-suppress-final-newline ()
+  (defun rk-org--suppress-final-newline ()
     (setq-local require-final-newline nil))
 
-  (defun org-ad-delete-trailing-space-on-src-block-exit (&rest _)
+  (defun rk-org--delete-trailing-space-on-src-block-exit (&rest _)
     (delete-trailing-whitespace))
 
-  (add-hook 'org-src-mode-hook 'org-ad-suppress-final-newline)
-  (advice-add 'org-edit-src-exit :before 'org-ad-delete-trailing-space-on-src-block-exit))
+  (add-hook 'org-src-mode-hook 'rk-org--suppress-final-newline)
+  (advice-add 'org-edit-src-exit :before 'rk-org--delete-trailing-space-on-src-block-exit))
 
 (use-package ob-gnuplot
   :after org)
@@ -312,9 +195,11 @@ Do not scheduled items or repeating todos."
   :straight t
   :after org)
 
-(use-package ob-shell :after org)
+(use-package ob-shell
+  :after org)
 
-(use-package ob-sql :after org)
+(use-package ob-sql
+  :after org)
 
 (use-package org-id
   :after org
@@ -344,6 +229,11 @@ Do not scheduled items or repeating todos."
   :preface
   (defun rk-org--exclude-tasks-on-hold (tag)
     (and (equal tag "hold") (concat "-" tag)))
+  (defun rk-org--general-agenda ()
+    (interactive)
+    (let ((agenda-key "g"))
+      (org-agenda current-prefix-arg agenda-key)
+      (delete-other-windows)))
 
   :custom
   (org-stuck-projects '("+project-ignore-maybe-done"
@@ -380,7 +270,8 @@ Do not scheduled items or repeating todos."
     :step 'week))
   :init
   (rk-leader-def
-    "oA" '(org-agenda :wk "agendas"))
+    "o a"   '(rk-org--general-agenda :wk "agenda")
+    "o A"   '(org-agenda :wk "all agendas"))
   :config
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
     "d" '(org-agenda-deadline :wk "deadline")
@@ -389,135 +280,36 @@ Do not scheduled items or repeating todos."
 
   ;; Match projects that do not have a scheduled action or NEXT action.
 
-  (add-hook 'org-finalize-agenda-hook #'org-agenda-to-appt)
-  (setq org-agenda-custom-commands
-        '(("A" "All"
-           ((tags-todo "inbox"
-                       ((org-agenda-overriding-header "To Refile")))
-            (tags-todo "-someday/NEXT"
-                       ((org-agenda-overriding-header "Next Actions")))
-            (stuck "")
-            (todo "WAITING"
-                  ((org-agenda-overriding-header "Waiting")))
-            (agenda ""))
-           ((org-agenda-tag-filter-preset '("-ignore"))
-            (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--consume-file rk-org--tickler-file))
-            (org-agenda-dim-blocked-tasks nil)
-            (org-agenda-archives-mode nil)
-            (org-agenda-ignore-properties '(effort appt))))
-
-          ("w" "Work"
-           ((tags-todo "inbox"
-                       ((org-agenda-overriding-header "To Refile")))
-            (todo "WAITING"
-                  ((org-agenda-overriding-header "Delegated / Follow Up")
-                   (org-agenda-breadcrumbs-separator "")
-                   (org-agenda-prefix-format '((todo . "  %i %-15b")))))
-            (todo "TODO"
-                  ((org-agenda-overriding-header "Notes to synthesise")
-                   (org-agenda-breadcrumbs-separator "")
-                   (org-agenda-files (list rk-org--tickler-file))))
-            (agenda "")
-            (tags-todo "-someday-media-study/NEXT"
-                       ((org-agenda-overriding-header "Next Actions")
-                        (org-agenda-breadcrumbs-separator "")
-                        (org-agenda-prefix-format '((tags . "%i %-24b")))))
-            (stuck ""))
-           ((org-agenda-tag-filter-preset '("-ignore"))
-            (org-agenda-files (list rk-org--work-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
-            (org-agenda-show-inherited-tags nil)
-            (org-agenda-dim-blocked-tasks nil)
-            (org-agenda-archives-mode nil)
-            (org-agenda-ignore-drawer-properties '(effort appt))))
-
-          ("p" "Personal"
-           ((tags-todo "inbox"
-                       ((org-agenda-overriding-header "To Refile")))
-            (tags-todo "-someday-media-study/NEXT"
-                       ((org-agenda-overriding-header "Next Actions")
-                        (org-agenda-breadcrumbs-separator "")
-                        (org-agenda-prefix-format '((tags . "  %i %-15b")))))
-            (stuck "")
-            (todo "WAITING"
-                  ((org-agenda-overriding-header "Waiting")))
-            (agenda ""))
-           ((org-agenda-tag-filter-preset '("-ignore"))
-            (org-agenda-files (list rk-org--personal-projects-file rk-org--inbox-file rk-org--next-file rk-org--tickler-file))
-            (org-agenda-show-inherited-tags nil)
-            (org-agenda-dim-blocked-tasks nil)
-            (org-agenda-archives-mode nil)
-            (org-agenda-ignore-drawer-properties '(effort appt))))
-
-          ("n" "Next"
-           ((tags-todo "-someday/NEXT"))
-           ((org-agenda-overriding-header "Next Actions")))
-
-          ("r" "Weekly Review"
-           ((agenda ""
-                    ((org-agenda-overriding-header "Review Previous Week")
-                     (org-agenda-ndays 7)
-                     (org-agenda-start-day "-7d")))
-            (agenda ""
-                    ((org-agenda-overriding-header "Review Upcoming Events")
-                     (org-agenda-ndays 14)))
-            (stuck ""
-                   ((org-agenda-overriding-header "Review Stuck Projects")))
-            (todo "WAITING"
-                  ((org-agenda-overriding-header "Review Tasks on Hold")))
-            (tags-todo "-someday/NEXT"
-                       ((org-agenda-overriding-header "Next Actions")))
-            (tags-todo "+goals+3m+project"
-                       ((org-agenda-overriding-header "Review 3 Month Goals")))
-            (tags-todo "+goals+1y+project"
-                       ((org-agenda-overriding-header "Review 1 Year Goals")))
-            (tags-todo "+goals+3y+project"
-                       ((org-agenda-overriding-header "Review 3 Year Goals")))
-            (tags-todo "someday"
-                       ((org-agenda-overriding-header "Someday"))))
-           ((org-agenda-tag-filter-preset
-             '("-ignore"))
-            (org-agenda-show-log t)
-            (org-agenda-files (list rk-org--consume-file rk-org--personal-projects-file rk-org--work-projects-file rk-org--inbox-file rk-org--someday-file rk-org--tickler-file))
-            (org-agenda-archives-mode nil)
-            (org-agenda-dim-blocked-tasks nil))))))
-
-(use-package appt
-  :defer t
-  :config
-  (progn
-    (setq appt-message-warning-time 60)
-    (setq appt-display-interval 5)))
+  (add-hook 'org-agenda-finalize-hook #'org-agenda-to-appt))
 
 (use-package org-archive
   :after org
   :functions (org-archive-subtree)
-  :defines (org-archive-default-command)
+  :custom
+  (org-archive-default-command #'rk-org--archive-done-tasks)
   :preface
-  (progn
-    (autoload 'org-map-entries "org")
-    (autoload 'org-set-tags "org")
-    (autoload 'org-get-tags "org")
+  (autoload 'org-map-entries "org")
+  (autoload 'org-set-tags "org")
+  (autoload 'org-get-tags "org")
 
-    (defun rk-org--archive-done-tasks ()
-      (interactive)
-      (atomic-change-group
-        (org-map-entries (lambda ()
-                           ;; HACK: Ensure point does not move past the next
-                           ;; item to archive.
-                           (let ((_ (point)))
-                             (org-archive-subtree)))
-                         "/DONE|PAID|VOID|CANCELLED" 'tree)))
+  (defun rk-org--archive-done-tasks ()
+    (interactive)
+    (atomic-change-group
+      (org-map-entries (lambda ()
+                         ;; HACK: Ensure point does not move past the next
+                         ;; item to archive.
+                         (let ((_ (point)))
+                           (org-archive-subtree)))
+                       "/DONE|PAID|VOID|CANCELLED" 'tree)))
 
-    (defun rk-org--apply-inherited-tags (&rest _)
-      "Apply inherited tags when archiving."
-      (org-set-tags (org-get-tags))))
+  (defun rk-org--apply-inherited-tags (&rest _)
+    "Apply inherited tags when archiving."
+    (org-set-tags (org-get-tags)))
 
   :config
-  (progn
-    (rk-local-leader-def :keymaps 'org-mode-map
-      "c" '(org-archive-subtree :wk "archive"))
-    (setq org-archive-default-command #'rk-org--archive-done-tasks)
-    (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags)))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "ua" '(org-archive-subtree :wk "archive"))
+  (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags))
 
 (use-package org-src
   :after org
@@ -560,82 +352,35 @@ Do not scheduled items or repeating todos."
 
 (use-package org-clock
   :after org
-  :defines (org-clock-persist
-            org-clock-persist-query-resume
-            org-clock-history-length
-            org-clock-in-resume
-            org-clock-report-include-clocking-task
-            org-clock-out-remove-zero-time-clocks
-            org-clock-persist-file)
+  :custom
+  (org-clock-persist t)
+  (org-clock-persist-query-resume nil)
+  (org-clock-history-length 20)
+  (org-clock-in-resume t)
+  (org-clock-report-include-clocking-task t)
+  (org-clock-out-remove-zero-time-clocks t)
+  (org-clock-persist-file (f-join rk-org-roam-dir ".org-clock-save"))
 
   :preface
-  (progn
-    (autoload 'org-remove-empty-drawer-at "org")
+  (autoload 'org-remove-empty-drawer-at "org")
+  (transient-define-prefix org-clock-transient ()
+    "Org clock transient"
+    ["Actions"
+     ("i" "In" org-clock-in)
+     ("o" "Out" org-clock-out)
+     ("g" "Goto" org-clock-goto)])
 
-    (transient-define-prefix org-clock-transient ()
-      "Org clock transient"
-      ["Actions"
-       ("i" "In" org-clock-in)
-       ("o" "Out" org-clock-out)
-       ("g" "Goto" org-clock-goto)])
-
-    (defun rk-org--remove-empty-clock-drawers ()
-      "Remove empty clock drawers at point."
-      (save-excursion
-        (beginning-of-line 0)
-        (org-remove-empty-drawer-at (point)))))
+  (defun rk-org--remove-empty-clock-drawers ()
+    "Remove empty clock drawers at point."
+    (save-excursion
+      (beginning-of-line 0)
+      (org-remove-empty-drawer-at (point))))
 
   :config
-  (progn
-    (setq org-clock-persist t)
-    (setq org-clock-persist-query-resume nil)
-    (setq org-clock-history-length 20)
-    (setq org-clock-in-resume t)
-    (setq org-clock-report-include-clocking-task t)
-    (setq org-clock-out-remove-zero-time-clocks t)
-    (setq org-clock-persist-file (f-join rk-org-roam-dir ".org-clock-save"))
-    (rk-leader-def
-      "oC" '(org-clock-transient :wk "clock"))
-
-    (org-clock-persistence-insinuate)
-    (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t)))
-
-(use-package org-capture
-  :after org
-  :defines org-capture-list
-  :defines (org-capture-templates)
-  :preface
-  (defun rk-org--capture-template-entry (key label form template &rest kws)
-    (append
-     (list key label 'entry form template
-           :clock-keep t
-           :empty-lines 1
-           :prepend t)
-     kws))
-  :init
-  (setq org-capture-templates
-        (list
-         ;; Reg org
-         (rk-org--capture-template-entry
-          "t" "Add [t]o inbox"
-          '(file rk-org--inbox-file) "* TODO %i%?")
-
-         (rk-org--capture-template-entry
-          "m" "Add [m]eeting"
-          '(file+headline rk-org--tickler-file "Meetings") "* TODO %i%? \n%^t")
-
-         (rk-org--capture-template-entry
-          "p" "Create work [p]roject"
-          '(file rk-org--work-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
-
-         (rk-org--capture-template-entry
-          "P" "Create [P]ersonal project"
-          '(file rk-org--personal-projects-file) "* TODO %i%? [%] :project:\n%^{CATEGORY}p")
-
-         (rk-org--capture-template-entry
-          "s" "Add task to do [s]omeday"
-          '(file+olp rk-org--someday-file "Side projects")
-          "* SOMEDAY  %?"))))
+  (rk-local-leader-def :keyamps 'org-mode-map
+    "uc" '(org-clock-transient :wk "clock"))
+  (org-clock-persistence-insinuate)
+  (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t))
 
 (use-package org-download
   :straight t
@@ -644,57 +389,53 @@ Do not scheduled items or repeating todos."
   (setq org-download-method 'attach))
 
 (use-package evil
-  :defer t
+  :straight t
+  :after org
   :general
   (:keymaps 'evil-org-mode-map :states '(insert normal)
             "M-o" #'org-insert-subheading)
   :preface
-  (progn
-    (autoload 'org-at-heading-p "org")
-    (autoload 'evil-insert-state "evil-states")
+  (autoload 'org-at-heading-p "org")
+  (autoload 'evil-insert-state "evil-states")
 
-    (defun rk-org--evil-insert-state (&rest _)
-      "Enter evil insert state when creating new headings."
-      (when (called-interactively-p nil)
-        (evil-insert-state)))
+  (defun rk-org--evil-insert-state (&rest _)
+    "Enter evil insert state when creating new headings."
+    (when (called-interactively-p nil)
+      (evil-insert-state)))
 
-    (defun rk-org--add-blank-line-after-heading (&rest _)
-      "Add a blank line of padding below new headings."
-      (when (and (called-interactively-p nil)
-                 (org-at-heading-p))
-        (let ((next-line-blank?
-               (save-excursion
-                 (forward-line)
-                 (s-blank? (buffer-substring (line-beginning-position) (line-end-position))))))
-          (unless next-line-blank?
-            (save-excursion
-              (goto-char (line-end-position))
-              (open-line 1)))))))
+  (defun rk-org--add-blank-line-after-heading (&rest _)
+    "Add a blank line of padding below new headings."
+    (when (and (called-interactively-p nil)
+               (org-at-heading-p))
+      (let ((next-line-blank?
+             (save-excursion
+               (forward-line)
+               (s-blank? (buffer-substring (line-beginning-position) (line-end-position))))))
+        (unless next-line-blank?
+          (save-excursion
+            (goto-char (line-end-position))
+            (open-line 1))))))
 
   :config
-  (progn
-    (advice-add 'org-insert-heading :after #'rk-org--evil-insert-state)
-    (advice-add 'org-insert-subheading :after #'rk-org--evil-insert-state)
-    (advice-add 'org-insert-heading-respect-content :after #'rk-org--evil-insert-state)
-    (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--evil-insert-state)
-    (advice-add 'org-insert-todo-heading :after #'rk-org--evil-insert-state)
+  (advice-add 'org-insert-heading :after #'rk-org--evil-insert-state)
+  (advice-add 'org-insert-subheading :after #'rk-org--evil-insert-state)
+  (advice-add 'org-insert-heading-respect-content :after #'rk-org--evil-insert-state)
+  (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--evil-insert-state)
+  (advice-add 'org-insert-todo-heading :after #'rk-org--evil-insert-state)
 
-    (advice-add 'org-insert-heading :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-subheading :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
-    (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading)))
+  (advice-add 'org-insert-heading :after #'rk-org--add-blank-line-after-heading)
+  (advice-add 'org-insert-subheading :after #'rk-org--add-blank-line-after-heading)
+  (advice-add 'org-insert-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
+  (advice-add 'org-insert-todo-heading-respect-content :after #'rk-org--add-blank-line-after-heading)
+  (advice-add 'org-insert-todo-heading :after #'rk-org--add-blank-line-after-heading))
 
 (use-package ox
   :after org
-  :defines (org-export-exclude-tags
-            org-export-coding-system)
+  :custom
+  (org-export-exclude-tags '("noexport" "crypt"))
+  (org-export-coding-system 'utf-8)
   :init
-  (defvar org-export-backends '(ascii html latex odt gfm koma-letter custom-confluence))
-  :config
-  (progn
-    (setq org-export-exclude-tags '("noexport" "crypt"))
-    (setq org-export-coding-system 'utf-8)))
+  (defvar org-export-backends '(ascii html latex odt gfm koma-letter custom-confluence)))
 
 (use-package ox-gfm
   :straight t
@@ -702,10 +443,6 @@ Do not scheduled items or repeating todos."
 
 (use-package ox-html
   :after org
-  :defines (org-html-html5-fancy
-            org-html-postamble
-            org-html-table-row-open-tag
-            org-html-head-extra)
   :preface
   (defun rk-org-html-open-tags-setup
       (number _group-number _start-group-p _end-group-p topp bottomp)
@@ -714,16 +451,15 @@ Do not scheduled items or repeating todos."
           (t (if (= (mod number 2) 1)
                  "<tr class=\"tr-odd\">"
                "<tr class=\"tr-even\">"))))
-  :config
-  (progn
-    (setq org-html-html5-fancy t)
-    (setq org-html-postamble nil)
+  :custom
+  (org-html-html5-fancy t)
+  (org-html-postamble nil)
 
-    ;; Highlight alternating rows in HTML tables.
+  ;; Highlight alternating rows in HTML tables.
 
-    (setq org-html-table-row-open-tag #'rk-org-html-open-tags-setup)
-    (setq org-html-head-extra
-          "
+  (org-html-table-row-open-tag #'rk-org-html-open-tags-setup)
+  (org-html-head-extra
+   "
 <style type=\"text/css\">
 table tr.tr-odd td {
       background-color: #FCF6CF;
@@ -732,12 +468,7 @@ table tr.tr-even td {
       background-color: #FEFEF2;
 }
 </style>
-")))
-
-(use-package rk-org-clock-cascade
-  :after org
-  :commands rk-org-clock-cascade-init
-  :config (add-hook 'org-mode-hook #'rk-org-clock-cascade-init))
+"))
 
 (use-package typopunct
   :straight t
@@ -752,17 +483,9 @@ table tr.tr-even td {
 (use-package rk-org-goto
   :config
   (rk-leader-def
-    "oa"  '(rk-org-goto-agenda :wk "agenda")
-    "og"  '(:ignore t :wk "goto")
-    "ogc" '(rk-org-goto-consume :wk "consume")
-    "ogt" '(rk-org-goto-tickler :wk "tickler")
-    "ogd" '(rk-org-goto-diary :wk "diary")
-    "ogi" '(rk-org-goto-inbox :wk "inbox")
-    "ogn" '(rk-org-goto-next :wk "next/one-off")
-    "ogr" '(rk-org-goto-reference :wk "reference")
-    "ogp" '(rk-org-goto-projects :wk "projects")
-    "ot"  '(rk-org-goto-todo-list :wk "todos")
-    "ov"  '(rk-org-goto-tags-list :wk "tags")))
+    "o g"  '(:ignore t :wk "goto")
+    "o g t"  '(rk-org-goto-todo-list :wk "todos")
+    "o g v"  '(rk-org-goto-tags-list :wk "tags")))
 
 (use-package evil-org
   :straight t
@@ -795,15 +518,16 @@ table tr.tr-even td {
             "C-b" #'evil-scroll-page-up
             "M-RET" #'org-agenda-show-and-scroll-up
             "J" #'org-agenda-goto-date)
-  (:keymaps 'org-mode-map :states '(insert normal)
+  (:keymaps 'org-mode-map :states '(insert normal motion)
             "M-o" #'evil-org-org-insert-subheading-below
+            "TAB" #'org-cycle
             "RET" #'rk-org--return)
   :config
+  (require 'evil-org-agenda)
   (add-hook 'org-mode-hook 'evil-org-mode)
   (add-hook 'evil-org-mode-hook
             (lambda ()
               (evil-org-set-key-theme '(textobjects navigation additional shift heading todo))))
-  (require 'evil-org-agenda)
   (evil-org-agenda-set-keys))
 
 (use-package org-indent
@@ -813,12 +537,6 @@ table tr.tr-even td {
 (use-package flyspell
   :after org
   :hook (org-mode . flyspell-mode))
-
-(use-package org-bullets
-  :straight t
-  :disabled t
-  :after org
-  :hook (org-mode . org-bullets-mode))
 
 (use-package org-superstar
   :straight t
@@ -843,10 +561,6 @@ table tr.tr-even td {
   :after org
   :preface
   (defvar rk-org-roam--dailies-prev-buffer nil)
-  (defun rk-org-roam--open-with-buffer-maybe ()
-    (and (not org-roam-capture--node)
-         (not (eq 'visible (org-roam-buffer--visibility)))
-         (org-roam-buffer-toggle)))
   (defun rk-org-roam--visit-node-other-window ()
     (interactive)
     (let ((current-prefix-arg t))
@@ -861,15 +575,17 @@ table tr.tr-even td {
       (call-interactively 'org-roam-grep-visit)))
   (pretty-hydra-define rk-org-roam--daily-utils
     (:title "Roam Utilities" :quit-key "q"
-            :foreign-keys run
-            :pre (if (not rk-org-roam--dailies-prev-buffer) (setq rk-org-roam--dailies-prev-buffer (current-buffer)))
-            :post (progn (if rk-org-roam--dailies-prev-buffer (switch-to-buffer rk-org-roam--dailies-prev-buffer)) (setq rk-org-roam--dailies-prev-buffer nil)))
+            :foreign-keys run)
     ("Dailies"
      (("C-n"  org-roam-dailies-goto-today "today")
       ("C-y"  org-roam-dailies-goto-yesterday "yesterday")
       ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
       ("C-j" org-roam-dailies-goto-next-note "next")
       ("C-k" org-roam-dailies-goto-previous-note "previous"))))
+  (defun rk-org-roam--is-ca ()
+    (let ((is-ca (y-or-n-p "Is this note CA related?")))
+      (if is-ca ":ca:"
+        nil)))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'org-roam-node-insert)
@@ -890,10 +606,18 @@ table tr.tr-even td {
             "<return>" #'rk-org-roam--visit-grep-other-window)
   :custom
   (org-roam-directory rk-org-roam-dir)
+  (org-roam-dailies-capture-templates '(("d" "default" entry "* %?" :target
+                                         (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n"))))
+  (org-roam-capture-templates '(("b" "basic" plain "%?" :target
+                                 (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+filetags: %(rk-org-roam--is-ca)\n\n")
+                                 :unnarrowed t)
+                                ("p" "person" plain "%?" :target
+                                 (file+head "%<%Y%m%d%H%M%S>-${slug}.org" ":PROPERTIES:\n:CATEGORY:person\n:END:\n#+title: ${title}\n#+filetags: :person:%(rk-org-roam--is-ca)")
+                                 :unnarrowed t)))
   :init
   (rk-leader-def
-    "ob"  '(org-roam-buffer-toggle :wk "toggle buffer")
-    "oB"  '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
+    "ob" '(org-roam-buffer-toggle :wk "toggle buffer")
+    "oB" '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
 
     "od"  '(:ignore t :wk "date")
     "odt" '(org-roam-dailies-goto-today :wk "today")
@@ -901,7 +625,7 @@ table tr.tr-even td {
     "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
     "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
   (rk-local-leader-def :keymaps 'org-mode-map
-    "." '(rk-org-roam--daily-utils/body :wk "daily utils"))
+    "d" '(rk-org-roam--daily-utils/body :wk "daily"))
   :config
   (cl-defmethod org-roam-node-directories ((node org-roam-node))
     (if-let ((dirs (file-name-directory (file-relative-name (org-roam-node-file node) org-roam-directory))))
@@ -932,9 +656,128 @@ table tr.tr-even td {
              :host github
              :repo "d12frosted/vulpea")
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
+  :preface
+  (defun rk-org--non-diary-notes ()
+    (interactive)
+    (vulpea-find :filter-fn (lambda (note) (and (not (f-child-of-p (vulpea-note-path note) rk-org-roam-dailies-dir))
+                                                (not (f-child-of-p (vulpea-note-path note) rk-roam-refs-dir))))))
+  (defun vulpea-project-p ()
+    "Return non-nil if current buffer has any todo entry.
+
+TODO entries marked as done are ignored, meaning the this
+function returns nil if current buffer contains only completed
+tasks."
+    (seq-find
+     (lambda (type)
+       (eq type 'todo))
+     (org-element-map
+         (org-element-parse-buffer 'headline)
+         'headline
+       (lambda (h)
+         (org-element-property :todo-type h)))))
+
+  (defun vulpea-project-update-tag ()
+    "Update PROJECT tag in the current buffer."
+    (when (and (not (active-minibuffer-window))
+               (vulpea-buffer-p))
+      (save-excursion
+        (goto-char (point-min))
+        (let* ((tags (vulpea-buffer-tags-get))
+               (original-tags tags))
+          (if (vulpea-project-p)
+              (setq tags (cons "project" tags))
+            (setq tags (remove "project" tags)))
+
+          ;; cleanup duplicates
+          (setq tags (seq-uniq tags))
+
+          ;; update tags if changed
+          (when (or (seq-difference tags original-tags)
+                    (seq-difference original-tags tags))
+            (apply #'vulpea-buffer-tags-set tags))))))
+
+  (defun vulpea-buffer-p ()
+    "Return non-nil if the currently visited buffer is a note."
+    (and buffer-file-name
+         (string-prefix-p
+          (expand-file-name (file-name-as-directory org-roam-directory))
+          (file-name-directory buffer-file-name))))
+
+  (defun vulpea-project-files ()
+    "Return a list of note files containing 'project' tag." ;
+    (seq-uniq
+     (seq-map
+      #'car
+      (org-roam-db-query
+       [:select [nodes:file]
+                :from tags
+                :left-join nodes
+                :on (= tags:node-id nodes:id)
+                :where (like tag (quote "%\"project\"%"))]))))
+
+  (defun vulpea-agenda-files-update (&rest _)
+    "Update the value of `org-agenda-files'."
+    (setq org-agenda-files (vulpea-project-files)))
   :init
   (rk-leader-def
-    "of" '(vulpea-find :wk "find file node")))
+    "of" '(rk-org--non-diary-notes :wk "find file node"))
+  :config
+  (add-hook 'find-file-hook #'vulpea-project-update-tag)
+  (add-hook 'before-save-hook #'vulpea-project-update-tag)
+  (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
+
+(use-package vulpea
+  :straight t
+  :after org-agenda
+  :preface
+  (defun vulpea-agenda-category (&optional len)
+    "Get category of item at point for agenda.
+
+Category is defined by one of the following items:
+
+- CATEGORY property
+- TITLE keyword
+- TITLE property
+- filename without directory and extension
+
+When LEN is a number, resulting string is padded right with
+spaces and then truncated with ... on the right if result is
+longer than LEN.
+
+Usage example:
+
+  (setq org-agenda-prefix-format
+        '((agenda . \" %(vulpea-agenda-category) %?-12t %12s\")))
+
+Refer to `org-agenda-prefix-format' for more information."
+    (let* ((file-name (when buffer-file-name
+                        (file-name-sans-extension
+                         (file-name-nondirectory buffer-file-name))))
+           (title (vulpea-buffer-prop-get "title"))
+           (category (org-get-category))
+           (result
+            (or (if (and
+                     title
+                     (string-equal category file-name))
+                    title
+                  category)
+                "")))
+      (if (numberp len)
+          (s-truncate len (s-pad-right len " " result))
+        result)))
+  :config
+  (setq org-agenda-custom-commands
+        '(("g" "General"
+           ((todo "NEXT|TODO"
+                  ((org-agenda-overriding-header "TODO")))
+            (todo "WAITING"
+                  ((org-agenda-overriding-header "Waiting")))
+            (agenda ""))
+           ((org-agenda-files (vulpea-project-files))
+            (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
+                                        (todo . " %i %(vulpea-agenda-category 12) ")
+                                        (tags . " %i %(vulpea-agenda-category 12) ")
+                                        (search . " %i %(vulpea-agenda-category 12) "))))))))
 
 (use-package org-roam-ui
   :straight
@@ -958,28 +801,6 @@ table tr.tr-even td {
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
-;; Disable yasnippet in org mode buffers
-(use-package yasnippet
-  :straight t
-  :after org
-  :preface
-  (defun rk-yas--disable-yas ()
-    (yas-minor-mode -1))
-  :config
-  (add-hook 'org-mode-hook #'rk-yas--disable-yas))
-
-;; Disable for now, cons outweigh pros.
-(use-package svg-tag-mode
-  :straight t
-  :disabled t
-  :after org
-  :init
-  (setq svg-tag-tags
-        '(("\\(:[a-z]+:\\)" . ((lambda (tag)
-                                 (svg-tag-make tag :beg 1 :end -1))))))
-  :config
-  (add-hook 'org-mode-hook #'svg-tag-mode))
-
 (use-package citar
   :straight t
   :general
@@ -988,6 +809,8 @@ table tr.tr-even td {
   (:keymaps 'minibuffer-local-map
             "C-b" #'citar-insert-preset)
   :preface
+  (autoload #'org-roam-review-set-budding "org-roam-review")
+  (autoload #'vulpea-buffer-title-set "vulpea-buffer")
   (defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
   (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
   (defvar rk-bib-lib-dir (f-join paths--dropbox-dir "bib_files"))
@@ -998,6 +821,19 @@ table tr.tr-even td {
     "Open the bib file."
     (interactive)
     (find-file rk-bib-refs-file))
+  (defun rk-citar--format-note (key entry filepath)
+    (let* ((template "${title}; ${author editor}")
+           (note-meta
+            (citar--format-entry-no-widths entry template))
+           (buffer (find-file filepath)))
+      (with-current-buffer buffer
+        (erase-buffer)
+        (citar-org-roam-make-preamble key)
+        (vulpea-buffer-title-set note-meta)
+        (call-interactively #'org-roam-review-set-budding)
+        (goto-char (point-max))
+        (insert "\n")
+        (evil-insert 1))))
   :custom
   (citar-notes-paths `(,rk-roam-refs-dir))
   (citar-library-paths `(,rk-bib-lib-dir))
@@ -1006,6 +842,7 @@ table tr.tr-even td {
   (org-cite-follow-processor 'citar)
   (org-cite-activate-processor 'citar)
   (citar-bibliography `(,rk-bib-refs-file))
+  (citar-format-note-function #'rk-citar--format-note)
   :init
   (rk-leader-def
     "o c"   '(:ignore t :wk "cite")
@@ -1023,6 +860,52 @@ table tr.tr-even td {
   :after org
   :hook (org-mode . org-pdftools-setup-link))
 
+(use-package org-drill
+  :straight t
+  :after org)
+
+(use-package org-roam-review
+  :hook
+  (org-mode . org-roam-review-cache-mode)
+  (org-roam-capture-new-node . org-roam-review-set-seedling)
+  :commands
+  (org-roam-review
+   org-roam-review-list-uncategorised
+   org-roam-review-list-recently-added)
+  :custom
+  (org-roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
+  (org-roam-review-ignored-tags '())
+  :general
+  ;; optional bindings for evil-mode compatability.
+  (:states '(normal) :keymaps 'org-roam-review-mode-map
+           "TAB" 'magit-section-cycle
+           "g r" 'org-roam-review-refresh)
+  :init
+  (rk-leader-def
+    "o r" '(:ignore t :wk "review")
+    "o r s" '(org-roam-review :wk "status")
+    "o r u" '(org-roam-review-list-uncategorised :wk "to categorize")
+    "o r r" '(org-roam-review-list-recently-added :wk "recently added"))
+  :config
+  (add-to-list 'display-buffer-alist
+               `(,(rx bos "*org-roam-review*" eos)
+                 (display-buffer-in-direction)
+                 (direction       . right)
+                 (window-width    . 0.5)
+                 (window-height   . fit-window-to-buffer)))
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "r"   '(:ignore t :wk "review")
+    "r r" '(org-roam-review-accept :wk "accept")
+    "r u" '(org-roam-review-bury :wk "bury")
+    "r x" '(org-roam-review-set-excluded :wk "set excluded")
+    "r b" '(org-roam-review-set-budding :wk "set budding")
+    "r s" '(org-roam-review-set-seedling :wk "set seedling")
+    "r e" '(org-roam-review-set-evergreen :wk "set evergreen")))
+
+(use-package org-roam-gc
+  :init
+  (rk-leader-def
+    "oug" '(org-roam-gc :wk "gc")))
 
 (provide 'rk-org)
 
