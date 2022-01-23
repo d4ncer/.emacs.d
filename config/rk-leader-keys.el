@@ -127,6 +127,7 @@
     "n w"   '(widen :wk "widen")
 
     "o"     '(:ignore t :wk "org")
+    "o u"   '(:ignore t :wk "utils")
 
     "p"     '(:ignore t :wk "project")
 
