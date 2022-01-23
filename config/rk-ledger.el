@@ -29,6 +29,7 @@
      ("budget (long term)" "%(binary) --empty -S -T [[ledger-mode-flags]] -f %(ledger-file) bal ^assets:piggy")
      ("cleared" "%(binary) cleared [[ledger-mode-flags]] -f %(ledger-file)")
      ("equity" "%(binary) --real [[ledger-mode-flags]] -f %(ledger-file) equity")
+     ("house move expenses" "%(binary) --real [[ledger-mode-flags]] bal '%housemove22'")
      ("income statement" "%(binary) --invert --real -S -T [[ledger-mode-flags]] -f %(ledger-file) bal ^income ^expenses -p \"this month\""))))
 
 (use-package org-capture
