@@ -100,11 +100,18 @@
 
 (straight-use-package 'org)
 
-;;; Ack org-roam V2
+;; Ack org-roam V2
 
 (defvar org-roam-v2-ack)
 (setq org-roam-v2-ack t)
 
+;; Aggressively load persist
+
+(use-package persist
+  :straight t
+  :demand t
+  :custom
+  (persist--directory-location (f-join paths-cache-directory "persist")))
 
 ;; Aggressively load themes
 
