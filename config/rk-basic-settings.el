@@ -146,6 +146,14 @@
 (use-package mini-frame
   :straight t)
 
+(use-package ts
+  :straight t)
+
+(use-package persist
+  :straight t
+  :custom
+  (persist--directory-location (f-join paths-cache-directory "persist")))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
