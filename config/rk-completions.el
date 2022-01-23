@@ -125,19 +125,18 @@ ARG is the same as for `backward-kill-sexp'."
 
 (use-package consult
   :straight t
-  :after org
+  :after (org vulpea)
   :preface
-  (defun rk-org-roam--search-work-projects ()
+  (defun rk-org-roam--search-projects ()
     (interactive)
-    (let ((org-agenda-files (list rk-org--work-projects-file)))
+    (let ((org-agenda-files (vulpea-project-files)))
       (call-interactively 'consult-org-agenda)))
   :general
   (:keymaps 'org-mode-map :states '(normal visual motion)
             "?" #'consult-org-heading)
   :init
   (rk-leader-def
-    "o ?" '(consult-org-agenda :wk "search all agenda")
-    "o /" '(rk-org-roam--search-work-projects :wk "search work headings")))
+    "o /" '(rk-org-roam--search-projects :wk "search project headings")))
 
 (use-package embark-consult
   :straight t
