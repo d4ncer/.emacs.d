@@ -127,7 +127,8 @@
   (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
   (rk-leader-def
     "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
-    "ol" '(org-store-link :wk "store link"))
+    "ol" '(org-store-link :wk "store link")
+    "ous" '(org-save-all-org-buffers :wk "save all"))
 
   :hook ((org-mode . rk-org--setup-org))
   :config
