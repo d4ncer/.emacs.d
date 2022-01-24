@@ -133,10 +133,7 @@ ARG is the same as for `backward-kill-sexp'."
       (call-interactively 'consult-org-agenda)))
   :general
   (:keymaps 'org-mode-map :states '(normal visual motion)
-            "?" #'consult-org-heading)
-  :init
-  (rk-leader-def
-    "o /" '(rk-org-roam--search-projects :wk "search project headings")))
+            "?" #'consult-org-heading))
 
 (use-package embark-consult
   :straight t

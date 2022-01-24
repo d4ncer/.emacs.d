@@ -909,6 +909,11 @@ Refer to `org-agenda-prefix-format' for more information."
   (rk-leader-def
     "oug" '(org-roam-gc :wk "gc")))
 
+(use-package org-roam-search
+  :init
+  (rk-leader-def
+    "o/" '(org-roam-search :wk "search")))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here

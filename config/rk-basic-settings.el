@@ -149,6 +149,12 @@
 (use-package ts
   :straight t)
 
+(use-package memoize
+  :straight t)
+
+(use-package pcre2el
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
