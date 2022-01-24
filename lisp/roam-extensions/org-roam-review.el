@@ -59,6 +59,7 @@
 (require 'f)
 (require 'ht)
 (require 'ts)
+(require 'plist)
 
 (autoload 'pp-display-expression "pp")
 
@@ -72,7 +73,7 @@
   :group 'org-roam-review
   :type 'file)
 
-(defconst org-roam-review-maturity-values '("budding" "seedling" "evergreen"))
+(defconst org-roam-review-maturity-values '("seedling" "evergreen" "budding"))
 
 (defcustom org-roam-review-ignored-tags '()
   "A list of tags that define a note should not be imported."
@@ -93,42 +94,9 @@ candidate for reviews."
 
 ;;; Cached note type & accessors
 
-(defconst org-roam-review-note-required-keys
-  '(:id :title :file))
-
-(defun org-roam-review--plist-keys (plist)
-  (seq-map #'car (-partition-all 2 plist)))
-
-(defun org-roam-review-note-p (note)
-  (when (listp note)
-    (let ((keys (org-roam-review--plist-keys note)))
-      (and (null (seq-difference org-roam-review-note-required-keys keys))
-           (seq-every-p (lambda (key)
-                          (plist-get note key))
-                        org-roam-review-note-required-keys)))))
-
-(defmacro org-roam-review-note-define-getter (name)
-  (cl-assert (symbolp name))
-  (let ((keyword (intern (format ":%s" name))))
-    `(defun ,(intern (format "org-roam-review-note-%s" name)) (note)
-       ,(format "Generated accessor for `%s' key in an org-roam-review-note plist." keyword)
-       (cl-assert (org-roam-review-note-p note))
-       (plist-get note ,keyword))))
-
-(defun org-roam-review-note-create (&rest keys)
-  (cl-assert (seq-every-p #'keywordp (org-roam-review--plist-keys keys)))
-  (cl-assert (org-roam-review-note-p keys))
-  keys)
-
-(org-roam-review-note-define-getter id)
-(org-roam-review-note-define-getter title)
-(org-roam-review-note-define-getter file)
-(org-roam-review-note-define-getter tags)
-(org-roam-review-note-define-getter next-review)
-(org-roam-review-note-define-getter last-review)
-(org-roam-review-note-define-getter maturity)
-(org-roam-review-note-define-getter todo-keywords)
-(org-roam-review-note-define-getter created)
+(plist-define org-roam-review-note
+              :required (:id :title :file)
+              :optional (:tags :next-review :last-review :maturity :todo-keywords :created))
 
 (defun org-roam-review-note-ignored-p (note)
   (seq-intersection (org-roam-review-note-tags note)
@@ -267,8 +235,6 @@ https://github.com/org-roam/org-roam/issues/2032"
                org-file-tags
              (org-get-tags))))
 
-(f-ext-p "abc.org" "db")
-
 (defun org-roam-review--cache-roam-files ()
   (f-files org-roam-directory
            (lambda (file)
@@ -314,14 +280,28 @@ https://github.com/org-roam/org-roam/issues/2032"
 
 (defvar-local org-roam-review-buffer-refresh-command nil)
 
-(defun org-roam-review-refresh ()
-  "Rebuild the review buffer."
-  (interactive)
-  (with-current-buffer (get-buffer-create "*org-roam-review*")
-    (unless org-roam-review-buffer-refresh-command
-      (error "Refresh command not defined"))
-    (call-interactively org-roam-review-buffer-refresh-command))
-  (message "Buffer refreshed"))
+(defun org-roam-review-buffers ()
+  (seq-filter (lambda (buf)
+                (and (buffer-live-p buf)
+                     (with-current-buffer buf
+                       (derived-mode-p 'org-roam-review-mode))))
+              (buffer-list)))
+
+(defun org-roam-review-refresh (&optional interactive-p)
+  "Rebuild the review buffer.
+
+INTERACTIVE-P indicates that the function was called
+interactively. Extra messages will be logged."
+  (interactive "P")
+  (dolist (buf (org-roam-review-buffers))
+    (with-current-buffer buf
+      (unless org-roam-review-buffer-refresh-command
+        (error "Refresh command not defined"))
+      (if (commandp org-roam-review-buffer-refresh-command)
+          (call-interactively org-roam-review-buffer-refresh-command)
+        (funcall org-roam-review-buffer-refresh-command))))
+  (when interactive-p
+    (message "Buffer refreshed")))
 
 (defvar org-roam-review-mode-map
   (let ((keymap (make-sparse-keymap)))
@@ -331,7 +311,6 @@ https://github.com/org-roam/org-roam/issues/2032"
     keymap))
 
 (defun org-roam-review--refresh-buffer-override (fn &rest args)
-  (message "Advice called")
   (if (equal (buffer-name) org-roam-buffer)
       (apply fn args)
     (call-interactively 'org-roam-review-refresh)))
@@ -344,21 +323,33 @@ nodes for review."
   ;; buffer, since it will error.
   (advice-add 'org-roam-buffer-refresh :around #'org-roam-review--refresh-buffer-override))
 
-(defun org-roam-review--insert-node (node &optional skip-preview-p)
+(defun org-roam-review-insert-preview (node)
+  (let (start content)
+    (with-temp-buffer
+      (insert-file-contents (org-roam-node-file node))
+      (goto-char (point-min))
+      (org-roam-end-of-meta-data t)
+      (setq start (point))
+      (org-next-visible-heading 1)
+      (setq content
+            (org-roam-fontify-like-in-org-mode
+             (string-trim (buffer-substring-no-properties start (point))))))
+
+    (magit-insert-section section (org-roam-preview-section)
+      (insert (if (string-blank-p (string-trim-left content))
+                  (propertize "(Empty)" 'font-lock-face 'font-lock-comment-face)
+                content))
+      (oset section file (org-roam-node-file node))
+      (oset section point start)
+      (insert "\n\n"))))
+
+(defun org-roam-review--insert-node (node skip-preview-p insert-preview-fn)
   (magit-insert-section section (org-roam-node-section nil t)
     (magit-insert-heading (propertize (org-roam-node-title node)
-                                      'font-lock-face 'org-roam-title))
+                                      'font-lock-face 'magit-section-secondary-heading))
     (oset section node node)
     (unless skip-preview-p
-      (magit-insert-section section (org-roam-preview-section)
-        (let ((content (org-roam-fontify-like-in-org-mode
-                        (org-roam-preview-get-contents (org-roam-node-file node) 0))))
-          (insert (if (string-blank-p (string-trim-left content))
-                      (propertize "(Empty)" 'font-lock-face 'font-lock-comment-face)
-                    content)))
-        (oset section file (org-roam-node-file node))
-        (oset section point 0)
-        (insert "\n\n")))))
+      (funcall insert-preview-fn node))))
 
 (defvar org-roam-review-default-placeholder
   (propertize "(None)" 'face 'font-lock-comment-face))
@@ -366,7 +357,7 @@ nodes for review."
 (defconst org-roam-review-max-previews-per-group
   50)
 
-(defun org-roam-review--insert-notes (notes placeholder)
+(defun org-roam-review--insert-notes (notes placeholder insert-preview-fn)
   (if-let* ((nodes (nreverse (seq-reduce (lambda (acc note)
                                            (if-let* ((node (-some->> note
                                                              (org-roam-review-note-id)
@@ -376,13 +367,15 @@ nodes for review."
                                          notes nil))))
       (--each-indexed nodes
         (let ((skip-preview-p (> (1+ it-index) org-roam-review-max-previews-per-group)))
-          (org-roam-review--insert-node it skip-preview-p)))
+          (org-roam-review--insert-node it skip-preview-p insert-preview-fn)))
     (insert (or placeholder org-roam-review-default-placeholder))
     (newline)))
 
-(cl-defun org-roam-review--create-buffer (&key title instructions group-on refresh-command placeholder sort
-                                               (buffer-name "*org-roam-review*")
-                                               (notes nil notes-supplied-p))
+(cl-defun org-roam-review--create-buffer
+    (&key title instructions group-on refresh-command placeholder sort
+          (buffer-name "*org-roam-review*")
+          (insert-preview-fn 'org-roam-review-insert-preview)
+          (notes nil notes-supplied-p))
   "Create a note review buffer for the notes currently in the cache.
 
 
@@ -406,6 +399,9 @@ The following keyword arguments are optional:
   display.
 
 - BUFFER-NAME is the name to use for the created buffer.
+
+- INSERT-PREVIEW-FN is a function that takes a node and is
+  expected to insert a preview using the magit-section API.
 
 - GROUP-ON is a projection function that is passed a note and
   should return one of:
@@ -453,10 +449,10 @@ The following keyword arguments are optional:
                                                (if (stringp key) key (car key))
                                                (length group))))
                            (magit-insert-heading (propertize header 'font-lock-face 'magit-section-heading)))
-                         (org-roam-review--insert-notes (-sort (or sort (-const t)) group) placeholder)
+                         (org-roam-review--insert-notes (-sort (or sort (-const t)) group) placeholder insert-preview-fn)
                          (insert "\n"))))))
                 (t
-                 (org-roam-review--insert-notes (-sort (or sort (-const t)) notes) placeholder))))
+                 (org-roam-review--insert-notes (-sort (or sort (-const t)) notes) placeholder insert-preview-fn))))
         (goto-char (point-min))))
     buf))
 
@@ -652,20 +648,7 @@ A higher score means that the note will appear less frequently."
 
           (save-buffer)
           (message "Maturity set to '%s'. Review scheduled for %s" maturity next-review)))))
-  (org-roam-review--refresh-buffers))
-
-(defun org-roam-review-buffers ()
-  (seq-filter (lambda (buf)
-                (and (buffer-live-p buf)
-                     (with-current-buffer buf
-                       (derived-mode-p 'org-roam-review-mode))))
-              (buffer-list)))
-
-(defun org-roam-review--refresh-buffers ()
-  (save-window-excursion
-    (dolist (buf (org-roam-review-buffers))
-      (with-current-buffer buf
-        (call-interactively org-roam-review-buffer-refresh-command)))))
+  (org-roam-review-refresh))
 
 (defun org-roam-review--kill-buffer-for-completed-review ()
   (let ((review-buf (get-buffer "*org-roam-review*")))
@@ -686,7 +669,7 @@ A higher score means that the note will appear less frequently."
   (when-let* ((maturity (org-entry-get-with-inheritance "MATURITY")))
     (org-roam-review--update-note maturity 3))
   (org-roam-review--kill-buffer-for-completed-review)
-  (org-roam-review--refresh-buffers))
+  (org-roam-review-refresh))
 
 ;;;###autoload
 (defun org-roam-review-bury ()
@@ -695,7 +678,7 @@ A higher score means that the note will appear less frequently."
   (when-let* ((maturity (org-entry-get-with-inheritance "MATURITY")))
     (org-roam-review--update-note maturity 5))
   (org-roam-review--kill-buffer-for-completed-review)
-  (org-roam-review--refresh-buffers))
+  (org-roam-review-refresh))
 
 (defun org-roam-review--skip-note-for-maturity-assignment-p ()
   (org-with-wide-buffer
