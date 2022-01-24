@@ -16,6 +16,23 @@
 (use-package ledger-mode
   :straight t
   :mode ("\\.ledger$" . ledger-mode)
+  :general
+  (:keymaps 'ledger-mode-map :states '(normal motion visual)
+            "C-j" #'ledger-navigate-next-xact-or-directive
+            "C-k" #'ledger-navigate-prev-xact-or-directive
+            "C-n" #'ledger-navigate-next-uncleared
+            "C-p" #'ledger-navigate-previous-uncleared)
+  :preface
+  ;; TODO: Improve this API to have more than one tag
+  (defun rk-ledger--add-meta (tag)
+    (save-excursion
+      (ledger-navigate-beginning-of-xact)
+      (end-of-line)
+      (insert (format "\n\t; :%s:" tag))))
+
+  (defun rk-ledger--add-housemove ()
+    (interactive)
+    (rk-ledger--add-meta "housemove22"))
   :init
   (rk-local-leader-def :keymaps 'ledger-mode-map
     "." '(ledger-mode-clean-buffer :wk "format")
