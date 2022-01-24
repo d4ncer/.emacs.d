@@ -208,6 +208,12 @@ ARG is the same as for `backward-kill-sexp'."
   (setq completion-cycle-threshold 3)
   (setq tab-always-indent 'complete))
 
+(use-package bookmark-view
+  :straight t
+  :init
+  (rk-leader-def
+    "w s" '(bookmark-view :wk "save view")))
+
 (provide 'rk-completions)
 
 ;;; rk-completions.el ends here
