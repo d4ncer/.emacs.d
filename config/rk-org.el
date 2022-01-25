@@ -24,6 +24,7 @@
 (defconst rk-org-roam-dir (f-join paths--org-dir "roam"))
 (defconst rk-org-roam-dailies-dir (f-join rk-org-roam-dir "daily"))
 (defconst rk-org-roam-temporal-prefix "%<%Y%m%d%H%M%S>")
+(defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
 
 (use-package org
   :straight t
@@ -803,6 +804,11 @@ Refer to `org-agenda-prefix-format' for more information."
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
+(use-package ebib
+  :straight t
+  :custom
+  (ebib-preload-bib-files `(,rk-bib-refs-file)))
+
 (use-package citar
   :straight t
   :general
@@ -813,7 +819,7 @@ Refer to `org-agenda-prefix-format' for more information."
   :preface
   (autoload #'org-roam-review-set-budding "org-roam-review")
   (autoload #'vulpea-buffer-title-set "vulpea-buffer")
-  (defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
+
   (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
   (defvar rk-bib-lib-dir (f-join paths--dropbox-dir "bib_files"))
   (defun rk-citar--idle-refresh-cache ()
