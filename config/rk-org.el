@@ -150,6 +150,10 @@
   (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
   (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol))
 
+(use-package org-ml
+  :straight t
+  :after org)
+
 (use-package ob-python
   :after org
   :preface
