@@ -110,8 +110,8 @@
 (use-package persist
   :straight t
   :demand t
-  :custom
-  (persist--directory-location (f-join paths-cache-directory "persist")))
+  :config
+  (setq persist--directory-location (f-join paths-cache-directory "persist")))
 
 ;; Aggressively load themes
 
