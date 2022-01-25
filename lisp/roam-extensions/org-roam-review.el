@@ -91,12 +91,16 @@ candidate for reviews."
   :group 'org-roam-review
   :type '(repeat string))
 
+(defvar org-roam-review-note-accepted-hook nil)
+(defvar org-roam-review-note-buried-hook nil)
+(defvar org-roam-review-note-processed-hook nil)
+
 
 ;;; Cached note type & accessors
 
 (plist-define org-roam-review-note
-              :required (:id :title :file)
-              :optional (:tags :next-review :last-review :maturity :todo-keywords :created))
+  :required (:id :title :file)
+  :optional (:tags :next-review :last-review :maturity :todo-keywords :created))
 
 (defun org-roam-review-note-ignored-p (note)
   (seq-intersection (org-roam-review-note-tags note)
@@ -240,14 +244,14 @@ https://github.com/org-roam/org-roam/issues/2032"
            (lambda (file)
              (when (f-ext-p file "org")
                (with-temp-buffer
-                 (insert-file-contents file)
-                 (setq-local major-mode 'org-mode)
-                 (org-set-regexps-and-options)
-                 (unless (org-roam-review--cache-skip-note-p file)
-                   (org-roam-review--cache-mutate (lambda (cache)
-                                                    (org-roam-review--update-by-props-in-buffer cache
-                                                                                                (current-buffer)
-                                                                                                file)))))))
+                 (let ((org-inhibit-startup t))
+                   (insert-file-contents file)
+                   (org-mode)
+                   (unless (org-roam-review--cache-skip-note-p file)
+                     (org-roam-review--cache-mutate (lambda (cache)
+                                                      (org-roam-review--update-by-props-in-buffer cache
+                                                                                                  (current-buffer)
+                                                                                                  file))))))))
            t))
 
 ;;;###autoload
@@ -474,11 +478,17 @@ categorised by their maturity."
     ("evergreen" (cons "Evergreen 🌲" 1))
     (value value)))
 
+(defun org-roam-review-display-buffer-and-select (buf)
+  (display-buffer buf)
+  (when-let* ((win (seq-find (lambda (it) (equal buf (window-buffer it)))
+                             (window-list))))
+    (select-window win)))
+
 ;;;###autoload
 (defun org-roam-review-list-due ()
   "List notes that are due for review."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Due Notes"
     :instructions "The notes below are due for review.
@@ -499,7 +509,7 @@ them as reviewed with `org-roam-review-accept',
 (defun org-roam-review-list-categorised ()
   "List all evergreen notes categorised by maturity."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Evergreen Notes"
     :instructions "The notes below are categorised by maturity."
@@ -519,7 +529,7 @@ them as reviewed with `org-roam-review-accept',
 This is useful for migrating notes into the spaced repetition
 system."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Uncategorised Notes"
     :instructions "The notes below are missing the properties
@@ -538,7 +548,7 @@ needed to be included in reviews. Categorise them as appropriate."
 (defun org-roam-review-list-authors ()
   "List all author notes."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Author Notes"
     :instructions "The list below contains notes tagged as authors."
@@ -559,7 +569,7 @@ needed to be included in reviews. Categorise them as appropriate."
 (defun org-roam-review-list-outlines ()
   "List all outline notes."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Outline Notes"
     :refresh-command #'org-roam-review-list-outlines
@@ -587,7 +597,7 @@ grouped by whether they require further processing."
 (defun org-roam-review-list-recently-added ()
   "List notes that were created recently, grouped by time."
   (interactive)
-  (display-buffer
+  (org-roam-review-display-buffer-and-select
    (org-roam-review--create-buffer
     :title "Recently Created Notes"
     :refresh-command #'org-roam-review-list-recently-added
@@ -659,7 +669,7 @@ A higher score means that the note will appear less frequently."
     (save-buffer)
     (kill-buffer)
     (-some->> review-buf
-      (display-buffer)
+      (org-roam-review-display-buffer-and-select)
       (select-window))))
 
 ;;;###autoload
@@ -669,6 +679,8 @@ A higher score means that the note will appear less frequently."
   (when-let* ((maturity (org-entry-get-with-inheritance "MATURITY")))
     (org-roam-review--update-note maturity 3))
   (org-roam-review--kill-buffer-for-completed-review)
+  (run-hooks 'org-roam-review-note-accepted-hook)
+  (run-hooks 'org-roam-review-note-processed-hook)
   (org-roam-review-refresh))
 
 ;;;###autoload
@@ -678,6 +690,8 @@ A higher score means that the note will appear less frequently."
   (when-let* ((maturity (org-entry-get-with-inheritance "MATURITY")))
     (org-roam-review--update-note maturity 5))
   (org-roam-review--kill-buffer-for-completed-review)
+  (run-hooks 'org-roam-review-note-buried-hook)
+  (run-hooks 'org-roam-review-note-processed-hook)
   (org-roam-review-refresh))
 
 (defun org-roam-review--skip-note-for-maturity-assignment-p ()
