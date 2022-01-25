@@ -42,7 +42,8 @@
   :init
   (rk-local-leader-def :keymaps 'ibuffer-mode-map
     "o" '(ibuffer-other-window :wk "ib other window"))
-  (rk-leader-def "." '(ibuffer :wk "ib"))
+  (rk-leader-def
+    "b l" '(ibuffer :wk "ib"))
   :config
   (add-hook 'ibuffer-hook #'rk-ibuffer--hacky-show-line-only t))
 

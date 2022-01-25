@@ -150,6 +150,12 @@
   (advice-add 'org-add-log-note :before #'rk-org--exit-minibuffer)
   (advice-add 'org-toggle-heading :after #'rk-org--toggle-heading-goto-eol))
 
+(use-package org-capture
+  :after org
+  :init
+  (rk-leader-def
+    "."  '(org-capture :wk "capture")))
+
 (use-package org-ml
   :straight t
   :after org)

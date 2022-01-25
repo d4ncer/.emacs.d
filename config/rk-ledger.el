@@ -15,6 +15,7 @@
 
 (use-package ledger-mode
   :straight t
+  :demand t
   :mode ("\\.ledger$" . ledger-mode)
   :general
   (:keymaps 'ledger-mode-map :states '(normal motion visual)
@@ -83,7 +84,7 @@
     (dolist (window (window-list))
       (with-current-buffer (window-buffer window)
         (when (and (derived-mode-p 'ledger-mode)
-                   (-contains-p '("s" "j" "c" "a") (plist-get org-capture-plist :key)))
+                   (-contains-p '("ls" "lj" "lc" "la") (plist-get org-capture-plist :key)))
           (call-interactively #'ledger-mode-clean-buffer)))))
   (defun rk-ledger--template-entry (key label form template &rest kws)
     (append
@@ -103,35 +104,34 @@
             (s-join "|" (-concat '("") (rk-ledger--non-expense-accounts-list)))
             (s-join "|" (-concat '("") (rk-ledger--non-expense-accounts-list)))))
 
-  :init
-  (rk-leader-def
-    "l"   '(:ignore t :wk "ledger")
-    "l k" '(org-capture :wk "capture"))
   :config
   (with-eval-after-load 'flycheck
     (require 'flycheck-ledger))
   (add-hook 'org-capture-before-finalize-hook #'rk-ledger--align-ledger-clean-buffer)
   (let ((templates org-capture-templates)
         (ledger-templates (list
+                           ;; Ledger templates
+                           '("l" "Ledger")
+
                            (rk-ledger--template-entry
-                            "a" "Transfer between accounts"
+                            "la" "Transfer between accounts"
                             '(file rk-accounts--ledger-file)
                             '(function rk-ledger--inter-acc-template))
 
                            (rk-ledger--template-entry
-                            "c" "Credit Card"
+                            "lc" "Credit Card"
                             '(file rk-accounts--ledger-file)
                             '(function rk-ledger--expense-template)
                             :account "Liabilities:Visa")
 
                            (rk-ledger--template-entry
-                            "s" "Savings"
+                            "ls" "Savings"
                             '(file rk-accounts--ledger-file)
                             '(function rk-ledger--expense-template)
                             :account "Assets:Savings")
 
                            (rk-ledger--template-entry
-                            "j" "Joint Checking"
+                            "lj" "Joint Checking"
                             '(file rk-accounts--ledger-file)
                             '(function rk-ledger--expense-template)
                             :account "Assets:Joint Checking"))))
