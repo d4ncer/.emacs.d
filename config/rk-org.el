@@ -579,6 +579,10 @@ table tr.tr-even td {
     (interactive)
     (let ((current-prefix-arg t))
       (call-interactively 'org-roam-grep-visit)))
+  (defun rk-org-roam--set-created-timestamp ()
+    (org-with-wide-buffer
+     (unless (org-entry-get (point) "CREATED")
+       (org-set-property "CREATED" (format-time-string (org-time-stamp-format t t))))))
   (pretty-hydra-define rk-org-roam--daily-utils
     (:title "Roam Utilities" :quit-key "q"
             :foreign-keys run)
@@ -650,6 +654,7 @@ table tr.tr-even td {
   (setq org-roam-node-display-template (concat (propertize "${tags:20}" 'face 'org-tag) " ${title:80} " (propertize "${backlinkscount:6}" 'face 'org-tag)))
   (org-roam-db-autosync-mode)
   (org-roam-db-sync 'force)
+  (add-hook 'org-roam-capture-new-node-hook #'rk-org-roam--set-created-timestamp)
   (add-to-list 'display-buffer-alist
                `(,(rx "*" "org-roam" (zero-or-more anything) "*")
                  (display-buffer-in-direction)
