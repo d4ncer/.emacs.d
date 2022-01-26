@@ -595,13 +595,7 @@ table tr.tr-even td {
       ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
       ("C-j" org-roam-dailies-goto-next-note "next")
       ("C-k" org-roam-dailies-goto-previous-note "previous"))))
-  (defun rk-org-roam--is-ca ()
-    (let ((is-ca (y-or-n-p "Is this note CA related?")))
-      (if is-ca ":ca:"
-        nil)))
   :general
-  (:keymaps 'org-mode-map
-            "C-c i" #'org-roam-node-insert)
   (:keymaps 'org-roam-mode-map :states '(normal)
             "<tab>" #'magit-section-toggle
             "n" #'magit-section-forward
@@ -621,12 +615,6 @@ table tr.tr-even td {
   (org-roam-directory rk-org-roam-dir)
   (org-roam-dailies-capture-templates '(("d" "default" entry "* %?" :target
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n"))))
-  (org-roam-capture-templates '(("b" "basic" plain "%?" :target
-                                 (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+filetags: %(rk-org-roam--is-ca)\n\n")
-                                 :unnarrowed t)
-                                ("p" "person" plain "%?" :target
-                                 (file+head "%<%Y%m%d%H%M%S>-${slug}.org" ":PROPERTIES:\n:CATEGORY:person\n:END:\n#+title: ${title}\n#+filetags: :person:%(rk-org-roam--is-ca)")
-                                 :unnarrowed t)))
   :init
   (rk-leader-def
     "ob" '(org-roam-buffer-toggle :wk "toggle buffer")
@@ -672,10 +660,9 @@ table tr.tr-even td {
              :repo "d12frosted/vulpea")
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
   :preface
-  (defun rk-org--non-diary-notes ()
-    (interactive)
-    (vulpea-find :filter-fn (lambda (note) (and (not (f-child-of-p (vulpea-note-path note) rk-org-roam-dailies-dir))
-                                                (not (f-child-of-p (vulpea-note-path note) rk-roam-refs-dir))))))
+  (defun rk-org--filter-non-diary-notes (note)
+    (and (not (f-child-of-p (vulpea-note-path note) rk-org-roam-dailies-dir))
+         (not (f-child-of-p (vulpea-note-path note) rk-roam-refs-dir))))
   (defun vulpea-project-p ()
     "Return non-nil if current buffer has any todo entry.
 
@@ -733,6 +720,143 @@ tasks."
   (defun vulpea-agenda-files-update (&rest _)
     "Update the value of `org-agenda-files'."
     (setq org-agenda-files (vulpea-project-files)))
+
+  (defun rk-vulpea--org-roam-file-name (title)
+    "Return the slug of NODE."
+    (let ((slug-trim-chars '(;; Combining Diacritical Marks https://www.unicode.org/charts/PDF/U0300.pdf
+                             768 ; U+0300 COMBINING GRAVE ACCENT
+                             769 ; U+0301 COMBINING ACUTE ACCENT
+                             770 ; U+0302 COMBINING CIRCUMFLEX ACCENT
+                             771 ; U+0303 COMBINING TILDE
+                             772 ; U+0304 COMBINING MACRON
+                             774 ; U+0306 COMBINING BREVE
+                             775 ; U+0307 COMBINING DOT ABOVE
+                             776 ; U+0308 COMBINING DIAERESIS
+                             777 ; U+0309 COMBINING HOOK ABOVE
+                             778 ; U+030A COMBINING RING ABOVE
+                             780 ; U+030C COMBINING CARON
+                             795 ; U+031B COMBINING HORN
+                             803 ; U+0323 COMBINING DOT BELOW
+                             804 ; U+0324 COMBINING DIAERESIS BELOW
+                             805 ; U+0325 COMBINING RING BELOW
+                             807 ; U+0327 COMBINING CEDILLA
+                             813 ; U+032D COMBINING CIRCUMFLEX ACCENT BELOW
+                             814 ; U+032E COMBINING BREVE BELOW
+                             816 ; U+0330 COMBINING TILDE BELOW
+                             817 ; U+0331 COMBINING MACRON BELOW
+                             )))
+      (cl-flet* ((nonspacing-mark-p (char)
+                   (memq char slug-trim-chars))
+                 (strip-nonspacing-marks (s)
+                   (string-glyph-compose
+                    (apply #'string (seq-remove #'nonspacing-mark-p
+                                                (string-glyph-decompose s)))))
+                 (cl-replace (title pair)
+                   (replace-regexp-in-string (car pair) (cdr pair) title)))
+        (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ;; convert anything not alphanumeric
+                        ("__*" . "_")                   ;; remove sequential underscores
+                        ("^_" . "")                     ;; remove starting underscore
+                        ("_$" . "")))                   ;; remove ending underscore
+        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+        (ts (format-time-string "%Y%m%d%H%M%S")))
+          (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
+
+  (defun rk-vulpea--person-to-tag (title)
+    (concat "@" (s-replace " " "" title)))
+
+  (defun rk-vulpea--create (title &optional insert-p jump-to)
+    (let* ((type (completing-read "Note type: "
+                                  '(("default" 1) ("person" 2))
+                                  nil t))
+           (is-ca (y-or-n-p "Is this note CA related?"))
+           (note (cond
+                  ((string= type "person")
+                   (vulpea-create
+                    title
+                    (rk-vulpea--org-roam-file-name title)
+                    :properties '(("CATEGORY" . "person"))
+                    :tags (remq nil (list "person" is-ca (rk-vulpea--person-to-tag title)))
+                    :immediate-finish t))
+                  (t (vulpea-create
+                      title
+                      (rk-vulpea--org-roam-file-name title)
+                      :immediate-finish t
+                      :tags (remq nil (list is-ca)))))))
+      (when insert-p
+        (insert (org-link-make-string (concat "id:" (vulpea-note-id note)) title)))
+      (when jump-to
+        (find-file (vulpea-note-path note)))))
+
+  (defun rk-vulpea--insert (&optional filter-fn)
+    "Select a node and insert a link to it.
+
+If the note doesn't exist, offer a set of options to create one.
+
+FILTER-FN is the function to apply on the candidates, which takes
+as its argument a `vulpea-note'."
+    (interactive)
+    (unwind-protect
+        (atomic-change-group
+          (let* (region-text
+                 beg end
+                 (_ (when (region-active-p)
+                      (setq
+                       beg (set-marker (make-marker) (region-beginning))
+                       end (set-marker (make-marker) (region-end))
+                       region-text
+                       (org-link-display-format (buffer-substring-no-properties beg end)))))
+                 (note (vulpea-select
+                        "Note"
+                        :filter-fn (or filter-fn vulpea-insert-default-filter)
+                        :initial-prompt region-text))
+                 (title (or region-text
+                            (vulpea-note-title note))))
+            (if (vulpea-note-id note)
+                (progn
+                  (when region-text
+                    (delete-region beg end)
+                    (set-marker beg nil)
+                    (set-marker end nil))
+                  (insert (org-link-make-string
+                           (concat "id:" (vulpea-note-id note))
+                           title))
+                  (run-hook-with-args
+                   'vulpea-insert-handle-functions
+                   note))
+              (rk-vulpea--create title t))))))
+
+  (defun rk-vulpea--find (&key filter-fn)
+    (interactive)
+    (let* ((region-text
+            (when (region-active-p)
+              (org-link-display-format
+               (buffer-substring-no-properties
+                (set-marker
+                 (make-marker) (region-beginning))
+                (set-marker
+                 (make-marker) (region-end))))))
+           (note (vulpea-select-from
+                  "Note"
+                  (funcall
+                   vulpea-find-default-candidates-source
+                   (or
+                    filter-fn
+                    vulpea-find-default-filter))
+                  :initial-prompt region-text))
+           (title (or region-text
+                      (vulpea-note-title note))))
+      (if (vulpea-note-id note)
+          (org-roam-node-visit
+           (org-roam-node-from-id (vulpea-note-id note)))
+        (rk-vulpea--create title nil t))))
+
+  (defun rk-org--non-diary-notes ()
+    (interactive)
+    (rk-vulpea--find :filter-fn #'rk-org--filter-non-diary-notes))
+
+  :general
+  (:keymaps 'org-mode-map
+            "C-c i" #'rk-vulpea--insert)
   :init
   (rk-leader-def
     "of" '(rk-org--non-diary-notes :wk "find file node"))
