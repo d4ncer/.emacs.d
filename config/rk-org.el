@@ -907,8 +907,8 @@ Refer to `org-agenda-prefix-format' for more information."
   :config
   (setq org-agenda-custom-commands
         '(("g" "General"
-           ((todo "NEXT|TODO"
-                  ((org-agenda-overriding-header "TODO")))
+           ((todo "NEXT"
+                  ((org-agenda-overriding-header "Next action")))
             (todo "WAITING"
                   ((org-agenda-overriding-header "Waiting")))
             (agenda ""))
