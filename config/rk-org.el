@@ -153,26 +153,9 @@
 (use-package org-capture
   :after org
   :preface
-  (autoload 'org-funcs-capture-template-apply-defaults "org-funcs")
-  (autoload 'org-funcs-update-capture-templates "org-funcs")
-  (autoload 'org-templates-from-file "org-templates")
-  (defun org-templates-reload ()
-    "Reload the configured capture templates."
-    (interactive)
-    (let ((templates (f-files (expand-file-name "templates" paths--org-dir)
-                              (lambda (file)
-                                (string-suffix-p ".template.org" file)))))
-
-      (->> (seq-mapcat #'org-templates-from-file templates)
-           (seq-map #'org-funcs-capture-template-apply-defaults)
-           (org-funcs-update-capture-templates))))
   :init
   (rk-leader-def
     "."  '(org-capture :wk "capture")))
-
-(use-package org-ml
-  :straight t
-  :after org)
 
 (use-package ob-python
   :after org
