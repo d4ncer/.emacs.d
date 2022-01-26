@@ -15,8 +15,8 @@
 
 (use-package ledger-mode
   :straight t
-  :demand t
   :mode ("\\.ledger$" . ledger-mode)
+  :demand t
   :general
   (:keymaps 'ledger-mode-map :states '(normal motion visual)
             "C-j" #'ledger-navigate-next-xact-or-directive
@@ -105,8 +105,6 @@
             (s-join "|" (-concat '("") (rk-ledger--non-expense-accounts-list)))))
 
   :config
-  (with-eval-after-load 'flycheck
-    (require 'flycheck-ledger))
   (add-hook 'org-capture-before-finalize-hook #'rk-ledger--align-ledger-clean-buffer)
   (let ((templates org-capture-templates)
         (ledger-templates (list
@@ -139,7 +137,7 @@
 
 (use-package flycheck-ledger
   :straight t
-  :after (flycheck ledger))
+  :after flycheck)
 
 (provide 'rk-ledger)
 
