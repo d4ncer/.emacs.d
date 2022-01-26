@@ -155,6 +155,9 @@
 (use-package pcre2el
   :straight t)
 
+(use-package async
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
