@@ -854,6 +854,23 @@ as its argument a `vulpea-note'."
     (interactive)
     (rk-vulpea--find :filter-fn #'rk-org--filter-non-diary-notes))
 
+
+  (defun rk-vulpea--insert-handle (note)
+    "Hook to be called on NOTE after `vulpea-insert'."
+    (when-let* ((title (vulpea-note-title note))
+                (tags (vulpea-note-tags note)))
+      (when (seq-contains-p tags "person")
+        (save-excursion
+          (ignore-errors
+            (org-back-to-heading)
+            (when (eq 'todo (org-element-property
+                             :todo-type
+                             (org-element-at-point)))
+              (org-set-tags
+               (seq-uniq
+                (cons
+                 (rk-vulpea--person-to-tag title)
+                 (org-get-tags nil t))))))))))
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'rk-vulpea--insert)
@@ -861,6 +878,7 @@ as its argument a `vulpea-note'."
   (rk-leader-def
     "of" '(rk-org--non-diary-notes :wk "find file node"))
   :config
+  (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
   (add-hook 'find-file-hook #'vulpea-project-update-tag)
   (add-hook 'before-save-hook #'vulpea-project-update-tag)
   (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
