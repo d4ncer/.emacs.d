@@ -104,7 +104,10 @@ Do not scheduled items or repeating todos."
     "When marking a todo to NEXT, mark all subsequent todos as TODO."
     (save-excursion
       (while (org-goto-sibling)
-        (org-todo "TODO"))))
+        (when (eq 'todo (org-element-property
+                         :todo-type
+                         (org-element-at-point)))
+          (org-todo "TODO")))))
 
   :custom
   (org-tags-exclude-from-inheritance '("subproject"))
