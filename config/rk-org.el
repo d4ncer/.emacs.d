@@ -100,6 +100,12 @@ Do not scheduled items or repeating todos."
                  (-contains? '("TODO") (org-get-todo-state)))
         (org-todo "NEXT"))))
 
+  (defun rk-org--set-subsequent-siblings-todo-state ()
+    "When marking a todo to NEXT, mark all subsequent todos as TODO."
+    (save-excursion
+      (while (org-goto-sibling)
+        (org-todo "TODO"))))
+
   :custom
   (org-tags-exclude-from-inheritance '("subproject"))
   (org-M-RET-may-split-line nil)
@@ -143,6 +149,7 @@ Do not scheduled items or repeating todos."
 
   :hook ((org-mode . rk-org--setup-org))
   :config
+  (add-hook 'org-after-todo-state-change-hook #'rk-org--set-subsequent-siblings-todo-state)
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
   (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
   (add-hook 'org-mode-hook #'auto-fill-mode)
