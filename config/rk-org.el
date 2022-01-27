@@ -92,6 +92,7 @@
     (rk-org--disable-ligatures))
 
   :custom
+  (org-tags-exclude-from-inheritance '("subproject"))
   (org-M-RET-may-split-line nil)
   (org-catch-invisible-edits 'smart)
   (org-cycle-separator-lines 1)
@@ -245,9 +246,9 @@
       (delete-other-windows)))
 
   :custom
-  (org-stuck-projects '("+project-ignore-maybe-done"
+  (org-stuck-projects '("+subproject-ignore-maybe-done"
                         ("NEXT") nil
-                        "SCHEDULED:"))
+                        ""))
 
   (org-agenda-include-diary nil)
   (org-agenda-start-on-weekday nil)
@@ -489,6 +490,7 @@ table tr.tr-even td {
   :config
   (add-hook 'org-mode-hook #'rk-typopunct-init))
 
+
 (use-package rk-org-goto
   :config
   (rk-leader-def
@@ -562,6 +564,9 @@ table tr.tr-even td {
                                      ("DONE" . ?☑)))
   :config
   (setf (alist-get 45 org-superstar-item-bullet-alist) ?•))
+
+(use-package org-ql
+  :straight t)
 
 ;; Roam config
 
@@ -660,9 +665,12 @@ table tr.tr-even td {
              :repo "d12frosted/vulpea")
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
   :preface
+  (use-package org-ql
+    :straight t)
   (defun rk-org--filter-non-diary-notes (note)
     (and (not (f-child-of-p (vulpea-note-path note) rk-org-roam-dailies-dir))
          (not (f-child-of-p (vulpea-note-path note) rk-roam-refs-dir))))
+
   (defun vulpea-project-p ()
     "Return non-nil if current buffer has any todo entry.
 
@@ -678,6 +686,24 @@ tasks."
        (lambda (h)
          (org-element-property :todo-type h)))))
 
+  (defun rk-vulpea--set-subproject ()
+    "Check for TODO in children entries and mark current header."
+    (let* ((tags (org-get-tags nil t))
+           (original-tags tags)
+           (subp-p (-contains-p tags "subproject"))
+           (todo-children-p (org-ql--predicate-children '(todo)))
+           (done-p (and subp-p
+                        (not todo-children-p))))
+      (when todo-children-p
+        (setq tags (cons "subproject" tags)))
+      (when done-p
+        (message "hmm")
+        (setq tags (remove "subproject" tags)))
+      (setq tags (seq-uniq tags))
+      (when (or (seq-difference tags original-tags)
+                (seq-difference original-tags tags))
+        (org-set-tags tags))))
+
   (defun vulpea-project-update-tag ()
     "Update PROJECT tag in the current buffer."
     (when (and (not (active-minibuffer-window))
@@ -687,7 +713,9 @@ tasks."
         (let* ((tags (vulpea-buffer-tags-get))
                (original-tags tags))
           (if (vulpea-project-p)
-              (setq tags (cons "project" tags))
+              (progn
+                (org-map-entries #'rk-vulpea--set-subproject "LEVEL=1")
+                (setq tags (cons "project" tags)))
             (setq tags (remove "project" tags)))
 
           ;; cleanup duplicates
@@ -757,8 +785,8 @@ tasks."
                         ("__*" . "_")                   ;; remove sequential underscores
                         ("^_" . "")                     ;; remove starting underscore
                         ("_$" . "")))                   ;; remove ending underscore
-               (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
-               (ts (format-time-string "%Y%m%d%H%M%S")))
+        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+        (ts (format-time-string "%Y%m%d%H%M%S")))
           (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
 
   (defun rk-vulpea--person-to-tag (title)
@@ -929,6 +957,7 @@ Refer to `org-agenda-prefix-format' for more information."
                   ((org-agenda-overriding-header "Next action")))
             (todo "WAITING"
                   ((org-agenda-overriding-header "Waiting")))
+            (stuck)
             (agenda ""))
            ((org-agenda-files (vulpea-project-files))
             (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
