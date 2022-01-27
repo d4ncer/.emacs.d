@@ -80,7 +80,7 @@
   :group 'org-roam-review
   :type '(list string))
 
-(defcustom org-roam-review-extra-ignored-tags-for-review '("outline")
+(defcustom org-roam-review-tags-ignored-for-review-buffer '("outline")
   "A list of tags that define a note should not be considered a
 candidate for reviews."
   :group 'org-roam-review
@@ -90,6 +90,24 @@ candidate for reviews."
   "Org TODO keywords representing pending todos in outline files."
   :group 'org-roam-review
   :type '(repeat string))
+
+(defface org-roam-review-instructions
+  '((t
+     (:inherit font-lock-comment-face)))
+  "Face for instructional information in a review buffer."
+  :group 'org-roam-review)
+
+(defface org-roam-review-filter
+  '((t
+     (:inherit org-tag)))
+  "Face for filter information in a review buffer."
+  :group 'org-roam-review)
+
+(defface org-roam-review-filter-keyword
+  '((t
+     (:inherit org-document-info-keyword)))
+  "Face for the filter information keyword in a review buffer."
+  :group 'org-roam-review)
 
 (defvar org-roam-review-note-accepted-hook nil)
 (defvar org-roam-review-note-buried-hook nil)
@@ -102,14 +120,8 @@ candidate for reviews."
   :required (:id :title :file)
   :optional (:tags :next-review :last-review :maturity :todo-keywords :created))
 
-(defun org-roam-review-note-ignored-p (note)
-  (seq-intersection (org-roam-review-note-tags note)
-                    (append org-roam-review-ignored-tags
-                            org-roam-review-extra-ignored-tags-for-review)))
-
-(defun org-roam-review-note-due-p (note)
-  (when-let* ((next-review (org-roam-review-note-next-review note)))
-    (ts<= next-review (ts-now))))
+(plist-define org-roam-review-filter
+  :optional (:required :forbidden))
 
 
 ;;; Define cache operations
@@ -282,6 +294,19 @@ https://github.com/org-roam/org-roam/issues/2032"
 
 ;;; Review buffers
 
+(defvar org-roam-review--filter nil)
+
+(defun org-roam-review-note-ignored-p (note)
+  (let* ((tags (org-roam-review-note-tags note))
+         (forbidden-tags (org-roam-review-filter-forbidden org-roam-review--filter))
+         (required-tags (org-roam-review-filter-required org-roam-review--filter)))
+    (or (seq-intersection tags forbidden-tags)
+        (seq-difference required-tags tags))))
+
+(defun org-roam-review-note-due-p (note)
+  (when-let* ((next-review (org-roam-review-note-next-review note)))
+    (ts<= next-review (ts-now))))
+
 (defvar-local org-roam-review-buffer-refresh-command nil)
 
 (defun org-roam-review-buffers ()
@@ -301,14 +326,37 @@ interactively. Extra messages will be logged."
     (with-current-buffer buf
       (unless org-roam-review-buffer-refresh-command
         (error "Refresh command not defined"))
-      (if (commandp org-roam-review-buffer-refresh-command)
-          (call-interactively org-roam-review-buffer-refresh-command)
-        (funcall org-roam-review-buffer-refresh-command))))
+      (funcall org-roam-review-buffer-refresh-command)))
   (when interactive-p
     (message "Buffer refreshed")))
 
+(defun org-roam-review--read-tags-filter ()
+  (-let* ((current-filter
+           (string-join (append
+                         (seq-map (lambda (it) (concat "-" it)) (org-roam-review-filter-forbidden org-roam-review--filter))
+                         (org-roam-review-filter-required org-roam-review--filter))
+                        " "))
+          (input (read-string "Tags filter (+/-): " current-filter))
+          ((forbidden required) (-separate (lambda (it) (string-prefix-p "-" it))
+                                           (split-string input " " t))))
+    (org-roam-review-filter-create :forbidden (seq-map (lambda (it) (string-remove-prefix "-" it))
+                                                       forbidden)
+                                   :required (seq-map (lambda (it) (string-remove-prefix "+" it))
+                                                      required))))
+
+(defun org-roam-review-modify-tags (tags-filter)
+  "Read a tags filter interactively.
+
+When called with a `C-u' prefix arg, clear the current filter."
+  (interactive (list
+                (unless current-prefix-arg
+                  (org-roam-review--read-tags-filter))))
+  (setq org-roam-review--filter tags-filter)
+  (org-roam-review-refresh t))
+
 (defvar org-roam-review-mode-map
   (let ((keymap (make-sparse-keymap)))
+    (define-key keymap (kbd "/") #'org-roam-review-modify-tags)
     (define-key keymap (kbd "TAB") #'magit-section-cycle)
     (define-key keymap (kbd "g") #'org-roam-review-refresh)
     (define-key keymap [remap org-roam-buffer-refresh] #'org-roam-review-refresh)
@@ -375,11 +423,56 @@ nodes for review."
     (insert (or placeholder org-roam-review-default-placeholder))
     (newline)))
 
-(cl-defun org-roam-review--create-buffer
-    (&key title instructions group-on refresh-command placeholder sort
+(cl-defun org-roam-review--render (&key title instructions group-on placeholder sort postprocess insert-preview-fn notes)
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (org-roam-review-mode)
+    (org-roam-buffer-set-header-line-format title)
+    (magit-insert-section root (root)
+      (when (and instructions notes)
+        (let ((start (point)))
+          (insert (propertize instructions 'font-lock-face 'org-roam-review-instructions))
+          (fill-region start (point)))
+        (newline 2))
+
+      (let ((forbidden-tags (seq-map (lambda (it) (format "-%s" it)) (org-roam-review-filter-forbidden org-roam-review--filter)))
+            (required-tags (seq-map (lambda (it) (format "+%s" it)) (org-roam-review-filter-required org-roam-review--filter))))
+        (when (or forbidden-tags required-tags)
+          (insert (concat (propertize "Filters:" 'face 'org-roam-review-filter-keyword)
+                          " "
+                          (propertize (string-join (append forbidden-tags required-tags) " ") 'face 'org-roam-review-filter)))
+          (newline 2)))
+
+      (let ((start-of-content (point)))
+
+        (cond ((null notes)
+               (insert (or placeholder org-roam-review-default-placeholder))
+               (newline))
+              (group-on
+               (let ((grouped (->> (seq-group-by group-on notes)
+                                   (-sort (-on #'<= (-lambda ((key . _))
+                                                      (if (stringp key) key (or (cdr key) 0))))))))
+                 (pcase-dolist (`(,key . ,group) grouped)
+                   (when (and key group)
+                     (magit-insert-section section (org-roam-review-note-group)
+                       (oset section parent root)
+                       (let ((header (format "%s (%s)"
+                                             (if (stringp key) key (car key))
+                                             (length group))))
+                         (magit-insert-heading (propertize header 'font-lock-face 'magit-section-heading)))
+                       (org-roam-review--insert-notes (-sort (or sort (-const t)) group) placeholder insert-preview-fn)
+                       (insert "\n"))))))
+              (t
+               (org-roam-review--insert-notes (-sort (or sort (-const t)) notes) placeholder insert-preview-fn)))
+        (goto-char (point-min))
+        (save-excursion
+          (when postprocess (funcall postprocess)))
+        (goto-char start-of-content)))))
+
+(cl-defun org-roam-review-create-buffer
+    (&key title instructions group-on placeholder sort postprocess notes
           (buffer-name "*org-roam-review*")
-          (insert-preview-fn 'org-roam-review-insert-preview)
-          (notes nil notes-supplied-p))
+          (insert-preview-fn 'org-roam-review-insert-preview))
   "Create a note review buffer for the notes currently in the cache.
 
 
@@ -390,17 +483,16 @@ The following keyword arguments are required:
 - INSTRUCTIONS is a paragraph inserted below the title. It is
   automatically paragraph-filled.
 
-- NOTES is a list of notes to display (which is possibly empty).
-
-- REFRESH-COMMAND is a function to be called when the user
-  refreshes the buffer via the key command. It will usually be a
-  symbol, the name of this command that is being declared using
-  `org-roam-review--create-buffer'.
+- NOTES is a function returning a list of notes to display (which
+  is possibly empty).
 
 The following keyword arguments are optional:
 
 - PLACEHOLDER is a string to be shown if there are no notes to
   display.
+
+- POSTPROCESS is a function called after the buffer has been
+  populated.
 
 - BUFFER-NAME is the name to use for the created buffer.
 
@@ -424,41 +516,23 @@ The following keyword arguments are optional:
 - SORT is a projection function that is passed two notes within a
   group and returns non-nil if the first element should sort
   before the second."
-  (cl-assert (and notes-supplied-p title refresh-command))
-  (let ((buf (get-buffer-create buffer-name)))
-    (with-current-buffer buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (org-roam-review-mode)
-        (org-roam-buffer-set-header-line-format title)
-        (setq-local org-roam-review-buffer-refresh-command refresh-command)
-        (magit-insert-section (root)
-          (when (and instructions notes)
-            (let ((start (point)))
-              (insert (propertize instructions 'font-lock-face 'font-lock-comment-face))
-              (fill-region start (point)))
-            (newline 2))
-
-          (cond ((null notes)
-                 (insert (or placeholder org-roam-review-default-placeholder))
-                 (newline))
-                (group-on
-                 (let ((grouped (->> (seq-group-by group-on notes)
-                                     (-sort (-on #'<= (-lambda ((key . _))
-                                                        (if (stringp key) key (or (cdr key) 0))))))))
-                   (pcase-dolist (`(,key . ,group) grouped)
-                     (when (and key group)
-                       (magit-insert-section (org-roam-review-note-group)
-                         (let ((header (format "%s (%s)"
-                                               (if (stringp key) key (car key))
-                                               (length group))))
-                           (magit-insert-heading (propertize header 'font-lock-face 'magit-section-heading)))
-                         (org-roam-review--insert-notes (-sort (or sort (-const t)) group) placeholder insert-preview-fn)
-                         (insert "\n"))))))
-                (t
-                 (org-roam-review--insert-notes (-sort (or sort (-const t)) notes) placeholder insert-preview-fn))))
-        (goto-char (point-min))))
-    buf))
+  (cl-assert title)
+  (cl-assert (functionp notes))
+  (let (render)
+    (setq render
+          (lambda (updated-notes)
+            (with-current-buffer (get-buffer-create buffer-name)
+              (org-roam-review--render :title title
+                                       :instructions instructions
+                                       :notes updated-notes
+                                       :group-on group-on
+                                       :placeholder placeholder
+                                       :sort sort
+                                       :postprocess postprocess
+                                       :insert-preview-fn insert-preview-fn)
+              (setq-local org-roam-review-buffer-refresh-command (lambda () (funcall render (funcall notes))))
+              (current-buffer))))
+    (funcall render (funcall notes))))
 
 ;;;###autoload
 (defun org-roam-review (&optional all)
@@ -489,38 +563,42 @@ categorised by their maturity."
   "List notes that are due for review."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Due Notes"
     :instructions "The notes below are due for review.
 Read each note and add new thoughts and connections, then mark
 them as reviewed with `org-roam-review-accept',
 `org-roam-review-bury' or by updating their maturity."
     :placeholder (concat (propertize "You're up-to-date!" 'face 'font-lock-comment-face) " 😸")
-    :refresh-command #'org-roam-review-list-due
     :group-on #'org-roam-review--maturity-header-for-note
     :sort (-on #'ts< #'org-roam-review-note-next-review)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (when (and (not (org-roam-review-note-ignored-p note))
-                         (org-roam-review-note-due-p note))
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (when (and (not (org-roam-review-note-ignored-p note))
+                    (null (seq-intersection (org-roam-review-note-tags note)
+                                            org-roam-review-tags-ignored-for-review-buffer))
+                    (org-roam-review-note-due-p note))
+           note)))))))
 
 ;;;###autoload
 (defun org-roam-review-list-categorised ()
   "List all evergreen notes categorised by maturity."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Evergreen Notes"
     :instructions "The notes below are categorised by maturity."
-    :refresh-command #'org-roam-review-list-categorised
     :group-on #'org-roam-review--maturity-header-for-note
     :sort (-on #'string-lessp #'org-roam-review-note-title)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (when (and (not (org-roam-review-note-ignored-p note))
-                         (org-roam-review-note-maturity note))
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (when (and (not (org-roam-review-note-ignored-p note))
+                    (org-roam-review-note-maturity note))
+           note)))))))
 
 ;;;###autoload
 (defun org-roam-review-list-uncategorised ()
@@ -530,34 +608,38 @@ This is useful for migrating notes into the spaced repetition
 system."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Uncategorised Notes"
     :instructions "The notes below are missing the properties
 needed to be included in reviews. Categorise them as appropriate."
-    :refresh-command #'org-roam-review-list-uncategorised
     :sort (-on #'string-lessp #'org-roam-review-note-title)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (unless (or (org-roam-review-note-ignored-p note)
-                          (seq-contains-p (org-roam-review-note-tags note) "outline")
-                          (org-roam-review-note-maturity note)
-                          (org-roam-review-note-next-review note))
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (unless (or (org-roam-review-note-ignored-p note)
+                     (seq-contains-p (org-roam-review-note-tags note) "outline")
+                     (seq-intersection (org-roam-review-note-tags note)
+                                       org-roam-review-tags-ignored-for-review-buffer)
+                     (org-roam-review-note-maturity note)
+                     (org-roam-review-note-next-review note))
+           note)))))))
 
 ;;;###autoload
 (defun org-roam-review-list-authors ()
   "List all author notes."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Author Notes"
     :instructions "The list below contains notes tagged as authors."
-    :refresh-command #'org-roam-review-list-authors
     :sort (-on #'string-lessp #'org-roam-review-note-title)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (when (seq-contains-p (org-roam-review-note-tags note) "author")
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (when (seq-contains-p (org-roam-review-note-tags note) "author")
+           note)))))))
 
 (defun org-roam-review--note-todo-presence (note)
   (if (seq-intersection (org-roam-review-note-todo-keywords note)
@@ -570,17 +652,18 @@ needed to be included in reviews. Categorise them as appropriate."
   "List all outline notes."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Outline Notes"
-    :refresh-command #'org-roam-review-list-outlines
     :instructions "The notes below are outlines of sources,
 grouped by whether they require further processing."
     :group-on #'org-roam-review--note-todo-presence
     :sort (-on #'string-lessp #'org-roam-review-note-title)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (when (seq-contains-p (org-roam-review-note-tags note) "outline")
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (when (seq-contains-p (org-roam-review-note-tags note) "outline")
+           note)))))))
 
 (defun org-roam-review--note-added-group (note)
   (when-let* ((created (org-roam-review-note-created note))
@@ -598,16 +681,17 @@ grouped by whether they require further processing."
   "List notes that were created recently, grouped by time."
   (interactive)
   (org-roam-review-display-buffer-and-select
-   (org-roam-review--create-buffer
+   (org-roam-review-create-buffer
     :title "Recently Created Notes"
-    :refresh-command #'org-roam-review-list-recently-added
     :instructions "The notes below are sorted by when they were created."
     :group-on #'org-roam-review--note-added-group
     :sort (-on #'string-lessp #'org-roam-review-note-title)
-    :notes (org-roam-review--cache-collect
-            (lambda (note)
-              (unless (seq-intersection (org-roam-review-note-tags note) org-roam-review-ignored-tags)
-                note))))))
+    :notes
+    (lambda ()
+      (org-roam-review--cache-collect
+       (lambda (note)
+         (unless (seq-intersection (org-roam-review-note-tags note) org-roam-review-ignored-tags)
+           note)))))))
 
 
 
@@ -654,7 +738,7 @@ A higher score means that the note will appear less frequently."
 
           (org-delete-property "REVIEW_EXCLUDED")
           (org-set-property "MATURITY" maturity)
-          (org-set-property "LAST_REVIEW" (format-time-string "[%Y-%m-%d %a]"))
+          (org-set-property "LAST_REVIEW" (org-format-time-string "[%Y-%m-%d %a]"))
 
           (save-buffer)
           (message "Maturity set to '%s'. Review scheduled for %s" maturity next-review)))))

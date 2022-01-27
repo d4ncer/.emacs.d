@@ -168,14 +168,16 @@ BUILDER is the command argument builder."
                files)))
 
 (defun org-roam-search-notes-from-nodes (nodes)
-  (seq-uniq (seq-mapcat (lambda (node)
-                          (when-let* ((file (org-roam-node-file node)))
-                            (with-temp-buffer
-                              (let ((major-mode 'org-mode))
-                                (org-set-regexps-and-options))
-                              (insert-file-contents file)
-                              (org-roam-review-notes-from-buffer (current-buffer) file))))
-                        nodes)))
+  (->> nodes
+       (seq-mapcat (lambda (node)
+                     (when-let* ((file (org-roam-node-file node)))
+                       (with-temp-buffer
+                         (insert-file-contents file)
+                         (let ((org-inhibit-startup t))
+                           (org-mode))
+                         (org-roam-review-notes-from-buffer (current-buffer) file)))))
+       (seq-uniq)
+       (seq-remove #'org-roam-review-note-ignored-p)))
 
 (defun org-roam-search--process-rg-output (buf)
   (let* ((output (with-current-buffer buf
@@ -189,14 +191,17 @@ BUILDER is the command argument builder."
     (save-match-data
       (let ((transpiled-regexp (pcre-to-elisp regexp)))
         (while (search-forward-regexp transpiled-regexp nil t)
-          (unless (seq-contains-p (face-at-point nil t) 'magit-section-heading)
+          (unless (seq-intersection (face-at-point nil t) '(magit-section-heading
+                                                            org-roam-review-instructions
+                                                            org-roam-review-filter
+                                                            org-roam-review-filter-keyword))
             (let ((overlay (make-overlay (let ((pt (match-beginning 0)))
                                            (goto-char pt)
                                            (min pt (or (car (save-match-data (bounds-of-thing-at-point 'word)))
                                                        (line-end-position))))
                                          (let ((pt (match-end 0)))
                                            (goto-char pt)
-                                           (max pt (or (cdr (save-match-data(bounds-of-thing-at-point 'word)))
+                                           (max pt (or (cdr (save-match-data (bounds-of-thing-at-point 'word)))
                                                        (line-beginning-position)))))))
               (overlay-put overlay 'face 'org-roam-search-highlight))))))))
 
@@ -252,6 +257,21 @@ BUILDER is the command argument builder."
 
 (defvar org-roam-search-view-query-history nil)
 
+(defun org-roam-search--ripgrep-for-notes (query)
+  (let (done notes)
+    (async-start-process "ripgrep" "rg"
+                         (lambda (proc)
+                           (let* ((files (org-roam-search--process-rg-output (process-buffer proc))))
+                             (setq notes
+                                   (org-roam-search-notes-from-nodes (org-roam-search--nodes-for-files files)))
+                             (setq done t)))
+                         "--smart-case"
+                         "--files-with-matches"
+                         query org-roam-directory)
+    (while (not done)
+      (sit-for 0.01))
+    notes))
+
 ;;;###autoload
 (defun org-roam-search-view (query)
   "Search `org-roam-directory' for notes matching a query.
@@ -265,24 +285,20 @@ QUERY is a PRCE regexp string that will be passed to ripgrep."
                            (not (string-prefix-p "(" input)))
                       (format "(%s)" input)
                     input))))
-  (async-start-process "ripgrep" "rg"
-                       (lambda (proc)
-                         (let* ((files (org-roam-search--process-rg-output (process-buffer proc)))
-                                (buf (org-roam-review--create-buffer
-                                      :title (format "Search Results: %s" query)
-                                      :placeholder "No search results"
-                                      :buffer-name org-roam-search-buffer-name
-                                      :refresh-command (lambda () (org-roam-search-view query))
-                                      :group-on #'org-roam-review--maturity-header-for-note
-                                      :sort (-on #'ts< (lambda (it) (or (org-roam-review-note-created it) (ts-now))))
-                                      :insert-preview-fn (org-roam-search-make-insert-preview-fn query)
-                                      :notes (org-roam-search-notes-from-nodes (org-roam-search--nodes-for-files files)))))
-                           (with-current-buffer buf
-                             (org-roam-search--highlight-matches query))
-                           (display-buffer buf)))
-                       "--smart-case"
-                       "--files-with-matches"
-                       query org-roam-directory))
+  (org-roam-review-display-buffer-and-select
+   (org-roam-review-create-buffer
+    :title (format "Search Results: %s" query)
+    :placeholder "No search results"
+    :buffer-name org-roam-search-buffer-name
+    :group-on #'org-roam-review--maturity-header-for-note
+    :sort (-on #'ts< (lambda (it) (or (org-roam-review-note-created it) (ts-now))))
+    :insert-preview-fn (org-roam-search-make-insert-preview-fn query)
+    :notes
+    (lambda ()
+      (org-roam-search--ripgrep-for-notes query))
+    :postprocess
+    (lambda ()
+      (org-roam-search--highlight-matches query)))))
 
 (defun org-roam-search--kill-buffer ()
   (when-let* ((buf (get-buffer org-roam-search-buffer-name)))
