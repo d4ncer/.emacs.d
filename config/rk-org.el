@@ -1024,11 +1024,14 @@ Refer to `org-agenda-prefix-format' for more information."
   :config
   (setq org-agenda-custom-commands
         '(("g" "General"
-           ((todo "NEXT"
+           ((todo "TODO"
+                  ((org-agenda-files `(,(f-join org-roam-directory "20220128063937-inbox.org")))
+                   (org-agenda-overriding-header "To Refile")))
+            (todo "NEXT"
                   ((org-agenda-overriding-header "Next action")))
+            (stuck)
             (todo "WAITING"
                   ((org-agenda-overriding-header "Waiting")))
-            (stuck)
             (agenda ""))
            ((org-agenda-files (vulpea-project-files))
             (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
