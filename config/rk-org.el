@@ -805,8 +805,8 @@ tasks."
                         ("__*" . "_")                   ;; remove sequential underscores
                         ("^_" . "")                     ;; remove starting underscore
                         ("_$" . "")))                   ;; remove ending underscore
-        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
-        (ts (format-time-string "%Y%m%d%H%M%S")))
+               (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+               (ts (format-time-string "%Y%m%d%H%M%S")))
           (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
 
   (defun rk-vulpea--person-to-tag (title)
@@ -816,20 +816,21 @@ tasks."
     (let* ((type (completing-read "Note type: "
                                   '(("default" 1) ("person" 2))
                                   nil t))
-           (is-ca (y-or-n-p "Is this note CA related?"))
+           (ca-p (y-or-n-p "Is this note CA related?"))
+           (ca-tag (if ca-p "ca" nil))
            (note (cond
                   ((string= type "person")
                    (vulpea-create
                     title
                     (rk-vulpea--org-roam-file-name title)
                     :properties '(("CATEGORY" . "person"))
-                    :tags (remq nil (list "person" is-ca (rk-vulpea--person-to-tag title)))
+                    :tags (remq nil (list "person" ca-tag (rk-vulpea--person-to-tag title)))
                     :immediate-finish t))
                   (t (vulpea-create
                       title
                       (rk-vulpea--org-roam-file-name title)
                       :immediate-finish t
-                      :tags (remq nil (list is-ca)))))))
+                      :tags (remq nil (list ca-tag)))))))
       (when insert-p
         (insert (org-link-make-string (concat "id:" (vulpea-note-id note)) title)))
       (when jump-to
