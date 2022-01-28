@@ -60,11 +60,7 @@
      "gd" #'tide-jump-to-definition
      "r" #'tide-rename-symbol
      "R" #'tide-references
-     "K" #'tide-documentation-at-point)
-    (general-define-key
-     :states 'insert
-     :keymaps 'local
-     "C-." #'company-complete))
+     "K" #'tide-documentation-at-point))
   (defun rk-ts--setup-tide-reference-local-binds ()
     (general-define-key
      :states 'normal
@@ -139,6 +135,19 @@
   :init
   :config
   (add-to-list 'tree-sitter-major-mode-language-alist '(rk-ts-tsx-mode . tsx)))
+
+(use-package emmet-mode
+  :straight t
+  :after typescript-mode
+  :general
+  (:keymaps 'emmet-mode-keymap :states '(normal insert)
+            "C-;" #'emmet-expand-line)
+  :custom
+  (emmet-move-cursor-between-quotes t)
+  :init
+  (add-hook 'rk-ts-tsx-mode-hook #'emmet-mode)
+  :config
+  (add-to-list 'emmet-jsx-major-modes 'rk-ts-tsx-mode))
 
 ;; LSP + Tailwind (disabled for now)
 
