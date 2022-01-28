@@ -11,23 +11,10 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'general)
 (require 'definers)
+(require 'rk-utils)
 (require 'dash)
 (require 'f)
-(require 's)
-(require 'flycheck)
-(require 'lsp)
-(require 'ht)
-(require 'rk-utils)
-(require 'projectile)
-
-(defconst rk-web--node-js-lts-version "v16.13.0"
-  "The version of Node to use by default if .nvmrc isn't found.")
-
-(defconst rk-web--prettier-default-args
-  (list "--single-quote" "true" "--trailing-comma" "es5")
-  "Default values for prettier.")
 
 (use-package web-mode
   :straight t
@@ -63,6 +50,7 @@
          ("\\.html\\'" . rk-web-html-mode))
 
   :preface
+  (autoload 'projectile-project-p "projectile")
   (defun rk-web--add-custom-eslint-rules-dir ()
     (-when-let* ((root (projectile-project-p))
                  (rules-dir (f-join root "rules"))
@@ -85,40 +73,10 @@
   (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
   (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
 
-(use-package emmet-mode
-  :straight t
-  :defer t
-  :after rk-web-modes
-  :defines (emmet-expand-jsx-className?)
-  :commands (emmet-mode emmet-expand-line)
-  :general (:keymaps 'emmet-mode-keymap :states '(normal insert)
-                     "M-;" #'emmet-expand-line)
-  :custom
-  (emmet-move-cursor-between-quotes t)
-  :preface
-  (defun rk-web--react-in-buffer-p ()
-    (save-excursion
-      (save-match-data
-        (goto-char (point-min))
-        (search-forward "React" nil t))))
-
-  (defun rk-web--maybe-emmet-mode ()
-    (cond
-     ((derived-mode-p 'rk-web-html-mode 'html-mode 'nxml-mode)
-      (emmet-mode +1))
-
-     ((and (derived-mode-p 'rk-web-js-mode)
-           (rk-web--react-in-buffer-p))
-      (progn
-        (setq-local emmet-expand-jsx-className? t)
-        (emmet-mode +1)))))
-
-  :init
-  (add-hook 'web-mode-hook #'rk-web--maybe-emmet-mode))
-
 (use-package rk-flycheck-stylelint
   :after flycheck
   :preface
+  (autoload 'projectile-project-p "projectile")
   (defun rk-web--set-stylelintrc ()
     "Set either local or root stylelintrc"
     (-if-let* ((root (projectile-project-p))
