@@ -932,6 +932,56 @@ as its argument a `vulpea-note'."
   (add-hook 'before-save-hook #'vulpea-project-update-tag)
   (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
 
+(use-package org-capture
+  :after vulpea
+  :preface
+  (use-package org-ql
+    :straight t)
+  (require 'org-ql)
+  (defun rk-org--subproject-title ()
+    (when (org-ql--predicate-tags-local "subproject")
+      (org-element-property :raw-value (org-element-at-point))))
+  (defun rk-org--get-subprojects ()
+    (org-with-wide-buffer
+     (--keep it (org-map-entries #'rk-org--subproject-title "LEVEL=1"))))
+  (defun rk-org--setup-source-from-file (path)
+    (vulpea-utils-with-file path
+      `(:name ,(vulpea-buffer-title-get)
+              :category rk/capture-targets
+              :target file+headline
+              :path ,path
+              :items ,(rk-org--get-subprojects))))
+  (defun rk-org--setup-inbox-source ()
+    (let ((path (f-join org-roam-directory "20220128063937-inbox.org")))
+      (list `(:name "To Inbox"
+                    :category rk/capture-targets
+                    :target file
+                    :path ,path
+                    :items ,(list "Inbox")))))
+  (defun rk-org--capture-to-project-or-inbox ()
+    "Capture a TODO to an existing subproject or to inbox"
+    (interactive)
+    (let* ((marginalia-annotator-registry '((multi-category none none none)))
+           (sources (mapcar #'rk-org--setup-source-from-file (vulpea-project-files)))
+           (msources (-concat (rk-org--setup-inbox-source) sources))
+           (resp (consult--multi msources
+                                 :prompt "Add task to: "
+                                 :default "To Inbox"
+                                 :require-match t))
+           (title (car resp))
+           (pl (cdr resp))
+           (org-capture-templates (cond
+                                   ((eq 'file+headline (plist-get pl :target))
+                                    `(("x" "*file+headline*" entry (file+headline ,(plist-get pl :path) ,title)
+                                       "* TODO %?\n" :empty-lines 5)))
+                                   (t
+                                    `(("x" "*file*" entry (file ,(plist-get pl :path))
+                                       "* TODO %?\n" :empty-lines 5))))))
+      (org-capture nil "x")))
+  :config
+  (rk-leader-def
+    "o ." '(rk-org--project-target-sources :wk "capture project TODO")))
+
 (use-package vulpea
   :straight t
   :after org-agenda
