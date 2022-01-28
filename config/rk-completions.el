@@ -118,8 +118,7 @@ ARG is the same as for `backward-kill-sexp'."
 (use-package embark
   :straight t
   :general
-  ("C-." #'embark-act
-   "C-;" #'embark-dwim)
+  ("C-." #'embark-act)
   :init
   (setq prefix-help-command #'embark-prefix-help-command))
 
