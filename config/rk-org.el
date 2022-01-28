@@ -1016,7 +1016,9 @@ Refer to `org-agenda-prefix-format' for more information."
                      title
                      (string-equal category file-name))
                     title
-                  category)
+                  (if (string= category "???")
+                      title
+                    category))
                 "")))
       (if (numberp len)
           (s-truncate len (s-pad-right len " " result))
