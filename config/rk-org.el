@@ -715,11 +715,10 @@ tasks."
            (todo-children-p (org-ql--predicate-children '(todo)))
            (done-p (and subp-p
                         (not todo-children-p))))
+      (when done-p
+        (setq tags (remove "subproject" tags)))
       (when todo-children-p
         (setq tags (cons "subproject" tags)))
-      (when done-p
-        (message "hmm")
-        (setq tags (remove "subproject" tags)))
       (setq tags (seq-uniq tags))
       (when (or (seq-difference tags original-tags)
                 (seq-difference original-tags tags))
