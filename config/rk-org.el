@@ -825,12 +825,14 @@ tasks."
                     :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
                     :immediate-finish t))
                   ((string= type "project")
-                   (vulpea-create
-                    title
-                    (rk-vulpea--org-roam-file-name title)
-                    :tags (-concat tags '("project"))
-                    :body "* Description\n\n* Tasks :subproject:\n\n** NEXT Fill out description"
-                    :immediate-finish t))
+                   (let ((status (completing-read "Project status: "
+                                                  '(("draft" 1) ("in progress" 2) ("abandoned" 3) ("complete" 4)))))
+                     (vulpea-create
+                      title
+                      (rk-vulpea--org-roam-file-name title)
+                      :tags (-concat tags '("project"))
+                      :body (format "* Metadata\n\n- status :: %s\n\n* Description\n\n* Tasks :subproject:\n\n** NEXT Fill out description" status)
+                      :immediate-finish t)))
                   (t
                    (vulpea-create
                     title
