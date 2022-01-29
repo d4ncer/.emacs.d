@@ -1034,7 +1034,30 @@ Refer to `org-agenda-prefix-format' for more information."
       (if (numberp len)
           (s-truncate len (s-pad-right len " " result))
         result)))
+  (defun vulpea-agenda-person ()
+    "Show main `org-agenda' view."
+    (interactive)
+    (let* ((person (vulpea-select
+                    "Person"
+                    :filter-fn
+                    (lambda (note)
+                      (seq-contains-p (vulpea-note-tags note)
+                                      "person"))))
+           (node (org-roam-node-from-id (vulpea-note-id person)))
+           (names (cons (org-roam-node-title node)
+                        (org-roam-node-aliases node)))
+           (tags (seq-map #'rk-vulpea--person-to-tag names))
+           (query (string-join tags "|")))
+      (dlet ((org-agenda-overriding-arguments (list t query)))
+        (org-agenda nil "M"))))
+  :init
+  (rk-leader-def
+    "o p" '(vulpea-agenda-person :wk "for person"))
   :config
+  (setq org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
+                                   (todo . " %i %(vulpea-agenda-category 12) ")
+                                   (tags . " %i %(vulpea-agenda-category 12) ")
+                                   (search . " %i %(vulpea-agenda-category 12) ")))
   (setq org-agenda-custom-commands
         '(("g" "General"
            ((todo "TODO"
