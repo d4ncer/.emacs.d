@@ -732,9 +732,9 @@ tasks."
         (goto-char (point-min))
         (let* ((tags (vulpea-buffer-tags-get))
                (original-tags tags))
+          (org-ql-select (current-buffer) '(level 1) :action #'rk-vulpea--set-subproject)
           (if (vulpea-project-p)
               (progn
-                (org-map-entries #'rk-vulpea--set-subproject "LEVEL=1")
                 (setq tags (cons "project" tags)))
             (setq tags (remove "project" tags)))
 
