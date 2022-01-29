@@ -802,12 +802,9 @@ tasks."
                                                 (string-glyph-decompose s)))))
                  (cl-replace (title pair)
                    (replace-regexp-in-string (car pair) (cdr pair) title)))
-        (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ;; convert anything not alphanumeric
-                        ("__*" . "_")                   ;; remove sequential underscores
-                        ("^_" . "")                     ;; remove starting underscore
-                        ("_$" . "")))                   ;; remove ending underscore
-               (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
-               (ts (format-time-string "%Y%m%d%H%M%S")))
+        (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
+        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+        (ts (format-time-string "%Y%m%d%H%M%S")))
           (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
 
   (defun rk-vulpea--person-to-tag (title)
