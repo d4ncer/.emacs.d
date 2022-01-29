@@ -953,9 +953,6 @@ as its argument a `vulpea-note'."
   (defun rk-org--subproject-title ()
     (when (org-ql--predicate-tags-local "subproject")
       (org-element-property :raw-value (org-element-at-point))))
-  (defun rk-org--get-subprojects ()
-    (org-with-wide-buffer
-     (--keep it (org-map-entries #'rk-org--subproject-title "LEVEL=1"))))
   (defun rk-org--single-subproject-p ()
     (length= (rk-org--get-subprojects) 1))
   (defun rk-org--setup-source-from-file (path)
