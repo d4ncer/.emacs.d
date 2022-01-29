@@ -812,27 +812,40 @@ tasks."
 
   (defun rk-vulpea--create (title &optional insert-p jump-to)
     (let* ((type (completing-read "Note type: "
-                                  '(("default" 1) ("person" 2))
+                                  '(("default" 1) ("person" 2) ("project" 3))
                                   nil t))
            (ca-p (y-or-n-p "Is this note CA related?"))
            (ca-tag (if ca-p "ca" nil))
+           (tags (remq nil (list ca-tag)))
            (note (cond
                   ((string= type "person")
                    (vulpea-create
                     title
                     (rk-vulpea--org-roam-file-name title)
                     :properties '(("CATEGORY" . "person"))
-                    :tags (remq nil (list "person" ca-tag (rk-vulpea--person-to-tag title)))
+                    :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
                     :immediate-finish t))
-                  (t (vulpea-create
-                      title
-                      (rk-vulpea--org-roam-file-name title)
-                      :immediate-finish t
-                      :tags (remq nil (list ca-tag)))))))
-      (when insert-p
-        (insert (org-link-make-string (concat "id:" (vulpea-note-id note)) title)))
-      (when jump-to
-        (find-file (vulpea-note-path note)))))
+                  ((string= type "project")
+                   (vulpea-create
+                    title
+                    (rk-vulpea--org-roam-file-name title)
+                    :tags (-concat tags '("project"))
+                    :body "* Description\n\n* Tasks :subproject:\n\n** NEXT Fill out description"
+                    :immediate-finish t))
+                  (t
+                   (vulpea-create
+                    title
+                    (rk-vulpea--org-roam-file-name title)
+                    :immediate-finish t
+                    :tags tags)))))
+      (progn
+        (vulpea-utils-with-note note
+          (org-align-tags t)
+          (save-buffer))
+        (when insert-p
+          (insert (org-link-make-string (concat "id:" (vulpea-note-id note)) title)))
+        (when jump-to
+          (find-file (vulpea-note-path note))))))
 
   (defun rk-vulpea--insert (&optional filter-fn)
     "Select a node and insert a link to it.
@@ -942,6 +955,8 @@ as its argument a `vulpea-note'."
   (defun rk-org--get-subprojects ()
     (org-with-wide-buffer
      (--keep it (org-map-entries #'rk-org--subproject-title "LEVEL=1"))))
+  (defun rk-org--single-subproject-p ()
+    (length= (rk-org--get-subprojects) 1))
   (defun rk-org--setup-source-from-file (path)
     (vulpea-utils-with-file path
       `(:name ,(vulpea-buffer-title-get)
@@ -1074,7 +1089,7 @@ Refer to `org-agenda-prefix-format' for more information."
   (:keymaps 'minibuffer-local-map
             "C-b" #'citar-insert-preset)
   :preface
-  (autoload #'org-roam-review-set-budding "org-roam-review")
+  (autoload #'org-roam-review-set-seedling "org-roam-review")
   (autoload #'vulpea-buffer-title-set "vulpea-buffer")
 
   (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
@@ -1095,7 +1110,7 @@ Refer to `org-agenda-prefix-format' for more information."
         (erase-buffer)
         (citar-org-roam-make-preamble key)
         (vulpea-buffer-title-set note-meta)
-        (call-interactively #'org-roam-review-set-budding)
+        (call-interactively #'org-roam-review-set-seedling)
         (goto-char (point-max))
         (insert "\n")
         (evil-insert 1))))
@@ -1132,19 +1147,20 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package org-roam-review
   :hook
   (org-mode . org-roam-review-cache-mode)
-  (org-roam-capture-new-node . org-roam-review-set-seedling)
   :commands
   (org-roam-review
    org-roam-review-list-uncategorised
    org-roam-review-list-recently-added)
   :custom
   (org-roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
-  (org-roam-review-ignored-tags '())
+  (org-roam-review-ignored-tags '("project" "daily"))
   :general
   ;; optional bindings for evil-mode compatability.
   (:states '(normal) :keymaps 'org-roam-review-mode-map
            "TAB" 'magit-section-cycle
            "g r" 'org-roam-review-refresh)
+  :preface
+  (autoload 'vulpea-utils-with-note "vulpea-utils")
   :init
   (rk-leader-def
     "o r" '(:ignore t :wk "review")
