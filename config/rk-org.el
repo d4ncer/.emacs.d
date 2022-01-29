@@ -103,11 +103,12 @@ Do not scheduled items or repeating todos."
   (defun rk-org--set-subsequent-siblings-todo-state ()
     "When marking a todo to NEXT, mark all subsequent todos as TODO."
     (save-excursion
-      (while (org-goto-sibling)
-        (when (eq 'todo (org-element-property
-                         :todo-type
-                         (org-element-at-point)))
-          (org-todo "TODO")))))
+      (when (string= org-state "NEXT")
+        (while (org-goto-sibling)
+          (when (eq 'todo (org-element-property
+                           :todo-type
+                           (org-element-at-point)))
+            (org-todo "TODO"))))))
 
   :custom
   (org-tags-exclude-from-inheritance '("subproject"))
