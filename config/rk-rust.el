@@ -23,15 +23,17 @@
   :straight t
   :after lsp-mode
   :mode ("\\.rs\\'" . rust-mode)
+  :general
+  (:keymaps 'rust-mode-map :states '(normal visual)
+            "J" #'lsp-rust-analyzer-join-lines)
   :preface
-  (progn
-    (defun rk-rust--set-local-vars ()
-      (setq lsp-rust-server 'rust-analyzer)
-      (setq-local compile-command "cargo build"))
+  (defun rk-rust--set-local-vars ()
+    (setq lsp-rust-server 'rust-analyzer)
+    (setq-local compile-command "cargo build"))
 
-    (defun rk-rust--setup ()
-      (rk-rust--set-local-vars)
-      (lsp)))
+  (defun rk-rust--setup ()
+    (rk-rust--set-local-vars)
+    (lsp))
 
   :custom
   (rust-rustfmt-bin (executable-find "rustfmt"))
@@ -40,11 +42,10 @@
   ;; Enable backtraces in rust programs run from Emacs.
   (setenv "RUST_BACKTRACE" "1")
 
-  (general-def :keymaps 'rust-mode-map :states 'normal
-    "J" #'rk-utils--chainable-aware-join-line)
-
   (rk-local-leader-def :keymaps 'rust-mode-map
-    "." '(rust-format-buffer :wk "format"))
+    "." '(rust-format-buffer :wk "format")
+    "l m" '(lsp-rust-analyzer-expand-macro :wk "expand rust macro")
+    "l d" '(lsp-rust-analyzer-open-external-docs :wk "open external docs"))
 
   (add-hook 'rust-mode-hook #'rk-rust--setup))
 
