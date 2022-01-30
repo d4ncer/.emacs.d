@@ -1174,7 +1174,7 @@ Refer to `org-agenda-prefix-format' for more information."
    org-roam-review-list-recently-added)
   :custom
   (org-roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
-  (org-roam-review-ignored-tags '("project" "daily"))
+  (org-roam-review-ignored-tags '("daily"))
   :general
   ;; optional bindings for evil-mode compatability.
   (:states '(normal) :keymaps 'org-roam-review-mode-map
