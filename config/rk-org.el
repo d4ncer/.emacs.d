@@ -939,6 +939,12 @@ as its argument a `vulpea-note'."
   (rk-leader-def
     "of" '(rk-org--non-diary-notes :wk "find file node"))
   :config
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "m"   '(:ignore t :wk "meta")
+    "m a" '(vulpea-meta-add :wk "add")
+    "m A" '(vulpea-meta-add-list :wk "add list")
+    "m x" '(vulpea-meta-remove :wk "remove")
+    "m X" '(vulpea-meta-clean :wk "remove all"))
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
   (add-hook 'find-file-hook #'vulpea-project-update-tag)
   (add-hook 'before-save-hook #'vulpea-project-update-tag)
