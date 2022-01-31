@@ -734,6 +734,10 @@ tasks."
                 (seq-difference original-tags tags))
         (org-set-tags tags))))
 
+  (defun rk-vulpea--project-status ()
+    (completing-read "Project status: "
+                     '(("draft" 1) ("in progress" 2) ("abandoned" 3) ("complete" 4))))
+
   (defun vulpea-project-update-tag ()
     "Update PROJECT tag in the current buffer."
     (when (and (not (active-minibuffer-window))
@@ -835,8 +839,7 @@ tasks."
                     :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
                     :immediate-finish t))
                   ((string= type "project")
-                   (let ((status (completing-read "Project status: "
-                                                  '(("draft" 1) ("in progress" 2) ("abandoned" 3) ("complete" 4)))))
+                   (let ((status (rk-vulpea--project-status)))
                      (vulpea-create
                       title
                       (rk-vulpea--org-roam-file-name title)
@@ -942,6 +945,14 @@ as its argument a `vulpea-note'."
                 (cons
                  (rk-vulpea--person-to-tag title)
                  (org-get-tags nil t))))))))))
+
+  (defun rk-vulpea--update-project-status ()
+    (interactive)
+    (if-let* ((project-p (vulpea-project-p))
+              (status (rk-vulpea--project-status)))
+        (vulpea-buffer-meta-set "status" status)
+      (message "Can only set project status in PROJECTs")))
+
   :general
   (:keymaps 'org-mode-map
             "C-c i" #'rk-vulpea--insert)
