@@ -47,6 +47,12 @@
             "/" #'rk-org--italicize
             "+" #'rk-org--strike-through
             "=" #'rk-org--quote)
+  (:keymaps 'org-read-date-minibuffer-local-map
+            "C-n" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-day 1)))
+            "C-p" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1)))
+            "C-t" (lambda () (interactive) (org-eval-in-calendar '(calendar-goto-today)))
+            "C-j" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-month 1)))
+            "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-month 1))))
   :preface
   (autoload 'outline-forward-same-level "outline")
   (defun rk-org--deemphasize ()
