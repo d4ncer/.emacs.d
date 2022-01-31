@@ -984,6 +984,7 @@ as its argument a `vulpea-note'."
       (org-element-property :raw-value (org-element-at-point))))
   (defun rk-org--single-subproject-p ()
     (length= (rk-org--get-subprojects) 1))
+
   (defun rk-org--setup-source-from-file (path)
     (vulpea-utils-with-file path
       `(:name ,(vulpea-buffer-title-get)
@@ -991,6 +992,7 @@ as its argument a `vulpea-note'."
               :target file+headline
               :path ,path
               :items ,(rk-org--get-subprojects))))
+
   (defun rk-org--setup-inbox-source ()
     (let ((path (f-join org-roam-directory "20220128063937-inbox.org")))
       (list `(:name "To Inbox"
