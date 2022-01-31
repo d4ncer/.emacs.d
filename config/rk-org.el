@@ -415,7 +415,7 @@ Do not scheduled items or repeating todos."
       (org-remove-empty-drawer-at (point))))
 
   :config
-  (rk-local-leader-def :keyamps 'org-mode-map
+  (rk-local-leader-def :keymaps 'org-mode-map
     "uc" '(org-clock-transient :wk "clock"))
   (org-clock-persistence-insinuate)
   (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t))
