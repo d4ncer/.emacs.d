@@ -824,7 +824,7 @@ tasks."
 
   (defun rk-vulpea--create (title &optional insert-p jump-to)
     (let* ((type (completing-read "Note type: "
-                                  '(("default" 1) ("person" 2) ("project" 3))
+                                  '(("default" 1) ("person" 2) ("project" 3) ("article" 4))
                                   nil t))
            (ca-p (y-or-n-p "Is this note CA related?"))
            (ca-tag (if ca-p "ca" nil))
@@ -838,6 +838,18 @@ tasks."
                     :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
                     :body "* Metadata\n\n- type :: person\n\n* Description\n\n"
                     :immediate-finish t))
+                  ((string= type "article")
+                   (let* ((url (read-string "URL: "))
+                          (domain (ignore-errors (url-domain (url-generic-parse-url url))))
+                          (desc (if domain
+                                    (org-link-make-string url domain)
+                                  url)))
+                     (vulpea-create
+                      title
+                      (rk-vulpea--org-roam-file-name title)
+                      :tags (-concat tags '("article"))
+                      :body (format "* Metadata\n\n- url :: %s\n\n* Notes\n\n" desc)
+                      :immediate-finish t)))
                   ((string= type "project")
                    (let ((status (rk-vulpea--project-status)))
                      (vulpea-create
