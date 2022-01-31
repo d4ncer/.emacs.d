@@ -1221,7 +1221,9 @@ Refer to `org-agenda-prefix-format' for more information."
   :commands
   (org-roam-review
    org-roam-review-list-uncategorised
-   org-roam-review-list-recently-added)
+   org-roam-review-list-recently-added
+   org-roam-review-set-seedling
+   org-roam-review-set-excluded)
   :custom
   (org-roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
   (org-roam-review-ignored-tags '("daily"))
@@ -1231,7 +1233,12 @@ Refer to `org-agenda-prefix-format' for more information."
            "TAB" 'magit-section-cycle
            "g r" 'org-roam-review-refresh)
   :preface
-  (autoload 'vulpea-utils-with-note "vulpea-utils")
+  (autoload 'vulpea-buffer-tags-get "vulpea-buffer")
+  (defun rk-orr--review-note-p ()
+    (when-let* ((tags (vulpea-buffer-tags-get))
+                (valid-p (not (-intersection tags org-roam-review-ignored-tags)))
+                (review-p (y-or-n-p "Review this note?")))
+      (org-roam-review-set-seedling)))
   :init
   (rk-leader-def
     "o r" '(:ignore t :wk "review")
@@ -1239,6 +1246,7 @@ Refer to `org-agenda-prefix-format' for more information."
     "o r u" '(org-roam-review-list-uncategorised :wk "to categorize")
     "o r r" '(org-roam-review-list-recently-added :wk "recently added"))
   :config
+  (add-hook 'org-roam-capture-new-node-hook #'rk-orr--review-note-p)
   (add-to-list 'display-buffer-alist
                `(,(rx bos "*org-roam-review*" eos)
                  (display-buffer-in-direction)
