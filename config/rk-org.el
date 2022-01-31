@@ -995,17 +995,18 @@ as its argument a `vulpea-note'."
   (defun rk-org--setup-inbox-source ()
     (let ((path (f-join org-roam-directory "20220128063937-inbox.org")))
       (list `(:name "To Inbox"
-                    :category rk/capture-targets
+                    :category file
                     :target file
                     :path ,path
                     :items ,(list "Inbox")))))
+
+  ;; TODO fix this function, it no work
   (defun rk-org--capture-to-project-or-inbox ()
     "Capture a TODO to an existing subproject or to inbox"
     (interactive)
     (let* ((marginalia-annotator-registry '((multi-category none none none)))
-           (sources (mapcar #'rk-org--setup-source-from-file (vulpea-project-files)))
-           (msources (-concat (rk-org--setup-inbox-source) sources))
-           (resp (consult--multi msources
+           (sources (rk-org--))
+           (resp (consult--multi sources
                                  :prompt "Add task to: "
                                  :default "To Inbox"
                                  :require-match t))
@@ -1021,7 +1022,7 @@ as its argument a `vulpea-note'."
       (org-capture nil "x")))
   :config
   (rk-leader-def
-    "o ." '(rk-org--project-target-sources :wk "capture project TODO")))
+    "o ." '(rk-org--capture-to-project-or-inbox :wk "capture project TODO")))
 
 (use-package vulpea
   :straight t
