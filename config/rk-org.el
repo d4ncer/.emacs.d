@@ -37,7 +37,9 @@
             "M-p"     #'org-metaup
             "M-n"     #'org-metadown)
   (:keymaps 'org-mode-map :states '(normal visual motion)
-            "gb" #'org-mark-ring-goto)
+            "gb" #'org-mark-ring-goto
+            "C-n" #'org-next-visible-heading
+            "C-p" #'org-previous-visible-heading)
   (:keymaps 'org-mode-map :states '(visual)
             "-" #'rk-org--deemphasize
             "B" #'rk-org--embolden
