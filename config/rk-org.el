@@ -836,7 +836,7 @@ tasks."
                     (rk-vulpea--org-roam-file-name title)
                     :properties '(("CATEGORY" . "person"))
                     :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
-                    :body "* Metadata\n\n- type :: person\n\n* Description\n\n"
+                    :body "* Metadata\n\n- type :: person\n\n* Notes\n\n* Events\n\n"
                     :immediate-finish t))
                   ((string= type "article")
                    (let* ((url (read-string "URL: "))
