@@ -167,9 +167,8 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-mode-hook #'auto-fill-mode)
   (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
   (rk-local-leader-def :keymaps 'org-mode-map
-    "t"  '(:ignore t :wk "time")
-    "td" '(org-deadline :wk "deadline")
-    "ts" '(org-schedule :wk "schedule")
+    "d" '(org-deadline :wk "deadline")
+    "s" '(org-schedule :wk "schedule")
 
     "u"  '(:ignore t :wk "utils")
 
@@ -655,13 +654,16 @@ table tr.tr-even td {
     "oB" '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
 
     "od"  '(:ignore t :wk "date")
+    "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
     "odt" '(org-roam-dailies-goto-today :wk "today")
     "odd" '(org-roam-dailies-goto-date :wk "for date")
     "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
     "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
-  (rk-local-leader-def :keymaps 'org-mode-map
-    "d" '(rk-org-roam--daily-utils/body :wk "daily"))
   :config
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "t" '(:ignore t :wk "tags")
+    "ta" '(org-roam-tag-add :wk "add filetag(s)")
+    "tx" '(org-roam-tag-remove :wk "remove filetag(s)"))
   (cl-defmethod org-roam-node-directories ((node org-roam-node))
     (if-let ((dirs (file-name-directory (file-relative-name (org-roam-node-file node) org-roam-directory))))
         (format "(%s)" (car (f-split dirs)))
@@ -952,7 +954,8 @@ as its argument a `vulpea-note'."
     "m a" '(vulpea-meta-add :wk "add")
     "m A" '(vulpea-meta-add-list :wk "add list")
     "m x" '(vulpea-meta-remove :wk "remove")
-    "m X" '(vulpea-meta-clean :wk "remove all"))
+    "m X" '(vulpea-meta-clean :wk "remove all")
+    "m p" '(rk-vulpea--update-project-status :wk "project status"))
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
   (add-hook 'find-file-hook #'vulpea-project-update-tag)
   (add-hook 'before-save-hook #'vulpea-project-update-tag)
