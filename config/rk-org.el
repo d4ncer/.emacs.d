@@ -837,6 +837,7 @@ tasks."
                     (rk-vulpea--org-roam-file-name title)
                     :properties '(("CATEGORY" . "person"))
                     :tags (-concat tags `("person" ,(rk-vulpea--person-to-tag title)))
+                    :body "* Metadata\n\n- type :: person\n\n* Description\n\n"
                     :immediate-finish t))
                   ((string= type "project")
                    (let ((status (rk-vulpea--project-status)))
