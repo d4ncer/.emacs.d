@@ -846,8 +846,8 @@ tasks."
                  (cl-replace (title pair)
                    (replace-regexp-in-string (car pair) (cdr pair) title)))
         (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
-        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
-        (ts (format-time-string "%Y%m%d%H%M%S")))
+               (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+               (ts (format-time-string "%Y%m%d%H%M%S")))
           (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
 
   (defun rk-vulpea--person-to-tag (title)
@@ -1003,6 +1003,8 @@ as its argument a `vulpea-note'."
   (rk-leader-def
     "of" '(rk-org--non-diary-notes :wk "find file node"))
   :config
+  (ignore-errors
+    (org-roam-db-sync 'force))
   (rk-local-leader-def :keymaps 'org-mode-map
     "m"   '(:ignore t :wk "meta")
     "m a" '(vulpea-meta-add :wk "add")
