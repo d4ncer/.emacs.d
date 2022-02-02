@@ -168,6 +168,7 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
   (rk-local-leader-def :keymaps 'org-mode-map
     "d" '(org-deadline :wk "deadline")
+    "R" '(org-refile :wk "refile")
     "s" '(org-schedule :wk "schedule")
 
     "u"  '(:ignore t :wk "utils")
@@ -788,7 +789,11 @@ tasks."
           ;; update tags if changed
           (when (or (seq-difference tags original-tags)
                     (seq-difference original-tags tags))
-            (apply #'vulpea-buffer-tags-set tags))))))
+            ;; KLUDGE Setting refile targets hackily here.
+            ;; Fix this.
+            (progn
+              (apply #'vulpea-buffer-tags-set tags)
+              (setq org-refile-targets `((,(vulpea-project-files) :tag . "subproject")))))))))
 
   (defun vulpea-buffer-p ()
     "Return non-nil if the currently visited buffer is a note."
