@@ -1228,7 +1228,7 @@ Refer to `org-agenda-prefix-format' for more information."
         (vulpea-buffer-title-set note-meta)
         (call-interactively #'org-roam-review-set-seedling)
         (goto-char (point-max))
-        (insert "\n")
+        (insert "\n* First read\n\n* Key insights\n\n* Further thinking required")
         (evil-insert 1))))
   :custom
   (citar-notes-paths `(,rk-roam-refs-dir))
