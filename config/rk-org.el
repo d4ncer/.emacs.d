@@ -1070,9 +1070,17 @@ as its argument a `vulpea-note'."
                                     `(("x" "*file*" entry (file ,(plist-get pl :path))
                                        "* TODO %?\n" :empty-lines 5))))))
       (org-capture nil "x")))
+
+  (defun rk-org--capture-to-inbox ()
+    "Capture TODO to inbox."
+    (interactive)
+    (let* ((path (f-join org-roam-directory "20220128063937-inbox.org"))
+           (org-capture-templates `(("t" "*file*" entry (file ,path)
+                                     "* TODO %?\n" :empty-lines 1))))
+      (org-capture nil "t")))
   :config
   (rk-leader-def
-    "o ." '(rk-org--capture-to-project-or-inbox :wk "capture project TODO")))
+    "o ." '(rk-org--capture-to-inbox :wk "capture to inbox")))
 
 (use-package vulpea
   :straight t
