@@ -789,11 +789,12 @@ tasks."
           ;; update tags if changed
           (when (or (seq-difference tags original-tags)
                     (seq-difference original-tags tags))
-            ;; KLUDGE Setting refile targets hackily here.
-            ;; Fix this.
-            (progn
-              (apply #'vulpea-buffer-tags-set tags)
-              (setq org-refile-targets `((,(vulpea-project-files) :tag . "subproject")))))))))
+            (apply #'vulpea-buffer-tags-set tags))))))
+
+  ;; KLUDGE Setting refile targets hackily here.
+  ;; Fix this.
+  (defun rk-vulpea--refresh-refile-targets ()
+    (setq org-refile-targets `((,(vulpea-project-files) :tag . "subproject"))))
 
   (defun vulpea-buffer-p ()
     "Return non-nil if the currently visited buffer is a note."
@@ -1020,6 +1021,7 @@ as its argument a `vulpea-note'."
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
   (add-hook 'find-file-hook #'vulpea-project-update-tag)
   (add-hook 'before-save-hook #'vulpea-project-update-tag)
+  (add-hook 'after-save-hook #'rk-vulpea--refresh-refile-targets)
   (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
 
 (use-package org-capture
