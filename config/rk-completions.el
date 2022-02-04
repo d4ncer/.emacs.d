@@ -147,6 +147,8 @@ ARG is the same as for `backward-kill-sexp'."
   :hook (after-init . global-company-mode)
 
   :general
+  (:keymaps 'company-mode-map :states '(insert)
+            "C-;" #'company-complete)
   (:keymaps 'company-active-map
             "C-w" nil
             "C-j" #'company-select-next-or-abort
