@@ -20,11 +20,6 @@
 (require 'transient)
 
 (defvar org-directory paths--org-dir)
-(defconst rk-org-gtd-dir (f-join paths--org-dir "gtd"))
-(defconst rk-org-roam-dir (f-join paths--org-dir "roam"))
-(defconst rk-org-roam-dailies-dir (f-join rk-org-roam-dir "daily"))
-(defconst rk-org-roam-temporal-prefix "%<%Y%m%d%H%M%S>")
-(defvar rk-bib-refs-file (f-join paths--dropbox-dir "org/bib/references.bib"))
 
 (use-package org
   :straight t
@@ -261,7 +256,7 @@ Do not scheduled items or repeating todos."
 (use-package org-attach
   :after org
   :custom
-  (org-attach-id-dir (f-join paths--org-dir "data")))
+  (org-attach-id-dir rk-org--data-dir))
 
 (use-package org-agenda
   :after org
@@ -314,7 +309,6 @@ Do not scheduled items or repeating todos."
   (org-agenda-include-diary nil)
   (org-agenda-start-on-weekday nil)
   (org-agenda-auto-exclude-function #'rk-org--exclude-tasks-on-hold)
-  (org-agenda-files (f-files paths--gtd-dir (lambda (f) (f-ext? f "org"))))
   (org-agenda-hide-tags-regexp (rx (or "noexport" "someday" "project")))
   (org-agenda-insert-diary-extract-time t)
   (org-agenda-span 'week)
@@ -429,7 +423,7 @@ Do not scheduled items or repeating todos."
   (org-clock-in-resume t)
   (org-clock-report-include-clocking-task t)
   (org-clock-out-remove-zero-time-clocks t)
-  (org-clock-persist-file (f-join rk-org-roam-dir ".org-clock-save"))
+  (org-clock-persist-file (f-join rk-org--roam-dir ".org-clock-save"))
 
   :preface
   (autoload 'org-remove-empty-drawer-at "org")
@@ -677,7 +671,7 @@ table tr.tr-even td {
             "SPC" nil
             "<return>" #'rk-org-roam--visit-grep-other-window)
   :custom
-  (org-roam-directory rk-org-roam-dir)
+  (org-roam-directory rk-org--roam-dir)
   (org-roam-dailies-capture-templates '(("d" "default" entry "* %?" :target
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n"))))
   :init
@@ -730,8 +724,8 @@ table tr.tr-even td {
   (use-package org-ql
     :straight t)
   (defun rk-org--filter-non-diary-notes (note)
-    (and (not (f-child-of-p (vulpea-note-path note) rk-org-roam-dailies-dir))
-         (not (f-child-of-p (vulpea-note-path note) rk-roam-refs-dir))))
+    (and (not (f-child-of-p (vulpea-note-path note) rk-org--roam-dailies-dir))
+         (not (f-child-of-p (vulpea-note-path note) rk-org--roam-refs-dir))))
 
   (defun vulpea-project-p ()
     "Return non-nil if current buffer has any todo entry.
@@ -1030,53 +1024,37 @@ as its argument a `vulpea-note'."
   (use-package org-ql
     :straight t)
   (require 'org-ql)
+  (autoload 'org-element-at-point "org-element")
+
   (defun rk-org--subproject-title ()
     (when (org-ql--predicate-tags-local "subproject")
       (org-element-property :raw-value (org-element-at-point))))
-  (defun rk-org--single-subproject-p ()
-    (length= (rk-org--get-subprojects) 1))
-
-  (defun rk-org--setup-source-from-file (path)
-    (vulpea-utils-with-file path
-      `(:name ,(vulpea-buffer-title-get)
-              :category rk/capture-targets
-              :target file+headline
-              :path ,path
-              :items ,(rk-org--get-subprojects))))
-
-  (defun rk-org--setup-inbox-source ()
-    (let ((path (f-join org-roam-directory "20220128063937-inbox.org")))
-      (list `(:name "To Inbox"
-                    :category file
-                    :target file
-                    :path ,path
-                    :items ,(list "Inbox")))))
 
   ;; TODO fix this function, it no work
-  (defun rk-org--capture-to-project-or-inbox ()
-    "Capture a TODO to an existing subproject or to inbox"
-    (interactive)
-    (let* ((marginalia-annotator-registry '((multi-category none none none)))
-           (sources (rk-org--))
-           (resp (consult--multi sources
-                                 :prompt "Add task to: "
-                                 :default "To Inbox"
-                                 :require-match t))
-           (title (car resp))
-           (pl (cdr resp))
-           (org-capture-templates (cond
-                                   ((eq 'file+headline (plist-get pl :target))
-                                    `(("x" "*file+headline*" entry (file+headline ,(plist-get pl :path) ,title)
-                                       "* TODO %?\n" :empty-lines 5)))
-                                   (t
-                                    `(("x" "*file*" entry (file ,(plist-get pl :path))
-                                       "* TODO %?\n" :empty-lines 5))))))
-      (org-capture nil "x")))
+  ;; (defun rk-org--capture-to-project-or-inbox ()
+  ;;   "Capture a TODO to an existing subproject or to inbox"
+  ;;   (interactive)
+  ;;   (let* ((marginalia-annotator-registry '((multi-category none none none)))
+  ;;          (sources (rk-org--))
+  ;;          (resp (consult--multi sources
+  ;;                                :prompt "Add task to: "
+  ;;                                :default "To Inbox"
+  ;;                                :require-match t))
+  ;;          (title (car resp))
+  ;;          (pl (cdr resp))
+  ;;          (org-capture-templates (cond
+  ;;                                  ((eq 'file+headline (plist-get pl :target))
+  ;;                                   `(("x" "*file+headline*" entry (file+headline ,(plist-get pl :path) ,title)
+  ;;                                      "* TODO %?\n" :empty-lines 5)))
+  ;;                                  (t
+  ;;                                   `(("x" "*file*" entry (file ,(plist-get pl :path))
+  ;;                                      "* TODO %?\n" :empty-lines 5))))))
+  ;;     (org-capture nil "x")))
 
   (defun rk-org--capture-to-inbox ()
     "Capture TODO to inbox."
     (interactive)
-    (let* ((path (f-join org-roam-directory "20220128063937-inbox.org"))
+    (let* ((path rk-org--roam-inbox)
            (org-capture-templates `(("t" "*file*" entry (file ,path)
                                      "* TODO %?\n" :empty-lines 1))))
       (org-capture nil "t")))
@@ -1195,7 +1173,7 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package ebib
   :straight t
   :custom
-  (ebib-preload-bib-files `(,rk-bib-refs-file)))
+  (ebib-preload-bib-files `(,rk-bib--refs-file)))
 
 (use-package citar
   :straight t
@@ -1208,15 +1186,13 @@ Refer to `org-agenda-prefix-format' for more information."
   (autoload #'org-roam-review-set-seedling "org-roam-review")
   (autoload #'vulpea-buffer-title-set "vulpea-buffer")
 
-  (defvar rk-roam-refs-dir (f-join rk-org-roam-dir "references/"))
-  (defvar rk-bib-lib-dir (f-join paths--dropbox-dir "bib_files"))
   (defun rk-citar--idle-refresh-cache ()
     "Generate bib item caches with idle timer."
     (run-with-idle-timer 0.5 nil #'citar-refresh))
   (defun rk-citar--goto-bib ()
     "Open the bib file."
     (interactive)
-    (find-file rk-bib-refs-file))
+    (find-file rk-bib--refs-file))
   (defun rk-citar--format-note (key entry filepath)
     (let* ((template "${title}; ${author editor}")
            (note-meta
@@ -1231,13 +1207,13 @@ Refer to `org-agenda-prefix-format' for more information."
         (insert "\n* First read\n\n* Key insights\n\n* Further thinking required")
         (evil-insert 1))))
   :custom
-  (citar-notes-paths `(,rk-roam-refs-dir))
-  (citar-library-paths `(,rk-bib-lib-dir))
-  (org-cite-global-bibliography `(,rk-bib-refs-file))
+  (citar-notes-paths `(,rk-org--roam-refs-dir))
+  (citar-library-paths `(,rk-bib--lib-dir))
+  (org-cite-global-bibliography `(,rk-bib--refs-file))
   (org-cite-insert-processor 'citar)
   (org-cite-follow-processor 'citar)
   (org-cite-activate-processor 'citar)
-  (citar-bibliography `(,rk-bib-refs-file))
+  (citar-bibliography `(,rk-bib--refs-file))
   (citar-format-note-function #'rk-citar--format-note)
   :init
   (rk-leader-def
@@ -1270,7 +1246,7 @@ Refer to `org-agenda-prefix-format' for more information."
    org-roam-review-set-seedling
    org-roam-review-set-excluded)
   :custom
-  (org-roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
+  (org-roam-review-cache-file rk-org--roam-review-cache-file)
   (org-roam-review-ignored-tags '("daily"))
   :general
   ;; optional bindings for evil-mode compatability.

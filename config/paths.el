@@ -71,16 +71,19 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst paths--life-dir (f-join paths--org-dir "life"))
 (defconst paths--accounts-dir (f-join paths--org-dir "accounts"))
 
-(defconst rk-org--diary-file (f-join paths--life-dir "diary.org"))
-(defconst rk-org--consume-file (f-join paths--life-dir "consume.org"))
+(defconst rk-org--data-dir (f-join paths--org-dir "data"))
 
-(defconst rk-org--inbox-file (f-join paths--gtd-dir "inbox.org"))
-(defconst rk-org--next-file (f-join paths--gtd-dir "next.org"))
-(defconst rk-org--tickler-file (f-join paths--gtd-dir "tickler.org"))
-(defconst rk-org--someday-file (f-join paths--gtd-dir "someday.org"))
-(defconst rk-org--work-projects-file (f-join paths--gtd-dir "projects-work.org"))
-(defconst rk-org--personal-projects-file (f-join paths--gtd-dir "projects-personal.org"))
-(defconst rk-org--reference-file (f-join paths--gtd-dir "reference.org"))
+(defconst rk-org--roam-dir (f-join paths--org-dir "roam"))
+(defconst rk-org--roam-dailies-dir (f-join rk-org--roam-dir "daily"))
+(defconst rk-org--roam-temporal-prefix "%<%Y%m%d%H%M%S>")
+(defconst rk-org--roam-inbox (f-join rk-org--roam-dir "20220128063937-inbox.org"))
+(defconst rk-org--roam-refs-dir (f-join rk-org--roam-dir "references/"))
+
+(defconst rk-org--roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
+
+(defconst rk-bib--lib-dir (f-join paths--dropbox-dir "bib_files"))
+(defconst rk-bib--refs-file (f-join paths--org-dir "bib/references.bib"))
+
 (defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
 
 (provide 'paths)
