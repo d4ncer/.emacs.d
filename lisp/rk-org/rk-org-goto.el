@@ -26,6 +26,12 @@
   (interactive)
   (org-tags-view nil))
 
+;;;###autoload
+(defun rk-org-goto-inbox ()
+  "Go to inbox."
+  (interactive)
+  (find-file rk-org--roam-inbox))
+
 (provide 'rk-org-goto)
 
 ;;; rk-org-goto.el ends here

@@ -550,7 +550,8 @@ table tr.tr-even td {
   (rk-leader-def
     "o g"  '(:ignore t :wk "goto")
     "o g t"  '(rk-org-goto-todo-list :wk "todos")
-    "o g v"  '(rk-org-goto-tags-list :wk "tags")))
+    "o g v"  '(rk-org-goto-tags-list :wk "tags")
+    "o g i"  '(rk-org-goto-inbox :wk "inbox")))
 
 (use-package evil-org
   :straight t
