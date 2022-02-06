@@ -998,7 +998,8 @@ as its argument a `vulpea-note'."
 
   (defun rk-vulpea--update-project-status ()
     (interactive)
-    (if-let* ((project-p (vulpea-project-p))
+    (if-let* ((project-p (or (vulpea-project-p)
+                             (vulpea-buffer-meta-get! (vulpea-buffer-meta) "status" 'string)))
               (status (rk-vulpea--project-status)))
         (vulpea-buffer-meta-set "status" status)
       (message "Can only set project status in PROJECTs")))
