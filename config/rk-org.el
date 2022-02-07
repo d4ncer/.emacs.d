@@ -856,7 +856,7 @@ tasks."
 
   (defun rk-vulpea--create (title &optional insert-p jump-to)
     (let* ((type (completing-read "Note type: "
-                                  '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6))
+                                  '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6) ("technology" 7))
                                   nil t))
            (ca-p (y-or-n-p "Is this note CA related?"))
            (ca-tag (if ca-p "ca" nil))
@@ -903,6 +903,13 @@ tasks."
                     (rk-vulpea--org-roam-file-name title)
                     :tags (-concat tags '("org"))
                     :body (format "* Metadata\n\n- type :: org structure\n\n* Description\n\n")
+                    :immediate-finish t))
+                  ((string= type "technology")
+                   (vulpea-create
+                    title
+                    (rk-vulpea--org-roam-file-name title)
+                    :tags (-concat tags '("technology"))
+                    :body (format "* Metadata\n\n- type :: technology\n\n* Description\n\n* Notes\n\n")
                     :immediate-finish t))
                   (t
                    (vulpea-create
