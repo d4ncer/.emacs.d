@@ -204,6 +204,7 @@
 (use-package rk-hashicorp)
 (use-package rk-nix)
 (use-package rk-ruby)
+(use-package rk-clojure)
 
 (use-package private-config
   :when (f-dir-p "~/private")
