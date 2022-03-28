@@ -104,6 +104,14 @@
             (s-join "|" (-concat '("") (rk-ledger--non-expense-accounts-list)))
             (s-join "|" (-concat '("") (rk-ledger--non-expense-accounts-list)))))
 
+
+  :init
+  (rk-local-leader-def :keymaps 'ledger-mode-map
+    "c" '(:ignore t :wk "capture")
+    "c j" '((lambda () (interactive) (org-capture nil "lj")) :wk "joint")
+    "c a" '((lambda () (interactive) (org-capture nil "la")) :wk "xfer")
+    "c c" '((lambda () (interactive) (org-capture nil "lc")) :wk "credit card")
+    "c s" '((lambda () (interactive) (org-capture nil "ls")) :wk "savings"))
   :config
   (add-hook 'org-capture-before-finalize-hook #'rk-ledger--align-ledger-clean-buffer)
   (let ((templates org-capture-templates)
@@ -133,13 +141,7 @@
                             '(file rk-accounts--ledger-file)
                             '(function rk-ledger--expense-template)
                             :account "Assets:Joint Checking"))))
-    (setq org-capture-templates (-concat templates ledger-templates)))
-  (rk-local-leader-def :keymap 'ledger-mode-map
-    "c" '(:ignore t :wk "capture")
-    "c j" '((lambda () (interactive) (org-capture nil "lj")) :wk "joint")
-    "c a" '((lambda () (interactive) (org-capture nil "la")) :wk "xfer")
-    "c c" '((lambda () (interactive) (org-capture nil "lc")) :wk "credit card")
-    "c s" '((lambda () (interactive) (org-capture nil "ls")) :wk "savings")))
+    (setq org-capture-templates (-concat templates ledger-templates))))
 
 (use-package flycheck-ledger
   :straight t
