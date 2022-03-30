@@ -131,6 +131,7 @@
     "." '(prettier-prettify :wk "format")))
 
 (use-package tree-sitter-langs
+  :straight t
   :after typescript-mode
   :init
   :config

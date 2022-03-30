@@ -18,17 +18,9 @@
 (require 'f)
 
 (use-package tree-sitter
-  :if (f-exists-p paths-tree-sitter-src-dir)
-  :custom
-  ;; Favour compilation rather than pulling binaries
-  ;; from github until tree-sitter puts up m1 binaries.
-  (tsc-dyn-get-from '(:compilation))
+  :straight t
   :commands (global-tree-sitter-mode tree-sitter-hl-mode)
   :config
-  (require 'tree-sitter-hl)
-  (require 'tree-sitter-langs)
-  (require 'tree-sitter-debug)
-  (require 'tree-sitter-query)
   (global-tree-sitter-mode 1)
   (add-hook 'tree-sitter-mode-hook #'tree-sitter-hl-mode))
 

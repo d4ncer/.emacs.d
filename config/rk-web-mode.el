@@ -111,6 +111,7 @@
     "." '(stylefmt-format-buffer :wk "format")))
 
 (use-package tree-sitter-langs
+  :straight t
   :after rk-web-modes
   :config
   (dolist (entry '((rk-web-css-mode . css) (rk-web-html-mode . html) (rk-web-js-mode . javascript))) (add-to-list 'tree-sitter-major-mode-language-alist entry)))
