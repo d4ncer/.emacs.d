@@ -127,6 +127,7 @@
   :straight (:host github :repo "magit/forge")
   :after magit
   :custom
+  (forge-database-file (f-join paths-cache-directory "forge-db.sqlite"))
   (forge-add-default-sections nil)
   (forge-add-default-bindings nil))
 
