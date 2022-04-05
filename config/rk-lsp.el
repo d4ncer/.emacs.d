@@ -152,7 +152,10 @@
   :straight t
   :custom
   (dumb-jump-selector 'completing-read)
-  (dumb-jump-force-searcher 'rg))
+  (dumb-jump-force-searcher 'rg)
+  :config
+  (add-hook 'xref-backend-functions #'dumb-jump-xref-activate))
+
 
 (provide 'rk-lsp)
 
