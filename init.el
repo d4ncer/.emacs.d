@@ -205,6 +205,7 @@
 (use-package rk-nix)
 (use-package rk-ruby)
 (use-package rk-clojure)
+(use-package rk-java)
 
 (use-package private-config
   :when (f-dir-p "~/private")

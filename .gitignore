@@ -30,3 +30,9 @@ session.*
 
 # Org
 org-roam.db
+
+# lsp-mode
+workspace
+
+# jdtls
+.dap-breakpoints
