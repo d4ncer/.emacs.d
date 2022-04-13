@@ -74,6 +74,13 @@
   (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
   (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
 
+(use-package rk-web-modes
+  :after lsp
+  :init
+  (add-to-list 'lsp-language-id-configuration '(rk-web-js-mode . "javascript"))
+  :config
+  (add-hook 'rk-web-js-mode-hook #'lsp))
+
 (use-package rk-flycheck-stylelint
   :after flycheck
   :preface
