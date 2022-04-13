@@ -43,7 +43,8 @@
      :states 'normal
      :keymaps 'local
      "gd" #'lsp-find-definition
-     "K" #'lsp-describe-thing-at-point)
+     "K" #'lsp-describe-thing-at-point
+     "T" #'lsp-goto-type-definition)
     (when (rk-lsp--lsp-company-mode-p)
       (general-define-key
        :states 'insert
