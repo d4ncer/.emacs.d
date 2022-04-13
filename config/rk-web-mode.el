@@ -45,6 +45,7 @@
 (use-package rk-web-modes
   :mode (("\\.es6\\'"  . rk-web-js-mode)
          ("\\.jsx?\\'" . rk-web-js-mode)
+         ("\\.mjs\\'" . rk-web-js-mode)
          ("\\.css\\'"  . rk-web-css-mode)
          ("\\.scss\\'"  . rk-web-css-mode)
          ("\\.html\\'" . rk-web-html-mode))
