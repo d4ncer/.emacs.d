@@ -9,9 +9,10 @@
 ;;; Code:
 
 (require 'web-mode)
+(require 'js)
 
 ;;;###autoload
-(define-derived-mode rk-web-js-mode web-mode "JS"
+(define-derived-mode rk-web-js-mode js-mode "JS"
   "Derived mode for editing JavaScript files.")
 
 ;;;###autoload
