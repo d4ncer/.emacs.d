@@ -58,7 +58,8 @@
   :config (git-commit-clubhouse-prefix-init))
 
 (use-package git-commit-jira-prefix
-  :commands git-commit-jira-prefix-init
+  :demand t
+  :commands (git-commit-jira-prefix-init)
   :config (git-commit-jira-prefix-init))
 
 (use-package git-timemachine
