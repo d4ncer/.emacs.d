@@ -29,6 +29,7 @@
   :preface
   (defun rk-rust--set-local-vars ()
     (setq lsp-rust-server 'rust-analyzer)
+    (setq lsp-rust-analyzer-proc-macro-enable t)
     (setq-local compile-command "cargo build"))
 
   (defun rk-rust--setup ()
