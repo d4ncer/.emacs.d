@@ -9,23 +9,22 @@
 
 (require 'definers)
 
-;; TS + LSP (Disabled for now)
+;; TS + LSP (WE GONNA TRY IT)
 
 (use-package typescript-mode
+  :straight t
   :after lsp
-  :disabled t
   :config
   (add-hook 'rk-ts-tsx-mode-hook #'lsp))
 
 (use-package typescript-mode
   :straight t
-  :disabled t
   :after lsp
   :hook (typescript-mode . lsp)
   :init
   (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
 
-;; TS + Tide (We like this)
+;; TS + Tide (We like this, but trying LSP)
 
 (use-package typescript-mode
   :straight t
@@ -47,6 +46,7 @@
 
 (use-package tide
   :straight t
+  :disabled t
   :after typescript-mode
   :commands (tide-setup)
   :custom
@@ -108,6 +108,7 @@
 
 (use-package tide
   :straight t
+  :disabled t
   :after (flycheck typescript-mode)
   :config
   (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
@@ -123,7 +124,7 @@
 
 (use-package prettier
   :straight t
-  :after (typescript-mode tide)
+  :after typescript-mode
   :init
   (add-hook 'rk-ts-tsx-mode-hook #'prettier-mode)
   (add-hook 'typescript-mode-hook #'prettier-mode)
