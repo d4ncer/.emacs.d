@@ -75,6 +75,8 @@
 
     "lr" '(lsp-rename :wk "rename")
 
+    "lx" '(lsp-execute-code-action :wk "exec action")
+
     "ls" '(:ignore t :wk "session / workspace")
     "lsd" '(lsp-describe-session :wk "describe")
     "lsr" '(lsp-restart-workspace :wk "restart")
