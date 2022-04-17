@@ -124,6 +124,7 @@
 
 (use-package undo-tree
   :straight t
+  :custom (undo-tree-auto-save-history nil)
   :config
   (global-undo-tree-mode))
 
