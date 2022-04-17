@@ -128,6 +128,12 @@
   :config
   (global-undo-tree-mode))
 
+(use-package undo-tree
+  :straight t
+  :after evil
+  :config
+  (evil-set-undo-system 'undo-tree))
+
 (use-package epg
   :custom
   (epg-pinentry-mode 'loopback))
