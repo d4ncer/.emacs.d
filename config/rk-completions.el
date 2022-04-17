@@ -85,9 +85,12 @@ ARG is the same as for `backward-kill-sexp'."
   :config
   (set-face-attribute 'consult-file nil :inherit nil :weight 'semi-bold)
   (consult-customize
+   consult-theme
+   :preview-key '(:debounce 0.2 any)
    consult-ripgrep consult-git-grep consult-grep
    consult-bookmark consult-recent-file consult-xref
-   consult--source-file consult--source-project-file consult--source-bookmark
+   consult--source-bookmark consult--source-recent-file
+   consult--source-project-recent-file
    :preview-key (kbd "M-.")))
 
 (use-package marginalia
