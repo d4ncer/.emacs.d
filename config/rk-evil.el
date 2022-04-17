@@ -79,10 +79,6 @@
     (make-local-variable 'evil-surround-pairs-alist)
     (push '(?\` . ("`" . "'")) evil-surround-pairs-alist))
 
-  :general
-  (:keymaps 'evil-surround-mode-map :states '(visual)
-            "s" #'evil-surround-region
-            "S" #'evil-substitute)
   :hook
   (emacs-lisp-mode-hook . rk-elisp--init-evil-surround-pairs)
   :init
