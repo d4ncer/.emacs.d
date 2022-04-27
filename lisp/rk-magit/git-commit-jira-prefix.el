@@ -75,8 +75,8 @@
 (defun git-commit-jira-prefix--ticket-number ()
   (-when-let* ((branch (magit-get-current-branch))
                ((_ ticket) (s-match (rx bos (? (or "feature" "release") "/")
-                                        (group "MPB" "-" (+ digit))) branch)))
-    ticket))
+                                        (group (or "MPB" "mpb" "HELP" "help") (or "-" "_") (+ digit))) branch)))
+    (--> ticket (s-upcase it) (s-replace "_" "-" it))))
 
 (defun git-commit-jira-prefix--message-contains-ticket-number? (ticket-number)
   (save-excursion
