@@ -239,14 +239,14 @@ With prefix argument ARG, prompt for a file."
   (message "Password copied to kill-ring."))
 
 ;; Work stuff
-(defconst rkca--jira-url-template
-  "https://cultureamp.atlassian.net/browse/%s")
+(defconst rkmooven--jira-url-template
+  "https://mooven.atlassian.net/browse/%s")
 
-(defun rkca-insert-TKISS-link (ticket)
-  "Generate a link to a TKISS JIRA ticket."
+(defun rkmooven-insert-JIRA-link (ticket)
+  "Generate a link to a MPB JIRA TICKET."
   (interactive (let ((ticket (read-string "Ticket number: ")))
                  (list ticket)))
-  (org-insert-link nil (format rkca--jira-url-template ticket) (format "TKISS-%s" ticket)))
+  (org-insert-link nil (format rkmooven--jira-url-template ticket) (format "MPB-%s" ticket)))
 
 
 (provide 'rk-misc-utils)

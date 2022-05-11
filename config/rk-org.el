@@ -26,7 +26,7 @@
   :demand t
   :general
   (:keymaps 'org-mode-map
-            "C-c l" #'rkca-insert-TKISS-link
+            "C-c l" #'rkmooven-insert-JIRA-link
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "M-p"     #'org-metaup
@@ -839,16 +839,16 @@ tasks."
                              817 ; U+0331 COMBINING MACRON BELOW
                              )))
       (cl-flet* ((nonspacing-mark-p (char)
-                   (memq char slug-trim-chars))
+                                    (memq char slug-trim-chars))
                  (strip-nonspacing-marks (s)
-                   (string-glyph-compose
-                    (apply #'string (seq-remove #'nonspacing-mark-p
-                                                (string-glyph-decompose s)))))
+                                         (string-glyph-compose
+                                          (apply #'string (seq-remove #'nonspacing-mark-p
+                                                                      (string-glyph-decompose s)))))
                  (cl-replace (title pair)
-                   (replace-regexp-in-string (car pair) (cdr pair) title)))
+                             (replace-regexp-in-string (car pair) (cdr pair) title)))
         (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
-        (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
-        (ts (format-time-string "%Y%m%d%H%M%S")))
+               (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
+               (ts (format-time-string "%Y%m%d%H%M%S")))
           (expand-file-name (format "%s-%s.org" ts (downcase slug)) org-roam-directory)))))
 
   (defun rk-vulpea--person-to-tag (title)
@@ -858,9 +858,9 @@ tasks."
     (let* ((type (completing-read "Note type: "
                                   '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6) ("technology" 7))
                                   nil t))
-           (ca-p (y-or-n-p "Is this note CA related?"))
-           (ca-tag (if ca-p "ca" nil))
-           (tags (remq nil (list ca-tag)))
+           (mooven-p (y-or-n-p "Is this note Mooven related?"))
+           (mooven-tag (if mooven-p "mooven" nil))
+           (tags (remq nil (list mooven-tag)))
            (note (cond
                   ((string= type "person")
                    (vulpea-create
@@ -1048,6 +1048,7 @@ as its argument a `vulpea-note'."
     :straight t)
   (require 'org-ql)
   (autoload 'org-element-at-point "org-element")
+  (autoload 'org-duration-from-minutes "org-duration")
 
   (defun rk-org--subproject-title ()
     (when (org-ql--predicate-tags-local "subproject")
