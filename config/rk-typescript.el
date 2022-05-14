@@ -143,7 +143,7 @@
   :after typescript-mode
   :general
   (:keymaps 'emmet-mode-keymap :states '(normal insert)
-            "C-;" #'emmet-expand-line)
+            "C-'" #'emmet-expand-line)
   :custom
   (emmet-move-cursor-between-quotes t)
   :init
