@@ -162,6 +162,12 @@
   :config
   (add-hook 'xref-backend-functions #'dumb-jump-xref-activate))
 
+(use-package consult-lsp
+  :straight (:host github :repo "gagbo/consult-lsp" :branch "main")
+  :after lsp-mode
+  :config
+  (rk-local-leader-def :keymaps 'lsp-mode-map
+    "ld" '(consult-lsp-diagnostics :wk "diagnostics")))
 
 (provide 'rk-lsp)
 
