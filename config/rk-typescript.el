@@ -14,8 +14,17 @@
 (use-package typescript-mode
   :straight t
   :after lsp
+  :preface
+  (defun rk-ts--add-eslint-checker ()
+    (if (or (eq major-mode 'typescript-mode)
+            (eq major-mode 'rk-ts-tsx-mode))
+        (progn
+          (flycheck-add-mode 'javascript-eslint 'typescript-mode)
+          (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
+          (flycheck-add-next-checker 'lsp 'javascript-eslint))))
   :config
-  (add-hook 'rk-ts-tsx-mode-hook #'lsp))
+  (add-hook 'rk-ts-tsx-mode-hook #'lsp)
+  (add-hook 'lsp-diagnostics-mode-hook #'rk-ts--add-eslint-checker))
 
 (use-package typescript-mode
   :straight t
@@ -120,7 +129,8 @@
   :straight t
   :after typescript-mode
   :init
-  (add-hook 'typescript-mode #'add-node-modules-path))
+  (add-hook 'rk-ts-tsx-mode-hook #'add-node-modules-path)
+  (add-hook 'typescript-mode-hook #'add-node-modules-path))
 
 (use-package prettier
   :straight t
