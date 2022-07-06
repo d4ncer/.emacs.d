@@ -1148,16 +1148,21 @@ Refer to `org-agenda-prefix-format' for more information."
     "o p" '(vulpea-agenda-person :wk "for person"))
   :config
   (setq org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                   (todo . " %i %(vulpea-agenda-category 12) ")
-                                   (tags . " %i %(vulpea-agenda-category 12) ")
-                                   (search . " %i %(vulpea-agenda-category 12) ")))
+                                   (todo . " %i %(vulpea-agenda-category 12)%?-12t% s ")
+                                   (tags . " %i %(vulpea-agenda-category 12)%?-12t% s ")
+                                   (search . " %i %(vulpea-agenda-category 12)%?-12t% s ")))
   (setq org-agenda-custom-commands
         '(("g" "General"
            ((org-ql-block '(todo)
                           ((org-ql-block-header "To Refile")
                            (org-agenda-files `(,(f-join org-roam-directory "20220128063937-inbox.org")))))
             (org-ql-block '(and (todo "NEXT")
-                                (not (planning)))
+                                (not (planning))
+                                (heading "Fill out description"))
+                          ((org-ql-block-header "Projects to kick-off")))
+            (org-ql-block '(and (todo "NEXT")
+                                (not (planning))
+                                (not (heading "Fill out description")))
                           ((org-ql-block-header "Unplanned NEXT actions")))
             (org-ql-block '(and (tags "subproject")
                                 (descendants (todo))
@@ -1168,9 +1173,9 @@ Refer to `org-agenda-prefix-format' for more information."
             (agenda ""))
            ((org-agenda-files (vulpea-project-files))
             (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                        (todo . " %i %(vulpea-agenda-category 12) ")
-                                        (tags . " %i %(vulpea-agenda-category 12) ")
-                                        (search . " %i %(vulpea-agenda-category 12) "))))))))
+                                        (todo . " %i %(vulpea-agenda-category 12)%?-12t% s")
+                                        (tags . " %i %(vulpea-agenda-category 12)%?-12t% s")
+                                        (search . " %i %(vulpea-agenda-category 12)%?-12t% s"))))))))
 
 (use-package org-roam-ui
   :straight
