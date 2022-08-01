@@ -50,6 +50,7 @@
   (flycheck-display-errors-delay 0.1)
   (flycheck-emacs-lisp-load-path 'inherit)
   (flycheck-python-pycompile-executable "python")
+  (flycheck-check-syntax-automatically '(save idle-change idle-buffer-switch mode-enabled))
   (flycheck-global-modes '(not text-mode
                                org-mode
                                org-agenda-mode))
