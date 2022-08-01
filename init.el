@@ -142,7 +142,6 @@
 (use-package rk-basic-settings)
 (use-package rk-auto-insert)
 (use-package rk-leader-keys)
-(use-package rk-envrc)
 (use-package rk-darwin :if (equal system-type 'darwin))
 
 ;; Editor capabilities
@@ -206,6 +205,9 @@
 (use-package rk-ruby)
 (use-package rk-clojure)
 (use-package rk-java)
+
+;; Setup envrc
+(use-package rk-envrc)
 
 (use-package private-config
   :when (f-dir-p "~/private")
