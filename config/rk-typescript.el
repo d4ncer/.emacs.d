@@ -23,8 +23,9 @@
           (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
           (flycheck-add-next-checker 'lsp 'javascript-eslint))))
   :config
-  (add-hook 'rk-ts-tsx-mode-hook #'lsp)
-  (add-hook 'lsp-diagnostics-mode-hook #'rk-ts--add-eslint-checker))
+  (add-hook 'rk-ts-tsx-mode-hook #'lsp-deferred)
+  ;; (add-hook 'lsp-diagnostics-mode-hook #'rk-ts--add-eslint-checker)
+  )
 
 (use-package typescript-mode
   :straight t
