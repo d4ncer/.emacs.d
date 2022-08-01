@@ -29,9 +29,10 @@
 (use-package typescript-mode
   :straight t
   :after lsp
-  :hook (typescript-mode . lsp)
   :init
-  (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose")))
+  (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose"))
+  :config
+  (add-hook 'typescript-mode-hook #'lsp-deferred))
 
 ;; TS + Tide (We like this, but trying LSP)
 
@@ -163,7 +164,6 @@
   :init
   (setq lsp-tailwindcss-add-on-mode t)
   (setq lsp-tailwindcss-major-modes '(rk-ts-tsx-mode)))
-
 
 (provide 'rk-typescript)
 
