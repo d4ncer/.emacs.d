@@ -103,13 +103,6 @@
   (add-hook 'rk-web-css-mode-hook #'prettier-mode)
   (add-hook 'rk-web-html-mode-hook #'prettier-mode))
 
-(use-package add-node-modules-path
-  :straight t
-  :after rk-web-modes
-  :init
-  (add-hook 'rk-web-css-mode-hook #'add-node-modules-path)
-  (add-hook 'rk-web-js-mode-hook #'add-node-modules-path))
-
 (use-package stylefmt
   :straight t
   :after rk-web-modes

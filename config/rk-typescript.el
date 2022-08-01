@@ -125,13 +125,6 @@
   (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
   (flycheck-add-mode 'typescript-tide 'rk-ts-tsx-mode))
 
-(use-package add-node-modules-path
-  :straight t
-  :after typescript-mode
-  :init
-  (add-hook 'rk-ts-tsx-mode-hook #'add-node-modules-path)
-  (add-hook 'typescript-mode-hook #'add-node-modules-path))
-
 (use-package prettier
   :straight t
   :after typescript-mode
