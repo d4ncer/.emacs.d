@@ -122,6 +122,7 @@
 (use-package flyspell-lazy
   :straight t
   :demand t
+  :commands (flyspell-lazy-mode)
   :custom
   (flyspell-lazy-idle-seconds 1)
   (flyspell-lazy-window-idle-seconds 3)
