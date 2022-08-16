@@ -68,7 +68,6 @@ ARG is the same as for `backward-kill-sexp'."
         xref-show-xrefs-function #'consult-xref
         xref-show-definitions-function #'consult-xref)
   (advice-add #'register-preview :override #'consult-register-window)
-  (advice-add #'completing-read-multiple :override #'consult-completing-read-multiple)
   (rk-leader-def
     "/"   '(consult-ripgrep :wk "search (project)")
 
