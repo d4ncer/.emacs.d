@@ -115,11 +115,6 @@
 
 ;; Aggressively load themes
 
-(use-package rk-themes
-  :disabled
-  :config
-  (rk/themes/light-theme))
-
 (use-package rk-themes)
 
 ;; Aggressively load flyspell-lazy

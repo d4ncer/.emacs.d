@@ -113,51 +113,6 @@
   :config
   (evil-set-initial-state 'flycheck-error-list-mode 'motion))
 
-(use-package flycheck
-  :straight t
-  :after nano-modeline
-  :config
-  (defun rk-flycheck--custom-mode-line-status-text (&optional status)
-    (pcase (or status flycheck-last-status-change)
-      (`no-checker "Checks[-]")
-      (`errored "Checks[ERROR]")
-      (`finished
-       (let-alist (flycheck-count-errors flycheck-current-errors)
-         (cond
-          ((and .error .warning)
-           (format "✖ (%s error%s, %s warn%s)"
-                   .error
-                   (if (equal .error 1) "" "s")
-                   .warning
-                   (if (equal .warning 1) "" "s")))
-          (.error
-           (format "✖ (%s error%s)" .error (if (equal .error 1) "" "s")))
-
-          (.warning
-           (format "! (%s warning%s)" .warning (if (equal .warning 1) "" "s")))
-          (t
-           "✔"))))
-      (`interrupted "? (interrupted)")
-      (`suspicious "? (suspicious)")
-      (`running "···")
-      (_
-       "")))
-
-  (defun rk-nano-modeline--default-mode ()
-    (let ((buffer-name (format-mode-line "%b"))
-          (mode-name   (nano-mode-name))
-          (branch      (vc-branch))
-          (position    (format-mode-line "%l:%c")))
-      (nano-modeline-compose (nano-modeline-status)
-                             buffer-name
-                             (concat "(" mode-name
-                                     (if branch (concat ", "
-                                                        (propertize branch 'face 'italic)))
-                                     ") " (rk-flycheck--custom-mode-line-status-text))
-                             position)))
-  (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode)
-  :custom
-  (flycheck-mode-line '(:eval (rk-flycheck--custom-mode-line-status-text))))
 
 (use-package flycheck
   :straight t

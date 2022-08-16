@@ -15,15 +15,9 @@
 
 (require 'dash)
 (require 'general)
-(require 'rk-theme-base)
 
 (use-package rk-ligature
   :if (window-system))
-
-(defun rk/themes/light-theme ()
-  "Load light theme."
-  (interactive)
-  (load-theme 'rk-light t))
 
 (defun config-themes--after-enable-theme (&rest _)
   "Delete posframes after changing themes."

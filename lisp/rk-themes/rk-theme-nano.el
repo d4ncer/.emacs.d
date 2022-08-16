@@ -7,200 +7,270 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'straight)
-(require 'definers)
+(require 'rk-colors)
 
-(defconst rk-theme-cursor-yellow "#f1c40f")
-(defconst rk-theme-cursor-blue "#3498db")
-(defconst rk-theme-cursor-green "#2ecc71")
-(defconst rk-theme-cursor-purple "#9b59b6")
-
-;; Solarized light for text
-(defconst rk-theme-nano-yellow "#b58900")
-(defconst rk-theme-nano-orange "#cb4b16")
-(defconst rk-theme-nano-red "#dc322f")
-(defconst rk-theme-nano-magenta "#d33682")
-(defconst rk-theme-nano-violet "#6c71c4")
-(defconst rk-theme-nano-blue "#268bd2")
-(defconst rk-theme-nano-cyan "#2aa198")
-(defconst rk-theme-nano-green "#859900")
-
-;; Offwhites for highlights
-(defconst rk-theme-nano-light-red "#ffe0e0")
-
-;; Default fg/bg
-(defconst rk-theme-nano-offblack "#333")
-(defconst rk-theme-nano-offwhite "#fdfdfd")
-(defconst rk-theme-nano-offwhite-dark "#fbf1d4")
-
-;; Greys
-(defconst rk-theme-nano-solarized-b03 "#002b36")
-(defconst rk-theme-nano-solarized-b02 "#073642")
-(defconst rk-theme-nano-solarized-b01 "#586e75")
-(defconst rk-theme-nano-solarized-b00 "#657b83")
-(defconst rk-theme-nano-solarized-b0 "#839496")
-(defconst rk-theme-nano-solarized-b1 "#93a1a1")
-(defconst rk-theme-nano-solarized-b2 "#eee8d5")
-(defconst rk-theme-nano-solarized-b3 "#fdf6e3")
-(defconst rk-theme-nano-dark-grey "#747369")
-(defconst rk-theme-nano-light-grey "#e8e6df")
-
-(defconst rk-theme-font-family "JetBrains Mono")
+(defconst rk-font-family "JetBrains Mono")
 
 ;; Nano stuff
 
-(straight-use-package
- '(nano-emacs :type git :host github :repo "rougier/nano-emacs"))
+(use-package nano-theme
+  :straight '(nano-theme :type git :host github
+                         :repo "rougier/nano-theme")
+  :preface
+  (defun rk-themes-build-theme ()
+    ;; Add internal border
+    (setq default-frame-alist
+          (append (list
+                   '(min-height . 1)  '(height . 45)
+                   '(min-width  . 1)  '(width  . 81)
+                   '(vertical-scroll-bars . nil)
+                   '(internal-border-width . 24)
+                   '(left-fringe . 0)
+                   '(right-fringe . 0)
+                   '(tool-bar-lines . 0)
+                   '(menu-bar-lines . 0))))
+    ;; Vertical window divider
+    (setq window-divider-default-right-width 24)
+    (setq window-divider-default-places 'right-only)
+    (window-divider-mode 1)
 
-(require 'nano-base-colors)
-(require 'nano-faces)
-(require 'nano-theme)
-(setq nano-font-size 18)
-(setq nano-font-family-monospaced "JetBrains Mono")
+    ;; Nicer glyphs for continuation and wrap
+    (set-display-table-slot standard-display-table
+                            'truncation (make-glyph-code ?… 'nano-faded))
+    (set-display-table-slot standard-display-table
+                            'wrap (make-glyph-code ?- 'nano-faded))
+    ;; Set up theme
+    (nano-light)
 
-(nano-faces)
-(nano-theme)
+    ;; Override faces
+    (set-face-attribute 'default nil
+                        :weight 'regular
+                        :family rk-font-family
+                        :height 190)
 
-(require 'nano-layout)
+    (set-face-attribute 'bold nil
+                        :weight 'bold)
 
-(require 'nano-modeline)
+    (set-face-attribute 'italic nil
+                        :slant 'italic)
 
-(use-package rk-minibuffer
-  :disabled t)
+    (set-face-attribute 'font-lock-keyword-face nil
+                        :weight 'light
+                        :inherit 'default)
 
-(rk-leader-def
-  "i f" #'nano-what-faces)
+    (set-face-attribute 'font-lock-builtin-face nil
+                        :weight 'light
+                        :inherit 'default)
 
-(set-face-attribute 'default nil
-                    :weight 'regular)
+    (set-face-attribute 'font-lock-variable-name-face nil
+                        :inherit 'default)
 
-(set-face-attribute 'bold nil
-                    :weight 'bold)
+    (set-face-attribute 'font-lock-function-name-face nil
+                        :weight 'semi-bold
+                        :inherit 'default)
 
-(set-face-attribute 'italic nil
-                    :slant 'italic)
+    (set-face-attribute 'font-lock-constant-face nil
+                        :inherit 'default)
 
-(set-face-attribute 'font-lock-keyword-face nil
-                    :weight 'light
-                    :inherit 'default)
+    (set-face-attribute 'font-lock-type-face nil
+                        :inherit 'default)
 
-(set-face-attribute 'font-lock-builtin-face nil
-                    :weight 'light
-                    :inherit 'default)
+    (set-face-attribute 'font-lock-string-face nil
+                        :weight 'light
+                        :inherit 'default)
 
-(set-face-attribute 'font-lock-variable-name-face nil
-                    :inherit 'default)
+    (set-face-attribute 'font-lock-comment-face nil
+                        :weight 'semi-bold
+                        :inherit 'default)
 
-(set-face-attribute 'font-lock-function-name-face nil
-                    :weight 'semi-bold
-                    :inherit 'default)
+    (set-face-attribute 'font-lock-doc-face nil
+                        :weight 'semi-bold
+                        :inherit 'default)
 
-(set-face-attribute 'font-lock-constant-face nil
-                    :inherit 'default)
+    (with-eval-after-load 'magit
+      (set-face-attribute 'magit-process-ng nil
+                          :foreground rk-colors-red)
 
-(set-face-attribute 'font-lock-type-face nil
-                    :inherit 'default)
+      (set-face-attribute 'magit-process-ok nil
+                          :foreground rk-colors-green)
 
-(set-face-attribute 'font-lock-string-face nil
-                    :weight 'light
-                    :inherit 'default)
+      (set-face-attribute 'magit-section-heading nil
+                          :weight 'semi-bold)
 
-(set-face-attribute 'font-lock-comment-face nil
-                    :weight 'semi-bold
-                    :inherit 'default)
+      (set-face-attribute 'magit-branch-local nil
+                          :foreground rk-colors-blue
+                          :weight 'semi-bold)
 
-(set-face-attribute 'font-lock-doc-face nil
-                    :weight 'semi-bold
-                    :inherit 'default)
+      (set-face-attribute 'magit-branch-remote nil
+                          :foreground rk-colors-green
+                          :weight 'semi-bold)
 
-(with-eval-after-load 'magit
-  (set-face-attribute 'magit-process-ng nil
-                      :foreground rk-theme-nano-red)
+      (set-face-attribute 'magit-branch-current nil
+                          :foreground rk-colors-blue
+                          :weight 'semi-bold
+                          :box 1)
 
-  (set-face-attribute 'magit-process-ok nil
-                      :foreground rk-theme-nano-green))
+      (set-face-attribute 'magit-tag nil
+                          :foreground rk-colors-yellow
+                          :weight 'semi-bold)
 
-(with-eval-after-load 'highlight-thing
-  (set-face-attribute 'highlight-thing nil
-                      :foreground nano-color-salient
-                      :background nano-color-background
-                      :weight 'semi-bold))
+      (set-face-attribute 'magit-diff-removed-highlight nil
+                          :foreground rk-colors-red
+                          :weight 'regular)
 
-(with-eval-after-load 'org
-  (set-face-attribute 'org-level-1 nil
-                      :inherit nil
-                      :weight 'bold
-                      :height 200)
-  (set-face-attribute 'org-verbatim nil
-                      :foreground nano-color-salient
-                      :weight 'medium))
+      (set-face-attribute 'magit-diff-added-highlight nil
+                          :foreground rk-colors-green
+                          :weight 'regular))
 
-(with-eval-after-load 'corfu
-  (set-face-attribute 'corfu-border nil
-                      :background nano-color-salient)
+    (with-eval-after-load 'highlight-thing
+      (set-face-attribute 'highlight-thing nil
+                          :foreground nano-light-salient
+                          :background nano-light-background
+                          :weight 'semi-bold))
 
-  (set-face-attribute 'corfu-default nil
-                      :background nano-color-background))
+    (with-eval-after-load 'org
+      (set-face-attribute 'org-level-1 nil
+                          :inherit nil
+                          :weight 'bold
+                          :height 200)
+      (set-face-attribute 'org-verbatim nil
+                          :foreground nano-light-salient
+                          :weight 'medium))
 
-(with-eval-after-load 'company
-  (set-face-attribute 'company-tooltip nil
-                      :background nano-color-subtle)
-  (set-face-attribute 'company-tooltip-annotation nil
-                      :background nano-color-subtle
-                      :weight 'bold)
-  (set-face-attribute 'company-tooltip-common-selection nil
-                      :foreground nano-color-subtle
-                      :background nano-color-salient
-                      :weight 'bold))
+    (with-eval-after-load 'corfu
+      (set-face-attribute 'corfu-border nil
+                          :background nano-light-salient)
 
-(with-eval-after-load 'company-box
-  (set-face-attribute 'company-box-candidate nil
-                      :weight 'light)
-  (set-face-attribute 'company-box-background nil
-                      :background nano-color-subtle)
-  (set-face-attribute 'company-box-selection nil
-                      :background nano-color-salient
-                      :foreground nano-color-subtle))
+      (set-face-attribute 'corfu-default nil
+                          :background nano-light-background))
 
-(with-eval-after-load 'tree-sitter-hl
-  (set-face-attribute 'tree-sitter-hl-face:function.call nil
-                      :inherit nil
-                      :weight 'semi-bold
-                      :underline nil
-                      :foreground nano-color-foreground
-                      :slant 'normal)
-  (set-face-attribute 'tree-sitter-hl-face:property nil
-                      :slant 'normal)
-  (set-face-attribute 'tree-sitter-hl-face:tag nil
-                      :weight 'medium)
-  (set-face-attribute 'tree-sitter-hl-face:attribute nil
-                      :foreground nano-color-faded))
+    (with-eval-after-load 'company
+      (set-face-attribute 'company-tooltip nil
+                          :background nano-light-subtle)
+      (set-face-attribute 'company-echo nil
+                          :background nano-light-subtle)
+      (set-face-attribute 'company-tooltip-annotation nil
+                          :background nano-light-subtle
+                          :weight 'bold)
+      (set-face-attribute 'company-tooltip-common-selection nil
+                          :foreground nano-light-subtle
+                          :background nano-light-salient
+                          :weight 'bold))
 
-(with-eval-after-load 'flyspell
-  (set-face-attribute 'flyspell-incorrect nil
-                      :foreground nano-color-critical)
-  (set-face-attribute 'flyspell-duplicate nil
-                      :foreground nano-color-critical))
+    (with-eval-after-load 'tree-sitter-hl
+      (set-face-attribute 'tree-sitter-hl-face:function.call nil
+                          :inherit nil
+                          :weight 'semi-bold
+                          :underline nil
+                          :foreground nano-light-foreground
+                          :slant 'normal)
+      (set-face-attribute 'tree-sitter-hl-face:property nil
+                          :slant 'normal)
+      (set-face-attribute 'tree-sitter-hl-face:tag nil
+                          :weight 'medium)
+      (set-face-attribute 'tree-sitter-hl-face:attribute nil
+                          :foreground nano-light-faded))
 
-(with-eval-after-load 'lsp-ui-peek
-  (set-face-attribute 'lsp-ui-peek-header nil
-                      :background nano-color-popout
-                      :foreground nano-color-background)
-  (set-face-attribute 'lsp-ui-peek-footer nil
-                      :background nano-color-popout)
-  (set-face-attribute 'lsp-ui-peek-peek nil
-                      :background nano-color-background)
-  (set-face-attribute 'lsp-ui-peek-list nil
-                      :background nano-color-background)
-  (set-face-attribute 'lsp-ui-peek-filename nil
-                      :foreground nano-color-faded
-                      :weight 'semi-bold)
-  (set-face-attribute 'lsp-ui-peek-selection nil
-                      :background nano-color-faded
-                      :foreground nano-color-background)
-  (set-face-attribute 'lsp-ui-peek-highlight nil
-                      :box nil
-                      :background nano-color-subtle))
+    (with-eval-after-load 'flyspell
+      (set-face-attribute 'flyspell-incorrect nil
+                          :foreground nano-light-critical)
+      (set-face-attribute 'flyspell-duplicate nil
+                          :foreground nano-light-critical))
+
+    (with-eval-after-load 'lsp-ui-peek
+      (set-face-attribute 'lsp-ui-peek-header nil
+                          :background nano-light-popout
+                          :foreground nano-light-background)
+      (set-face-attribute 'lsp-ui-peek-footer nil
+                          :background nano-light-popout)
+      (set-face-attribute 'lsp-ui-peek-peek nil
+                          :background nano-light-background)
+      (set-face-attribute 'lsp-ui-peek-list nil
+                          :background nano-light-background)
+      (set-face-attribute 'lsp-ui-peek-filename nil
+                          :foreground nano-light-faded
+                          :weight 'semi-bold)
+      (set-face-attribute 'lsp-ui-peek-selection nil
+                          :background nano-light-faded
+                          :foreground nano-light-background)
+      (set-face-attribute 'lsp-ui-peek-highlight nil
+                          :box nil
+                          :background nano-light-subtle)))
+  :config
+  (rk-themes-build-theme))
+
+(use-package nano-modeline
+  :straight '(nano-modeline :type git :host github
+                            :repo "rougier/nano-modeline")
+  :after (nano-theme)
+  :custom
+  (nano-modeline-prefix-padding t)
+  :config
+  (nano-modeline-mode))
+
+(use-package flycheck
+  :straight t
+  :after nano-modeline
+  :preface
+  (defun rk-flycheck--custom-mode-line-status-text (&optional status)
+    (pcase (or status flycheck-last-status-change)
+      (`no-checker "Checks[-]")
+      (`errored "Checks[ERROR]")
+      (`finished
+       (let-alist (flycheck-count-errors flycheck-current-errors)
+         (cond
+          ((and .error .warning)
+           (format "✖ (%s error%s, %s warn%s)"
+                   .error
+                   (if (equal .error 1) "" "s")
+                   .warning
+                   (if (equal .warning 1) "" "s")))
+          (.error
+           (format "✖ (%s error%s)" .error (if (equal .error 1) "" "s")))
+
+          (.warning
+           (format "! (%s warning%s)" .warning (if (equal .warning 1) "" "s")))
+          (t
+           "✔"))))
+      (`interrupted "? (interrupted)")
+      (`suspicious "? (suspicious)")
+      (`running "···")
+      (_
+       "")))
+
+  (defun rk-nano-modeline--default-mode (&optional icon)
+    (let ((icon (or icon
+                    (plist-get (cdr (assoc 'text-mode nano-modeline-mode-formats)) :icon)))
+          ;; We take into account the case of narrowed buffers
+          (buffer-name (cond
+                        ((and (derived-mode-p 'org-mode)
+                              (buffer-narrowed-p)
+                              (buffer-base-buffer))
+                         (format"%s [%s]" (buffer-base-buffer)
+                                (org-link-display-format
+                                 (substring-no-properties (or (org-get-heading 'no-tags)
+                                                              "-")))))
+                        ((and (buffer-narrowed-p)
+                              (buffer-base-buffer))
+                         (format"%s [narrow]" (buffer-base-buffer)))
+                        (t
+                         (format-mode-line "%b"))))
+
+          (mode-name   (nano-modeline-mode-name))
+          (branch      (nano-modeline-vc-branch))
+          (position    (format-mode-line "%l:%c"))
+          (flyc        (rk-flycheck--custom-mode-line-status-text)))
+      (nano-modeline-render icon
+                            buffer-name
+                            (if branch (concat "(" branch ")") "")
+                            (concat " " flyc " " position))))
+  
+  :config
+  (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode))
+
+(use-package nano-minibuffer
+  :straight '(nano-minibuffer :type git :host github
+                              :repo "rougier/nano-minibuffer"))
 
 (provide 'rk-theme-nano)
 
