@@ -7,6 +7,8 @@
 (eval-when-compile
   (require 'use-package))
 
+(require 'definers)
+
 (use-package emacs
   :custom
   ;; Write custom settings outside init.el
