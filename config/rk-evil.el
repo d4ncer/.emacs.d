@@ -12,7 +12,7 @@
   (require 'use-package))
 
 (require 'definers)
-(require 'rk-theme-base)
+(require 'rk-colors)
 
 (use-package evil
   :straight t
@@ -60,11 +60,11 @@
   (setq evil-want-keybinding nil)
   :config
   ;; Configure cursors.
-  (setq evil-motion-state-cursor `(,rk-theme-cursor-purple box)
-        evil-visual-state-cursor `(,rk-theme-base-solarized-b2 (hbar . 2))
-        evil-normal-state-cursor `(,rk-theme-cursor-yellow box)
-        evil-insert-state-cursor `(,rk-theme-cursor-green (bar . 2))
-        evil-emacs-state-cursor  `(,rk-theme-cursor-blue hbar))
+  (setq evil-motion-state-cursor `(,rk-colors-cursor-purple box)
+        evil-visual-state-cursor `(,rk-colors-solarized-b2 (hbar . 2))
+        evil-normal-state-cursor `(,rk-colors-cursor-yellow box)
+        evil-insert-state-cursor `(,rk-colors-cursor-green (bar . 2))
+        evil-emacs-state-cursor  `(,rk-colors-cursor-blue hbar))
   (evil-mode +1)
   :functions (evil-mode)
   :defines (evil-want-Y-yank-to-eol))

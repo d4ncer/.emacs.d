@@ -14,6 +14,7 @@
 (require 'paths)
 (require 'f)
 (require 'definers)
+(require 'rk-colors)
 
 (defvar rk-lsp--ui-menu-colors '("#e99ce8" "#bbbbff" "#ffbbff")
   "Colors to use for imenu.")
@@ -66,7 +67,7 @@
   (lsp-server-install-dir (f-join paths-cache-directory "lsp-servers"))
   (lsp-keymap-prefix "C-l")
   ;; (lsp-eslint-server-command '("node" "/home/rk/.local/eslint-server/server/out/eslintServer.js" "--stdio"))
-  (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-theme-base-solarized-b1)
+  (lsp-diagnostics-attributes `((unnecessary :foreground ,rk-colors-solarized-b1)
                                 (deprecated :strike-through t)))
   :init
   (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
@@ -126,12 +127,12 @@
             "<C-return>" #'lsp-ui-peek--goto-xref-other-window)
   :custom
   (lsp-ui-doc-enable nil)
-  (lsp-ui-doc-border nano-color-subtle)
+  (lsp-ui-doc-border 'nano-light-subtle)
   (lsp-ui-doc-delay 0.75)
   (lsp-ui-sideline-enable nil)
   (lsp-ui-peek-fontify 'always)
   :config
-  (set-face-attribute 'lsp-ui-doc-background nil :background nano-color-background))
+  (set-face-attribute 'lsp-ui-doc-background nil :background nano-light-background))
 
 (use-package lsp-imenu
   :defines (lsp-ui-imenu-colors)
