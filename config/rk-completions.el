@@ -145,47 +145,46 @@ ARG is the same as for `backward-kill-sexp'."
 
 ;; Company / Corfu
 
-(use-package company
-  :straight t
-  :hook (after-init . global-company-mode)
+;; (use-package company
+;;   :straight t
+;;   :hook (after-init . global-company-mode)
 
-  :general
-  (:keymaps 'company-mode-map :states '(insert)
-            "C-;" #'company-complete)
-  (:keymaps 'company-active-map
-            "C-w" nil
-            "C-j" #'company-select-next-or-abort
-            "C-k" #'company-select-previous-or-abort
-            "<tab>" #'company-complete-selection)
-  (:keymaps 'company-search-map
-            "C-w" nil
-            "C-j" #'company-select-next-or-abort
-            "C-k" #'company-select-previous-or-abort
-            "<tab>" #'company-complete-selection)
+;;   :general
+;;   (:keymaps 'company-mode-map :states '(insert)
+;;             "C-;" #'company-complete)
+;;   (:keymaps 'company-active-map
+;;             "C-w" nil
+;;             "C-j" #'company-select-next-or-abort
+;;             "C-k" #'company-select-previous-or-abort
+;;             "<tab>" #'company-complete-selection)
+;;   (:keymaps 'company-search-map
+;;             "C-w" nil
+;;             "C-j" #'company-select-next-or-abort
+;;             "C-k" #'company-select-previous-or-abort
+;;             "<tab>" #'company-complete-selection)
 
-  :commands (company-select-next-or-abort
-             company-select-previous-or-abort
-             company-show-doc-buffer)
-  :custom
-  (company-tooltip-align-annotations t)
-  (company-idle-delay 0.2)
-  (company-require-match nil))
+;;   :commands (company-select-next-or-abort
+;;              company-select-previous-or-abort
+;;              company-show-doc-buffer)
+;;   :custom
+;;   (company-tooltip-align-annotations t)
+;;   (company-idle-delay 0.2)
+;;   (company-require-match nil))
 
-(use-package company-dabbrev
-  :after company
-  :custom
-  (company-dabbrev-ignore-case nil)
-  (company-dabbrev-downcase nil))
+;; (use-package company-dabbrev
+;;   :after company
+;;   :custom
+;;   (company-dabbrev-ignore-case nil)
+;;   (company-dabbrev-downcase nil))
 
-(use-package company-box
-  :straight t
-  :custom
-  (company-box-scrollbar nil)
-  :hook (company-mode . company-box-mode))
+;; (use-package company-box
+;;   :straight t
+;;   :custom
+;;   (company-box-scrollbar nil)
+;;   :hook (company-mode . company-box-mode))
 
 (use-package corfu
   :straight t
-  :disabled t
   :custom
   (corfu-auto t)
   (corfu-quit-no-match t)
@@ -199,7 +198,13 @@ ARG is the same as for `backward-kill-sexp'."
             "C-k" #'corfu-previous
             "C-h" #'corfu-show-documentation)
   :init
-  (corfu-global-mode))
+  (global-corfu-mode))
+
+(use-package corfu-doc
+  :straight '(corfu-doc :type git :host github :repo "galeo/corfu-doc")
+  :after (corfu)
+  :config
+  (add-hook 'corfu-mode-hook #'corfu-doc-mode))
 
 (use-package emacs
   :general
