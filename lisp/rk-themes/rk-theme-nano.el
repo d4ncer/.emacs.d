@@ -179,10 +179,9 @@
 
     (with-eval-after-load 'lsp-ui-peek
       (set-face-attribute 'lsp-ui-peek-header nil
-                          :background nano-light-popout
-                          :foreground nano-light-background)
+                          :background nano-light-salient)
       (set-face-attribute 'lsp-ui-peek-footer nil
-                          :background nano-light-popout)
+                          :background nano-light-salient)
       (set-face-attribute 'lsp-ui-peek-peek nil
                           :background nano-light-background)
       (set-face-attribute 'lsp-ui-peek-list nil
