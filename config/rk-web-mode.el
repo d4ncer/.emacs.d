@@ -75,11 +75,12 @@
   (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
 
 (use-package rk-web-modes
-  :after lsp
+  :after lsp-mode
   :init
   (add-to-list 'lsp-language-id-configuration '(rk-web-js-mode . "javascript"))
   :config
-  (add-hook 'rk-web-js-mode-hook #'lsp))
+  (add-hook 'rk-web-js-mode-hook #'lsp-deferred)
+  (add-hook 'rk-web-css-mode-hook #'lsp-deferred))
 
 (use-package rk-flycheck-stylelint
   :after flycheck
