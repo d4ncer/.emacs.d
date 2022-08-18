@@ -63,7 +63,7 @@
   :config (git-commit-jira-prefix-init))
 
 (use-package git-timemachine
-  :straight (:host gitlab :repo "pidu/git-timemachine" :branch "master")
+  :straight (:host github :repo "emacsmirror/git-timemachine" :branch "master")
   :commands
   (git-timemachine-show-current-revision
    git-timemachine-show-nth-revision
