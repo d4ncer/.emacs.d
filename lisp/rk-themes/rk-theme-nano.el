@@ -114,6 +114,14 @@
                           :foreground rk-colors-yellow
                           :weight 'semi-bold)
 
+      (set-face-attribute 'magit-diff-removed nil
+                          :foreground rk-colors-red
+                          :weight 'regular)
+
+      (set-face-attribute 'magit-diff-added nil
+                          :foreground rk-colors-green
+                          :weight 'regular)
+
       (set-face-attribute 'magit-diff-removed-highlight nil
                           :foreground rk-colors-red
                           :weight 'regular)
@@ -145,17 +153,8 @@
                           :background nano-light-background))
 
     (with-eval-after-load 'company
-      (set-face-attribute 'company-tooltip nil
-                          :background nano-light-subtle)
-      (set-face-attribute 'company-echo nil
-                          :background nano-light-subtle)
-      (set-face-attribute 'company-tooltip-annotation nil
-                          :background nano-light-subtle
-                          :weight 'bold)
-      (set-face-attribute 'company-tooltip-common-selection nil
-                          :foreground nano-light-subtle
-                          :background nano-light-salient
-                          :weight 'bold))
+      (set-face-attribute 'company-tooltip-annotation-selection nil
+                          :inherit 'company-tooltip-selection))
 
     (with-eval-after-load 'tree-sitter-hl
       (set-face-attribute 'tree-sitter-hl-face:function.call nil
@@ -263,7 +262,7 @@
                             buffer-name
                             (if branch (concat "(" branch ")") "")
                             (concat " " flyc " " position))))
-  
+
   :config
   (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode))
 
