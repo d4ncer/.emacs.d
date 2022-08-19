@@ -1218,13 +1218,11 @@ Refer to `org-agenda-prefix-format' for more information."
   (autoload #'org-roam-review-set-seedling "org-roam-review")
   (autoload #'vulpea-buffer-title-set "vulpea-buffer")
 
-  (defun rk-citar--idle-refresh-cache ()
-    "Generate bib item caches with idle timer."
-    (run-with-idle-timer 0.5 nil #'citar-refresh))
   (defun rk-citar--goto-bib ()
     "Open the bib file."
     (interactive)
     (find-file rk-bib--refs-file))
+
   (defun rk-citar--format-note (key entry filepath)
     (let* ((template "${title}; ${author editor}")
            (note-meta
@@ -1254,9 +1252,6 @@ Refer to `org-agenda-prefix-format' for more information."
 
     "G b" '(rk-citar--goto-bib :wk "goto bib refs"))
   :config
-  (add-hook 'org-mode-hook #'rk-citar--idle-refresh-cache)
-  (add-hook 'LaTeX-mode-hook #'rk-citar--idle-refresh-cache)
-  (citar-refresh)
   (require 'citar-org))
 
 (use-package org-pdftools
