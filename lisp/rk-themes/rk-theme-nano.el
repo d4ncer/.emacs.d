@@ -34,13 +34,14 @@
     (setq window-divider-default-places 'right-only)
     (window-divider-mode 1)
 
+    ;; Set up theme
+    (nano-light)
+
     ;; Nicer glyphs for continuation and wrap
     (set-display-table-slot standard-display-table
                             'truncation (make-glyph-code ?… 'nano-faded))
     (set-display-table-slot standard-display-table
                             'wrap (make-glyph-code ?- 'nano-faded))
-    ;; Set up theme
-    (nano-light)
 
     ;; Override faces
     (set-face-attribute 'default nil
