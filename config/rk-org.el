@@ -626,7 +626,10 @@ table tr.tr-even td {
 ;; Roam config
 
 (use-package org-roam
-  :straight t
+  :straight (:type git
+                   :host github
+                   :repo "org-roam/org-roam"
+                   :branch "main")
   :after org
   :preface
   (defvar rk-org-roam--dailies-prev-buffer nil)
