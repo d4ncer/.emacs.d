@@ -59,11 +59,6 @@
   (push (list (rx "*" (or "Cargo" "go" "Racer" "restclient" "Ledger" "lsp" "nim" "docker" "Help" "tide" "helpful") (zero-or-more anything) "*") :noselect t :regexp t) popwin:special-display-config)
   (popwin-mode 1))
 
-(use-package keychain-environment
-  :straight t
-  :config
-  (keychain-refresh-environment))
-
 (use-package smex
   :straight t
   :commands (smex-initialize)

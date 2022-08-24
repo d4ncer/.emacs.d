@@ -215,6 +215,13 @@
 
 ;;; Post init setup.
 
+;; Load keychain after everything else to ensure env is setup
+
+(use-package keychain-environment
+  :straight t
+  :config
+  (keychain-refresh-environment))
+
 ;;; Improve eval-expression
 
 (defvar eval-expression-interactively-map
