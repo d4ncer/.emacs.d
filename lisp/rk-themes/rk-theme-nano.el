@@ -55,6 +55,9 @@
     (set-face-attribute 'italic nil
                         :slant 'italic)
 
+    (set-face-attribute 'highlight nil
+                        :background nano-light-subtle)
+
     (set-face-attribute 'font-lock-keyword-face nil
                         :weight 'light
                         :inherit 'default)
