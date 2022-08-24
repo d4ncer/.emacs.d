@@ -15,6 +15,7 @@
 
 (use-package go-mode
   :straight t
+  :after lsp-mode
   :mode ("\\.go\\'" . go-mode)
   :preface
   (defun rk-go--modules-p ()
@@ -33,7 +34,7 @@
       (setenv "GO111MODULE" "auto"))
     (if-let ((gopath (getenv "GOPATH")))
         (setq lsp-go-gopls-server-path (f-join gopath "bin/gopls")))
-    (lsp)
+    (lsp-deferred)
     (rk-go--setup-flycheck))
   :hook
   (go-mode . rk-go--setup-go))
