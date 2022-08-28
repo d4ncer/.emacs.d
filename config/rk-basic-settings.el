@@ -160,6 +160,9 @@
 (use-package async
   :straight t)
 
+(use-package sudo-edit
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
