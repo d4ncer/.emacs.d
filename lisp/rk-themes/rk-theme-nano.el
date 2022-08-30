@@ -118,6 +118,10 @@
                           :foreground rk-colors-yellow
                           :weight 'semi-bold)
 
+      (set-face-attribute 'magit-diff-context nil
+                          :background nano-light-background
+                          :weight 'regular)
+
       (set-face-attribute 'magit-diff-removed nil
                           :foreground rk-colors-red
                           :weight 'regular)
