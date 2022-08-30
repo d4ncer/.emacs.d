@@ -169,6 +169,7 @@
 (use-package rk-prodigy)
 (use-package rk-ledger)
 (use-package rk-pdf)
+(use-package rk-sql)
 
 ;; Programming language support
 
