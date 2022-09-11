@@ -55,6 +55,7 @@
 (straight-use-package 'general)
 (straight-use-package 'el-patch)
 (straight-use-package 'pretty-hydra)
+(straight-use-package 'pcache)
 
 (require 'dash)
 (require 'f)
