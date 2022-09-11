@@ -199,6 +199,7 @@ Do not scheduled items or repeating todos."
   (org-confirm-babel-evaluate nil)
   (org-babel-load-languages '((emacs-lisp . t)
                               (sql . t)
+                              (js . t)
                               (ledger . t)
                               (python . t)
                               (http . t)
