@@ -22,26 +22,48 @@
 
 (setq frame-resize-pixelwise t)
 
+;; Setup keychain
+
+(defun keychain-refresh-environment ()
+  "Set ssh-agent and gpg-agent environment variables.
+Set the environment variables `SSH_AUTH_SOCK', `SSH_AGENT_PID'
+and `GPG_AGENT' in Emacs' `process-environment' according to
+information retrieved from files created by the keychain script."
+  (interactive)
+  (let* ((ssh (shell-command-to-string "/opt/homebrew/bin/keychain -q --noask --agents ssh --eval"))
+         (gpg (shell-command-to-string "/opt/homebrew/bin/keychain -q --noask --agents gpg --eval")))
+    (list (and ssh
+               (string-match "SSH_AUTH_SOCK[=\s]\\([^\s;\n]*\\)" ssh)
+               (setenv       "SSH_AUTH_SOCK" (match-string 1 ssh)))
+          (and ssh
+               (string-match "SSH_AGENT_PID[=\s]\\([0-9]*\\)?" ssh)
+               (setenv       "SSH_AGENT_PID" (match-string 1 ssh)))
+          (and gpg
+               (string-match "GPG_AGENT_INFO[=\s]\\([^\s;\n]*\\)" gpg)
+               (setenv       "GPG_AGENT_INFO" (match-string 1 gpg))))))
+
+(keychain-refresh-environment)
+
 ;; Bootstrap straight
 
 (setq package-enable-at-startup nil)
 
-(eval-and-compile
-  (defvar bootstrap-version 5)
-  (defvar bootstrap-file (concat user-emacs-directory "straight/repos/straight.el/bootstrap.el")))
+(defvar bootstrap-version)
+(let ((bootstrap-file
+       (expand-file-name "straight/repos/straight.el/bootstrap.el" user-emacs-directory))
+      (bootstrap-version 6))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
 
-(unless (file-exists-p bootstrap-file)
-  (with-current-buffer
-      (url-retrieve-synchronously
-       "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-       'silent 'inhibit-cookies)
-    (goto-char (point-max))
-    (eval-print-last-sexp)))
+;; Aggressively load in org to avoid shadowing
 
-(defconst straight-cache-autoloads t)
-(defconst straight-check-for-modifications 'live)
-
-(require 'straight bootstrap-file t)
+(straight-use-package 'org)
 
 ;; Setup cl-lib
 
@@ -97,9 +119,6 @@
 
 (setq read-process-output-max (* 1024 1024))
 
-;; Aggressively load in org to avoid shadowing
-
-(straight-use-package 'org)
 
 ;; Ack org-roam V2
 
