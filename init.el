@@ -86,16 +86,6 @@ information retrieved from files created by the keychain script."
 (require 'el-patch)
 (require 'pretty-hydra)
 
-;; Set up selectrum
-
-(straight-use-package 'selectrum)
-(require 'selectrum)
-(selectrum-mode +1)
-
-;; Set up general to auto unbind keys (override everything)
-
-(general-auto-unbind-keys)
-
 ;; Set up personal settings
 
 (setq user-full-name "Raghuvir Kasturi")
@@ -107,6 +97,21 @@ information retrieved from files created by the keychain script."
 (eval-when-compile
   (require 'recentf)
   (require 'use-package))
+
+;; Set up Vertico
+
+(use-package vertico
+  :straight t
+  :init
+  (vertico-mode)
+  :general (:keymaps 'vertico-map
+                     "C-j" #'next-line-or-history-element
+                     "C-k" #'previous-line-or-history-element
+                     "C-<return>" #'vertico-exit-input))
+
+;; Set up general to auto unbind keys (override everything)
+
+(general-auto-unbind-keys)
 
 ;; Setup paths & features
 
