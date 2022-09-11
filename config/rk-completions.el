@@ -51,6 +51,7 @@ ARG is the same as for `backward-kill-sexp'."
   :custom
   (consult-project-root-function #'projectile-project-root)
   (consult-narrow-key (kbd ">"))
+  :hook (completion-list-mode . consult-preview-at-point-mode)
   :preface
   (defun rk-comp--consult-line-at-point ()
     (interactive)
