@@ -148,7 +148,6 @@ Do not scheduled items or repeating todos."
   (org-confirm-babel-evaluate nil)
 
   :init
-  (load-file (expand-file-name "org-version.el" (concat paths-lisp-directory "/rk-org")))
   (rk-leader-def
     "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
     "ol" '(org-store-link :wk "store link")
