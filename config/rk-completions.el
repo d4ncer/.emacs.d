@@ -83,7 +83,6 @@ ARG is the same as for `backward-kill-sexp'."
     "s P" '(rk-comp--consult-rg-at-point :wk "search in project")
     "s F" '(rk-comp--consult-rg-at-point-custom-dir :wk "search from dir"))
   :config
-  (set-face-attribute 'consult-file nil :inherit nil :weight 'semi-bold)
   (consult-customize
    consult-theme
    :preview-key '(:debounce 0.2 any)
@@ -104,18 +103,6 @@ ARG is the same as for `backward-kill-sexp'."
   :init
   (marginalia-mode)
   :config
-  (dolist (face '(marginalia-key
-                  marginalia-number
-                  marginalia-file-owner
-                  marginalia-file-priv-read
-                  marginalia-file-priv-write
-                  marginalia-file-priv-exec
-                  marginalia-file-priv-link
-                  marginalia-file-priv-dir
-                  marginalia-file-priv-no
-                  marginalia-file-priv-other
-                  marginalia-file-priv-rare))
-    (set-face-attribute face nil :inherit nil :weight 'light))
   (advice-add #'marginalia-cycle :after #'rk-comp--flush-selectrum))
 
 (use-package embark

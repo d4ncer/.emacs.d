@@ -91,6 +91,26 @@
                         :weight 'semi-bold
                         :inherit 'default)
 
+    (with-eval-after-load 'consult
+      (set-face-attribute 'consult-file nil :inherit nil
+                          :weight 'semi-bold))
+
+    (with-eval-after-load 'marginalia
+      (dolist (face '(marginalia-key
+                      marginalia-number
+                      marginalia-file-owner
+                      marginalia-file-priv-read
+                      marginalia-file-priv-write
+                      marginalia-file-priv-exec
+                      marginalia-file-priv-link
+                      marginalia-file-priv-dir
+                      marginalia-file-priv-no
+                      marginalia-file-priv-other
+                      marginalia-file-priv-rare))
+        (set-face-attribute face nil
+                            :inherit nil
+                            :weight 'light)))
+
     (with-eval-after-load 'magit
       (set-face-attribute 'magit-process-ng nil
                           :foreground rk-colors-red)
@@ -274,9 +294,9 @@
   :config
   (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode))
 
-(use-package nano-minibuffer
-  :straight '(nano-minibuffer :type git :host github
-                              :repo "rougier/nano-minibuffer"))
+;; (use-package nano-minibuffer
+;;   :straight '(nano-minibuffer :type git :host github
+;;                               :repo "rougier/nano-minibuffer"))
 
 (provide 'rk-theme-nano)
 
