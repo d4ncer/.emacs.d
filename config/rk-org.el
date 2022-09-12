@@ -1029,8 +1029,7 @@ as its argument a `vulpea-note'."
   (rk-leader-def
     "of" '(rk-org--non-diary-notes :wk "find file node"))
   :config
-  (ignore-errors
-    (org-roam-db-sync 'force))
+  (org-roam-db-sync)
   (rk-local-leader-def :keymaps 'org-mode-map
     "m"   '(:ignore t :wk "meta")
     "m a" '(vulpea-meta-add :wk "add")
