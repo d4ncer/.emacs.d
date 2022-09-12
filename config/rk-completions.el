@@ -11,37 +11,55 @@
 (require 'definers)
 (require 'general)
 
-(use-package selectrum
-  :straight t
-  :preface
-  ;; https://github.com/raxod502/selectrum/issues/498#issuecomment-876424791
-  (defun rk-comp--backward-kill-sexp (&optional arg)
-    "Selectrum wrapper for `backward-kill-sexp' without saving to kill-ring.
-ARG is the same as for `backward-kill-sexp'."
-    (interactive "p")
-    ;; For Selectrum file prompts `backward-kill-sexp' would wrongly
-    ;; include trailing (read only) spaces as part of the input (see
-    ;; `selectrum--minibuffer-local-filename-syntax').
-    (save-restriction
-      (narrow-to-region (minibuffer-prompt-end) (point-max))
-      (let ((opoint (point)))
-        (forward-sexp (- (or arg 1)))
-        (delete-region opoint (point)))))
-  :general (:keymaps 'selectrum-minibuffer-map
-                     "C-j" #'next-line-or-history-element
-                     "C-k" #'previous-line-or-history-element
-                     "C-<return>" #'selectrum-submit-exact-input
-                     "C-h" #'rk-comp--backward-kill-sexp)
+(use-package savehist
   :init
-  (rk-leader-def
-    "r" '(selectrum-repeat :wk "resume")))
+  (savehist-mode))
 
-(use-package selectrum-prescient
+(use-package emacs
+  :init
+  ;; Add prompt indicator to `completing-read-multiple'.
+  ;; We display [CRM<separator>], e.g., [CRM,] if the separator is a comma.
+  (defun crm-indicator (args)
+    (cons (format "[CRM%s] %s"
+                  (replace-regexp-in-string
+                   "\\`\\[.*?]\\*\\|\\[.*?]\\*\\'" ""
+                   crm-separator)
+                  (car args))
+          (cdr args)))
+  (advice-add #'completing-read-multiple :filter-args #'crm-indicator)
+
+  ;; Do not allow the cursor in the minibuffer prompt
+  (setq minibuffer-prompt-properties
+        '(read-only t cursor-intangible t face minibuffer-prompt))
+  (add-hook 'minibuffer-setup-hook #'cursor-intangible-mode)
+
+  ;; Emacs 28: Hide commands in M-x which do not work in the current mode.
+  ;; Vertico commands are hidden in normal buffers.
+  (setq read-extended-command-predicate
+        #'command-completion-default-include-p)
+
+  ;; Enable recursive minibuffers
+  (setq enable-recursive-minibuffers t))
+
+(use-package vertico-directory
+  :after vertico
+  ;; More convenient directory navigation commands
+  :general (:keymaps 'vertico-map
+                     "RET" #'vertico-directory-enter
+                     "DEL" #'vertico-directory-delete-char
+                     "C-h" #'vertico-directory-delete-word)
+  ;; Tidy shadowed file names
+  :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
+
+(use-package orderless
   :straight t
-  :after selectrum
-  :config
-  (selectrum-prescient-mode +1)
-  (prescient-persist-mode +1))
+  :init
+  ;; Configure a custom style dispatcher (see the Consult wiki)
+  ;; (setq orderless-style-dispatchers '(+orderless-dispatch)
+  ;;       orderless-component-separator #'orderless-escapable-split-on-space)
+  (setq completion-styles '(orderless basic)
+        completion-category-defaults nil
+        completion-category-overrides '((file (styles partial-completion)))))
 
 (use-package consult
   :straight (:files (:defaults))
@@ -96,14 +114,8 @@ ARG is the same as for `backward-kill-sexp'."
   :straight t
   :general (:keymaps 'minibuffer-local-map
                      "C-0" #'marginalia-cycle)
-  :preface
-  (defun rk-comp--flush-selectrum ()
-    (when (bound-and-true-p selectrum-mode)
-      (selectrum-exhibit)))
   :init
-  (marginalia-mode)
-  :config
-  (advice-add #'marginalia-cycle :after #'rk-comp--flush-selectrum))
+  (marginalia-mode))
 
 (use-package embark
   :straight t
