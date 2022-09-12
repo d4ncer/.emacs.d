@@ -107,7 +107,6 @@ information retrieved from files created by the keychain script."
   (let* ((dir (straight--el-get-package-directory 'vertico))
          (ext (f-join dir "extensions/")))
     (add-to-list 'load-path ext))
-  (add-to-list 'load-path)
   :general (:keymaps 'vertico-map
                      "C-j" #'next-line-or-history-element
                      "C-k" #'previous-line-or-history-element
