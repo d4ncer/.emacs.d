@@ -3,6 +3,6 @@
 # key: sql
 # condition: (yas-funcs-bolp)
 # --
-#+begin_src sql
+#+begin_src sql :dbconnection ${1::$$(yas-choose-value '("fe-test-r" "fe-test-w" "fe-prod-r" "fe-prod-w" "be-test-r" "be-test-w" "be-prod-r" "be-prod-w"))}
 $0
 #+end_src
