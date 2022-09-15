@@ -1038,8 +1038,11 @@ as its argument a `vulpea-note'."
     "m X" '(vulpea-meta-clean :wk "remove all")
     "m p" '(rk-vulpea--update-project-status :wk "project status"))
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
-  (add-hook 'find-file-hook #'vulpea-project-update-tag)
-  (add-hook 'before-save-hook #'vulpea-project-update-tag)
+
+  ;; KLUDGE: Don't automatically update project/subproject tags. Manually do it.
+  ;; (add-hook 'find-file-hook #'vulpea-project-update-tag)
+  ;; (add-hook 'before-save-hook #'vulpea-project-update-tag)
+
   (add-hook 'after-save-hook #'rk-vulpea--refresh-refile-targets)
   (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
 
