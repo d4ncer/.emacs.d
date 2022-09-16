@@ -60,6 +60,15 @@
   ;; Tidy shadowed file names
   :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
 
+(use-package vertico-repeat
+  :after vertico
+  :defines (vertico-repeat-save)
+  :init
+  (rk-leader-def
+    "r" '(vertico-repeat-last :wk "resume"))
+  (add-to-list 'savehist-additional-variables 'vertico-repeat-history)
+  (add-hook 'minibuffer-setup-hook #'vertico-repeat-save))
+
 (use-package orderless
   :straight t
   :init
