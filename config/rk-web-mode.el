@@ -71,7 +71,6 @@
   (setq flycheck-html-tidy-executable (locate-file "tidy" exec-path))
   (flycheck-add-mode 'javascript-eslint 'rk-web-js-mode)
   (flycheck-add-mode 'css-csslint 'rk-web-css-mode)
-  (flycheck-add-mode 'json-jsonlint 'rk-web-json-mode)
   (flycheck-add-mode 'html-tidy 'rk-web-html-mode))
 
 (use-package rk-web-modes
@@ -104,6 +103,12 @@
   (add-hook 'rk-web-js-mode-hook #'prettier-mode)
   (add-hook 'rk-web-css-mode-hook #'prettier-mode)
   (add-hook 'rk-web-html-mode-hook #'prettier-mode))
+
+(use-package prettier
+  :straight t
+  :after json-mode
+  :init
+  (add-hook 'json-mode-hook #'prettier-mode))
 
 (use-package stylefmt
   :straight t
