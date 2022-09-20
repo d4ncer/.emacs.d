@@ -77,6 +77,8 @@
 
     "li" '(lsp-ui-imenu :wk "imenu")
 
+    "lo" '(lsp-organize-imports :wk "fix imports")
+
     "lr" '(lsp-rename :wk "rename")
 
     "lx" '(lsp-execute-code-action :wk "exec action")
