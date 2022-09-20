@@ -1322,6 +1322,12 @@ Refer to `org-agenda-prefix-format' for more information."
   (rk-leader-def
     "o/" '(org-roam-search :wk "search")))
 
+(use-package org-modern
+  :straight (:type git :host github :repo "minad/org-modern" :branch "main")
+  :after org
+  :config
+  (global-org-modern-mode))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
