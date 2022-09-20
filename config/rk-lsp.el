@@ -88,6 +88,19 @@
     "lsr" '(lsp-workspace-folders-remove :wk "remove folder")
     "lss" '(lsp-workspace-folders-switch :wk "switch folder")))
 
+(use-package emacs
+  :after lsp-mode
+  :init
+  (advice-add 'json-parse-string :around
+              (lambda (orig string &rest rest)
+                (apply orig (s-replace "\\u0000" "" string)
+                       rest)))
+  (advice-add 'json-parse-buffer :around
+              (lambda (orig &rest rest)
+                (while (re-search-forward "\\u0000" nil t)
+                  (replace-match ""))
+                (apply orig rest))))
+
 (use-package lsp-mode
   :straight t
   :after company
