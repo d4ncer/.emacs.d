@@ -165,6 +165,8 @@
                           :weight 'semi-bold))
 
     (with-eval-after-load 'org
+      (set-face-attribute 'org-block nil
+                          :inherit 'default)
       (set-face-attribute 'org-level-1 nil
                           :inherit nil
                           :weight 'bold
