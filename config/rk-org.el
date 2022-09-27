@@ -1225,10 +1225,13 @@ Refer to `org-agenda-prefix-format' for more information."
     (interactive)
     (find-file rk-bib--refs-file))
 
-  (defun rk-citar--format-note (key entry filepath)
+  (defun rk-citar--format-note (key entry)
     (let* ((template "${title}; ${author editor}")
+           (filepath (expand-file-name
+                      (concat key ".org")
+                      (car citar-notes-paths)))
            (note-meta
-            (citar--format-entry-no-widths entry template))
+            (citar-format--entry template entry))
            (buffer (find-file filepath)))
       (with-current-buffer buffer
         (erase-buffer)
@@ -1246,7 +1249,7 @@ Refer to `org-agenda-prefix-format' for more information."
   (org-cite-follow-processor 'citar)
   (org-cite-activate-processor 'citar)
   (citar-bibliography `(,rk-bib--refs-file))
-  (citar-format-note-function #'rk-citar--format-note)
+  (citar-note-format-function #'rk-citar--format-note)
   :init
   (rk-leader-def
     "o c"   '(:ignore t :wk "cite")
