@@ -25,9 +25,8 @@
    ("runhaskell" . haskell-mode))
 
   :init
-  (progn
-    (add-to-list 'completion-ignored-extensions ".hi")
-    (add-to-list 'completion-ignored-extensions ".gm"))
+  (add-to-list 'completion-ignored-extensions ".hi")
+  (add-to-list 'completion-ignored-extensions ".gm")
   :config
   (add-to-list 'display-buffer-alist
                `(,(rx bos "*stack hoogle*" eos)
@@ -52,13 +51,13 @@
   :commands (haskell-compile)
   :defines (haskell-compile-command
             haskell-compile-cabal-build-command)
-  :config
-  (progn
-    (rk-local-leader-def :keymaps 'haskell-mode-map
-      "c" '(haskell-compile :wk "compile"))
-
-    (setq haskell-compile-command "stack exec -- ghc -Wall -ferror-spans -fforce-recomp -c %s")
-    (setq haskell-compile-cabal-build-command "stack build --ghc-options -ferror-spans")))
+  :init
+  (rk-local-leader-def :keymaps 'haskell-mode-map
+    "c" '(haskell-compile :wk "compile"))
+  ;; :config
+  ;; (setq haskell-compile-command "stack exec -- ghc -Wall -ferror-spans -fforce-recomp -c %s")
+  ;; (setq haskell-compile-cabal-build-command "stack build --ghc-options -ferror-spans")
+  )
 
 (use-package haskell-interactive-mode
   :after haskell-mode
