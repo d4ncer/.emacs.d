@@ -604,22 +604,6 @@ table tr.tr-even td {
   :after org
   :hook (org-mode . flyspell-mode))
 
-(use-package org-superstar
-  :straight t
-  :hook (org-mode . org-superstar-mode)
-  :custom
-  (org-indent-mode-turns-on-hiding-stars nil)
-  (org-superstar-headline-bullets-list '(?○))
-  (org-superstar-leading-bullet ?\s)
-  (org-superstar-special-todo-items t)
-  (org-superstar-todo-bullet-alist '(("TODO" . ?☐)
-                                     ("NEXT" . ?☐)
-                                     ("WAITING" . ?◹)
-                                     ("CANCELLED" . ?☒)
-                                     ("DONE" . ?☑)))
-  :config
-  (setf (alist-get 45 org-superstar-item-bullet-alist) ?•))
-
 (use-package org-ql
   :straight t)
 
@@ -1328,6 +1312,10 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package org-modern
   :straight (:type git :host github :repo "minad/org-modern" :branch "main")
   :after org
+  :custom
+  (org-modern-list '((?+ . "◦")
+                     (?* . "–")
+                     (?- . "•")))
   :config
   (global-org-modern-mode))
 
