@@ -65,6 +65,11 @@ information retrieved from files created by the keychain script."
 
 (straight-use-package 'org)
 
+;; Set up nursery
+
+(straight-use-package
+ '(nursery :type git :host github :repo "chrisbarrett/nursery"))
+
 ;; Setup cl-lib
 
 (require 'cl-lib)
