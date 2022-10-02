@@ -114,7 +114,7 @@ Do not scheduled items or repeating todos."
             (org-todo "TODO"))))))
 
   :custom
-  (org-tags-exclude-from-inheritance '("subproject"))
+  (org-tags-exclude-from-inheritance '("project"))
   (org-M-RET-may-split-line nil)
   (org-catch-invisible-edits 'smart)
   (org-cycle-separator-lines 1)
@@ -162,7 +162,6 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
   (rk-local-leader-def :keymaps 'org-mode-map
     "d" '(org-deadline :wk "deadline")
-    "R" '(org-refile :wk "refile")
     "s" '(org-schedule :wk "schedule")
 
     "u"  '(:ignore t :wk "utils")
@@ -302,7 +301,7 @@ Do not scheduled items or repeating todos."
     (setq buffer-read-only t))
 
   :custom
-  (org-stuck-projects '("+subproject-ignore-maybe-done"
+  (org-stuck-projects '("-ignore-maybe-done"
                         ("NEXT") nil
                         ""))
 
@@ -340,11 +339,52 @@ Do not scheduled items or repeating todos."
   :config
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
     "d" '(org-agenda-deadline :wk "deadline")
-    "p" '(org-agenda-set-property :wk "set property")
-    "r" '(org-agenda-refile :wk "refile"))
+    "p" '(org-agenda-set-property :wk "set property"))
 
   (add-hook 'org-agenda-finalize-hook #'org-agenda-delete-empty-blocks)
   (add-hook 'org-agenda-finalize-hook #'org-agenda-to-appt))
+
+(use-package org
+  :straight t
+  :after (vulpea)
+  :preface
+  (defcustom rk-org--refile-headline "Tasks"
+    "The headline to refile to in project files.")
+
+  (defun rk-org--refile ()
+    (interactive)
+    (let* ((notes (vulpea-db-query-by-tags-some '("project")))
+           (completions (seq-map (lambda (n) (cons (vulpea-select-describe n) n)) notes))
+           (note (completing-read
+                  "Refile to: "
+                  completions nil t))
+           (v-note (cdr (assoc note completions)))
+           (file (vulpea-note-path v-note))
+           (pos (save-excursion
+                  (find-file file)
+                  (org-find-exact-headline-in-buffer rk-org--refile-headline))))
+      (org-refile nil nil (list rk-org--refile-headline file nil pos))
+      (switch-to-buffer (current-buffer))))
+
+  (defun rk-org-agenda--refile ()
+    (interactive)
+    (let* ((notes (vulpea-db-query-by-tags-some '("project")))
+           (completions (seq-map (lambda (n) (cons (vulpea-select-describe n) n)) notes))
+           (note (completing-read
+                  "Refile to: "
+                  completions nil t))
+           (v-note (cdr (assoc note completions)))
+           (file (vulpea-note-path v-note))
+           (pos (save-excursion
+                  (find-file file)
+                  (org-find-exact-headline-in-buffer rk-org--refile-headline))))
+      (org-agenda-refile nil (list rk-org--refile-headline file nil pos))
+      (switch-to-buffer (current-buffer))))
+  :config
+  (rk-local-leader-def :keymaps 'org-mode-map
+    "R" '(rk-org--refile :wk "refile"))
+  (rk-local-leader-def :keymaps 'org-agenda-mode-map
+    "r" '(rk-org-agenda--refile :wk "refile")))
 
 (use-package org-archive
   :after org
@@ -604,9 +644,6 @@ table tr.tr-even td {
   :after org
   :hook (org-mode . flyspell-mode))
 
-(use-package org-ql
-  :straight t)
-
 ;; Roam config
 
 (use-package org-roam
@@ -659,6 +696,7 @@ table tr.tr-even td {
             "SPC" nil
             "<return>" #'rk-org-roam--visit-grep-other-window)
   :custom
+  (org-roam-file-extensions '("org" "org_archive"))
   (org-roam-directory rk-org--roam-dir)
   (org-roam-dailies-capture-templates '(("d" "default" entry "* %?" :target
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n"))))
@@ -708,12 +746,18 @@ table tr.tr-even td {
              :host github
              :repo "d12frosted/vulpea")
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
+  :after (org-ql)
   :preface
-  (use-package org-ql
-    :straight t)
   (defun rk-org--filter-non-diary-notes (note)
     (and (not (f-child-of-p (vulpea-note-path note) rk-org--roam-dailies-dir))
          (not (f-child-of-p (vulpea-note-path note) rk-org--roam-refs-dir))))
+
+  (defun vulpea-active-project-p ()
+    "Return non-nil if current buffer is a Vulpea project and has
+non-done status."
+    (let ((p-status (vulpea-buffer-meta-get! (vulpea-buffer-meta) "status")))
+      (or (s-equals? p-status "in progress")
+          (s-equals? p-status "draft"))))
 
   (defun vulpea-project-p ()
     "Return non-nil if current buffer has any todo entry.
@@ -721,31 +765,17 @@ table tr.tr-even td {
 TODO entries marked as done are ignored, meaning the this
 function returns nil if current buffer contains only completed
 tasks."
-    (seq-find
-     (lambda (type)
-       (eq type 'todo))
-     (org-element-map
-         (org-element-parse-buffer 'headline)
-         'headline
-       (lambda (h)
-         (org-element-property :todo-type h)))))
-
-  (defun rk-vulpea--set-subproject ()
-    "Check for TODO in children entries and mark current header."
-    (let* ((tags (org-get-tags nil t))
-           (original-tags tags)
-           (subp-p (-contains-p tags "subproject"))
-           (todo-children-p (org-ql--predicate-children '(todo)))
-           (done-p (and subp-p
-                        (not todo-children-p))))
-      (when done-p
-        (setq tags (remove "subproject" tags)))
-      (when todo-children-p
-        (setq tags (cons "subproject" tags)))
-      (setq tags (seq-uniq tags))
-      (when (or (seq-difference tags original-tags)
-                (seq-difference original-tags tags))
-        (org-set-tags tags))))
+    (let ((p-stats (vulpea-buffer-meta-get! (vulpea-buffer-meta) "status")))
+      (or (s-equals? (vulpea-buffer-prop-get "title") "Inbox")
+          (vulpea-active-project-p)
+          (seq-find
+           (lambda (type)
+             (eq type 'todo))
+           (org-element-map
+               (org-element-parse-buffer 'headline)
+               'headline
+             (lambda (h)
+               (org-element-property :todo-type h)))))))
 
   (defun rk-vulpea--project-status ()
     (completing-read "Project status: "
@@ -754,12 +784,13 @@ tasks."
   (defun vulpea-project-update-tag ()
     "Update PROJECT tag in the current buffer."
     (when (and (not (active-minibuffer-window))
+               (eq 'org-mode major-mode)
                (vulpea-buffer-p))
       (save-excursion
         (goto-char (point-min))
         (let* ((tags (vulpea-buffer-tags-get))
                (original-tags tags))
-          (org-ql-select (current-buffer) '(level 1) :action #'rk-vulpea--set-subproject)
+
           (if (vulpea-project-p)
               (progn
                 (setq tags (cons "project" tags)))
@@ -772,11 +803,6 @@ tasks."
           (when (or (seq-difference tags original-tags)
                     (seq-difference original-tags tags))
             (apply #'vulpea-buffer-tags-set tags))))))
-
-  ;; KLUDGE Setting refile targets hackily here.
-  ;; Fix this.
-  (defun rk-vulpea--refresh-refile-targets ()
-    (setq org-refile-targets `((,(vulpea-project-files) :tag . "subproject"))))
 
   (defun vulpea-buffer-p ()
     "Return non-nil if the currently visited buffer is a note."
@@ -875,7 +901,7 @@ tasks."
                       title
                       (rk-vulpea--org-roam-file-name title)
                       :tags (-concat tags '("project"))
-                      :body (format "* Metadata\n\n- status :: %s\n\n* Description\n\n* Tasks :subproject:\n\n** NEXT Fill out description" status)
+                      :body (format "* Metadata\n\n- status :: %s\n\n* Description\n\n* Tasks\n\n** NEXT Fill out description" status)
                       :immediate-finish t)))
                   ((string= type "idea")
                    (vulpea-create
@@ -1015,6 +1041,7 @@ as its argument a `vulpea-note'."
   :config
   (org-roam-db-sync)
   (rk-local-leader-def :keymaps 'org-mode-map
+    "u b" '(vulpea-find-backlink :wk "find backlinks")
     "m"   '(:ignore t :wk "meta")
     "m a" '(vulpea-meta-add :wk "add")
     "m A" '(vulpea-meta-add-list :wk "add list")
@@ -1023,25 +1050,19 @@ as its argument a `vulpea-note'."
     "m p" '(rk-vulpea--update-project-status :wk "project status"))
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
 
-  ;; KLUDGE: Don't automatically update project/subproject tags. Manually do it.
-  ;; (add-hook 'find-file-hook #'vulpea-project-update-tag)
-  ;; (add-hook 'before-save-hook #'vulpea-project-update-tag)
+  (add-hook 'find-file-hook #'vulpea-project-update-tag)
+  (add-hook 'before-save-hook #'vulpea-project-update-tag)
 
-  (add-hook 'after-save-hook #'rk-vulpea--refresh-refile-targets)
   (advice-add 'org-agenda :before #'vulpea-agenda-files-update))
 
+(use-package org-ql
+  :straight t)
+
 (use-package org-capture
-  :after vulpea
+  :after (vulpea org-ql)
   :preface
-  (use-package org-ql
-    :straight t)
-  (require 'org-ql)
   (autoload 'org-element-at-point "org-element")
   (autoload 'org-duration-from-minutes "org-duration")
-
-  (defun rk-org--subproject-title ()
-    (when (org-ql--predicate-tags-local "subproject")
-      (org-element-property :raw-value (org-element-at-point))))
 
   ;; TODO fix this function, it no work
   ;; (defun rk-org--capture-to-project-or-inbox ()
@@ -1153,7 +1174,7 @@ Refer to `org-agenda-prefix-format' for more information."
                                 (not (planning))
                                 (not (heading "Fill out description")))
                           ((org-ql-block-header "Unplanned NEXT actions")))
-            (org-ql-block '(and (tags "subproject")
+            (org-ql-block '(and (heading "Tasks")
                                 (descendants (todo))
                                 (not (descendants (todo "NEXT"))))
                           ((org-ql-block-header "Stuck projects")))
