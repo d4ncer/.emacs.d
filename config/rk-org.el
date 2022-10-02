@@ -1064,27 +1064,6 @@ as its argument a `vulpea-note'."
   (autoload 'org-element-at-point "org-element")
   (autoload 'org-duration-from-minutes "org-duration")
 
-  ;; TODO fix this function, it no work
-  ;; (defun rk-org--capture-to-project-or-inbox ()
-  ;;   "Capture a TODO to an existing subproject or to inbox"
-  ;;   (interactive)
-  ;;   (let* ((marginalia-annotator-registry '((multi-category none none none)))
-  ;;          (sources (rk-org--))
-  ;;          (resp (consult--multi sources
-  ;;                                :prompt "Add task to: "
-  ;;                                :default "To Inbox"
-  ;;                                :require-match t))
-  ;;          (title (car resp))
-  ;;          (pl (cdr resp))
-  ;;          (org-capture-templates (cond
-  ;;                                  ((eq 'file+headline (plist-get pl :target))
-  ;;                                   `(("x" "*file+headline*" entry (file+headline ,(plist-get pl :path) ,title)
-  ;;                                      "* TODO %?\n" :empty-lines 5)))
-  ;;                                  (t
-  ;;                                   `(("x" "*file*" entry (file ,(plist-get pl :path))
-  ;;                                      "* TODO %?\n" :empty-lines 5))))))
-  ;;     (org-capture nil "x")))
-
   (defun rk-org--capture-to-inbox ()
     "Capture TODO to inbox."
     (interactive)
