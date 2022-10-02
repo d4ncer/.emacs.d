@@ -160,68 +160,30 @@
   :demand t
   :hook (embark-collect-mode . consult-preview-at-point-mode))
 
-;; Company / Corfu
+;; Corfu
 
-(use-package company
+(use-package corfu
   :straight t
-  :hook (after-init . global-company-mode)
-
+  :custom
+  (corfu-auto t)
+  (corfu-quit-no-match t)
+  (corfu-quit-at-boundary t)
+  :preface
+  (autoload 'company-show-doc-buffer "company")
   :general
-  (:keymaps 'company-mode-map :states '(insert)
-            "C-;" #'company-complete)
-  (:keymaps 'company-active-map
-            "C-w" nil
-            "C-j" #'company-select-next-or-abort
-            "C-k" #'company-select-previous-or-abort
-            "<tab>" #'company-complete-selection)
-  (:keymaps 'company-search-map
-            "C-w" nil
-            "C-j" #'company-select-next-or-abort
-            "C-k" #'company-select-previous-or-abort
-            "<tab>" #'company-complete-selection)
+  (:keymaps 'corfu-map
+            "C-<return>" #'corfu-insert
+            "C-j" #'corfu-next
+            "C-k" #'corfu-previous
+            "C-h" #'corfu-show-documentation)
+  :init
+  (global-corfu-mode))
 
-  :commands (company-select-next-or-abort
-             company-select-previous-or-abort
-             company-show-doc-buffer)
-  :custom
-  (company-tooltip-align-annotations t)
-  (company-idle-delay 0.2)
-  (company-require-match nil))
-
-(use-package company-dabbrev
-  :after company
-  :custom
-  (company-dabbrev-ignore-case nil)
-  (company-dabbrev-downcase nil))
-
-;; (use-package company-box
-;;   :straight t
-;;   :custom
-;;   (company-box-scrollbar nil)
-;;   :hook (company-mode . company-box-mode))
-
-;; (use-package corfu
-;;   :straight t
-;;   :custom
-;;   (corfu-auto t)
-;;   (corfu-quit-no-match t)
-;;   (corfu-quit-at-boundary t)
-;;   :preface
-;;   (autoload 'company-show-doc-buffer "company")
-;;   :general
-;;   (:keymaps 'corfu-map
-;;             "C-<return>" #'corfu-insert
-;;             "C-j" #'corfu-next
-;;             "C-k" #'corfu-previous
-;;             "C-h" #'corfu-show-documentation)
-;;   :init
-;;   (global-corfu-mode))
-
-;; (use-package corfu-doc
-;;   :straight '(corfu-doc :type git :host github :repo "galeo/corfu-doc")
-;;   :after (corfu)
-;;   :config
-;;   (add-hook 'corfu-mode-hook #'corfu-doc-mode))
+(use-package corfu-doc
+  :straight '(corfu-doc :type git :host github :repo "galeo/corfu-doc")
+  :after (corfu)
+  :config
+  (add-hook 'corfu-mode-hook #'corfu-doc-mode))
 
 (use-package emacs
   :general
