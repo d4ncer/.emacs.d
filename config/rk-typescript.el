@@ -30,8 +30,8 @@
 (use-package typescript-mode
   :straight t
   :after lsp
-  :init
-  (setq lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose"))
+  :custom
+  ;; (lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose" "--tsserver-log-file=/tmp/ts-logs.txt" "--log-level=4"))
   :config
   (add-hook 'typescript-mode-hook #'lsp-deferred))
 
