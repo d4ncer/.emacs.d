@@ -852,13 +852,13 @@ tasks."
                              817 ; U+0331 COMBINING MACRON BELOW
                              )))
       (cl-flet* ((nonspacing-mark-p (char)
-                                    (memq char slug-trim-chars))
+                   (memq char slug-trim-chars))
                  (strip-nonspacing-marks (s)
-                                         (string-glyph-compose
-                                          (apply #'string (seq-remove #'nonspacing-mark-p
-                                                                      (string-glyph-decompose s)))))
+                   (string-glyph-compose
+                    (apply #'string (seq-remove #'nonspacing-mark-p
+                                                (string-glyph-decompose s)))))
                  (cl-replace (title pair)
-                             (replace-regexp-in-string (car pair) (cdr pair) title)))
+                   (replace-regexp-in-string (car pair) (cdr pair) title)))
         (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
                (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
                (ts (format-time-string "%Y%m%d%H%M%S")))
@@ -1067,8 +1067,7 @@ as its argument a `vulpea-note'."
   (defun rk-org--capture-to-inbox ()
     "Capture TODO to inbox."
     (interactive)
-    (let* ((path rk-org--roam-inbox)
-           (org-capture-templates `(("t" "*file*" entry (file ,path)
+    (let* ((org-capture-templates `(("t" "*file*" entry (file ,rk-org--roam-inbox)
                                      "* TODO %?\n" :empty-lines 1))))
       (org-capture nil "t")))
   :config
@@ -1253,11 +1252,9 @@ Refer to `org-agenda-prefix-format' for more information."
   :after org)
 
 (use-package org-roam-review
-  :hook
-  (org-mode . org-roam-review-cache-mode)
   :commands
   (org-roam-review
-   org-roam-review-list-uncategorised
+   org-roam-review-list-by-maturity
    org-roam-review-list-recently-added
    org-roam-review-set-seedling
    org-roam-review-set-excluded)
@@ -1280,7 +1277,8 @@ Refer to `org-agenda-prefix-format' for more information."
   (rk-leader-def
     "o r" '(:ignore t :wk "review")
     "o r s" '(org-roam-review :wk "status")
-    "o r u" '(org-roam-review-list-uncategorised :wk "to categorize")
+    "o r v" '(org-roam-review-list-due :wk "to review")
+    "o r u" '(org-roam-review-list-by-maturity :wk "to categorize")
     "o r r" '(org-roam-review-list-recently-added :wk "recently added"))
   :config
   (add-hook 'org-roam-capture-new-node-hook #'rk-orr--review-note-p)
@@ -1298,6 +1296,9 @@ Refer to `org-agenda-prefix-format' for more information."
     "r b" '(org-roam-review-set-budding :wk "set budding")
     "r s" '(org-roam-review-set-seedling :wk "set seedling")
     "r e" '(org-roam-review-set-evergreen :wk "set evergreen")))
+
+(straight-use-package
+ '(nursery :type git :host github :repo "chrisbarrett/nursery"))
 
 (use-package org-roam-gc
   :init
