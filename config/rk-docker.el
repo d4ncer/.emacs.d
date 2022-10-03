@@ -26,12 +26,6 @@
     "B" '(dockerfile-build-no-cache-buffer :wk "build w/o cache")
     "t" '(dockerfile-test-function :wk "test")))
 
-(use-package docker
-  :straight t
-  :init
-  (rk-leader-def
-    "ad" '(docker :wk "docker")))
-
 (provide 'rk-docker)
 
 ;;; rk-docker.el ends here
