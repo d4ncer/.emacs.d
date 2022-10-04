@@ -25,6 +25,10 @@
   :straight t
   :demand t
   :general
+  (:keymaps 'image-map
+            "o" #'evil-open-below)
+  (:keymaps 'org-mode-map
+            "C-c C-i" #'rk-org--insert-screenshot)
   (:keymaps 'org-mode-map
             "C-c l" #'rkmooven-insert-JIRA-link
             "C-n" #'org-next-visible-heading
@@ -113,7 +117,19 @@ Do not scheduled items or repeating todos."
                            (org-element-at-point)))
             (org-todo "TODO"))))))
 
+  (defun rk-org--insert-screenshot ()
+    (interactive)
+    (let* ((image-dir (f-join paths--org-dir "images"))
+           (dest (f-join image-dir (format-time-string "screen_%Y%m%d_%H%M%S.png"))))
+      (start-process "screencapture" nil "/usr/sbin/screencapture" "-i" dest)
+      (read-char "Taking screenshot... Press any key when done.")
+      (let ((width (read-number "Desired width: " 600)))
+        (insert (format "#+attr_org: :width %s\n" width))
+        (org-insert-link t (concat "file:" dest) "")
+        (org-redisplay-inline-images))))
+
   :custom
+  (org-image-actual-width nil)
   (org-tags-exclude-from-inheritance '("project"))
   (org-M-RET-may-split-line nil)
   (org-catch-invisible-edits 'smart)
