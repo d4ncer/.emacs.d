@@ -1192,7 +1192,7 @@ Refer to `org-agenda-prefix-format' for more information."
   :straight t
   :general
   (:keymaps 'org-mode-map :states '(insert)
-            "C-c b" #'citar-insert-citation)
+            "C-c b" #'org-cite-insert)
   (:keymaps 'minibuffer-local-map
             "C-b" #'citar-insert-preset)
   :preface
