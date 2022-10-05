@@ -1254,6 +1254,11 @@ Refer to `org-agenda-prefix-format' for more information."
   :config
   (require 'citar-org))
 
+(use-package citar-embark
+  :straight t
+  :after citar embark
+  :config (citar-embark-mode))
+
 (use-package org-pdftools
   :straight t
   :after org
