@@ -140,7 +140,6 @@
   :straight t
   :after typescript-mode
   :init
-  :config
   (add-to-list 'tree-sitter-major-mode-language-alist '(rk-ts-tsx-mode . tsx)))
 
 (use-package emmet-mode

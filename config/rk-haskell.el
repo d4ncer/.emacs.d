@@ -37,6 +37,12 @@
                  (slot            . 1)
                  (window-height   . 0.5))))
 
+(use-package tree-sitter-langs
+  :straight t
+  :after (haskell-mode tree-sitter)
+  :init
+  (add-to-list 'tree-sitter-major-mode-language-alist '(haskell-mode . haskell)))
+
 (use-package lsp-haskell
   :straight t
   :after (haskell-mode lsp)

@@ -24,6 +24,10 @@
   (global-tree-sitter-mode 1)
   (add-hook 'tree-sitter-mode-hook #'tree-sitter-hl-mode))
 
+(use-package tree-sitter-langs
+  :straight t
+  :after tree-sitter)
+
 (use-package expand-region
   :straight t
   :after tree-sitter
