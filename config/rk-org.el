@@ -1149,10 +1149,6 @@ Refer to `org-agenda-prefix-format' for more information."
   (rk-leader-def
     "o p" '(vulpea-agenda-person :wk "for person"))
   :config
-  (setq org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                   (todo . " %i %(vulpea-agenda-category 12)%?-12t% s ")
-                                   (tags . " %i %(vulpea-agenda-category 12)%?-12t% s ")
-                                   (search . " %i %(vulpea-agenda-category 12)%?-12t% s ")))
   (setq org-agenda-custom-commands
         '(("g" "General"
            ((org-ql-block '(todo)
@@ -1174,10 +1170,10 @@ Refer to `org-agenda-prefix-format' for more information."
                           ((org-ql-block-header "Waiting")))
             (agenda ""))
            ((org-agenda-files (vulpea-project-files))
-            (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                        (todo . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                        (tags . " %i %(vulpea-agenda-category 12)%?-12t% s")
-                                        (search . " %i %(vulpea-agenda-category 12)%?-12t% s"))))))))
+            (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s")
+                                        (todo . " %i %(vulpea-agenda-category 24)%?-24t% s")
+                                        (tags . " %i %(vulpea-agenda-category 24)%?-24t% s")
+                                        (search . " %i %(vulpea-agenda-category 24)%?-24t% s"))))))))
 
 (use-package org-roam-ui
   :straight
