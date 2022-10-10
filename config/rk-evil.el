@@ -69,6 +69,13 @@
   :functions (evil-mode)
   :defines (evil-want-Y-yank-to-eol))
 
+(use-package avy
+  :straight t
+  :after evil
+  :general
+  (:states '(normal motion)
+           "g c" #'avy-goto-char-2))
+
 (use-package evil-surround
   :straight t
   :after evil
