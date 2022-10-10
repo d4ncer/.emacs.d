@@ -28,7 +28,8 @@
   (:keymaps 'image-map
             "o" #'evil-open-below)
   (:keymaps 'org-mode-map
-            "C-c l" #'rkmooven-insert-JIRA-link
+            "C-c j" #'rkmooven-insert-JIRA-link
+            "C-c l" #'org-insert-last-stored-link
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "M-p"     #'org-metaup
