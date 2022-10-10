@@ -15,6 +15,12 @@
   :straight t
   :mode ("\\.\\(e?ya?\\|ra\\)ml\\'" . yaml-mode))
 
+(use-package prettier
+  :straight t
+  :after yaml-mode
+  :init
+  (add-hook 'yaml-mode-hook #'prettier-mode))
+
 (provide 'rk-yaml)
 
 ;;; rk-yaml.el ends here
