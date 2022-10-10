@@ -18,6 +18,7 @@
 (use-package prettier
   :straight t
   :after yaml-mode
+  :if (executable-find "prettier")
   :init
   (add-hook 'yaml-mode-hook #'prettier-mode))
 
