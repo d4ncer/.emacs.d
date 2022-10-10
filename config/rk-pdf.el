@@ -10,6 +10,9 @@
 (use-package pdf-tools
   :straight t
   :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
+  :general
+  (:keymaps 'pdf-view-mode-map :states '(normal)
+            "gp" #'pdf-view-goto-page)
   :preface
   (defun rk-pdf--unset-cursor ()
     (setq-local evil-normal-state-cursor (list nil)))
