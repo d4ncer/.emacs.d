@@ -10,7 +10,7 @@
 (require 'f)
 (require 'gnus)
 
-(defvar rk-java--lombok-version "1.18.22")
+(defvar rk-java--lombok-version "1.18.24")
 (defvar rk-java--lombok-path
   (f-join gnus-home-directory (format ".m2/repository/org/projectlombok/lombok/%s/lombok-%s.jar" rk-java--lombok-version rk-java--lombok-version)))
 
@@ -18,26 +18,15 @@
   :straight t
   :after lsp
   :config
-  ;; (setq lsp-java-vmargs '("-XX:+UseParallelGC" "-XX:GCTimeRatio=4" "-XX:AdaptiveSizePolicyWeight=90" "-Dsun.zip.disableMemoryMapping=true" "-Xmx1G" "-Xms100m"))
-  ;; (setq lsp-java-vmargs
-  ;;       `("-noverify"
-  ;;         "-XX:+UseParallelGC"
-  ;;         "-XX:GCTimeRatio=4"
-  ;;         "-XX:AdaptiveSizePolicyWeight=90"
-  ;;         "-Dsun.zip.disableMemoryMapping=true"
-  ;;         "-Xmx1G"
-  ;;         "-Xms100m"
-  ;;         ,(format "-javaagent:%s" rk-java--lombok-path)
-  ;;         ,(format "-Xbootclasspath/a:%s" rk-java--lombok-path)))
   (setq lsp-java-vmargs
-        `("-noverify"
-          "-XX:+UseParallelGC"
+        `("-XX:+UseParallelGC"
           "-XX:GCTimeRatio=4"
           "-XX:AdaptiveSizePolicyWeight=90"
           "-Dsun.zip.disableMemoryMapping=true"
           "-Xmx1G"
           "-Xms100m"
-          ,(format "-javaagent:%s" rk-java--lombok-path)))
+          ,(format "-javaagent:%s" rk-java--lombok-path)
+          ,(format "-Xbootclasspath/a:%s" rk-java--lombok-path)))
   (add-hook 'java-mode-hook #'lsp))
 
 (provide 'rk-java)
