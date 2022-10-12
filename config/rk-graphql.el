@@ -16,7 +16,6 @@
 (use-package prettier
   :straight t
   :after graphql
-  :if (executable-find "prettier")
   :init
   (add-hook 'graphql-mode-hook #'prettier-mode))
 

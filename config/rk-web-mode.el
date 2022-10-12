@@ -99,7 +99,6 @@
 (use-package prettier
   :straight t
   :after rk-web-modes
-  :if (executable-find "prettier")
   :init
   (add-hook 'rk-web-js-mode-hook #'prettier-mode)
   (add-hook 'rk-web-css-mode-hook #'prettier-mode)
@@ -108,7 +107,6 @@
 (use-package prettier
   :straight t
   :after json-mode
-  :if (executable-find "prettier")
   :init
   (add-hook 'json-mode-hook #'prettier-mode))
 

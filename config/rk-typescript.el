@@ -130,7 +130,6 @@
 (use-package prettier
   :straight t
   :after typescript-mode
-  :if (executable-find "prettier")
   :init
   (add-hook 'rk-ts-tsx-mode-hook #'prettier-mode)
   (add-hook 'typescript-mode-hook #'prettier-mode)
