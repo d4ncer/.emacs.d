@@ -168,8 +168,6 @@
   (corfu-auto t)
   (corfu-quit-no-match t)
   (corfu-quit-at-boundary t)
-  :preface
-  (autoload 'company-show-doc-buffer "company")
   :general
   (:keymaps 'corfu-map
             "C-<return>" #'corfu-insert

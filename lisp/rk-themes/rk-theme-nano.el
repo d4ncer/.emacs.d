@@ -182,10 +182,6 @@
       (set-face-attribute 'corfu-default nil
                           :background nano-light-background))
 
-    (with-eval-after-load 'company
-      (set-face-attribute 'company-tooltip-annotation-selection nil
-                          :inherit 'company-tooltip-selection))
-
     (with-eval-after-load 'tree-sitter-hl
       (set-face-attribute 'tree-sitter-hl-face:function.call nil
                           :inherit nil

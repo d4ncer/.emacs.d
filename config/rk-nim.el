@@ -39,9 +39,6 @@
     (nimsuggest-mode 1)
     (flycheck-mode 1)
 
-    (with-eval-after-load 'company
-      (add-to-list 'company-backends 'company-nimsuggest))
-
     (auto-fill-mode 0)
     (electric-indent-local-mode 0))
   :config

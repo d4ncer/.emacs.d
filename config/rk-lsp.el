@@ -22,9 +22,6 @@
 (use-package lsp-mode
   :straight t
   :preface
-  (defun rk-lsp--lsp-company-mode-p ()
-    (and (bound-and-true-p lsp-mode)
-         (bound-and-true-p company-mode)))
   (defun rk-lsp--maybe-disable-highlight-thing ()
     (when (gethash "documentHighlightProvider" (lsp--server-capabilities))
       (highlight-thing-mode -1)))
@@ -48,18 +45,14 @@
      :keymaps 'local
      "gd" #'lsp-find-definition
      "K" #'lsp-describe-thing-at-point
-     "T" #'lsp-goto-type-definition)
-    (when (rk-lsp--lsp-company-mode-p)
-      (general-define-key
-       :states 'insert
-       :keymaps 'local
-       "C-." #'company-complete)))
+     "T" #'lsp-goto-type-definition))
   (defun rk-lsp--setup-lsp ()
     (rk-lsp--maybe-setup-organize-imports)
     (rk-lsp--maybe-disable-highlight-thing)
     (rk-lsp--maybe-setup-format-on-save)
     (rk-lsp--setup-local-keybinds))
   :custom
+  (lsp-completion-provider :none)
   (lsp-headerline-breadcrumb-enable nil)
   (lsp-enable-snippet t)
   (lsp-enable-on-type-formatting nil)
@@ -102,16 +95,6 @@
                 (while (re-search-forward "\\u0000" nil t)
                   (replace-match ""))
                 (apply orig rest))))
-
-(use-package lsp-mode
-  :straight t
-  :after company
-  :preface
-  (defun rk-lsp--setup-company-backend ()
-    (when (rk-lsp--lsp-company-mode-p)
-      (set (make-local-variable 'company-backends) '(company-files company-capf))))
-  :config
-  (add-hook 'company-mode-hook #'rk-lsp--setup-company-backend))
 
 (use-package lsp-ui
   :straight t
