@@ -16,6 +16,9 @@
   (savehist-mode))
 
 (use-package emacs
+  :general
+  (:states '(insert normal motion)
+           "C-;" #'completion-at-point)
   :init
   ;; Use `consult-completion-in-region' if Vertico is enabled.
   ;; Otherwise use the default `completion--in-region' function.
