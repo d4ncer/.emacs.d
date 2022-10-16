@@ -24,6 +24,11 @@
           (magit-status project-root)
         (dired project-root))))
 
+  (defun rk-projectile--find-file-in-project ()
+    (interactive)
+    (let ((projectile-switch-project-action #'projectile-find-file))
+      (projectile-switch-project)))
+
   :custom
   (projectile-indexing-method 'alien)
   (projectile-completion-system 'default)
@@ -63,7 +68,8 @@
     "pf" '(projectile-find-file :wk "find file (project)")
     "pF" '(projectile-recentf :wk "find recent file (project)")
     "pd" '(projectile-find-dir :wk "find dir (project)")
-    "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)"))
+    "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)")
+    "ps" '(rk-projectile--find-file-in-project :wk "find file (other project)"))
 
   :config
   (projectile-mode +1))
