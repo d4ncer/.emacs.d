@@ -915,7 +915,7 @@ tasks."
                       title
                       (rk-vulpea--org-roam-file-name title)
                       :tags (-concat tags '("project"))
-                      :body (format "* Metadata\n\n- status :: %s\n\n* Description\n\n* Tasks\n\n** NEXT Fill out description" status)
+                      :body (format "* Metadata\n\n- status :: %s\n\n* Description\n\n* Tasks\n\n** NEXT Fill out description\n\n" status)
                       :immediate-finish t)))
                   ((string= type "idea")
                    (vulpea-create
