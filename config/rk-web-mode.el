@@ -133,6 +133,7 @@
 
 (use-package jest
   :straight t
+  :after rk-web-modes
   :config
   (rk-local-leader-def :keymaps 'rk-web-js-mode-map
     "t" '(jest :wk "test")))
