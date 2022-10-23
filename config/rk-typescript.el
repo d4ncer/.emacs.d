@@ -155,6 +155,13 @@
   :config
   (add-to-list 'emmet-jsx-major-modes 'rk-ts-tsx-mode))
 
+(use-package jest
+  :straight t
+  :after typescript-mode
+  :config
+  (rk-local-leader-def :keymaps 'typescript-mode-map
+    "t" '(jest :wk "test")))
+
 ;; LSP + Tailwind (disabled for now)
 
 (use-package lsp-tailwindcss
