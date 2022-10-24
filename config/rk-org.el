@@ -140,7 +140,7 @@ Do not scheduled items or repeating todos."
   (org-return-follows-link t)
   (org-reverse-note-order nil)
   (org-confirm-elisp-link-function nil)
-  (org-startup-indented t)
+  (org-startup-indented nil)
   (org-startup-with-inline-images t)
   (org-hierarchical-todo-statistics nil)
   (org-checkbox-hierarchical-statistics t)
@@ -649,10 +649,6 @@ table tr.tr-even td {
             (lambda ()
               (evil-org-set-key-theme '(textobjects navigation additional shift heading todo))))
   (evil-org-agenda-set-keys))
-
-(use-package org-indent
-  :after org
-  :hook (org-mode . org-indent-mode))
 
 (use-package flyspell
   :after org
