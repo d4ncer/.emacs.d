@@ -25,6 +25,11 @@
   "Derived mode for editing CSS files."
   (setq-local web-mode-content-type "css"))
 
+;;;###autoload
+(define-derived-mode rk-web-scss-mode web-mode "SCSS"
+  "Derived mode for editing SCSS files."
+  (setq-local web-mode-content-type "css"))
+
 (provide 'rk-web-modes)
 
 ;;; rk-web-modes.el ends here
