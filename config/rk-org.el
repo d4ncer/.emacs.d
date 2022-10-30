@@ -304,7 +304,7 @@ Do not scheduled items or repeating todos."
 
   :custom
   (org-stuck-projects '("-ignore-maybe-done"
-                        ("NEXT") nil
+                        ("NEXT" "WAITING") nil
                         ""))
 
   (org-agenda-include-diary nil)
@@ -862,13 +862,13 @@ tasks."
                              817 ; U+0331 COMBINING MACRON BELOW
                              )))
       (cl-flet* ((nonspacing-mark-p (char)
-                   (memq char slug-trim-chars))
+                                    (memq char slug-trim-chars))
                  (strip-nonspacing-marks (s)
-                   (string-glyph-compose
-                    (apply #'string (seq-remove #'nonspacing-mark-p
-                                                (string-glyph-decompose s)))))
+                                         (string-glyph-compose
+                                          (apply #'string (seq-remove #'nonspacing-mark-p
+                                                                      (string-glyph-decompose s)))))
                  (cl-replace (title pair)
-                   (replace-regexp-in-string (car pair) (cdr pair) title)))
+                             (replace-regexp-in-string (car pair) (cdr pair) title)))
         (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
                (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
                (ts (format-time-string "%Y%m%d%H%M%S")))
@@ -1160,7 +1160,7 @@ Refer to `org-agenda-prefix-format' for more information."
                           ((org-ql-block-header "Unplanned NEXT actions")))
             (org-ql-block '(and (heading "Tasks")
                                 (descendants (todo))
-                                (not (descendants (todo "NEXT"))))
+                                (not (descendants (todo "NEXT" "WAITING"))))
                           ((org-ql-block-header "Stuck projects")))
             (org-ql-block '(todo "WAITING")
                           ((org-ql-block-header "Waiting")))
