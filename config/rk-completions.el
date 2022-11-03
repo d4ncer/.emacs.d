@@ -18,7 +18,7 @@
 (use-package emacs
   :general
   (:states '(insert normal motion)
-           "C-;" #'completion-at-point)
+           "C-; ;" #'completion-at-point)
   :init
   ;; Use `consult-completion-in-region' if Vertico is enabled.
   ;; Otherwise use the default `completion--in-region' function.
@@ -179,6 +179,16 @@
             "C-h" #'corfu-show-documentation)
   :init
   (global-corfu-mode))
+
+(use-package cape
+  :straight t
+  :general
+  (:states '(insert normal motion)
+           "C-; f" #'cape-file
+           "C-; w" #'cape-dabbrev)
+  :init
+  (add-to-list 'completion-at-point-functions #'cape-dabbrev)
+  (add-to-list 'completion-at-point-functions #'cape-file))
 
 (use-package corfu-doc
   :straight '(corfu-doc :type git :host github :repo "galeo/corfu-doc")
