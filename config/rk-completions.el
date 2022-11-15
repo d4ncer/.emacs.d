@@ -92,15 +92,19 @@
   (consult-narrow-key (kbd ">"))
   :hook (completion-list-mode . consult-preview-at-point-mode)
   :preface
+  (defun rk-comp--thing-at-pt ()
+    (if (use-region-p)
+        (buffer-substring-no-properties (region-beginning) (region-end))
+      (substring-no-properties (thing-at-point 'symbol))))
   (defun rk-comp--consult-line-at-point ()
     (interactive)
-    (consult-line (thing-at-point 'symbol)))
+    (consult-line (rk-comp--thing-at-pt)))
   (defun rk-comp--consult-rg-at-point ()
     (interactive)
-    (consult-ripgrep (or (projectile-project-root) default-directory) (thing-at-point 'symbol)))
+    (consult-ripgrep (or (projectile-project-root) default-directory) (rk-comp--thing-at-pt)))
   (defun rk-comp--consult-rg-at-point-custom-dir (dir input)
     (interactive (list (read-directory-name "Start from directory: ")
-                       (or (thing-at-point 'symbol) "")))
+                       (or (rk-comp--thing-at-pt) "")))
     (consult-ripgrep dir input))
   :init
   (setq register-preview-delay 0
