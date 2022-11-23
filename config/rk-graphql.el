@@ -10,6 +10,15 @@
 (use-package graphql-mode
   :straight t)
 
+;; (use-package graphql-mode
+;;   :straight t
+;;   :after lsp-mode
+;;   :config
+;;   (require 'lsp-graphql)
+;;   (lsp-dependency 'graphql-language-service-cli
+;;                   `(:system ,(executable-find "graphql-lsp")))
+;;   (add-hook 'graphql-mode-hook #'lsp-deferred))
+
 (use-package graphql
   :straight t)
 
