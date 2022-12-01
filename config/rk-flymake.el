@@ -135,6 +135,12 @@
                            :icon "")
                nano-modeline-mode-formats)))
 
+(use-package flymake-posframe
+  :straight '(flymake-posframe :type git :host github
+                               :repo "Ladicle/flymake-posframe")
+  :after flymake
+  :hook (flymake-mode . flymake-posframe-mode))
+
 (provide 'rk-flymake)
 
 ;;; rk-flymake.el ends here
