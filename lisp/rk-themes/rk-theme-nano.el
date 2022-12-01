@@ -229,13 +229,9 @@
   :after (nano-theme)
   :custom
   (nano-modeline-prefix-padding t)
+  (nano-modeline-prefix 'icon)
   :config
   (nano-modeline-mode))
-
-
-;; (use-package nano-minibuffer
-;;   :straight '(nano-minibuffer :type git :host github
-;;                               :repo "rougier/nano-minibuffer"))
 
 (provide 'rk-theme-nano)
 
