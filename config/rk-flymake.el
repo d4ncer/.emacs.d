@@ -137,8 +137,10 @@
 
 (use-package flymake-posframe
   :straight '(flymake-posframe :type git :host github
-                               :repo "Ladicle/flymake-posframe")
-  :after flymake
+                               :repo "d4ncer/flymake-posframe")
+  :after (flymake nano-theme)
+  :custom
+  (flymake-posframe-border-color nano-light-salient)
   :hook (flymake-mode . flymake-posframe-mode))
 
 (provide 'rk-flymake)
