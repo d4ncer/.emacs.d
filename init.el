@@ -187,7 +187,7 @@ information retrieved from files created by the keychain script."
 (use-package rk-lsp)
 (use-package rk-ws-butler)
 (use-package rk-aggressive-indent)
-(use-package rk-flycheck)
+(use-package rk-flymake)
 (use-package rk-ibuffer)
 (use-package rk-org)
 (use-package rk-spelling)
