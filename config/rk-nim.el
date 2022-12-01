@@ -37,10 +37,9 @@
     (when (string-match "/\.nimble/" buffer-file-name) (read-only-mode 1))
 
     (nimsuggest-mode 1)
-    (flycheck-mode 1)
-
     (auto-fill-mode 0)
     (electric-indent-local-mode 0))
+
   :config
   (add-hook 'nim-mode-hook #'rk-nim--setup))
 

@@ -84,17 +84,13 @@
                       (buffer-substring (line-beginning-position) (line-end-position)))
       (goto-char (line-end-position))))
 
-  (defun rk-org--disable-flycheck ()
-    "Disable Flycheck in org buffers."
-    (with-eval-after-load 'flycheck
-      (flycheck-mode -1)))
+  
 
   (defun rk-org--disable-ligatures ()
     (when (fboundp 'mac-auto-operator-composition-mode)
       (mac-auto-operator-composition-mode -1)))
 
   (defun rk-org--setup-org ()
-    (rk-org--disable-flycheck)
     (rk-org--disable-ligatures))
 
   (defun rk-org--set-next-todo-state ()
@@ -163,7 +159,6 @@ Do not scheduled items or repeating todos."
   :config
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-subsequent-siblings-todo-state)
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
-  (add-hook 'org-mode-hook #'rk-org--disable-flycheck)
   (add-hook 'org-mode-hook #'auto-fill-mode)
   (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
   (rk-local-leader-def :keymaps 'org-mode-map
@@ -430,9 +425,6 @@ Do not scheduled items or repeating todos."
     "Delete trailing whitespace when exiting src blocks."
     (delete-trailing-whitespace))
 
-  (defun rk-org--disable-eldoc-check ()
-    (setq-local flycheck-disabled-checkers '(emacs-lisp-checkdoc)))
-
   :config
   (setq org-src-lang-modes '(("ocaml" . tuareg)
                              ("json" . rk-web-json)
@@ -453,7 +445,6 @@ Do not scheduled items or repeating todos."
   (setq org-src-fontify-natively t)
   (setq org-src-window-setup 'current-window)
   (add-hook 'org-src-mode-hook #'rk-org--suppress-final-newline)
-  (add-hook 'org-src-mode-hook #'rk-org--disable-eldoc-check)
   (advice-add 'org-edit-src-exit :before #'rk-org--org-src-delete-trailing-space))
 
 (use-package org-clock

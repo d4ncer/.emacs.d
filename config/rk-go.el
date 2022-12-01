@@ -22,11 +22,6 @@
     "Return non-nil if this buffer is part of a Go Modules project."
     (locate-dominating-file default-directory "go.mod"))
 
-  (defun rk-go--setup-flycheck ()
-    "Adds gofmt & golint to flycheck checker list for go-mode."
-    (when lsp-mode
-      (setq-local flycheck-disabled-checkers '(go-build go-errcheck go-vet go-test))))
-
   (defun rk-go--setup-go ()
     "Run setup for Go buffers."
     (if (rk-go--modules-p)
@@ -34,8 +29,7 @@
       (setenv "GO111MODULE" "auto"))
     (if-let ((gopath (getenv "GOPATH")))
         (setq lsp-go-gopls-server-path (f-join gopath "bin/gopls")))
-    (lsp-deferred)
-    (rk-go--setup-flycheck))
+    (lsp-deferred))
   :hook
   (go-mode . rk-go--setup-go))
 

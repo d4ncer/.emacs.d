@@ -50,20 +50,9 @@
          ("\\.scss\\'"  . rk-web-scss-mode)
          ("\\.html\\'" . rk-web-html-mode))
 
-  :preface
-  (autoload 'projectile-project-p "projectile")
-  (defun rk-web--add-custom-eslint-rules-dir ()
-    (-when-let* ((root (projectile-project-p))
-                 (rules-dir (f-join root "rules"))
-                 (rules-dir-p (f-exists-p rules-dir)))
-      (setq-local flycheck-eslint-rules-directories (-list rules-dir))))
-
   :config
   (general-def :keymaps 'rk-web-js-mode-map :states 'normal
-    "J" #'rk-utils--chainable-aware-join-line)
-
-  ;; Use custom ESLint rules if a "rules" dir exists in project root
-  (add-hook 'rk-web-js-mode-hook #'rk-web--add-custom-eslint-rules-dir))
+    "J" #'rk-utils--chainable-aware-join-line))
 
 (use-package rk-web-modes
   :after lsp-mode
@@ -76,19 +65,19 @@
   (add-hook 'rk-web-css-mode-hook #'lsp-deferred)
   (add-hook 'rk-web-scss-mode-hook #'lsp-deferred))
 
-(use-package rk-flycheck-stylelint
-  :after flycheck
-  :preface
-  (autoload 'projectile-project-p "projectile")
-  (defun rk-web--set-stylelintrc ()
-    "Set either local or root stylelintrc"
-    (-if-let* ((root (projectile-project-p))
-               (root-rc (f-join root ".stylelintrc.json")))
-        (setq-local flycheck-stylelintrc root-rc))
-    (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
-  :config
-  (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
-  (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc))
+;; (use-package rk-flycheck-stylelint
+;;   :after flycheck
+;;   :preface
+;;   (autoload 'projectile-project-p "projectile")
+;;   (defun rk-web--set-stylelintrc ()
+;;     "Set either local or root stylelintrc"
+;;     (-if-let* ((root (projectile-project-p))
+;;                (root-rc (f-join root ".stylelintrc.json")))
+;;         (setq-local flycheck-stylelintrc root-rc))
+;;     (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
+;;   :config
+;;   (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
+;;   (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc))
 
 (use-package prettier
   :straight t

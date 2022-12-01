@@ -50,10 +50,6 @@
 
   (add-hook 'rust-mode-hook #'rk-rust--setup))
 
-(use-package flycheck-rust
-  :straight t
-  :hook (flycheck-mode . flycheck-rust-setup))
-
 (use-package toml-mode
   :straight t
   :mode (("\\.toml\\'" . toml-mode)

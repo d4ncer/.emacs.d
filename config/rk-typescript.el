@@ -14,18 +14,8 @@
 (use-package typescript-mode
   :straight t
   :after lsp
-  :preface
-  (defun rk-ts--add-eslint-checker ()
-    (if (or (eq major-mode 'typescript-mode)
-            (eq major-mode 'rk-ts-tsx-mode))
-        (progn
-          (flycheck-add-mode 'javascript-eslint 'typescript-mode)
-          (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
-          (flycheck-add-next-checker 'lsp 'javascript-eslint))))
   :config
-  (add-hook 'rk-ts-tsx-mode-hook #'lsp-deferred)
-  ;; (add-hook 'lsp-diagnostics-mode-hook #'rk-ts--add-eslint-checker)
-  )
+  (add-hook 'rk-ts-tsx-mode-hook #'lsp-deferred))
 
 (use-package typescript-mode
   :straight t
@@ -116,16 +106,6 @@
     "e" '(tide-project-errors :wk "errors")
     "j" '(tide-jsdoc-template :wk "insert jsdoc")
     "v" '(tide-verify-setup :wk "verify setup")))
-
-(use-package tide
-  :straight t
-  :disabled t
-  :after (flycheck typescript-mode)
-  :config
-  (flycheck-add-mode 'javascript-eslint 'rk-ts-tsx-mode)
-  (flycheck-add-mode 'javascript-eslint 'typescript-mode)
-  (flycheck-add-next-checker 'typescript-tide 'javascript-eslint)
-  (flycheck-add-mode 'typescript-tide 'rk-ts-tsx-mode))
 
 (use-package prettier
   :straight t

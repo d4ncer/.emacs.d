@@ -232,65 +232,6 @@
   :config
   (nano-modeline-mode))
 
-(use-package flycheck
-  :straight t
-  :after nano-modeline
-  :preface
-  (defun rk-flycheck--custom-mode-line-status-text (&optional status)
-    (pcase (or status flycheck-last-status-change)
-      (`no-checker "Checks[-]")
-      (`errored "Checks[ERROR]")
-      (`finished
-       (let-alist (flycheck-count-errors flycheck-current-errors)
-         (cond
-          ((and .error .warning)
-           (format "✖ (%s error%s, %s warn%s)"
-                   .error
-                   (if (equal .error 1) "" "s")
-                   .warning
-                   (if (equal .warning 1) "" "s")))
-          (.error
-           (format "✖ (%s error%s)" .error (if (equal .error 1) "" "s")))
-
-          (.warning
-           (format "! (%s warning%s)" .warning (if (equal .warning 1) "" "s")))
-          (t
-           "✔"))))
-      (`interrupted "? (interrupted)")
-      (`suspicious "? (suspicious)")
-      (`running "···")
-      (_
-       "")))
-
-  (defun rk-nano-modeline--default-mode (&optional icon)
-    (let ((icon (or icon
-                    (plist-get (cdr (assoc 'text-mode nano-modeline-mode-formats)) :icon)))
-          ;; We take into account the case of narrowed buffers
-          (buffer-name (cond
-                        ((and (derived-mode-p 'org-mode)
-                              (buffer-narrowed-p)
-                              (buffer-base-buffer))
-                         (format"%s [%s]" (buffer-base-buffer)
-                                (org-link-display-format
-                                 (substring-no-properties (or (org-get-heading 'no-tags)
-                                                              "-")))))
-                        ((and (buffer-narrowed-p)
-                              (buffer-base-buffer))
-                         (format"%s [narrow]" (buffer-base-buffer)))
-                        (t
-                         (format-mode-line "%b"))))
-
-          (mode-name   (nano-modeline-mode-name))
-          (branch      (nano-modeline-vc-branch))
-          (position    (format-mode-line "%l:%c"))
-          (flyc        (rk-flycheck--custom-mode-line-status-text)))
-      (nano-modeline-render icon
-                            buffer-name
-                            (if branch (concat "(" branch ")") "")
-                            (concat " " flyc " " position))))
-
-  :config
-  (advice-add 'nano-modeline-default-mode :override #'rk-nano-modeline--default-mode))
 
 ;; (use-package nano-minibuffer
 ;;   :straight '(nano-minibuffer :type git :host github

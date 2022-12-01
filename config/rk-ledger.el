@@ -143,10 +143,6 @@
                             :account "Assets:Joint Checking"))))
     (setq org-capture-templates (-concat templates ledger-templates))))
 
-(use-package flycheck-ledger
-  :straight t
-  :after flycheck)
-
 (provide 'rk-ledger)
 
 ;;; rk-ledger.el ends here
