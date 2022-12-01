@@ -52,6 +52,7 @@
     (rk-lsp--maybe-setup-format-on-save)
     (rk-lsp--setup-local-keybinds))
   :custom
+  (lsp-diagnostics-provider :flymake)
   (lsp-completion-provider :none)
   (lsp-headerline-breadcrumb-enable nil)
   (lsp-enable-snippet t)
