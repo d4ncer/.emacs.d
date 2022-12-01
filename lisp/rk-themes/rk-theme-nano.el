@@ -202,6 +202,12 @@
       (set-face-attribute 'flyspell-duplicate nil
                           :foreground nano-light-critical))
 
+    (with-eval-after-load 'flymake-posframe
+      (set-face-attribute 'flymake-posframe-background-face nil
+                          :background nano-light-background)
+      (set-face-attribute 'flymake-posframe-foreground-face nil
+                          :foreground nano-light-foreground))
+
     (with-eval-after-load 'lsp-ui-peek
       (set-face-attribute 'lsp-ui-peek-header nil
                           :background nano-light-salient)
