@@ -238,17 +238,6 @@ With prefix argument ARG, prompt for a file."
   (kill-new (s-trim (shell-command-to-string "gpg --gen-random --armor 1 30")))
   (message "Password copied to kill-ring."))
 
-;; Work stuff
-(defconst rkmooven--jira-url-template
-  "https://mooven.atlassian.net/browse/%s")
-
-(defun rkmooven-insert-JIRA-link (ticket)
-  "Generate a link to a MPB JIRA TICKET."
-  (interactive (let ((ticket (read-string "Ticket number: ")))
-                 (list ticket)))
-  (org-insert-link nil (format rkmooven--jira-url-template ticket) (format "MPB-%s" ticket)))
-
-
 (provide 'rk-misc-utils)
 
 ;;; rk-misc-utils.el ends here
