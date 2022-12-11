@@ -748,6 +748,8 @@ table tr.tr-even td {
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
   :after (org-ql)
   :preface
+  (defcustom rk-org--work-file-tag "regrow"
+    "The file tag to use for work-related org roam files.")
   (defun rk-org--filter-non-diary-notes (note)
     (and (not (f-child-of-p (vulpea-note-path note) rk-org--roam-dailies-dir))
          (not (f-child-of-p (vulpea-note-path note) rk-org--roam-refs-dir))))
@@ -852,13 +854,13 @@ tasks."
                              817 ; U+0331 COMBINING MACRON BELOW
                              )))
       (cl-flet* ((nonspacing-mark-p (char)
-                                    (memq char slug-trim-chars))
+                   (memq char slug-trim-chars))
                  (strip-nonspacing-marks (s)
-                                         (string-glyph-compose
-                                          (apply #'string (seq-remove #'nonspacing-mark-p
-                                                                      (string-glyph-decompose s)))))
+                   (string-glyph-compose
+                    (apply #'string (seq-remove #'nonspacing-mark-p
+                                                (string-glyph-decompose s)))))
                  (cl-replace (title pair)
-                             (replace-regexp-in-string (car pair) (cdr pair) title)))
+                   (replace-regexp-in-string (car pair) (cdr pair) title)))
         (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_") ("__*" . "_") ("^_" . "") ("_$" . "")))
                (slug (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))
                (ts (format-time-string "%Y%m%d%H%M%S")))
@@ -871,9 +873,9 @@ tasks."
     (let* ((type (completing-read "Note type: "
                                   '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6) ("technology" 7))
                                   nil t))
-           (mooven-p (y-or-n-p "Is this note Mooven related?"))
-           (mooven-tag (if mooven-p "mooven" nil))
-           (tags (remq nil (list mooven-tag)))
+           (work-p (y-or-n-p "Is this note work related?"))
+           (work-tag (if work-p rk-org--work-file-tag nil))
+           (tags (remq nil (list work-tag)))
            (note (cond
                   ((string= type "person")
                    (vulpea-create
