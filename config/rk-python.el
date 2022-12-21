@@ -17,7 +17,9 @@
 
 (use-package pipenv
   :straight t
-  :hook (python-mode . pipenv-mode))
+  :hook (python-mode . pipenv-mode)
+  :custom
+  (pipenv-projectile-after-switch-function #'pipenv-projectile-after-switch-extended))
 
 (use-package lsp-pyright
   :after (lsp-mode python)
