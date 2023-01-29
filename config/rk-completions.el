@@ -169,8 +169,11 @@
 
 ;; Corfu
 
+(defconst rk-comp--corfu-ext-dir (f-join straight-base-dir "straight" straight-build-dir "corfu" "extensions"))
+
 (use-package corfu
   :straight t
+  :load-path rk-comp--corfu-ext-dir
   :custom
   (corfu-auto t)
   (corfu-quit-no-match t)
@@ -182,7 +185,9 @@
             "C-k" #'corfu-previous
             "C-h" #'corfu-show-documentation)
   :init
-  (global-corfu-mode))
+  (global-corfu-mode)
+  (require 'corfu-popupinfo)
+  (add-hook 'corfu-mode-hook #'corfu-popupinfo-mode))
 
 (use-package cape
   :straight t
@@ -193,12 +198,6 @@
   :init
   (add-to-list 'completion-at-point-functions #'cape-dabbrev)
   (add-to-list 'completion-at-point-functions #'cape-file))
-
-(use-package corfu-doc
-  :straight '(corfu-doc :type git :host github :repo "galeo/corfu-doc")
-  :after (corfu)
-  :config
-  (add-hook 'corfu-mode-hook #'corfu-doc-mode))
 
 (use-package emacs
   :general
