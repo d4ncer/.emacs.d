@@ -221,6 +221,7 @@ information retrieved from files created by the keychain script."
 (use-package rk-clojure)
 (use-package rk-java)
 (use-package rk-zig)
+(use-package rk-c)
 
 ;; Setup envrc
 (use-package rk-envrc)
