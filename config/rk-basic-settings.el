@@ -164,6 +164,9 @@
 (use-package sudo-edit
   :straight t)
 
+(use-package compat
+  :straight (:type git :host github :repo "emacs-compat/compat" :branch "main"))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
