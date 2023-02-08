@@ -12,6 +12,7 @@
   (require 'use-package))
 
 (require 'lsp)
+(require 'definers)
 
 (use-package python)
 
@@ -19,7 +20,7 @@
   :straight t
   :hook (python-mode . pipenv-mode)
   :custom
-  (pipenv-projectile-after-switch-function #'pipenv-projectile-after-switch-default))
+  (pipenv-with-flycheck nil))
 
 (use-package lsp-pyright
   :after (lsp-mode python)
@@ -28,6 +29,13 @@
   (defun rk-python--setup-lsp ()
     (lsp-deferred))
   :hook (python-mode . rk-python--setup-lsp))
+
+(use-package python-black
+  :straight (:type git :host github :repo "wbolster/emacs-python-black" :branch "main")
+  :after python
+  :init
+  (rk-local-leader-def :keymaps 'python-mode-map
+    "." '(python-black-buffer :wk "format buffer")))
 
 (provide 'rk-python)
 
