@@ -72,6 +72,16 @@
     (interactive)
     (org-emphasize (string-to-char "+")))
 
+  (defun rk-org--sort-tasks ()
+    (when (eq 'org-mode major-mode)
+      (with-current-buffer (current-buffer)
+        (if-let ((marker (org-find-exact-headline-in-buffer "Tasks")))
+            (save-excursion
+              (goto-char (org-find-exact-headline-in-buffer "Tasks"))
+              (org-sort-entries t ?t)
+              (org-cycle)
+              (org-cycle))))))
+
   (defun rk-org--exit-minibuffer (&rest _)
     "Exit minibuffer before adding notes."
     (when (minibufferp (window-buffer (selected-window)))
@@ -83,7 +93,7 @@
                       (buffer-substring (line-beginning-position) (line-end-position)))
       (goto-char (line-end-position))))
 
-  
+
 
   (defun rk-org--disable-ligatures ()
     (when (fboundp 'mac-auto-operator-composition-mode)
