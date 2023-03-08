@@ -24,6 +24,9 @@
 (use-package cider
   :straight t
   :after clojure-mode
+  :general
+  (:keymaps 'cider-repl-mode-map
+            "<return>" #'cider-repl-closing-return)
   :config
   (rk-local-leader-def :keymaps 'clojure-mode-map
     "c"   '(cider-jack-in :wk "jack in")
