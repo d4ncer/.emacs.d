@@ -26,13 +26,15 @@
   :after clojure-mode
   :general
   (:keymaps 'cider-repl-mode-map
-            "<return>" #'cider-repl-closing-return)
+            "C-r" #'cider-repl-history)
   :config
   (rk-local-leader-def :keymaps 'clojure-mode-map
     "c"   '(cider-jack-in :wk "jack in")
     "e"   '(:ignore t :wk "eval")
     "e b" '(cider-eval-buffer :wk "eval buffer")
-    "e s" '(cider-eval-last-sexp :wk "eval last sexp")))
+    "e s" '(cider-eval-last-sexp :wk "eval last sexp"))
+  (rk-local-leader-def :keymaps 'cider-repl-mode-map
+    "." '(cider-repl-handle-shortcut :wk "shortcuts")))
 
 (use-package inf-clojure
   :straight t)
