@@ -36,3 +36,6 @@ workspace
 
 # jdtls
 .dap-breakpoints
+
+# LLMs
+chatgpt
