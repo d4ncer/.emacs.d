@@ -15,7 +15,7 @@
   :straight (:host github :repo "minad/jinx" :branch "main" :files ("*.el" "*.c" "*.h"))
   :hook (emacs-startup . global-jinx-mode)
   :general
-  ("z g" #'jinx-correct))
+  ("C-=" #'jinx-correct))
 
 (provide 'rk-spelling)
 
