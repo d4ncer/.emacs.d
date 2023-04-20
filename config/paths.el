@@ -82,7 +82,7 @@ If argument INTERACTIVE-P is set, log additional information."
 (defconst rk-org--roam-review-cache-file (f-join paths--org-dir ".org-roam-review"))
 
 (defconst rk-bib--lib-dir (f-join paths--cloud-dir "rkdev" "bib_files"))
-(defconst rk-bib--refs-file (f-join paths--org-dir "bib/references.bib"))
+(defconst rk-bib--refs-file (f-join paths--org-dir "bib/zotero-lib.bib"))
 
 (defconst rk-accounts--ledger-file (f-join paths--accounts-dir "base.ledger"))
 
