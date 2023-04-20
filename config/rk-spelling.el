@@ -11,26 +11,11 @@
 (eval-when-compile
   (require 'use-package))
 
-(use-package ispell
-  :straight t
-  :custom
-  (ispell-silently-savep t)
-  :config
-  (when (executable-find "aspell")
-    (setq ispell-program-name "aspell")
-    (add-to-list 'ispell-extra-args "--sug-mode=ultra")))
-
-(use-package flyspell
+(use-package jinx
+  :straight (:host github :repo "minad/jinx" :branch "main" :files ("*.el" "*.c" "*.h"))
+  :hook (emacs-startup . global-jinx-mode)
   :general
-  (:keymaps 'flyspell-mode-map
-            "C-." nil
-            "C-;" nil))
-
-(use-package flyspell-correct
-  :straight t
-  :general
-  (:keymaps 'flyspell-mode-map :states 'normal
-            "z g" #'flyspell-correct-wrapper))
+  ("z g" #'jinx-correct))
 
 (provide 'rk-spelling)
 
