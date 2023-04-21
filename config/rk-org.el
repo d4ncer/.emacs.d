@@ -100,6 +100,7 @@
       (mac-auto-operator-composition-mode -1)))
 
   (defun rk-org--setup-org ()
+    (flyspell-mode -1)
     (rk-org--disable-ligatures))
 
   (defun rk-org--set-next-todo-state ()
@@ -169,7 +170,6 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-subsequent-siblings-todo-state)
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
   (add-hook 'org-mode-hook #'auto-fill-mode)
-  (add-hook 'org-mode-hook #'rk-org--disable-ligatures)
   (rk-local-leader-def :keymaps 'org-mode-map
     "d" '(org-deadline :wk "deadline")
     "s" '(org-schedule :wk "schedule")
