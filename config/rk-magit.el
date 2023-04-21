@@ -124,13 +124,14 @@
   :config
   (add-hook 'magit-post-refresh-hook 'diff-hl-magit-post-refresh))
 
-(use-package forge
-  :straight (:host github :repo "magit/forge")
-  :after magit
-  :custom
-  (forge-database-file (f-join paths-cache-directory "forge-db.sqlite"))
-  (forge-add-default-sections nil)
-  (forge-add-default-bindings nil))
+;; TODO: Forge is borked (something about emacsql being a poo)
+;; (use-package forge
+;;   :straight t
+;;   :after magit
+;;   :custom
+;;   (forge-database-file (f-join paths-cache-directory "forge-db.sqlite"))
+;;   (forge-add-default-sections nil)
+;;   (forge-add-default-bindings nil))
 
 (use-package orgit
   :straight t
