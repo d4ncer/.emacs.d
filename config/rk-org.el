@@ -1240,6 +1240,11 @@ Refer to `org-agenda-prefix-format' for more information."
   (org-cite-follow-processor 'citar)
   (org-cite-activate-processor 'citar)
   (citar-bibliography `(,rk-bib--refs-file))
+  (citar-link-fields '((doi . "https://doi.org/%s")
+                       (pmid . "https://www.ncbi.nlm.nih.gov/pubmed/%s")
+                       (pmcid . "https://www.ncbi.nlm.nih.gov/pmc/articles/%s")
+                       (url . "%s")
+                       (howpublished . "%s")))
   (citar-note-format-function #'rk-citar--format-note)
   :init
   (rk-leader-def
