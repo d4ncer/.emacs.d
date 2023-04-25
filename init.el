@@ -198,6 +198,7 @@ information retrieved from files created by the keychain script."
 (use-package rk-ledger)
 (use-package rk-pdf)
 (use-package rk-sql)
+(use-package rk-mermaid)
 
 ;; Programming language support
 

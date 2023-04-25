@@ -209,7 +209,8 @@ Do not scheduled items or repeating todos."
                               (sql . t)
                               (python . t)
                               (dot . t)
-                              (shell . t)))
+                              (shell . t)
+                              (mermaid . t)))
   (org-babel-python-command (executable-find "python3")))
 
 (use-package org
@@ -231,6 +232,10 @@ Do not scheduled items or repeating todos."
   :after org)
 
 (use-package ob-restclient
+  :straight t
+  :after org)
+
+(use-package ob-mermaid
   :straight t
   :after org)
 
