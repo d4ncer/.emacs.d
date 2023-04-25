@@ -33,6 +33,7 @@ org-roam.db
 
 # lsp-mode
 workspace
+codeium
 
 # jdtls
 .dap-breakpoints
