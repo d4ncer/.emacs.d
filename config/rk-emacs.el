@@ -359,7 +359,49 @@
   :custom
   (tramp-default-method "ssh")
   (tramp-auto-save-directory "/tmp")
-  (tramp-persistency-file-name (concat paths-cache-directory "/tramp")))
+  (tramp-allow-unsafe-temporary-files t)
+  (tramp-persistency-file-name (concat paths-cache-directory "/tramp"))
+  :config
+  ;; Make Tramp respect the remote server's PATH setting, so we can pick up
+  ;; things like rbenv shims for remote Ruby execution via bundler
+  (add-to-list 'tramp-remote-path 'tramp-own-remote-path)
+  (when (>= emacs-major-version 30)
+    ;; Redefine `tramp-accept-process-output' to use the timeout again; see
+    ;; https://debbugs.gnu.org/cgi/bugreport.cgi?bug=61350
+    ;; https://github.com/jscheid/prettier.el/issues/120
+    (defun tramp-accept-process-output (proc &optional timeout)
+      "Like `accept-process-output' for Tramp processes.
+This is needed in order to hide `last-coding-system-used', which is set
+for process communication also.
+If the user quits via `C-g', it is propagated up to `tramp-file-name-handler'."
+      (declare (advertised-calling-convention (proc) "29.2"))
+      ;; There could be other processes which use the same socket for
+      ;; communication.  This could block the output for the current
+      ;; process.  Read such output first.  (Bug#61350)
+      ;; The process property isn't set anymore due to Bug#62194.
+      (when-let (((process-get proc 'tramp-shared-socket))
+                 (v (process-get proc 'tramp-vector)))
+        (dolist (p (delq proc (process-list)))
+          (when (tramp-file-name-equal-p v (process-get p 'tramp-vector))
+            (with-local-quit (accept-process-output p 0 nil t)))))
+
+      (setq timeout (or timeout 0))
+      (with-current-buffer (process-buffer proc)
+        (let ((inhibit-read-only t)
+              last-coding-system-used
+              result)
+          ;; This must be protected by the "locked" property.
+          (with-tramp-locked-connection proc
+            ;; JUST-THIS-ONE is set due to Bug#12145.  `with-local-quit'
+            ;; returns t in order to report success.
+            (if (with-local-quit
+                  (setq result (accept-process-output proc timeout nil t)) t)
+                (tramp-message
+                 proc 10 "%s %s %s %s\n%s"
+                 proc timeout (process-status proc) result (buffer-string))
+              ;; Propagate quit.
+              (keyboard-quit)))
+          result)))))
 
 (use-package bibtex
   :general
