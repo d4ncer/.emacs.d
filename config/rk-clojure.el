@@ -36,6 +36,17 @@
   (rk-local-leader-def :keymaps 'cider-repl-mode-map
     "." '(cider-repl-handle-shortcut :wk "shortcuts")))
 
+(use-package clj-refactor
+  :straight t
+  :after clojure-mode
+  :preface
+  (defun rk-cider--setup-clj-refactor ()
+    (clj-refactor-mode 1)
+    (cljr-add-keybindings-with-prefix "C-c C-m"))
+
+  :config
+  (add-hook 'clojure-mode-hook #'rk-cider--setup-clj-refactor))
+
 (use-package inf-clojure
   :straight t)
 
