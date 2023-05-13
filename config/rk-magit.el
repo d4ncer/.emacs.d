@@ -139,6 +139,8 @@
 
 (use-package git-link
   :straight t
+  :custom
+  (git-link-open-in-browser t)
   :init
   (rk-leader-def
     "gl" '(git-link :wk "link")))
