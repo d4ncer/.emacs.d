@@ -137,6 +137,12 @@
   :straight t
   :after (org magit))
 
+(use-package git-link
+  :straight t
+  :init
+  (rk-leader-def
+    "gl" '(git-link :wk "link")))
+
 (provide 'rk-magit)
 
 ;;; rk-magit.el ends here
