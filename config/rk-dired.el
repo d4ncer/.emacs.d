@@ -88,6 +88,12 @@
     "c" '(wdired-finish-edit :wk "commit changes")
     "k" '(wdired-abort-changes :wk "abort edit")))
 
+;; TODO: Come back and set this up at some point
+;; (use-package dirvish
+;;   :straight t
+;;   :init
+;;   (dirvish-override-dired-mode))
+
 (provide 'rk-dired)
 
 ;;; rk-dired.el ends here
