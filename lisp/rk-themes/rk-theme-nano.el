@@ -231,13 +231,37 @@
 
 (use-package nano-modeline
   :straight '(nano-modeline :type git :host github
-                            :repo "rougier/nano-modeline")
+                            :repo "rougier/nano-modeline" :branch "simpler")
   :after (nano-theme)
-  :custom
-  (nano-modeline-prefix-padding t)
-  (nano-modeline-prefix 'icon)
+  :preface
+  (defun rk-modeline-org-buffer-name (&optional name)
+    (propertize
+     (cond (name
+            name)
+           ((buffer-narrowed-p)
+            (format "%s [%s]" (or (buffer-base-buffer) (buffer-name))
+                    (org-link-display-format
+                     (substring-no-properties
+                      (or (org-get-heading 'no-tags) "-")))))
+           ((f-equal? (file-name-directory (buffer-file-name))
+                      rk-org--roam-dir)
+            (format "(roam) %s" (car (last (s-split "-" (buffer-file-name))))))
+           (t
+            (buffer-name)))
+     'face (nano-modeline-face 'name)))
+  (defun rk-modeline-org-mode ()
+    (funcall nano-modeline-position
+             '((nano-modeline-buffer-status) " "
+               (rk-modeline-org-buffer-name) " "
+               (nano-modeline-git-info))
+             '((nano-modeline-cursor-position)
+               (nano-modeline-window-dedicated))))
+  :init
+  (setq-default mode-line-format nil)
   :config
-  (nano-modeline-mode))
+  (add-hook 'prog-mode-hook #'nano-modeline-prog-mode)
+  (add-hook 'text-mode-hook #'nano-modeline-text-mode)
+  (add-hook 'org-mode-hook #'rk-modeline-org-mode))
 
 (provide 'rk-theme-nano)
 
