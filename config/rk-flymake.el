@@ -101,39 +101,21 @@
        (t
         "✔"))))
 
-  (defun rk-modeline--prog-mode ()
-    (let ((icon (plist-get (cdr (assoc 'prog-mode nano-modeline-mode-formats)) :icon))
-          ;; We take into account the case of narrowed buffers
-          (buffer-name (cond
-                        ((and (derived-mode-p 'org-mode)
-                              (buffer-narrowed-p)
-                              (buffer-base-buffer))
-                         (format"%s [%s]" (buffer-base-buffer)
-                                (org-link-display-format
-                                 (substring-no-properties (or (org-get-heading 'no-tags)
-                                                              "-")))))
-                        ((and (buffer-narrowed-p)
-                              (buffer-base-buffer))
-                         (format"%s [narrow]" (buffer-base-buffer)))
-                        (t
-                         (format-mode-line "%b"))))
+  (defun rk-modeline--flymake ()
+    (propertize (rk-modeline--flymake-counts)
+                'face (nano-modeline-face 'primary)))
 
-          (mode-name   (nano-modeline-mode-name))
-          (branch      (nano-modeline-vc-branch))
-          (position    (format-mode-line "%l:%c"))
-          (flymake-counts (rk-modeline--flymake-counts)))
-      (nano-modeline-render icon
-                            buffer-name
-                            (if branch (concat "(" branch ")") "")
-                            (concat " " flymake-counts " " position))))
-
-  :custom
-  (nano-modeline-mode-formats
-   (--map-when (eq (car it) 'prog-mode)
-               '(prog-mode :mode-p nano-modeline-prog-mode-p
-                           :format rk-modeline--prog-mode
-                           :icon "")
-               nano-modeline-mode-formats)))
+  (defun rk-modeline--prog-mode (&optional default)
+    (funcall nano-modeline-position
+             '((nano-modeline-buffer-status) " "
+               (nano-modeline-buffer-name) " "
+               (nano-modeline-git-info))
+             '((rk-modeline--flymake) " "
+               (nano-modeline-cursor-position)
+               (nano-modeline-window-dedicated))
+             default))
+  :config
+  (add-hook 'prog-mode-hook #'rk-modeline--prog-mode))
 
 (use-package flymake-posframe
   :straight '(flymake-posframe :type git :host github

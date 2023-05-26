@@ -259,7 +259,6 @@
   :init
   (setq-default mode-line-format nil)
   :config
-  (add-hook 'prog-mode-hook #'nano-modeline-prog-mode)
   (add-hook 'text-mode-hook #'nano-modeline-text-mode)
   (add-hook 'org-mode-hook #'rk-modeline-org-mode))
 
