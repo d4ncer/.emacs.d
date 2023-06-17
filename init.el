@@ -223,6 +223,7 @@ information retrieved from files created by the keychain script."
 (use-package rk-java)
 (use-package rk-zig)
 (use-package rk-c)
+(use-package rk-elixir)
 
 ;; Setup envrc
 (use-package rk-envrc)
