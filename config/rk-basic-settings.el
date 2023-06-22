@@ -67,31 +67,6 @@
   (setq smex-save-file (concat paths-cache-directory "/smex-items"))
   (smex-initialize))
 
-(use-package json-mode
-  :straight t
-  :init
-  (setq json-mode-auto-mode-list '(".babelrc" ".eslintrc" "composer.lock"))
-  :preface
-  (defun rk-json--disable-python-checker ()
-    (with-eval-after-load 'flycheck
-      (setq-local flycheck-disabled-checkers '(json-python-json))))
-  (defun rk-json--format-region-or-buffer ()
-    "Format region or buffer."
-    (interactive)
-    (if (use-region-p)
-        (json-pretty-print (region-beginning) (region-end))
-      (json-pretty-print (point-min) (point-max))))
-  :init
-  (rk-local-leader-def :keymaps 'json-mode-map
-    "." '(rk-json--format-region-or-buffer :wk "format"))
-  :config
-  (add-hook 'json-mode-hook #'rk-json--disable-python-checker)
-  (add-hook 'json-mode-hook #'lsp)
-  (with-eval-after-load 'js
-    (setq js-indent-level 2))
-  (with-eval-after-load 'json-reformat
-    (setq json-reformat:indent-width 2)))
-
 (use-package csv-mode
   :straight t
   :mode ("\\.csv\\'" . csv-mode)
