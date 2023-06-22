@@ -135,7 +135,7 @@
            :bind "M-\""
            :pre-handlers '(:add (rk-smartparens--add-space-before-sexp-insertion)))
 
-  (sp-with-modes (list 'rk-web-js-mode 'rk-web-tsx-mode 'typescript-mode)
+  (sp-with-modes (list 'js-ts-mode 'tsx-ts-mode 'typescript-ts-mode)
     (sp-local-pair "<" ">" :actions nil))
   (sp-with-modes (cons 'lisp-data-mode sp-lisp-modes)
     (sp-local-pair "(" nil
