@@ -1,4 +1,4 @@
-;;; rk-web-mode.el --- Configuration for web-mode.  -*- lexical-binding: t; -*-
+;;; rk-web-mode.el --- Configuration for HTML, CSS, JSON.  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2017 Raghuvir Kasturi
 
@@ -12,113 +12,48 @@
   (require 'use-package))
 
 (require 'definers)
-(require 'rk-utils)
-(require 'dash)
-(require 'f)
 
-(use-package web-mode
-  :straight t
-  :demand t
-  :defines (web-mode-markup-indent-offset
-            web-mode-css-indent-offset)
+(use-package json-ts-mode)
 
-  :general
-  (:keymaps 'web-mode-map
-            "C-c C-r" nil)
-  :preface
-  (autoload 'sp-local-pair "smartparens")
-
-  :config
-  (setq web-mode-code-indent-offset 2)
-  (setq web-mode-css-indent-offset 2)
-  (setq web-mode-markup-indent-offset 2)
-  (setq web-mode-enable-auto-quoting nil)
-
-  (add-to-list 'web-mode-content-types '("javascript" . "\\.es6\\'"))
-
-  ;; Change default indentation behaviour.
-
-  (setf (cdr (assoc "lineup-args" web-mode-indentation-params)) nil)
-  (setf (cdr (assoc "lineup-concats" web-mode-indentation-params)) nil)
-  (setf (cdr (assoc "lineup-calls" web-mode-indentation-params)) nil))
-
-(use-package rk-web-modes
-  :mode (("\\.es6\\'"  . rk-web-js-mode)
-         ("\\.jsx?\\'" . rk-web-js-mode)
-         ("\\.mjs\\'" . rk-web-js-mode)
-         ("\\.css\\'"  . rk-web-css-mode)
-         ("\\.scss\\'"  . rk-web-scss-mode)
-         ("\\.html\\'" . rk-web-html-mode))
-
-  :config
-  (general-def :keymaps 'rk-web-js-mode-map :states 'normal
-    "J" #'rk-utils--chainable-aware-join-line))
-
-(use-package rk-web-modes
+(use-package json-ts-mode
   :after lsp-mode
-  :init
-  (add-to-list 'lsp-language-id-configuration '(rk-web-js-mode . "javascript"))
-  (add-to-list 'lsp-language-id-configuration '(rk-web-css-mode . "css"))
-  (add-to-list 'lsp-language-id-configuration '(rk-web-scss-mode . "scss"))
-  :config
-  (add-hook 'rk-web-js-mode-hook #'lsp-deferred)
-  (add-hook 'rk-web-css-mode-hook #'lsp-deferred)
-  (add-hook 'rk-web-scss-mode-hook #'lsp-deferred))
+  :hook (json-ts-mode . lsp))
 
-;; (use-package rk-flycheck-stylelint
-;;   :after flycheck
-;;   :preface
-;;   (autoload 'projectile-project-p "projectile")
-;;   (defun rk-web--set-stylelintrc ()
-;;     "Set either local or root stylelintrc"
-;;     (-if-let* ((root (projectile-project-p))
-;;                (root-rc (f-join root ".stylelintrc.json")))
-;;         (setq-local flycheck-stylelintrc root-rc))
-;;     (f-join user-emacs-directory "lisp" ".stylelintrc.json"))
-;;   :config
-;;   (flycheck-add-mode 'css-stylelint 'rk-web-css-mode)
-;;   (add-hook 'rk-web-css-mode-hook #'rk-web--set-stylelintrc))
+(use-package js)
+
+(use-package js
+  :after lsp-mode
+  :hook (js-ts-mode . lsp))
+
+(use-package css-mode)
+
+(use-package css-mode
+  :after lsp-mode
+  :hook (css-ts-mode . lsp))
+
+(use-package html-ts-mode)
+
+(use-package html-ts-mode
+  :after lsp-mode
+  :hook (html-ts-mode . lsp))
 
 (use-package prettier
   :straight t
-  :after rk-web-modes
-  :init
-  (add-hook 'rk-web-js-mode-hook #'prettier-mode)
-  (add-hook 'rk-web-css-mode-hook #'prettier-mode)
-  (add-hook 'rk-web-html-mode-hook #'prettier-mode))
-
-(use-package prettier
-  :straight t
-  :after json-mode
-  :init
-  (add-hook 'json-mode-hook #'prettier-mode))
-
-(use-package stylefmt
-  :straight t
-  :after rk-web-modes
-  :commands (stylefmt-enable-on-save stylefmt-format-buffer)
-  :config
-  (rk-local-leader-def :keymaps 'rk-web-css-mode-map
-    "." '(stylefmt-format-buffer :wk "format")))
-
-(use-package tree-sitter-langs
-  :straight t
-  :after rk-web-modes
-  :config
-  (dolist (entry '((rk-web-css-mode . css) (rk-web-html-mode . html) (rk-web-js-mode . javascript))) (add-to-list 'tree-sitter-major-mode-language-alist entry)))
+  :after (js json-ts-mode css-mode html-ts-mode)
+  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . prettier-mode))
 
 (use-package jsdoc
   :straight (:host github :repo "isamert/jsdoc.el" :branch "main")
-  :after (tree-sitter tree-sitter-langs rk-web-modes)
-  :config
-  (rk-local-leader-def :keymaps 'rk-web-js-mode-map
+  :after js
+  :init
+  (rk-local-leader-def :keymaps 'js-ts-mode-map
     "d" '(jsdoc :wk "jsdoc")))
 
 (use-package jest
   :straight t
-  :after rk-web-modes
-  :config
-  (rk-local-leader-def :keymaps 'rk-web-js-mode-map
+  :after js
+  :init
+  (rk-local-leader-def :keymaps 'js-ts-mode-map
     "t" '(jest :wk "test")))
 
 (provide 'rk-web-mode)
