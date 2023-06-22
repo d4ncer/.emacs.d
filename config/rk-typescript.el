@@ -8,7 +8,11 @@
   (require 'use-package))
 
 (require 'definers)
+(require 'treesit-expand-region)
 
+(use-package typescript-ts-mode
+  :hook
+  ((typescript-ts-mode tsx-ts-mode) . rk-er/add-treesit-expander))
 
 (use-package typescript-ts-mode
   :after lsp-mode

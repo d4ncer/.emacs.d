@@ -7,17 +7,15 @@
 (eval-when-compile
   (require 'use-package))
 
-(use-package elixir-mode
+
+(use-package elixir-ts-mode
   :straight t)
 
-(use-package elixir-mode
+(use-package elixir-ts-mode
   :straight t
   :after lsp-mode
-  :preface
-  (defun rk-elixir--setup ()
-    (lsp-deferred))
   :hook
-  (elixir-mode . rk-elixir--setup))
+  ((elixir-ts-mode . lsp)
 
 (provide 'rk-elixir)
 

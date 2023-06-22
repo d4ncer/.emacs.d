@@ -12,26 +12,35 @@
   (require 'use-package))
 
 (require 'definers)
+(require 'treesit-expand-region)
 
-(use-package json-ts-mode)
+(use-package json-ts-mode
+  :hook
+  (json-ts-mode . rk-er/add-treesit-expander))
 
 (use-package json-ts-mode
   :after lsp-mode
   :hook (json-ts-mode . lsp))
 
-(use-package js)
+(use-package js
+  :hook
+  (js-ts-mode . rk-er/add-treesit-expander))
 
 (use-package js
   :after lsp-mode
   :hook (js-ts-mode . lsp))
 
-(use-package css-mode)
+(use-package css-mode
+  :hook
+  (css-ts-mode . rk-er/add-treesit-expander))
 
 (use-package css-mode
   :after lsp-mode
   :hook (css-ts-mode . lsp))
 
-(use-package html-ts-mode)
+(use-package html-ts-mode
+  :hook
+  (html-ts-mode . rk-er/add-treesit-expander))
 
 (use-package html-ts-mode
   :after lsp-mode
