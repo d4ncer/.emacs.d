@@ -27,17 +27,17 @@
       (highlight-thing-mode -1)))
   (defun rk-lsp--maybe-setup-organize-imports ()
     (when (and (gethash "codeActionProvider" (lsp--server-capabilities))
-               (not (or (eq major-mode 'typescript-mode)
-                        (eq major-mode 'rk-ts-tsx-mode)
-                        (eq major-mode 'rk-web-js-mode))))
+               (not (or (eq major-mode 'typescript-ts-mode)
+                        (eq major-mode 'tsx-ts-mode)
+                        (eq major-mode 'js-ts-mode))))
       (add-hook 'before-save-hook #'lsp-organize-imports nil 'local)))
   (defun rk-lsp--maybe-setup-format-on-save ()
     (when (and (gethash "documentFormattingProvider" (lsp--server-capabilities))
                (not (or (eq major-mode 'rust-mode)
                         (eq major-mode 'json-mode)
-                        (eq major-mode 'rk-ts-tsx-mode)
-                        (eq major-mode 'rk-web-js-mode)
-                        (eq major-mode 'typescript-mode))))
+                        (eq major-mode 'tsx-ts-mode)
+                        (eq major-mode 'js-ts-mode)
+                        (eq major-mode 'typescript-ts-mode))))
       (add-hook 'before-save-hook #'lsp-format-buffer nil 'local)))
   (defun rk-lsp--setup-local-keybinds ()
     (general-define-key
@@ -138,19 +138,6 @@
   (progn
     (setq lsp-ui-imenu-colors 'rk-lsp--ui-menu-colors)
     (add-hook 'lsp-after-open-hook #'lsp-enable-imenu)))
-
-(use-package lsp-ivy
-  :straight t
-  :disabled
-  :after lsp-mode
-  :preface
-  (defun rk-lsp-ivy--setup-local-keybinds ()
-    (general-define-key
-     :states 'normal
-     :keybinds 'local
-     "C-/" #'lsp-ivy-workspace-symbol))
-  :hook
-  (lsp-mode . rk-lsp-ivy--setup-local-keybinds))
 
 (use-package dumb-jump
   :straight t
