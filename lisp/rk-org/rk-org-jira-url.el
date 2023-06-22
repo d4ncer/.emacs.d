@@ -29,7 +29,7 @@
 (defun rk-org--create-jira-url (ticket project)
   "Create a URL for TICKET, scoped to the Green project by default, unless PROJECT is specified."
   (interactive (let ((ticket (read-string "Ticket number: " nil))
-                     (project (completing-read "Project: " '("Green" "Support" "MC Application" "Product Design" "Operations" "Red" "Blue" "Yellow" "Cinema") nil t)))
+                     (project (completing-read "Project: " (mapcar 'car rk-org--jira-project-alist) nil t)))
                  (list ticket project)))
   (let* ((project-tag (cdr (assoc project rk-org--jira-project-alist)))
          (ticket-and-project (format "%s-%s" project-tag ticket)))
