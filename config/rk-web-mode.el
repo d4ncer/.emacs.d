@@ -39,8 +39,13 @@
 
 (use-package prettier
   :straight t
+  :preface
+  ;; KLUDGE For some reason prettier gets loaded before direnv loads. This causes issues with
+  ;; incorrect binaries.
+  (defun rk/prettier-deferred ()
+    (run-with-idle-timer 0 nil (lambda () (prettier-mode))))
   :after (js json-ts-mode css-mode html-ts-mode)
-  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . prettier-mode))
+  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . rk/prettier-deferred))
 
 (use-package jsdoc
   :straight (:host github :repo "isamert/jsdoc.el" :branch "main")

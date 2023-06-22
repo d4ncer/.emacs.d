@@ -109,11 +109,15 @@
 
 (use-package prettier
   :straight t
-  :after typescript-mode
+  :preface
+  ;; KLUDGE For some reason prettier gets loaded before direnv loads. This causes issues with
+  ;; incorrect binaries.
+  (defun rk/prettier-deferred ()
+    (run-with-idle-timer 0 nil (lambda () (prettier-mode))))
+  :hook
+  ((tsx-ts-mode typescript-ts-mode) . rk/prettier-deferred)
   :init
-  (add-hook 'rk-ts-tsx-mode-hook #'prettier-mode)
-  (add-hook 'typescript-mode-hook #'prettier-mode)
-  (rk-local-leader-def :keymaps '(typescript-mode-map rk-ts-tsx-mode-map)
+  (rk-local-leader-def :keymaps '(typescript-ts-mode-map tsx-ts-mode-map)
     "." '(prettier-prettify :wk "format")))
 
 (use-package tree-sitter-langs
