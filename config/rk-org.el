@@ -441,7 +441,7 @@ Do not scheduled items or repeating todos."
 
   :config
   (setq org-src-lang-modes '(("ocaml" . tuareg)
-                             ("json" . rk-web-json)
+                             ("json" . json-ts)
                              ("elisp" . emacs-lisp)
                              ("ditaa" . artist)
                              ("asymptote" . asy)
@@ -453,9 +453,9 @@ Do not scheduled items or repeating todos."
                              ("C++" . c++)
                              ("screen" . shell-script)
                              ("shell" . sh)
-                             ("javascript" . rk-web-js)
-                             ("js" . rk-web-js)
-                             ("bash" . sh)))
+                             ("javascript" . js-ts)
+                             ("js" . js-ts)
+                             ("bash" . bash-ts)))
   (setq org-src-fontify-natively t)
   (setq org-src-window-setup 'current-window)
   (add-hook 'org-src-mode-hook #'rk-org--suppress-final-newline)
