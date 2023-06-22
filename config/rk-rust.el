@@ -16,8 +16,6 @@
 (require 's)
 (require 'definers)
 (require 'general)
-(require 'lsp)
-(require 'rk-utils)
 
 (use-package rust-mode
   :straight t

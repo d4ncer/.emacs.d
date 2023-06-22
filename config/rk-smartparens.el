@@ -12,7 +12,6 @@
   (require 'use-package))
 
 (require 'definers)
-(require 'rk-utils)
 
 (use-package smartparens
   :straight t
@@ -176,6 +175,19 @@
 (use-package smartparens
   :straight t
   :functions (sp-get-enclosing-sexp)
+  :preface
+  (defun bounds-of-surrounding-lines (lines-before lines-after)
+    (let ((start
+           (save-excursion
+             (ignore-errors
+               (forward-line (- lines-before)))
+             (line-beginning-position)))
+          (end
+           (save-excursion
+             (ignore-errors
+               (forward-line lines-after))
+             (line-end-position))))
+      (list start end)))
   :config
   (defun rk-smartparens--delete-horizontal-space-for-delete (f &rest args)
     "Perform context-sensitive whitespace cleanups when deleting.

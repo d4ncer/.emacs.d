@@ -53,10 +53,6 @@
     "gs" '(magit-status :wk "git status")
     "gb" '(rk-git--git-blame/body :wk "git blame")))
 
-(use-package git-commit-clubhouse-prefix
-  :disabled t
-  :config (git-commit-clubhouse-prefix-init))
-
 (use-package git-commit-jira-prefix
   :demand t
   :commands (git-commit-jira-prefix-init)
