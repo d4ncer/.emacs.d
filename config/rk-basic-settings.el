@@ -139,6 +139,23 @@
 (use-package sudo-edit
   :straight t)
 
+(use-package eldoc-box
+  :straight t
+  :hook (eldoc-mode . eldoc-box-hover-mode)
+  :custom
+  (eldoc-box-cleanup-interval 0.2)
+  (eldoc-box-offset '(24 32 68)))
+
+(use-package eldoc
+  :after eldoc-box
+  :preface
+  (defun rk/message-in-box (format-string &rest args)
+    (if format-string
+        (let ((msg (apply #'format-message format-string args)))
+          (eldoc-box--display msg))))
+  :custom
+  (eldoc-message-function #'rk/message-in-box))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
