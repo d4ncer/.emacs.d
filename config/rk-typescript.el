@@ -11,6 +11,9 @@
 (require 'treesit-expand-region)
 
 (use-package typescript-ts-mode
+  :init
+  (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-ts-mode))
+  (add-to-list 'auto-mode-alist '("\\.tsx\\'" . tsx-ts-mode))
   :hook
   ((typescript-ts-mode tsx-ts-mode) . rk-er/add-treesit-expander))
 
