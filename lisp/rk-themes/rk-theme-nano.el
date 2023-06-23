@@ -49,6 +49,16 @@
                         :family rk-font-family
                         :height 190)
 
+    (set-face-attribute 'mode-line nil
+                        :height 10
+                        :background "#333"
+                        :box nil)
+
+    (set-face-attribute 'mode-line-inactive nil
+                        :height 10
+                        :background "#999"
+                        :box nil)
+
     (set-face-attribute 'bold nil
                         :weight 'bold)
 
@@ -257,7 +267,7 @@
              '((nano-modeline-cursor-position)
                (nano-modeline-window-dedicated))))
   :init
-  (setq-default mode-line-format nil)
+  (setq-default mode-line-format "")
   :config
   (add-hook 'text-mode-hook #'nano-modeline-text-mode)
   (add-hook 'org-mode-hook #'rk-modeline-org-mode))
