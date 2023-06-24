@@ -51,12 +51,12 @@
 
     (set-face-attribute 'mode-line nil
                         :height 10
-                        :background "#333"
+                        :background "#bbb"
                         :box nil)
 
     (set-face-attribute 'mode-line-inactive nil
                         :height 10
-                        :background "#999"
+                        :background "#ddd"
                         :box nil)
 
     (set-face-attribute 'bold nil
