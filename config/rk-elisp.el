@@ -40,7 +40,9 @@
 
 (use-package eldoc
   :hook (emacs-lisp-mode . eldoc-mode)
-  :custom (eldoc-idle-delay 0.2))
+  :custom
+  (eldoc-idle-delay 0.2)
+  (eldoc-message-function #'message))
 
 (use-package checkdoc
   :custom
