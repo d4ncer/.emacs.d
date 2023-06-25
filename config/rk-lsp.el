@@ -70,6 +70,8 @@
     "l" '(:ignore t :wk "LSP")
     "l." '(lsp-format-buffer :wk "format")
 
+    "la" '(lsp-avy-lens :wk "run lens")
+
     "li" '(lsp-ui-imenu :wk "imenu")
 
     "lo" '(lsp-organize-imports :wk "fix imports")
