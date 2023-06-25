@@ -65,6 +65,7 @@
                                 (deprecated :strike-through t)))
   :init
   (add-hook 'lsp-after-open-hook #'rk-lsp--setup-lsp)
+  :config
   (rk-local-leader-def :keymaps 'lsp-mode-map
     "l" '(:ignore t :wk "LSP")
     "l." '(lsp-format-buffer :wk "format")
@@ -131,13 +132,13 @@
   (lsp-ui-sideline-enable nil)
   (lsp-ui-peek-fontify 'always))
 
-(use-package lsp-imenu
+(use-package lsp-ui-imenu
   :defines (lsp-ui-imenu-colors)
   :commands (lsp-enable-imenu)
-  :config
-  (progn
-    (setq lsp-ui-imenu-colors 'rk-lsp--ui-menu-colors)
-    (add-hook 'lsp-after-open-hook #'lsp-enable-imenu)))
+  :custom
+  (lsp-ui-menu-colors 'rk-lsp--ui-menu-colors)
+  :init
+  (add-hook 'lsp-after-open-hook #'lsp-enable-imenu))
 
 (use-package dumb-jump
   :straight t
