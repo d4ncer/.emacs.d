@@ -123,7 +123,6 @@
            :bind "M-`")
   (sp-pair "{" "}"
            :bind "M-{"
-           :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
            :post-handlers '(("||\n[i]" "RET") ("| " "SPC")))
   (sp-pair "[" "]"
            :bind "M-["
