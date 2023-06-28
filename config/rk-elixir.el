@@ -10,7 +10,17 @@
 (require 'treesit-expand-region)
 
 (use-package elixir-ts-mode
-  :straight t)
+  :straight t
+  :preface
+  (defun rk-elixir/return-and-indent-block ()
+    (interactive)
+    (newline-and-indent)
+    (save-excursion
+      (newline-and-indent))
+    (indent-according-to-mode))
+  :general
+  (:keymaps 'elixir-ts-mode-map
+            "C-<return>" #'rk-elixir/return-and-indent-block))
 
 (use-package elixir-ts-mode
   :straight t
