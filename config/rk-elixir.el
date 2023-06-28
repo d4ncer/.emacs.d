@@ -14,6 +14,15 @@
 
 (use-package elixir-ts-mode
   :straight t
+  :after yasnippet
+  :preface
+  (defun rk-elixir/setup-yas ()
+    (yas-activate-extra-mode 'elixir-mode))
+  :hook
+  ((elixir-ts-mode . rk-elixir/setup-yas)))
+
+(use-package elixir-ts-mode
+  :straight t
   :after lsp-mode
   :hook
   ((elixir-ts-mode . lsp)
