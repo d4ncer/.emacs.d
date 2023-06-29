@@ -12,15 +12,27 @@
 (use-package elixir-ts-mode
   :straight t
   :preface
+  (defun rk-elixir/single-blank-line-p ()
+    (save-excursion
+      (let (thisblank)
+        (beginning-of-line)
+        (setq thisblank (looking-at "[ \t]*$"))
+        (and thisblank
+             (not (looking-at "[ \t]*\n[ \t]*$"))
+             (or (bobp)
+                 (progn (forward-line -1)
+                        (not (looking-at "[ \t]*$"))))))))
   (defun rk-elixir/return-and-indent-block ()
     (interactive)
-    (newline-and-indent)
     (save-excursion
-      (newline-and-indent))
-    (indent-according-to-mode))
-  :general
-  (:keymaps 'elixir-ts-mode-map
-            "C-<return>" #'rk-elixir/return-and-indent-block))
+      (newline-and-indent 2))
+    (forward-line)
+    (indent-according-to-mode)
+    (unless (rk-elixir/single-blank-line-p)
+      (delete-blank-lines))))
+:general
+(:keymaps 'elixir-ts-mode-map
+          "C-<return>" #'rk-elixir/return-and-indent-block))
 
 (use-package elixir-ts-mode
   :straight t
