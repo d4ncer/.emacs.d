@@ -53,8 +53,10 @@
   ;; incorrect binaries.
   (defun rk/prettier-deferred ()
     (run-with-idle-timer 0 nil (lambda () (prettier-mode))))
-  :after (js json-ts-mode css-mode html-ts-mode)
-  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . rk/prettier-deferred))
+  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . rk/prettier-deferred)
+  :init
+  (rk-local-leader-def :keymaps '(js-ts-mode-map json-ts-mode-map css-ts-mode-map html-ts-mode-map)
+    "." '(prettier-prettify :wk "format")))
 
 (use-package jsdoc
   :straight (:host github :repo "isamert/jsdoc.el" :branch "main")
