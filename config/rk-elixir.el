@@ -34,7 +34,6 @@
   (:keymaps 'elixir-ts-mode-map
             "C-<return>" #'rk-elixir/return-and-indent-block))
 
-
 (use-package elixir-ts-mode
   :straight t
   :after yasnippet
