@@ -9,7 +9,7 @@
 
 (require 'rk-colors)
 
-(defconst rk-font-family "JetBrains Mono")
+(defconst rk-font-family "JetBrainsMono Nerd Font")
 
 ;; Nano stuff
 
