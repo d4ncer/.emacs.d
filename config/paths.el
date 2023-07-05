@@ -64,7 +64,7 @@ If argument INTERACTIVE-P is set, log additional information."
 
 ;; Org stuff
 
-(defconst paths--cloud-dir "/Users/rk/Library/Mobile Documents/com~apple~CloudDocs")
+(defconst paths--cloud-dir (format "/Users/%s/Library/Mobile Documents/com~apple~CloudDocs" user-login-name))
 (defconst paths--org-dir (f-join paths--cloud-dir "rkdev" "org"))
 
 (defconst paths--gtd-dir (f-join paths--org-dir "gtd"))
