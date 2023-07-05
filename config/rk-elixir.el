@@ -29,10 +29,11 @@
     (forward-line)
     (indent-according-to-mode)
     (unless (rk-elixir/single-blank-line-p)
-      (delete-blank-lines))))
-:general
-(:keymaps 'elixir-ts-mode-map
-          "C-<return>" #'rk-elixir/return-and-indent-block))
+      (delete-blank-lines)))
+  :general
+  (:keymaps 'elixir-ts-mode-map
+            "C-<return>" #'rk-elixir/return-and-indent-block))
+
 
 (use-package elixir-ts-mode
   :straight t
