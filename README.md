@@ -1,6 +1,6 @@
 # My .emacs setup
 
-![Screenshot of elisp & TSX buffers](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/main-new.png)
+![Screenshot of elisp & TSX buffers](https://raw.githubusercontent.com/d4ncer/.emacs.d/master/screenshots/main-8-7-23.png)
 
 ## Main tenets
 
