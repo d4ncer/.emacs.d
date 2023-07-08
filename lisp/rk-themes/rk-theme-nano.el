@@ -272,6 +272,34 @@
   (add-hook 'text-mode-hook #'nano-modeline-text-mode)
   (add-hook 'org-mode-hook #'rk-modeline-org-mode))
 
+(use-package emacs
+  :after (nano-modeline)
+  :defines (eww--rename-buffer)
+  :custom
+  (eww-header-line-format nil)
+  :preface
+  (defun rk-modeline-eww-url ()
+    (let ((url (plist-get eww-data :url)))
+      (propertize url 'face (nano-modeline-face 'name))))
+  (defun rk-modeline-eww-title ()
+    (let ((title (plist-get eww-data :title)))
+      (propertize
+       (if (zerop (length title))
+           "[untitled]"
+         (format "[%s]" title))
+       'face (nano-modeline-face 'secondary))))
+  (defun rk-modeline-eww-mode ()
+    (funcall nano-modeline-position
+             '((nano-modeline-buffer-status) " "
+               (rk-modeline-eww-url) " "
+               (rk-modeline-eww-title))))
+  (defun rk-eww/after-page-change ()
+    (eww--rename-buffer))
+  :config
+  ;; KLUDGE: override this fn
+  (advice-add 'eww--after-page-change :override #'rk-eww/after-page-change)
+  (add-hook 'eww-mode-hook #'rk-modeline-eww-mode))
+
 (provide 'rk-theme-nano)
 
 ;;; rk-theme-nano.el ends here
