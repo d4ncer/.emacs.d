@@ -9,15 +9,6 @@
 (require 'f)
 (require 'gnus)
 
-(defconst paths-tree-sitter-src-dir (f-join gnus-home-directory "code/elisp-tree-sitter")
-  "Directory for elisp-tree-sitter source code.")
-
-(defconst paths-tree-sitter-load-paths (seq-map (lambda (dir) (f-join paths-tree-sitter-src-dir dir)) (list "core" "lisp" "langs"))
-  "Load paths for tree-sitter")
-
-(defconst paths-evil-textobj-src-dir (f-join gnus-home-directory "code/evil-textobj-tree-sitter")
-  "Directory for evil-textobj-tree-sitter source code.")
-
 (defconst paths-cache-directory
   (concat user-emacs-directory "var"))
 
@@ -39,6 +30,9 @@
 (defconst paths-themes-directory
   (concat user-emacs-directory "themes"))
 
+(defconst paths-custom-pkgs
+  (f-join gnus-home-directory "code" "emacs-pkgs"))
+
 (defun paths-initialise (&optional interactive-p)
   "Add select subdirs of `user-emacs-directory' to the `load-path'.
 If argument INTERACTIVE-P is set, log additional information."
@@ -49,11 +43,12 @@ If argument INTERACTIVE-P is set, log additional information."
                 paths-config-directory
                 paths-hacks-directory
                 paths-themes-directory))
-         (extra-dirs (append paths-tree-sitter-load-paths `(,paths-evil-textobj-src-dir)))
+         (extra-dirs (list))
+         (custom-pkgs-dirs (f-directories paths-custom-pkgs))
          (subdirs
           (f-directories paths-lisp-directory))
          (updated-load-path
-          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs extra-dirs load-path)))))
+          (seq-filter #'file-directory-p (seq-uniq (append main-dirs subdirs custom-pkgs-dirs extra-dirs load-path)))))
 
     (setq load-path updated-load-path)
 
