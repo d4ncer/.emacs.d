@@ -1340,10 +1340,9 @@ Refer to `org-agenda-prefix-format' for more information."
   (org-modern-list '((?+ . "◦")
                      (?* . "–")
                      (?- . "•")))
-  :init
+  :config
   (set-face-attribute 'org-modern-symbol nil :family "Iosevka")
   (set-face-attribute 'org-modern-label nil :family "Iosevka")
-  :config
   (global-org-modern-mode))
 
 (provide 'rk-org)
