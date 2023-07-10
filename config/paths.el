@@ -44,7 +44,7 @@ If argument INTERACTIVE-P is set, log additional information."
                 paths-hacks-directory
                 paths-themes-directory))
          (extra-dirs (list))
-         (custom-pkgs-dirs (f-directories paths-custom-pkgs))
+         (custom-pkgs-dirs (if (f-exists? paths-custom-pkgs) (f-directories paths-custom-pkgs) (list)))
          (subdirs
           (f-directories paths-lisp-directory))
          (updated-load-path
