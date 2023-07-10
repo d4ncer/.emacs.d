@@ -18,15 +18,16 @@
   :straight t
   :after lsp
   :config
-  (setq lsp-java-vmargs
-        `("-XX:+UseParallelGC"
-          "-XX:GCTimeRatio=4"
-          "-XX:AdaptiveSizePolicyWeight=90"
-          "-Dsun.zip.disableMemoryMapping=true"
-          "-Xmx1G"
-          "-Xms100m"
-          ,(format "-javaagent:%s" rk-java--lombok-path)
-          ,(format "-Xbootclasspath/a:%s" rk-java--lombok-path)))
+  (when (f-exists? rk-java--lombok-path)
+    (setq lsp-java-vmargs
+          `("-XX:+UseParallelGC"
+            "-XX:GCTimeRatio=4"
+            "-XX:AdaptiveSizePolicyWeight=90"
+            "-Dsun.zip.disableMemoryMapping=true"
+            "-Xmx1G"
+            "-Xms100m"
+            ,(format "-javaagent:%s" rk-java--lombok-path)
+            ,(format "-Xbootclasspath/a:%s" rk-java--lombok-path))))
   (add-hook 'java-mode-hook #'lsp))
 
 (provide 'rk-java)
