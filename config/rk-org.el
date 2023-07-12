@@ -763,7 +763,7 @@ table tr.tr-even td {
   :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable))
   :after (org-ql)
   :preface
-  (defcustom rk-org--work-file-tag "regrow"
+  (defcustom rk-org--work-file-tag "canva"
     "The file tag to use for work-related org roam files.")
   (defun rk-org--filter-non-diary-notes (note)
     (and (not (f-child-of-p (vulpea-note-path note) rk-org--roam-dailies-dir))
