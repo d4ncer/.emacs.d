@@ -1337,6 +1337,12 @@ Refer to `org-agenda-prefix-format' for more information."
   (rk-leader-def
     "o/" '(org-roam-search :wk "search")))
 
+(use-package org-format
+  :after org
+  :custom
+  (org-format-blank-lines-before-content 1)
+  :hook (org-mode . org-format-on-save-mode))
+
 (use-package org-modern
   :straight (:type git :host github :repo "minad/org-modern" :branch "main")
   :after org
