@@ -669,6 +669,8 @@ table tr.tr-even td {
   :after org
   :preface
   (defvar rk-org-roam--dailies-prev-buffer nil)
+  (defun rk-org-roam--move-to-end ()
+    (goto-char (point-max)))
   (defun rk-org-roam--visit-node-other-window ()
     (interactive)
     (let ((current-prefix-arg t))
@@ -694,6 +696,8 @@ table tr.tr-even td {
       ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
       ("C-j" org-roam-dailies-goto-next-note "next")
       ("C-k" org-roam-dailies-goto-previous-note "previous"))))
+  :hook
+  (org-roam-dailies-find-file . rk-org-roam--move-to-end)
   :general
   (:keymaps 'org-roam-mode-map :states '(normal)
             "<tab>" #'magit-section-toggle
@@ -713,8 +717,8 @@ table tr.tr-even td {
   :custom
   (org-roam-file-extensions '("org" "org_archive"))
   (org-roam-directory rk-org--roam-dir)
-  (org-roam-dailies-capture-templates '(("d" "default" entry "* %?" :target
-                                         (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n"))))
+  (org-roam-dailies-capture-templates '(("d" "default" plain "" :target
+                                         (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* Work\n\n"))))
   :init
   (rk-leader-def
     "ob" '(org-roam-buffer-toggle :wk "toggle buffer")
