@@ -270,6 +270,7 @@
   (setq-default mode-line-format "")
   :config
   (add-hook 'text-mode-hook #'nano-modeline-text-mode)
+  (add-hook 'bibtex-mode-hook #'nano-modeline-text-mode)
   (add-hook 'org-mode-hook #'rk-modeline-org-mode))
 
 (use-package emacs
