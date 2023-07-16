@@ -31,6 +31,7 @@
             "C-c l" #'org-insert-last-stored-link
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
+            "C-c t" #'org-table-create-or-convert-from-region
             "M-p"     #'org-metaup
             "M-n"     #'org-metadown)
   (:keymaps 'org-mode-map :states '(normal visual motion)
@@ -718,7 +719,7 @@ table tr.tr-even td {
   (org-roam-file-extensions '("org" "org_archive"))
   (org-roam-directory rk-org--roam-dir)
   (org-roam-dailies-capture-templates '(("d" "default" plain "" :target
-                                         (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* Work\n\n"))))
+                                         (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* General\n\n* Work\n\n"))))
   :init
   (rk-leader-def
     "ob" '(org-roam-buffer-toggle :wk "toggle buffer")
@@ -1062,7 +1063,7 @@ as its argument a `vulpea-note'."
   :config
   (org-roam-db-sync)
   (rk-local-leader-def :keymaps 'org-mode-map
-    "u b" '(vulpea-find-backlink :wk "find backlinks")
+    "b" '(vulpea-find-backlink :wk "find backlinks")
     "m"   '(:ignore t :wk "meta")
     "m a" '(vulpea-meta-add :wk "add")
     "m A" '(vulpea-meta-add-list :wk "add list")
@@ -1340,7 +1341,7 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package org-format
   :after org
   :custom
-  (org-format-blank-lines-before-content 1)
+  (org-format-blank-lines-before-content 0)
   :hook (org-mode . org-format-on-save-mode))
 
 (use-package org-modern
