@@ -999,7 +999,7 @@ as its argument a `vulpea-note'."
                    note))
               (rk-vulpea--create title t))))))
 
-  (defun rk-vulpea--find (&key filter-fn)
+  (cl-defun rk-vulpea--find (&key filter-fn initial-prompt)
     (interactive)
     (let* ((region-text
             (when (region-active-p)
@@ -1009,6 +1009,7 @@ as its argument a `vulpea-note'."
                  (make-marker) (region-beginning))
                 (set-marker
                  (make-marker) (region-end))))))
+           (prompt (or initial-prompt region-text))
            (note (vulpea-select-from
                   "Note"
                   (funcall
@@ -1016,18 +1017,22 @@ as its argument a `vulpea-note'."
                    (or
                     filter-fn
                     vulpea-find-default-filter))
-                  :initial-prompt region-text))
-           (title (or region-text
+                  :initial-prompt prompt))
+           (title (or prompt
+                      region-text
                       (vulpea-note-title note))))
       (if (vulpea-note-id note)
           (org-roam-node-visit
            (org-roam-node-from-id (vulpea-note-id note)))
         (rk-vulpea--create title nil t))))
 
-  (defun rk-org--non-diary-notes ()
+  (defun rk-org--non-diary-notes (&optional initial-prompt)
     (interactive)
-    (rk-vulpea--find :filter-fn #'rk-org--filter-non-diary-notes))
+    (rk-vulpea--find :filter-fn #'rk-org--filter-non-diary-notes :initial-prompt initial-prompt))
 
+  (defun rk-org--project-notes ()
+    (interactive)
+    (funcall #'rk-org--non-diary-notes "#project"))
 
   (defun rk-vulpea--insert-handle (note)
     "Hook to be called on NOTE after `vulpea-insert'."
@@ -1059,7 +1064,8 @@ as its argument a `vulpea-note'."
             "C-c i" #'rk-vulpea--insert)
   :init
   (rk-leader-def
-    "of" '(rk-org--non-diary-notes :wk "find file node"))
+    "of" '(rk-org--non-diary-notes :wk "find file node")
+    "oP" '(rk-org--project-notes :wk "find projects"))
   :config
   (org-roam-db-sync)
   (rk-local-leader-def :keymaps 'org-mode-map
