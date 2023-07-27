@@ -62,7 +62,7 @@
 
     ","     '(:ignore t :wk "sparens")
 
-    "a"     '(:ignore t :wk "applications")
+    "a"     '(:ignore t :wk "AI/applications")
     "a m"   '(:ignore t :wk "misc")
     "a m t" '(rk-insert-iso-timestamp :wk "insert ISO timestap")
     "a m p" '(rk-generate-password :wk "generate random password")
