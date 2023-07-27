@@ -139,6 +139,9 @@
 (use-package sudo-edit
   :straight t)
 
+(use-package unfill
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
