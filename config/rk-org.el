@@ -722,9 +722,6 @@ table tr.tr-even td {
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* General\n\n* Work\n\n"))))
   :init
   (rk-leader-def
-    "ob" '(org-roam-buffer-toggle :wk "toggle buffer")
-    "oB" '(org-roam-buffer-display-dedicated :wk "toggle dedicated buffer")
-
     "od"  '(:ignore t :wk "date")
     "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
     "odt" '(org-roam-dailies-goto-today :wk "today")
@@ -1349,6 +1346,11 @@ Refer to `org-agenda-prefix-format' for more information."
   :custom
   (org-format-blank-lines-before-content 0)
   :hook (org-mode . org-format-on-save-mode))
+
+(use-package org-roam-links
+  :init
+  (rk-leader-def
+    "ob" '(org-roam-links :wk "evergreen links")))
 
 (use-package org-modern
   :straight (:type git :host github :repo "minad/org-modern" :branch "main")
