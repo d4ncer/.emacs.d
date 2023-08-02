@@ -183,6 +183,7 @@
   :config
   ;; Unbind some odd evil-insert commands
   (general-unbind :states '(insert)
+    "C-a"
     "C-w"
     "C-r"
     "C-k")
