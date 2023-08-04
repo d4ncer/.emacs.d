@@ -123,7 +123,16 @@ Do not scheduled items or repeating todos."
                            (org-element-at-point)))
             (org-todo "TODO"))))))
 
-
+  (defun rk-org--sort-headings-mark-first-next ()
+    "Sort headings under tasks and mark first as NEXT."
+    (interactive)
+    (save-excursion
+      (goto-char (point-min))
+      (search-forward "* Tasks")
+      (move-beginning-of-line nil)
+      (org-sort-entries nil ?d)
+      (org-next-visible-heading 1)
+      (org-todo "NEXT")))
 
   :custom
   (org-image-actual-width nil)
