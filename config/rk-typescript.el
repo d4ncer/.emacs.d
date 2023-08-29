@@ -55,6 +55,11 @@
   (rk-local-leader-def :keymaps 'typescript-ts-mode-map
     "t" '(jest :wk "test")))
 
+(use-package lsp-tailwindcss
+  :straight '(lsp-tailwindcss :type git :host github :repo "merrickluo/lsp-tailwindcss")
+  :init
+  (setq lsp-tailwindcss-add-on-mode t))
+
 (provide 'rk-typescript)
 
 ;;; rk-typescript.el ends here
