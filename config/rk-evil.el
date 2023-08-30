@@ -39,7 +39,7 @@
   (:states 'motion
            "gd" #'xref-find-definitions
            "gD" #'xref-find-definitions-other-window
-           "gb" #'xref-pop-marker-stack)
+           "gb" #'xref-go-back)
   (:keymaps 'help-mode-map
             :states 'motion
             "<escape>" #'quit-window
