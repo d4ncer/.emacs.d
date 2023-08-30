@@ -9,6 +9,8 @@
 
 (require 'treesit-expand-region)
 
+(setq lsp-elixir-ls-version "v0.16.0")
+
 (use-package elixir-ts-mode
   :straight t
   :preface
