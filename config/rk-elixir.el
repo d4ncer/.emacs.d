@@ -9,8 +9,6 @@
 
 (require 'treesit-expand-region)
 
-(setq lsp-elixir-ls-version "v0.16.0")
-
 (use-package elixir-ts-mode
   :straight t
   :preface
@@ -32,6 +30,8 @@
     (indent-according-to-mode)
     (unless (rk-elixir/single-blank-line-p)
       (delete-blank-lines)))
+  :hook
+  (elixir-ts-mode . rk-er/add-treesit-expander)
   :general
   (:keymaps 'elixir-ts-mode-map
             "C-<return>" #'rk-elixir/return-and-indent-block))
@@ -47,10 +47,20 @@
 
 (use-package elixir-ts-mode
   :straight t
-  :after lsp-mode
+  :after eglot
+  :preface
+  (defvar rk-elixir/elixir-ls-bin (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
+  :config
+  (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,rk-elixir/elixir-ls-bin))
   :hook
-  ((elixir-ts-mode . lsp)
-   (elixir-ts-mode . rk-er/add-treesit-expander)))
+  (elixir-ts-mode . eglot-ensure))
+
+;; (use-package elixir-ts-mode
+;;   :straight t
+;;   :after lsp-mode
+;;   :hook
+;;   ((elixir-ts-mode . lsp)
+;;    (elixir-ts-mode . rk-er/add-treesit-expander)))
 
 (use-package smartparens
   :straight t

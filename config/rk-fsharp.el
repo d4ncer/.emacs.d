@@ -1,4 +1,4 @@
-;;; rk-fsharp.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; rk-fsharp.el --- F# config  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -7,11 +7,13 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'lsp)
+(use-package fsharp-mode
+  :straight t)
 
 (use-package fsharp-mode
   :straight t
-  :hook (fsharp-mode . lsp))
+  :after eglot
+  :hook (fsharp-mode . eglot-ensure))
 
 (provide 'rk-fsharp)
 

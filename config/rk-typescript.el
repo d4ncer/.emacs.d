@@ -18,11 +18,9 @@
   ((typescript-ts-mode tsx-ts-mode) . rk-er/add-treesit-expander))
 
 (use-package typescript-ts-mode
-  :after lsp-mode
-  ;; :custom
-  ;; (lsp-clients-typescript-server-args '("--stdio" "--tsserver-log-verbosity=verbose" "--tsserver-log-file=/tmp/ts-logs.txt" "--log-level=4"))
+  :after eglot
   :hook
-  ((typescript-ts-mode tsx-ts-mode) . lsp))
+  ((typescript-ts-mode tsx-ts-mode) . eglot-ensure))
 
 (use-package prettier
   :straight t
@@ -55,10 +53,10 @@
   (rk-local-leader-def :keymaps 'typescript-ts-mode-map
     "t" '(jest :wk "test")))
 
-(use-package lsp-tailwindcss
-  :straight '(lsp-tailwindcss :type git :host github :repo "merrickluo/lsp-tailwindcss")
-  :init
-  (setq lsp-tailwindcss-add-on-mode t))
+;; (use-package lsp-tailwindcss
+;;   :straight '(lsp-tailwindcss :type git :host github :repo "merrickluo/lsp-tailwindcss")
+;;   :init
+;;   (setq lsp-tailwindcss-add-on-mode t))
 
 (provide 'rk-typescript)
 
