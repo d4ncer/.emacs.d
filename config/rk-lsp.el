@@ -14,16 +14,24 @@
 (require 'paths)
 (require 'definers)
 
-;; TODO: Add bindings for common eglot commands
-(use-package eglot)
+(use-package eglot
+  :preface
+  (defun rk-eglot/setup-hooks ()
+    (add-hook 'before-save-hook #'eglot-format-buffer nil 'local))
+  :hook
+  (eglot-managed-mode . rk-eglot/setup-hooks)
+  :config
+  (rk-local-leader-def :keymaps 'eglot-mode-map
+    "." '(eglot-format-buffer :wk "format")
+    "l" '(:ignore t :wk "lsp")
+    "l o" '(eglot-code-action-organize-imports :wk "organize imports")
+    "l c" '(eglot-code-actions :wk "code actions")
+    "l r" '(eglot-rename :wk "rename")))
 
 (use-package eldoc-box
-  :straight t)
-
-(use-package eglot
-  :after eldoc-box
-  :general (:keymaps 'eglot-mode-map :states '(normal motion)
-                     "K" #'eldoc-box-help-at-point))
+  :straight t
+  :general (:states '(normal motion)
+                    "K" #'eldoc-box-help-at-point))
 
 (use-package dumb-jump
   :straight t
