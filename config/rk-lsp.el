@@ -14,12 +14,24 @@
 (require 'paths)
 (require 'definers)
 
+(use-package dumb-jump
+  :straight t
+  :general
+  (:states '(normal motion)
+           "gw" #'dumb-jump-go
+           "gW" #'dumb-jump-go-other-window)
+  :custom
+  (dumb-jump-selector 'completing-read)
+  (dumb-jump-force-searcher 'rg))
+
 (use-package eglot
   :preface
   (defun rk-eglot/setup-hooks ()
-    (add-hook 'before-save-hook #'eglot-format-buffer nil 'local))
+    (add-hook 'before-save-hook #'eglot-format-buffer nil t))
+  (defun rk-eglot/init ()
+    (rk-eglot/setup-hooks))
   :hook
-  (eglot-managed-mode . rk-eglot/setup-hooks)
+  (eglot-managed-mode . rk-eglot/init)
   :config
   (rk-local-leader-def :keymaps 'eglot-mode-map
     "." '(eglot-format-buffer :wk "format")
@@ -32,14 +44,6 @@
   :straight t
   :general (:states '(normal motion)
                     "K" #'eldoc-box-help-at-point))
-
-(use-package dumb-jump
-  :straight t
-  :custom
-  (dumb-jump-selector 'completing-read)
-  (dumb-jump-force-searcher 'rg)
-  :config
-  (add-hook 'xref-backend-functions #'dumb-jump-xref-activate))
 
 (provide 'rk-lsp)
 
