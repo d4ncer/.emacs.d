@@ -30,11 +30,11 @@
         (xref-find-references sym)
       (call-interactively #'xref-find-references)))
   :general
+  ("C-j" #'evil-scroll-down
+   "C-k" #'evil-scroll-up)
   (:states '(normal motion)
            "R" #'rk-evil--find-refs-at-point
            "C-l" #'rk-evil--select-non-empty-line
-           "C-u" #'evil-scroll-page-up
-           "C-d" #'evil-scroll-page-down
            "C-." nil)
   (:states 'motion
            "gd" #'xref-find-definitions
@@ -206,3 +206,4 @@
 (provide 'rk-evil)
 
 ;;; rk-evil.el ends here
+
