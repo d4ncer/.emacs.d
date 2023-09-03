@@ -86,6 +86,7 @@
   :straight (:files (:defaults))
   :general
   (:states '(motion normal)
+           "C-'" #'consult-imenu-multi
            "/" #'consult-line)
   :custom
   (consult-project-root-function #'projectile-project-root)
