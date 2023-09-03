@@ -8,6 +8,7 @@
   (require 'use-package))
 
 (require 'treesit-expand-region)
+(require 'eglot)
 
 (use-package elixir-ts-mode
   :straight t
@@ -47,13 +48,14 @@
 
 (use-package elixir-ts-mode
   :straight t
-  :after eglot
   :preface
-  (defvar rk-elixir/elixir-ls-bin (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
+  (defvar
+    rk-elixir/elixir-ls-bin
+    (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
   :config
   (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,rk-elixir/elixir-ls-bin))
   :hook
-  (elixir-ts-mode . eglot-ensure))
+  ((elixir-ts-mode . eglot-ensure)))
 
 ;; (use-package elixir-ts-mode
 ;;   :straight t
