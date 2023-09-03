@@ -329,8 +329,8 @@
 (use-package emacs
   :after org
   :general
-  ("C-j" #'rk-transpose-line-down
-   "C-k" #'rk-transpose-line-up)
+  ("C-S-j" #'rk-transpose-line-down
+   "C-S-k" #'rk-transpose-line-up)
   :preface
   (autoload 'org-move-item-down "org-list")
   (autoload 'org-move-item-up "org-list")
