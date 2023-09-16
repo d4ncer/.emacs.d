@@ -679,6 +679,9 @@ table tr.tr-even td {
   :after org
   :preface
   (defvar rk-org-roam--dailies-prev-buffer nil)
+  (defun rk-org-roam/force-sync ()
+    (interactive)
+    (org-roam-db-sync t))
   (defun rk-org-roam--move-to-end ()
     (goto-char (point-max)))
   (defun rk-org-roam--visit-node-other-window ()
@@ -731,6 +734,7 @@ table tr.tr-even td {
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* General\n\n* Work\n\n"))))
   :init
   (rk-leader-def
+    "os"  '(rk-org-roam/force-sync :wk "roam sync")
     "od"  '(:ignore t :wk "date")
     "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
     "odt" '(org-roam-dailies-goto-today :wk "today")
