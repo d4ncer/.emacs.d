@@ -138,6 +138,11 @@
                    :skip-match 'sp-elixir-skip-keyword-list-def-p
                    :unless '(rk-sp/in-quoted-content-p))))
 
+(use-package dumb-jump
+  :straight t
+  :config
+  (add-to-list 'dumb-jump-language-file-exts '(:language "elixir" :ext "heex" :agtype "elixir" :rgtype "elixir")))
+
 (provide 'rk-elixir)
 
 ;;; rk-elixir.el ends here
