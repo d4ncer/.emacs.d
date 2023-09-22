@@ -16,6 +16,8 @@
 
 (use-package dumb-jump
   :straight t
+  ;; KLUDGE: Need specific bindings because xref-backends can't be easily
+  ;; unioned to support both LSP + dumb-jump
   :general
   (:states '(normal motion)
            "gw" #'dumb-jump-go
