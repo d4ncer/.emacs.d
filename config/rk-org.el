@@ -505,10 +505,10 @@ Do not scheduled items or repeating todos."
 
 (use-package org-download
   :straight t
-  :after org
   :general
   (:keymaps 'org-mode-map
             "C-c C-i" #'rk-org-download--insert-screenshot)
+  :demand t
   :preface
   (defun rk-org-download--insert-screenshot ()
     (interactive)
