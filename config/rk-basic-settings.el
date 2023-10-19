@@ -142,6 +142,9 @@
 (use-package unfill
   :straight t)
 
+(use-package pcsv
+  :straight t)
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
