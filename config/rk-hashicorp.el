@@ -10,30 +10,17 @@
 (require 'lsp)
 
 (use-package hcl-mode
-  :straight t
-  :mode (("\\.hcl\\'" . hcl-mode)
-         ("\\.nomad\\'" . hcl-mode)))
+  :straight t)
+
+(use-package terraform-mode
+  :straight t)
 
 (use-package terraform-mode
   :straight t
-  :mode ("\\.tf\\(vars\\)?\\'" . terraform-mode)
-  :preface
-  (defun rk-hashicorp--terra-ls-server-cmd ()
-    (let* ((base '("terraform-ls" "serve" "-tf-exec"))
-           (tbin (executable-find "terraform")))
-      (-snoc base tbin)))
-  (defun rk-hashicorp--register-official-lsp-client ()
-    (lsp-register-client
-     (make-lsp-client :new-connection (lsp-stdio-connection (lambda () (rk-hashicorp--terra-ls-server-cmd)))
-                      :major-modes '(terraform-mode)
-                      :priority 1
-                      :server-id 'terrals)))
-  (defun rk-hashicorp--setup-lsp ()
-    (rk-hashicorp--register-official-lsp-client)
-    (lsp-deferred))
+  :after eglot
   :config
-  (add-hook 'terraform-mode-hook #'terraform-format-on-save-mode)
-  (add-hook 'terraform-mode-hook #'rk-hashicorp--setup-lsp))
+  (add-to-list 'eglot-server-programs '(terraform-mode . ("terraform-ls" "serve")))
+  (add-hook 'terraform-mode-hook #'eglot-ensure))
 
 (provide 'rk-hashicorp)
 
