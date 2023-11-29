@@ -1197,7 +1197,14 @@ Refer to `org-agenda-prefix-format' for more information."
             (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (todo . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (tags . " %i %(vulpea-agenda-category 24)%?-24t% s")
-                                        (search . " %i %(vulpea-agenda-category 24)%?-24t% s"))))))))
+                                        (search . " %i %(vulpea-agenda-category 24)%?-24t% s")))))
+          ("y" "Yesterday & today"
+           ((agenda ""))
+           ((org-agenda-start-day "-1d")
+            (org-agenda-span 2)
+            (org-agenda-start-with-log-mode '(closed))
+            (org-agenda-archives-mode t)
+            (org-agenda-skip-function '(org-agenda-skip-entry-if 'notregexp "^\\*\\* DONE ")))))))
 
 (use-package org-roam-ui
   :straight
