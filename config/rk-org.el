@@ -1221,8 +1221,12 @@ Refer to `org-agenda-prefix-format' for more information."
   :config
   (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
+(use-package parsebib
+  :straight t)
+
 (use-package ebib
   :straight t
+  :after parsebib
   :custom
   (ebib-preload-bib-files `(,rk-bib--refs-file)))
 
