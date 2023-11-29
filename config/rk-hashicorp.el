@@ -18,9 +18,9 @@
 (use-package terraform-mode
   :straight t
   :after eglot
+  :hook (terraform-mode . eglot-ensure)
   :config
-  (add-to-list 'eglot-server-programs '(terraform-mode . ("terraform-ls" "serve")))
-  (add-hook 'terraform-mode-hook #'eglot-ensure))
+  (add-to-list 'eglot-server-programs '(terraform-mode . ("terraform-ls" "serve"))))
 
 (provide 'rk-hashicorp)
 
