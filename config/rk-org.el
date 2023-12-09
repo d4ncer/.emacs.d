@@ -591,6 +591,7 @@ Do not scheduled items or repeating todos."
   ;; Highlight alternating rows in HTML tables.
 
   (org-html-table-row-open-tag #'rk-org-html-open-tags-setup)
+  (org-html-head "<link rel=\"stylesheet\" href=\"https://sandyuraz.com/styles/org.css\">")
   (org-html-head-extra
    "
 <style type=\"text/css\">
