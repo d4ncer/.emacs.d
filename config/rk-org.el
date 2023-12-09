@@ -32,8 +32,8 @@
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "C-c t" #'org-table-create-or-convert-from-region
-            "M-p"     #'org-metaup
-            "M-n"     #'org-metadown)
+            "M-p"     #'org-previous-link
+            "M-n"     #'org-next-link)
   (:keymaps 'org-mode-map :states '(normal visual motion)
             "gb" #'org-mark-ring-goto
             "C-n" #'org-next-visible-heading
