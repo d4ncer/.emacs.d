@@ -1389,6 +1389,11 @@ Refer to `org-agenda-prefix-format' for more information."
   (set-face-attribute 'org-modern-label nil :family "Iosevka")
   (global-org-modern-mode))
 
+(use-package org-tidy
+  :straight t
+  :config
+  (add-hook 'org-mode-hook #'org-tidy-mode))
+
 (provide 'rk-org)
 
 ;;; rk-org.el ends here
