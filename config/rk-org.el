@@ -1037,13 +1037,13 @@ as its argument a `vulpea-note'."
            (org-roam-node-from-id (vulpea-note-id note)))
         (rk-vulpea--create title nil t))))
 
-  (defun rk-org--non-diary-notes (&optional initial-prompt)
+  (defun rk-org--all-notes (&optional initial-prompt)
     (interactive)
-    (rk-vulpea--find :filter-fn #'rk-org--filter-non-diary-notes :initial-prompt initial-prompt))
+    (rk-vulpea--find :initial-prompt initial-prompt))
 
   (defun rk-org--project-notes ()
     (interactive)
-    (funcall #'rk-org--non-diary-notes "#project"))
+    (funcall #'rk-org--all-notes "#project"))
 
   (defun rk-vulpea--insert-handle (note)
     "Hook to be called on NOTE after `vulpea-insert'."
@@ -1075,7 +1075,7 @@ as its argument a `vulpea-note'."
             "C-c i" #'rk-vulpea--insert)
   :init
   (rk-leader-def
-    "of" '(rk-org--non-diary-notes :wk "find file node")
+    "of" '(rk-org--all-notes :wk "find file node")
     "oP" '(rk-org--project-notes :wk "find projects"))
   :config
   (org-roam-db-sync)
