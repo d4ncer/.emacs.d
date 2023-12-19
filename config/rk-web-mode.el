@@ -46,18 +46,6 @@
   :after lsp-mode
   :hook (html-ts-mode . lsp))
 
-(use-package prettier
-  :straight t
-  :preface
-  ;; KLUDGE For some reason prettier gets loaded before direnv loads. This causes issues with
-  ;; incorrect binaries.
-  (defun rk/prettier-deferred ()
-    (run-with-idle-timer 0 nil (lambda () (prettier-mode))))
-  :hook ((js-ts-mode json-ts-mode css-ts-mode html-ts-mode) . rk/prettier-deferred)
-  :init
-  (rk-local-leader-def :keymaps '(js-ts-mode-map json-ts-mode-map css-ts-mode-map html-ts-mode-map)
-    "." '(prettier-prettify :wk "format")))
-
 (use-package jsdoc
   :straight (:host github :repo "isamert/jsdoc.el" :branch "main")
   :after js
@@ -71,6 +59,9 @@
   :init
   (rk-local-leader-def :keymaps 'js-ts-mode-map
     "t" '(jest :wk "test")))
+
+(use-package apheleia
+  :straight t)
 
 (provide 'rk-web-mode)
 

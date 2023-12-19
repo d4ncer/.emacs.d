@@ -22,19 +22,6 @@
   :hook
   ((typescript-ts-mode tsx-ts-mode) . eglot-ensure))
 
-(use-package prettier
-  :straight t
-  :preface
-  ;; KLUDGE For some reason prettier gets loaded before direnv loads. This causes issues with
-  ;; incorrect binaries.
-  (defun rk/prettier-deferred ()
-    (run-with-idle-timer 0 nil (lambda () (prettier-mode))))
-  :hook
-  ((tsx-ts-mode typescript-ts-mode) . rk/prettier-deferred)
-  :init
-  (rk-local-leader-def :keymaps '(typescript-ts-mode-map tsx-ts-mode-map)
-    "." '(prettier-prettify :wk "format")))
-
 (use-package emmet-mode
   :straight t
   :general
