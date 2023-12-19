@@ -145,6 +145,11 @@
 (use-package pcsv
   :straight t)
 
+(use-package super-save
+  :straight t
+  :config
+  (super-save-mode +1))
+
 (provide 'rk-basic-settings)
 
 ;;; rk-basic-settings.el ends here
