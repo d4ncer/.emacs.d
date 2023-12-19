@@ -46,16 +46,44 @@
   :hook
   ((elixir-ts-mode . rk-elixir/setup-yas)))
 
+;; [unused] lsp-mode config
+;; (use-package elixir-ts-mode
+;;   :straight t
+;;   :preface
+;;   (defvar
+;;     rk-elixir/elixir-ls-bin
+;;     (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
+;;   (defvar
+;;     rk-elixir/lexical-bin
+;;     (f-join gnus-home-directory "code" "lexical" "_build/dev/package/lexical/bin" "start_lexical.sh"))
+;;   :custom
+;;   (lsp-elixir-server-command `(,rk-elixir/lexical-bin))
+;;   :hook
+;;   ((elixir-ts-mode . lsp)
+;;    (heex-ts-mode . lsp)))
+
+;; Eglot config
 (use-package elixir-ts-mode
   :straight t
   :preface
   (defvar
     rk-elixir/elixir-ls-bin
     (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
+  (defvar
+    rk-elixir/lexical-bin
+    (f-join gnus-home-directory "code" "lexical" "_build/dev/package/lexical/bin" "start_lexical.sh"))
   :config
   (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,rk-elixir/elixir-ls-bin))
   :hook
-  ((elixir-ts-mode . eglot-ensure)))
+  ((elixir-ts-mode . eglot-ensure)
+   (heex-ts-mode . eglot-ensure)))
+
+;; TODO: This will only work when eglot supports multiple servers
+;; (use-package lsp-tailwindcss
+;;   :straight t
+;;   :config
+;;   (add-to-list 'eglot-server-programs
+;;                '((heex-ts-mode :language-id "html") "tailwindcss-language-server")))
 
 ;; (use-package elixir-ts-mode
 ;;   :straight t
