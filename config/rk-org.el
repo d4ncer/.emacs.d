@@ -288,6 +288,11 @@ Do not scheduled items or repeating todos."
     (let ((agenda-key "g"))
       (org-agenda current-prefix-arg agenda-key)
       (delete-other-windows)))
+  (defun rk-org--past-agenda ()
+    (interactive)
+    (let ((agenda-key "y"))
+      (org-agenda current-prefix-arg agenda-key)
+      (delete-other-windows)))
   (defun org-agenda-delete-empty-blocks ()
     "Remove empty agenda blocks.
   A block is identified as empty if there are fewer than 2
@@ -339,7 +344,7 @@ Do not scheduled items or repeating todos."
   (org-agenda-skip-deadline-prewarning-if-scheduled t)
   (org-agenda-skip-scheduled-if-done t)
   (org-agenda-sorting-strategy
-   '((agenda time-up priority-down category-keep)
+   '((agenda deadline-up priority-down category-keep)
      (todo priority-down category-keep scheduled-up)
      (tags priority-down category-keep)
      (search category-keep)))
@@ -356,6 +361,7 @@ Do not scheduled items or repeating todos."
   :init
   (rk-leader-def
     "o a"   '(rk-org--general-agenda :wk "agenda")
+    "o y"   '(rk-org--past-agenda :wk "done (14d)")
     "o A"   '(org-agenda :wk "all agendas"))
   :config
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
@@ -1189,7 +1195,8 @@ Refer to `org-agenda-prefix-format' for more information."
                           ((org-ql-block-header "Unplanned TODO/NEXT actions")))
             (org-ql-block '(and (heading "Tasks")
                                 (descendants (todo))
-                                (not (descendants (todo "NEXT" "WAITING"))))
+                                (not (descendants (todo "NEXT" "WAITING")))
+                                (not (descendants (todo "SOMEDAY"))))
                           ((org-ql-block-header "Stuck projects")))
             (org-ql-block '(todo "WAITING")
                           ((org-ql-block-header "Waiting")))
@@ -1199,13 +1206,16 @@ Refer to `org-agenda-prefix-format' for more information."
                                         (todo . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (tags . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (search . " %i %(vulpea-agenda-category 24)%?-24t% s")))))
-          ("y" "Yesterday & today"
+          ("y" "Last 14 days"
            ((agenda ""))
-           ((org-agenda-start-day "-1d")
-            (org-agenda-span 2)
-            (org-agenda-start-with-log-mode '(closed))
+           ((org-agenda-files (vulpea-project-files))
+            (org-agenda-start-day "-14d")
+            (org-agenda-span 16)
+            (org-agenda-start-on-weekday 1)
             (org-agenda-archives-mode t)
-            (org-agenda-skip-function '(org-agenda-skip-entry-if 'notregexp "^\\*\\* DONE ")))))))
+            (org-agenda-start-with-log-mode '(closed))
+            (org-agenda-skip-function '(org-agenda-skip-entry-if 'notregexp "^\\*\\* DONE "))
+            (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s"))))))))
 
 (use-package org-roam-ui
   :straight
