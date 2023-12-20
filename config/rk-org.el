@@ -1231,6 +1231,24 @@ Refer to `org-agenda-prefix-format' for more information."
         org-roam-ui-update-on-save t
         org-roam-ui-open-on-start t))
 
+(use-package org-super-agenda
+  :straight t
+  :after (vulpea org)
+  :preface
+  (defun rk-org/someday-projects ()
+    (interactive)
+    (org-ql-search (vulpea-project-files) '(todo "SOMEDAY") :super-groups '((:auto-title t)))
+    (delete-other-windows))
+  :init
+  (rk-leader-def
+    "o S"   '(rk-org/someday-projects :wk "someday"))
+  :config
+  (org-super-agenda--def-auto-group title "their TITLE property"
+    :key-form (org-super-agenda--when-with-marker-buffer (org-super-agenda--get-marker item)
+                (vulpea-buffer-title-get))
+    :header-form (concat "Project: " key))
+  (org-super-agenda-mode +1))
+
 ;; Misc
 
 (use-package verb
