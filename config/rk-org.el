@@ -28,18 +28,16 @@
   (:keymaps 'image-map
             "o" #'evil-open-below)
   (:keymaps 'org-mode-map
-            "<return>" #'rk-org--return
             "C-c l" #'org-insert-last-stored-link
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
             "C-c t" #'org-table-create-or-convert-from-region
-            "M-o" #'evil-org-org-insert-subheading-below
-            "TAB" #'org-cycle
-            "gb" #'org-mark-ring-goto
-            "C-n" #'org-next-visible-heading
-            "C-p" #'org-previous-visible-heading
             "M-p"     #'org-previous-link
             "M-n"     #'org-next-link)
+  (:keymaps 'org-mode-map :states '(normal visual motion)
+            "gb" #'org-mark-ring-goto
+            "C-n" #'org-next-visible-heading
+            "C-p" #'org-previous-visible-heading)
   (:keymaps 'org-mode-map :states '(visual)
             "-" #'rk-org--deemphasize
             "B" #'rk-org--embolden
@@ -55,19 +53,6 @@
             "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1))))
   :preface
   (autoload 'outline-forward-same-level "outline")
-
-  (defun rk-org--return (arg)
-    "Like `evil-org-return', but doesn't indent otherwise"
-    (interactive "P")
-    (cond ((and (not arg) (evil-org--empty-element-p))
-           (delete-region (line-beginning-position) (line-end-position)))
-          ((eolp)
-           (if (bolp)
-               (org-return nil)
-             (call-interactively #'evil-org-open-below)))
-          ('otherwise
-           (org-return nil))))
-
   (defun rk-org--deemphasize ()
     (interactive)
     (when (use-region-p)
@@ -117,7 +102,6 @@
 
   (defun rk-org--setup-org ()
     (flyspell-mode -1)
-    (auto-fill-mode)
     (rk-org--disable-ligatures))
 
   (defun rk-org--set-next-todo-state ()
@@ -195,6 +179,7 @@ Do not scheduled items or repeating todos."
   :config
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-subsequent-siblings-todo-state)
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
+  (add-hook 'org-mode-hook #'auto-fill-mode)
   (rk-local-leader-def :keymaps 'org-mode-map
     "d" '(org-deadline :wk "deadline")
     "s" '(org-schedule :wk "schedule")
@@ -234,7 +219,8 @@ Do not scheduled items or repeating todos."
                               (sql . t)
                               (python . t)
                               (dot . t)
-                              (shell . t)))
+                              (shell . t)
+                              (mermaid . t)))
   (org-babel-python-command (executable-find "python3")))
 
 (use-package org
@@ -256,6 +242,10 @@ Do not scheduled items or repeating todos."
   :after org)
 
 (use-package ob-restclient
+  :straight t
+  :after org)
+
+(use-package ob-mermaid
   :straight t
   :after org)
 
@@ -331,20 +321,6 @@ Do not scheduled items or repeating todos."
           (delete-region (point) (1+ (point-at-eol))))))
     (setq buffer-read-only t))
 
-  :general
-  (:keymaps 'org-agenda-mode-map :states 'motion
-            "j" #'org-agenda-next-line
-            "k" #'org-agenda-previous-line
-            "M-j" #'org-agenda-next-item
-            "M-k" #'org-agenda-previous-item
-            "M-h" #'org-agenda-earlier
-            "M-l" #'org-agenda-later
-            "gd" #'org-agenda-toggle-time-grid
-            "gr" #'org-agenda-redo
-            "C-f" #'evil-scroll-page-down
-            "C-b" #'evil-scroll-page-up
-            "M-RET" #'org-agenda-show-and-scroll-up
-            "J" #'org-agenda-goto-date)
   :custom
   (org-stuck-projects '("-ignore-maybe-done"
                         ("NEXT" "WAITING") nil
@@ -532,6 +508,7 @@ Do not scheduled items or repeating todos."
   :general
   (:keymaps 'org-mode-map
             "C-c C-i" #'rk-org-download--insert-screenshot)
+  :demand t
   :preface
   (defun rk-org-download--insert-screenshot ()
     (interactive)
@@ -649,12 +626,44 @@ table tr.tr-even td {
 (use-package evil-org
   :straight t
   :after org
-  :hook (org-mode . evil-org-mode)
+  :demand t
+  :preface
+  (defun rk-org--return (arg)
+    "Like `evil-org-return', but doesn't indent otherwise"
+    (interactive "P")
+    (cond ((and (not arg) (evil-org--empty-element-p))
+           (delete-region (line-beginning-position) (line-end-position)))
+          ((eolp)
+           (if (bolp)
+               (org-return nil)
+             (call-interactively #'evil-org-open-below)))
+          ('otherwise
+           (org-return nil))))
+
+  :general
+  (:keymaps 'org-agenda-mode-map :states 'motion
+            "j" #'org-agenda-next-line
+            "k" #'org-agenda-previous-line
+            "M-j" #'org-agenda-next-item
+            "M-k" #'org-agenda-previous-item
+            "M-h" #'org-agenda-earlier
+            "M-l" #'org-agenda-later
+            "gd" #'org-agenda-toggle-time-grid
+            "gr" #'org-agenda-redo
+            "C-f" #'evil-scroll-page-down
+            "C-b" #'evil-scroll-page-up
+            "M-RET" #'org-agenda-show-and-scroll-up
+            "J" #'org-agenda-goto-date)
+  (:keymaps 'org-mode-map :states '(insert normal motion)
+            "M-o" #'evil-org-org-insert-subheading-below
+            "TAB" #'org-cycle
+            "RET" #'rk-org--return)
   :config
   (require 'evil-org-agenda)
-  ;; (add-hook 'evil-org-mode-hook
-  ;;           (lambda ()
-  ;;             (evil-org-set-key-theme '(textobjects navigation additional shift heading todo))))
+  (add-hook 'org-mode-hook 'evil-org-mode)
+  (add-hook 'evil-org-mode-hook
+            (lambda ()
+              (evil-org-set-key-theme '(textobjects navigation additional shift heading todo))))
   (evil-org-agenda-set-keys))
 
 (use-package flyspell
