@@ -295,7 +295,9 @@ For performance, only consider a subset of the buffer."
            (t
             (funcall f args)))))))
 
-  (advice-add 'sp-backward-delete-char :around #'rk-smartparens--delete-horizontal-space-for-delete))
+  ;; Remove this advice as formatters should handle this, but keep the function for posterity.
+  ;; (advice-add 'sp-backward-delete-char :around #'rk-smartparens--delete-horizontal-space-for-delete)
+  )
 
 
 (provide 'rk-smartparens)
