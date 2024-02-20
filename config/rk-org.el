@@ -142,8 +142,12 @@ Do not scheduled items or repeating todos."
   (org-cycle-separator-lines 1)
   (org-enforce-todo-dependencies t)
   (org-footnote-auto-adjust t)
+  (org-auto-align-tags nil)
+  (org-tags-column 0)
+  (org-catch-invisible-edits 'show-and-error)
   (org-indirect-buffer-display 'current-window)
   (org-insert-heading-respect-content t)
+  (org-ellipsis "...")
   (org-link-abbrev-alist '(("att" . org-attach-expand-link)))
   (org-log-done 'time)
   (org-use-sub-superscripts '{})
@@ -351,7 +355,7 @@ Do not scheduled items or repeating todos."
   (org-agenda-text-search-extra-files '(agenda-archives))
   (org-agenda-use-time-grid nil)
   (org-agenda-inhibit-startup t)
-  (org-agenda-tags-column -100)
+  (org-agenda-tags-column 0)
   (org-agenda-clockreport-parameter-plist
    (list
     :compact t
@@ -741,7 +745,7 @@ table tr.tr-even td {
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* General\n\n* Work\n\n"))))
   :init
   (rk-leader-def
-    "os"  '(rk-org-roam/force-sync :wk "roam sync")
+    "oS"  '(rk-org-roam/force-sync :wk "roam sync")
     "od"  '(:ignore t :wk "date")
     "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
     "odt" '(org-roam-dailies-goto-today :wk "today")
@@ -1241,7 +1245,7 @@ Refer to `org-agenda-prefix-format' for more information."
     (delete-other-windows))
   :init
   (rk-leader-def
-    "o S"   '(rk-org/someday-projects :wk "someday"))
+    "o s"   '(rk-org/someday-projects :wk "someday"))
   :config
   (org-super-agenda--def-auto-group title "their TITLE property"
     :key-form (org-super-agenda--when-with-marker-buffer (org-super-agenda--get-marker item)
