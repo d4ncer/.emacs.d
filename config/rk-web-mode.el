@@ -60,9 +60,6 @@
   (rk-local-leader-def :keymaps 'js-ts-mode-map
     "t" '(jest :wk "test")))
 
-(use-package apheleia
-  :straight t)
-
 (provide 'rk-web-mode)
 
 ;;; rk-web-mode.el ends here

@@ -200,6 +200,7 @@ information retrieved from files created by the keychain script."
 (use-package rk-sql)
 (use-package rk-mermaid)
 (use-package rk-bazel)
+(use-package rk-fmt)
 
 ;; Programming language support
 
