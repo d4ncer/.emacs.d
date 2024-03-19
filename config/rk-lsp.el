@@ -28,10 +28,11 @@
 
 (use-package eglot
   :preface
-  (defun rk-eglot/setup-hooks ()
-    (add-hook 'before-save-hook #'eglot-format-buffer nil t))
+  ;; (defun rk-eglot/setup-hooks ()
+  ;;   (add-hook 'before-save-hook #'eglot-format-buffer nil t))
   (defun rk-eglot/init ()
-    (rk-eglot/setup-hooks))
+    ;; Put stuff in for eglot set up here
+    ())
   :hook
   (eglot-managed-mode . rk-eglot/init)
   :config
