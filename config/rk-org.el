@@ -73,6 +73,26 @@
     (interactive)
     (org-emphasize (string-to-char "+")))
 
+  (defun rk-org--retrieve-url-from-point ()
+    "Copies the URL from an org link at the point"
+    (interactive)
+    (let ((plain-url (url-get-url-at-point)))
+      (if plain-url
+          (progn
+            (kill-new plain-url)
+            (message (concat "Copied: " plain-url)))
+        (let* ((link-info (assoc :link (org-context)))
+               (text (when link-info
+                       (buffer-substring-no-properties
+                        (or (cadr link-info) (point-min))
+                        (or (caddr link-info) (point-max))))))
+          (if (not text)
+              (error "Oops! Point isn't in an org link")
+            (string-match org-link-bracket-re text)
+            (let ((url (substring text (match-beginning 1) (match-end 1))))
+              (kill-new url)
+              (message (concat "Copied: " url))))))))
+
   (defun rk-org--sort-tasks ()
     (when (eq 'org-mode major-mode)
       (with-current-buffer (current-buffer)
@@ -190,7 +210,8 @@ Do not scheduled items or repeating todos."
 
     "u"  '(:ignore t :wk "utils")
 
-    "l"  '(org-insert-link :wk "insert link"))
+    "l"  '(org-insert-link :wk "insert link")
+    "L"  '(rk-org--retrieve-url-from-point :wk "copy link"))
 
   (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
