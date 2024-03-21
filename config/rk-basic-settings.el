@@ -83,12 +83,19 @@
 (use-package exec-path-from-shell
   :straight t
   :if window-system
+  :preface
+  (defcustom rk-basic/rtx-shim-dir (f-join gnus-home-directory ".local/share/rtx/shims")
+    "Directory pointing to RTX shims.")
+  :custom
+  (exec-path-from-shell-variables '("PATH"
+                                    "MANPATH"
+                                    "DOTNET_ROLL_FORWARD"))
+  (exec-path-from-shell-check-startup-files nil)
   :config
-  (exec-path-from-shell-copy-env "GOPATH")
-  (exec-path-from-shell-copy-env "DOTNET_ROLL_FORWARD")
-  ;; (exec-path-from-shell-copy-env "LANG")
-  ;; (exec-path-from-shell-copy-env "LC_ALL")
-  (exec-path-from-shell-initialize))
+  (exec-path-from-shell-initialize )
+
+  ;; Add rtx shim dir to exec-path
+  (add-to-list 'exec-path rk-basic/rtx-shim-dir)))
 
 (use-package request
   :straight t)
