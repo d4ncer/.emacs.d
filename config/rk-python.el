@@ -11,31 +11,21 @@
 (eval-when-compile
   (require 'use-package))
 
-(require 'lsp)
-(require 'definers)
-
 (use-package python)
+
+(use-package python
+  :after eglot
+  :hook
+  (python-ts-mode . eglot-ensure))
 
 (use-package pipenv
   :straight t
-  :hook (python-mode . pipenv-mode)
+  :hook (python-ts-mode . pipenv-mode)
   :custom
   (pipenv-with-flycheck nil))
 
-(use-package lsp-pyright
-  :after (lsp-mode python)
-  :straight t
-  :preface
-  (defun rk-python--setup-lsp ()
-    (lsp-deferred))
-  :hook (python-mode . rk-python--setup-lsp))
-
-(use-package python-black
-  :straight (:type git :host github :repo "wbolster/emacs-python-black" :branch "main")
-  :after python
-  :init
-  (rk-local-leader-def :keymaps 'python-mode-map
-    "." '(python-black-buffer :wk "format buffer")))
+(use-package poetry
+  :straight t)
 
 (provide 'rk-python)
 
