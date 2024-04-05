@@ -240,8 +240,7 @@
   (rk-themes-build-theme))
 
 (use-package nano-modeline
-  :straight '(nano-modeline :type git :host github
-                            :repo "rougier/nano-modeline" :branch "simpler")
+  :straight t
   :after (nano-theme)
   :preface
   (defun rk-modeline-org-buffer-name (&optional name)
