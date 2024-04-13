@@ -19,32 +19,32 @@
   (json-ts-mode . rk-er/add-treesit-expander))
 
 (use-package json-ts-mode
-  :after lsp-mode
-  :hook (json-ts-mode . lsp))
+  :after eglot
+  :hook (json-ts-mode . eglot-ensure))
 
 (use-package js
   :hook
   (js-ts-mode . rk-er/add-treesit-expander))
 
 (use-package js
-  :after lsp-mode
-  :hook (js-ts-mode . lsp))
+  :after eglot
+  :hook (js-ts-mode . eglot-ensure))
 
 (use-package css-mode
   :hook
   (css-ts-mode . rk-er/add-treesit-expander))
 
 (use-package css-mode
-  :after lsp-mode
-  :hook (css-ts-mode . lsp))
+  :after eglot
+  :hook (css-ts-mode . eglot-ensure))
 
 (use-package html-ts-mode
   :hook
   (html-ts-mode . rk-er/add-treesit-expander))
 
 (use-package html-ts-mode
-  :after lsp-mode
-  :hook (html-ts-mode . lsp))
+  :after eglot
+  :hook (html-ts-mode . eglot-ensure))
 
 (use-package jsdoc
   :straight (:host github :repo "isamert/jsdoc.el" :branch "main")
