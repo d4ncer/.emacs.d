@@ -18,6 +18,7 @@
           (go "https://github.com/tree-sitter/tree-sitter-go")
           (heex "https://github.com/phoenixframework/tree-sitter-heex")
           (html "https://github.com/tree-sitter/tree-sitter-html")
+          (java "https://github.com/tree-sitter/tree-sitter-java")
           (javascript "https://github.com/tree-sitter/tree-sitter-javascript" "master" "src")
           (json "https://github.com/tree-sitter/tree-sitter-json")
           (make "https://github.com/alemuller/tree-sitter-make")
@@ -33,6 +34,7 @@
   (setq major-mode-remap-alist
         '((yaml-mode . yaml-ts-mode)
           (bash-mode . bash-ts-mode)
+          (java-mode . java-ts-mode)
           (js2-mode . js-ts-mode)
           (javascript-mode . js-ts-mode)
           (typescript-mode . typescript-ts-mode)
