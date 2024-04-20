@@ -31,6 +31,8 @@
             "C-c l" #'org-insert-last-stored-link
             "C-n" #'org-next-visible-heading
             "C-p" #'org-previous-visible-heading
+            "C-j" #'evil-scroll-down
+            "C-k" #'evil-scroll-up
             "C-c t" #'org-table-create-or-convert-from-region
             "M-p"     #'org-previous-link
             "M-n"     #'org-next-link)
