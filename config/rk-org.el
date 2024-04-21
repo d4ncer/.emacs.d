@@ -1353,6 +1353,11 @@ Refer to `org-agenda-prefix-format' for more information."
   :after citar embark
   :config (citar-embark-mode))
 
+(use-package citar-org-roam
+  :straight t
+  :after (citar org-roam)
+  :config (citar-org-roam-mode))
+
 (use-package org-pdftools
   :straight t
   :after org
