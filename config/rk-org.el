@@ -1356,6 +1356,7 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package citar-org-roam
   :straight t
   :after (citar org-roam)
+  :custom (citar-org-roam-subdir rk-org--roam-refs-dir)
   :config (citar-org-roam-mode))
 
 (use-package org-pdftools
