@@ -38,7 +38,7 @@
           (js2-mode . js-ts-mode)
           (javascript-mode . js-ts-mode)
           (typescript-mode . typescript-ts-mode)
-          (json-mode . json-ts-mode)
+          (js-json-mode . json-ts-mode)
           (css-mode . css-ts-mode)
           (python-mode . python-ts-mode))))
 
