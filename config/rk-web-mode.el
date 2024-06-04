@@ -23,6 +23,7 @@
   :hook (json-ts-mode . eglot-ensure))
 
 (use-package js
+  :mode ("\\.cjs\\'" . js-ts-mode)
   :hook
   (js-ts-mode . rk-er/add-treesit-expander))
 
