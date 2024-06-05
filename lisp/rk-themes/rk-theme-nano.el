@@ -101,6 +101,9 @@
                         :weight 'semi-bold
                         :inherit 'default)
 
+    (set-face-attribute 'nano-popout nil
+                        :foreground rk-colors-magenta)
+
     (with-eval-after-load 'consult
       (set-face-attribute 'consult-file nil :inherit nil
                           :weight 'semi-bold))
