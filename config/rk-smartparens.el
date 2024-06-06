@@ -135,7 +135,9 @@
            :pre-handlers '(:add (rk-smartparens--add-space-before-sexp-insertion)))
 
   (sp-with-modes (list 'js-ts-mode 'tsx-ts-mode 'typescript-ts-mode)
-    (sp-local-pair "<" ">" :actions nil))
+    (sp-local-pair "<" nil
+                   :unless '(:add rk-smartparens--after-equals-p)
+                   :skip-match 'rk-smartparens--after-equals-skip))
   (sp-with-modes (cons 'lisp-data-mode sp-lisp-modes)
     (sp-local-pair "(" nil
                    :pre-handlers '(rk-smartparens--add-space-before-sexp-insertion)
