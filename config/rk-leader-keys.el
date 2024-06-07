@@ -144,7 +144,7 @@
 
     "w"     '(:ignore t :wk "window")
     "w ="   '(balance-windows :wk "balance windows")
-    "w o"   '(delete-other-windows :wk "kill other windows")
+    "w K"   '(delete-other-windows :wk "kill other windows")
     "w q"   '(delete-window :wk "kill window")
     "w S"   '(window-swap-states :wk "swap")
     "w f"   '(other-frame :wk "next frame")

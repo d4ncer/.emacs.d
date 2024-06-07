@@ -207,11 +207,12 @@
   (setq completion-cycle-threshold 3)
   (setq tab-always-indent 'complete))
 
-(use-package bookmark-view
+(use-package burly
   :straight t
   :init
   (rk-leader-def
-    "w s" '(bookmark-view :wk "save view")))
+    "w s" '(burly-bookmark-windows :wk "save view")
+    "w o" '(burly-open-bookmark :wk "open view")))
 
 (provide 'rk-completions)
 
