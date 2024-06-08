@@ -11,7 +11,28 @@
 (eval-when-compile
   (require 'use-package))
 
-(use-package python)
+(require 'which-func)
+(require 'f)
+(require 's)
+
+(use-package python
+  :preface
+  (defun rk-python/unittest-at-point ()
+    "Run unittest at point using the built-in Python test runner."
+    (interactive)
+    (if-let* ((test-function (which-function))
+              (poetry-root (poetry-find-project-root))
+              (test-file (file-name-sans-extension (buffer-file-name)))
+              (diff-path (f-relative test-file poetry-root))
+              (formatted-diff (s-replace "/" "." diff-path))
+              (command (format "python -m unittest %s.%s" formatted-diff test-function))
+              (default-directory poetry-root))
+        (compile command)
+      (message "Must be in a Poetry project.")))
+  :config
+  (rk-local-leader-def :keymaps 'python-ts-mode-map
+    "t" '(rk-python/unittest-at-point :wk "test at point")))
+
 
 (use-package python
   :after eglot
