@@ -48,6 +48,17 @@
 (use-package poetry
   :straight t)
 
+(use-package poetry
+  :straight t
+  :after python
+  :preface
+  (defun rk-python/setup-poetry ()
+    (when (and (poetry-find-project-root)
+               (not (poetry-venv-activated-p)))
+      (poetry-venv-workon)))
+  :hook
+  (python-ts-mode . rk-python/setup-poetry))
+
 (provide 'rk-python)
 
 ;;; rk-python.el ends here
