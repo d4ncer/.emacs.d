@@ -155,6 +155,8 @@
 
 (use-package super-save
   :straight t
+  :custom
+  (super-save-exclude '(".org_archive"))
   :config
   (super-save-mode +1))
 
