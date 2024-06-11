@@ -28,6 +28,7 @@
           (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
           (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
           (mermaid "https://github.com/monaqa/tree-sitter-mermaid")
+          (rust "https://github.com/tree-sitter/tree-sitter-rust")
           (yaml "https://github.com/ikatyang/tree-sitter-yaml")))
 
   ;; KLUDGE remap some modes
@@ -40,6 +41,7 @@
           (typescript-mode . typescript-ts-mode)
           (js-json-mode . json-ts-mode)
           (css-mode . css-ts-mode)
+          (rust-mode . rust-ts-mode)
           (python-mode . python-ts-mode))))
 
 (provide 'rk-tree-sitter)
