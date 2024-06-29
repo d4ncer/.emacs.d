@@ -46,22 +46,6 @@
   :hook
   ((elixir-ts-mode . rk-elixir/setup-yas)))
 
-;; [unused] lsp-mode config
-;; (use-package elixir-ts-mode
-;;   :straight t
-;;   :preface
-;;   (defvar
-;;     rk-elixir/elixir-ls-bin
-;;     (f-join paths-cache-directory "lsp-servers" "elixir-ls" "language_server.sh"))
-;;   (defvar
-;;     rk-elixir/lexical-bin
-;;     (f-join gnus-home-directory "code" "lexical" "_build/dev/package/lexical/bin" "start_lexical.sh"))
-;;   :custom
-;;   (lsp-elixir-server-command `(,rk-elixir/lexical-bin))
-;;   :hook
-;;   ((elixir-ts-mode . lsp)
-;;    (heex-ts-mode . lsp)))
-
 ;; Eglot config
 (use-package elixir-ts-mode
   :straight t
