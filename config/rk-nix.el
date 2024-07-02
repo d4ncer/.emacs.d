@@ -1,4 +1,4 @@
-;;; rk-nix.el --- <enter description here>  -*- lexical-binding: t; -*-
+;;; rk-nix.el --- nix config  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 
@@ -13,9 +13,9 @@
 
 (use-package nix-mode
   :straight t
-  :after lsp
+  :after eglot
   :hook
-  (nix-mode . lsp))
+  (nix-mode . eglot-ensure))
 
 (provide 'rk-nix)
 
