@@ -9,26 +9,17 @@
 
 (require 'definers)
 
-(use-package clojure-mode
-  :straight t
-  :config
-  (define-clojure-indent
-   (GET 2)
-   (POST 2)
-   (PUT 2)
-   (PATCH 2)
-   (DELETE 2)
-   (match 1)
-   (friend/authorize 1)))
+(use-package clojure-ts-mode
+  :straight t)
 
 (use-package cider
   :straight t
-  :after clojure-mode
+  :after clojure-ts-mode
   :general
   (:keymaps 'cider-repl-mode-map
             "C-r" #'cider-repl-history)
   :config
-  (rk-local-leader-def :keymaps 'clojure-mode-map
+  (rk-local-leader-def :keymaps 'clojure-ts-mode-map
     "c"   '(cider-jack-in :wk "jack in")
     "e"   '(:ignore t :wk "eval")
     "e b" '(cider-eval-buffer :wk "eval buffer")
@@ -38,14 +29,13 @@
 
 (use-package clj-refactor
   :straight t
-  :after clojure-mode
+  :after clojure-ts-mode
   :preface
   (defun rk-cider--setup-clj-refactor ()
     (clj-refactor-mode 1)
     (cljr-add-keybindings-with-prefix "C-c C-m"))
-
-  :config
-  (add-hook 'clojure-mode-hook #'rk-cider--setup-clj-refactor))
+  :hook
+  (clojure-ts-mode . rk-cider--setup-clj-refactor))
 
 (use-package inf-clojure
   :straight t)
