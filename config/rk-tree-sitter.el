@@ -12,6 +12,7 @@
   (setq treesit-language-source-alist
         '((bash "https://github.com/tree-sitter/tree-sitter-bash")
           (cmake "https://github.com/uyha/tree-sitter-cmake")
+          (clojure "https://github.com/sogaiu/tree-sitter-clojure")
           (css "https://github.com/tree-sitter/tree-sitter-css")
           (elisp "https://github.com/Wilfred/tree-sitter-elisp")
           (elixir "https://github.com/elixir-lang/tree-sitter-elixir")
