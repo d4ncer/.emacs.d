@@ -200,7 +200,7 @@
   :straight t
   :after evil
   :custom
-  (evil-collection-mode-list `(ebib cider dired racer git-timemachine ibuffer help info docker magit forge (pdf pdf-view) ediff deadgrep custom))
+  (evil-collection-mode-list `(ebib cider dired racer git-timemachine ibuffer help info docker magit forge (pdf pdf-view) ediff deadgrep profiler custom))
   :config
   (evil-collection-init))
 
