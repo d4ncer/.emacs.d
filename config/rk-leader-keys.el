@@ -70,7 +70,7 @@
     "b"     '(:ignore t :wk "buffer")
     "b a"   '(mark-whole-buffer :wk "select all")
     "b b"   '(bury-buffer :wk "bury buffer")
-    "b d"   '(kill-this-buffer :wk "kill buffer")
+    "b d"   '(kill-current-buffer :wk "kill buffer")
     "b e"   '(erase-buffer :wk "erase buffer")
     "b Y"   '(rk-copy-whole-buffer-to-clipboard :wk "copy buffer")
     "b P"   '(rk-copy-clipboard-to-whole-buffer :wk "replace buffer with clipboard")
@@ -118,7 +118,6 @@
     "i"     '(:ignore t :wk "info")
 
     "k"     '(:ignore t :wk "kill")
-    "k b"   '(kill-this-buffer :wk "kill buffer")
     "k w"   '(delete-window :wk "kill window")
 
     "n"     '(:ignore t :wk "narrow/widen")
