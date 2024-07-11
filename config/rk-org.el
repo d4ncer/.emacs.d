@@ -279,6 +279,13 @@ Do not scheduled items or repeating todos."
   :straight t
   :after org)
 
+(use-package ob-elixir
+  :straight (:type git
+                   :host github
+                   :repo "d4ncer/ob-elixir"
+                   :branch "master")
+  :after org)
+
 (use-package ob-shell
   :after org)
 
@@ -501,6 +508,7 @@ Do not scheduled items or repeating todos."
                              ("shell" . sh)
                              ("javascript" . js-ts)
                              ("js" . js-ts)
+                             ("elixir" . elixir-ts)
                              ("bash" . bash-ts)))
   (setq org-src-fontify-natively t)
   (setq org-src-window-setup 'current-window)
