@@ -11,7 +11,15 @@
 (require 'eglot)
 
 (use-package elixir-ts-mode
-  :straight t
+  :init
+  (if (treesit-ready-p 'elixir t)
+      (progn
+        (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
+        (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
+        (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
+        (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode)))))
+
+(use-package elixir-ts-mode
   :preface
   (defun rk-elixir/single-blank-line-p ()
     (save-excursion
@@ -38,13 +46,12 @@
             "C-<return>" #'rk-elixir/return-and-indent-block))
 
 (use-package elixir-ts-mode
-  :straight t
   :after yasnippet
   :preface
   (defun rk-elixir/setup-yas ()
     (yas-activate-extra-mode 'elixir-mode))
   :hook
-  ((elixir-ts-mode . rk-elixir/setup-yas)))
+  (elixir-ts-mode . rk-elixir/setup-yas))
 
 ;; Eglot config
 (use-package elixir-ts-mode
@@ -89,66 +96,9 @@
   ;; with elixir-ts-mode for some reason. I've re-written the
   ;; :unless clause to use a treesit-based guard.
   (sp-with-modes '(elixir-ts-mode)
-    (sp-local-pair "do" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :skip-match 'sp-elixir-skip-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "def" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-bodyless-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "defp" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-bodyless-defp-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "defmodule" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "defimpl" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "fn" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '("| "))
-    (sp-local-pair "if" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "for" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-for-in-defimpl-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "cond" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "with" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "unless" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "case" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))
-    (sp-local-pair "try" "end"
-                   :when '(("SPC" "RET" "<evil-ret>"))
-                   :post-handlers '(sp-elixir-do-block-post-handler)
-                   :skip-match 'sp-elixir-skip-keyword-list-def-p
-                   :unless '(rk-sp/in-quoted-content-p))))
+
+    (sp-local-pair "def" nil :actions nil)
+    (sp-local-pair "defp" nil :actions nil)))
 
 (use-package dumb-jump
   :straight t
