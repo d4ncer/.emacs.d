@@ -75,7 +75,7 @@
     (interactive)
     (org-emphasize (string-to-char "+")))
 
-  (defun rk-org--retrieve-url-from-point ()
+  (defun rk-org--copy-url-at-point ()
     "Copies the URL from an org link at the point"
     (interactive)
     (let ((plain-url (url-get-url-at-point)))
@@ -96,14 +96,16 @@
               (message (concat "Copied: " url))))))))
 
   (defun rk-org--sort-tasks ()
+    (interactive)
     (when (eq 'org-mode major-mode)
       (with-current-buffer (current-buffer)
         (if-let ((marker (org-find-exact-headline-in-buffer "Tasks")))
             (save-excursion
-              (goto-char (org-find-exact-headline-in-buffer "Tasks"))
-              (org-sort-entries t ?t)
-              (org-cycle)
-              (org-cycle))))))
+              (goto-char marker)
+              (org-sort-entries t ?d)
+              (org-fold-show-children)
+              (org-next-visible-heading 1)
+              (org-todo "NEXT"))))))
 
   (defun rk-org--exit-minibuffer (&rest _)
     "Exit minibuffer before adding notes."
@@ -116,7 +118,11 @@
                       (buffer-substring (line-beginning-position) (line-end-position)))
       (goto-char (line-end-position))))
 
-
+  (defun rk-org--cleanup-project-tasks ()
+    (interactive)
+    (rk-org--archive-done-tasks)
+    (rk-org--sort-tasks)
+    (org-format-buffer))
 
   (defun rk-org--disable-ligatures ()
     (when (fboundp 'mac-auto-operator-composition-mode)
@@ -216,7 +222,7 @@ Do not scheduled items or repeating todos."
     "u"  '(:ignore t :wk "utils")
 
     "l"  '(org-insert-link :wk "insert link")
-    "L"  '(rk-org--retrieve-url-from-point :wk "copy link"))
+    "L"  '(rk-org--copy-url-at-point :wk "copy link"))
 
   (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
@@ -381,9 +387,8 @@ Do not scheduled items or repeating todos."
   (org-agenda-skip-deadline-prewarning-if-scheduled t)
   (org-agenda-skip-scheduled-if-done t)
   (org-agenda-sorting-strategy
-   '((agenda deadline-up priority-down category-keep)
-     (todo priority-down category-keep scheduled-up)
-     (tags priority-down category-keep)
+   '((agenda habit-down time-up urgency-down category-keep)
+     (todo urgency-down category-keep) (tags urgency-down category-keep)
      (search category-keep)))
   (org-agenda-text-search-extra-files '(agenda-archives))
   (org-agenda-use-time-grid nil)
@@ -461,14 +466,12 @@ Do not scheduled items or repeating todos."
   (autoload 'org-get-tags "org")
 
   (defun rk-org--archive-done-tasks ()
+    "Archive all tasks marked DONE in the file."
     (interactive)
-    (atomic-change-group
-      (org-map-entries (lambda ()
-                         ;; HACK: Ensure point does not move past the next
-                         ;; item to archive.
-                         (let ((_ (point)))
-                           (org-archive-subtree)))
-                       "/DONE|PAID|VOID|CANCELLED" 'tree)))
+    (mapc (lambda(entry)
+            (goto-char entry)
+            (org-archive-subtree))
+          (reverse (org-map-entries (lambda () (point)) "/DONE|PAID|VOID|CANCELLED" 'file))))
 
   (defun rk-org--apply-inherited-tags (&rest _)
     "Apply inherited tags when archiving."
@@ -1239,7 +1242,7 @@ Refer to `org-agenda-prefix-format' for more information."
             (org-ql-block '(todo "WAITING")
                           ((org-ql-block-header "Waiting")))
             (agenda ""))
-           ((org-agenda-files (vulpea-project-files))
+           ((org-agenda-files (-concat (vulpea-project-files) (if (boundp 'org-jira-working-dir) `(,org-jira-working-dir) '())))
             (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (todo . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (tags . " %i %(vulpea-agenda-category 24)%?-24t% s")
