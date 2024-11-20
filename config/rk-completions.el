@@ -68,7 +68,7 @@
   :defines (vertico-repeat-save)
   :init
   (rk-leader-def
-    "r" '(vertico-repeat-last :wk "resume"))
+    "r" '(vertico-repeat :wk "resume"))
   (add-to-list 'savehist-additional-variables 'vertico-repeat-history)
   (add-hook 'minibuffer-setup-hook #'vertico-repeat-save))
 
