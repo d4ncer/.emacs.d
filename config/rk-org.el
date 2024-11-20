@@ -1464,6 +1464,12 @@ Refer to `org-agenda-prefix-format' for more information."
   (set-face-attribute 'org-modern-label nil :family "Iosevka")
   (global-org-modern-mode))
 
+(use-package org-review
+  :straight (:type git :host github :repo "brabalan/org-review")
+  :general
+  (:keymaps 'org-mode-map
+            "C-c C-r" #'org-review-insert-last-review))
+
 ;; TODO: Come back and fix this, it breaks everything else
 ;; (use-package org-tidy
 ;;   :straight t
