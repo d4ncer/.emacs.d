@@ -64,7 +64,7 @@
     rk-elixir/lexical-bin
     (f-join gnus-home-directory "code" "lexical" "_build/dev/package/lexical/bin" "start_lexical.sh"))
   :config
-  (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,rk-elixir/lexical-bin))
+  (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,rk-elixir/elixir-ls-bin))
   :hook
   ((elixir-ts-mode . eglot-ensure)
    (heex-ts-mode . eglot-ensure)))
