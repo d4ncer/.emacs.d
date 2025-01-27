@@ -12,46 +12,43 @@
 
 (use-package elixir-ts-mode
   :init
-  (if (treesit-ready-p 'elixir t)
-      (progn
-        (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
-        (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
-        (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
-        (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode)))))
+  (when (treesit-ready-p 'elixir t)
+    (add-to-list 'auto-mode-alist '("\\.elixir\\'" . elixir-ts-mode))
+    (add-to-list 'auto-mode-alist '("\\.ex\\'" . elixir-ts-mode))
+    (add-to-list 'auto-mode-alist '("\\.exs\\'" . elixir-ts-mode))
+    (add-to-list 'auto-mode-alist '("mix\\.lock" . elixir-ts-mode)))
 
-(use-package elixir-ts-mode
   :preface
   (defun rk-elixir/single-blank-line-p ()
     (save-excursion
-      (let (thisblank)
-        (beginning-of-line)
-        (setq thisblank (looking-at "[ \t]*$"))
+      (let ((thisblank (looking-at "[ \t]*$")))
         (and thisblank
              (not (looking-at "[ \t]*\n[ \t]*$"))
              (or (bobp)
                  (progn (forward-line -1)
                         (not (looking-at "[ \t]*$"))))))))
+
   (defun rk-elixir/return-and-indent-block ()
     (interactive)
-    (save-excursion
-      (newline-and-indent 2))
+    (newline-and-indent 2)
     (forward-line)
     (indent-according-to-mode)
     (unless (rk-elixir/single-blank-line-p)
       (delete-blank-lines)))
+
   :hook
   (elixir-ts-mode . rk-er/add-treesit-expander)
+  (elixir-ts-mode . rk-elixir/setup-yas)
+
   :general
   (:keymaps 'elixir-ts-mode-map
             "C-<return>" #'rk-elixir/return-and-indent-block))
 
-(use-package elixir-ts-mode
-  :after yasnippet
+(use-package yasnippet
+  :after elixir-ts-mode
   :preface
   (defun rk-elixir/setup-yas ()
-    (yas-activate-extra-mode 'elixir-mode))
-  :hook
-  (elixir-ts-mode . rk-elixir/setup-yas))
+    (yas-activate-extra-mode 'elixir-mode)))
 
 ;; Eglot config
 (use-package elixir-ts-mode
