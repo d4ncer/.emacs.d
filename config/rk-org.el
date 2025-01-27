@@ -949,7 +949,7 @@ tasks."
 
   (defun rk-vulpea--create (title &optional insert-p jump-to)
     (let* ((type (completing-read "Note type: "
-                                  '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6) ("technology" 7))
+                                  '(("default" 1) ("person" 2) ("project" 3) ("article" 4) ("idea" 5) ("org struct" 6) ("technology" 7) ("entity" 8))
                                   nil t))
            (work-p (y-or-n-p "Is this note work related?"))
            (work-tag (if work-p rk-org--work-file-tag nil))
@@ -975,6 +975,13 @@ tasks."
                       :tags (-concat tags '("article"))
                       :body (format "* Metadata\n\n- url :: %s\n\n* Notes\n\n" desc)
                       :immediate-finish t)))
+                  ((string= type "entity")
+                   (vulpea-create
+                    title
+                    (rk-vulpea--org-roam-file-name title)
+                    :tags (-concat tags '("entity"))
+                    :body "* Metadata\n\n- type :: entity\n\n* Description"
+                    :immediate-finish t))
                   ((string= type "project")
                    (let ((status (rk-vulpea--project-status)))
                      (vulpea-create
