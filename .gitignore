@@ -1,5 +1,6 @@
 # Compiled
 *.elc
+*.eln
 .yas-compiled-snippets.el
 eln-cache/
 
@@ -15,9 +16,14 @@ custom.el
 eshell/
 url/
 request/
+/places
+/projects
+/autosave
 
-# Straight
+# Straight/pkg
 /var
+/elpaca
+/elpa
 /straight/*
 !/straight/versions/
 !/straight/versions/*
