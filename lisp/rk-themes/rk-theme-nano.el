@@ -255,12 +255,14 @@
                     (org-link-display-format
                      (substring-no-properties
                       (or (org-get-heading 'no-tags) "-")))))
-           ((f-equal? (file-name-directory (buffer-file-name))
-                      rk-org--roam-dir)
+           ((and (buffer-file-name)
+                 (f-equal? (file-name-directory (buffer-file-name))
+                           rk-org--roam-dir))
             (format "(roam) %s" (car (last (s-split "-" (buffer-file-name))))))
            (t
             (buffer-name)))
      'face (nano-modeline-face 'name)))
+
   (defun rk-modeline-org-mode ()
     (funcall nano-modeline-position
              '((nano-modeline-buffer-status) " "
