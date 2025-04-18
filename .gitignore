@@ -34,6 +34,12 @@ opam-user-setup.el
 # Session stuff
 session.*
 tramp
+/history
+/recentf
+
+# pkgs
+/spell-fu
+/transient
 
 # Org
 org-roam.db

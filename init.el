@@ -260,6 +260,7 @@ Runs `+escape-hook'."
    "bD" '(kill-current-buffer :wk "kill")
    "bl" '(ibuffer :wk "list")
    "bn" '(next-buffer :wk "next")
+   "bs" '(switch-to-buffer :wk "switch buffer")
    "bp" '(previous-buffer :wk "prev")
    "bc" (list
          (general-predicate-dispatch #'clone-indirect-buffer
@@ -326,7 +327,7 @@ Runs `+escape-hook'."
    "gb" '(magit-blame :wk "blame")
    "gd" '(magit-diff-buffer-file :wk "buffer diff")
    "gf" '(magit-file-dispatch :wk "file actions...")
-   "gg" '(magit-status :wk "status")
+   "gs" '(magit-status :wk "status")
    "gl" '(magit-log-buffer-file :wk "buffer log")
    "gr" '(browse-at-remote :wk "open on GitHub")
    "gt" '(git-timemachine-toggle :wk "file history")
@@ -342,7 +343,7 @@ Runs `+escape-hook'."
                 (find-file (file-name-concat user-emacs-directory "init.el")))
               :wk "init file")
 
-   "gs" (list (defun +goto-emacs-site-file ()
+   "gS" (list (defun +goto-emacs-site-file ()
                 (interactive)
                 (find-file
                  (read-file-name "Site file: " +site-files-directory)))
@@ -445,8 +446,7 @@ Runs `+escape-hook'."
    "wt"  '(+toggle-window-dedication :wk "toggle dedication")
    "ww" '(other-window :wk "other")
 
-   "z" '(global-text-scale-adjust :wk "text scaling")
-   )
+   "z" '(global-text-scale-adjust :wk "text scaling"))
 
   ;; Support multiple SPC-u calls in sequence to chain universal-argument calls.
 
@@ -566,6 +566,7 @@ Runs `+escape-hook'."
   (delete-old-versions t)
   (kept-old-versions 5)
   (kept-new-versions 5)
+  (insert-directory-program "gls")
   (backup-directory-alist `(("." . ,+auto-save-dir)))
   (auto-save-list-file-prefix (file-name-concat +auto-save-dir ".saves-"))
   (auto-save-file-name-transforms `((".*" ,+auto-save-dir t)))
@@ -891,6 +892,24 @@ With optional prefix arg CONTINUE-P, keep profiling."
   (envrc-show-summary-in-minibuffer nil) ; very noisy.
   )
 
+(use-package exec-path-from-shell :ensure t
+  ;; Use the shell to get some environment vars; necessary when the window
+  ;; system runs Emacs under a very different process environment.
+  ;;
+  ;; Also, turns out we need this for direnv to work right in compilation buffers.
+  :after-call +first-buffer-hook +first-file-hook
+  :if (memq system-type '(darwin x))
+  :demand t
+  :config
+  (pushnew! exec-path-from-shell-variables
+            "SSH_AUTH_SOCK"
+            "SSH_AGENT_PID")
+
+  ;; Speed up by using a non-interactive shell.
+  (delq! "-i" exec-path-from-shell-arguments)
+
+  (exec-path-from-shell-initialize))
+
 (use-package ligature :ensure t
   ;; Teach Emacs how to display ligatures when available.
   :after-call +first-buffer-hook +first-file-hook
@@ -1158,8 +1177,871 @@ With optional prefix arg CONTINUE-P, keep profiling."
   :custom
   (breadcrumb-idle-time 0.3))
 
+;;; Spell-checking
+
+(use-package ispell
+  ;; Built-in spellchecker. I don't actually use it directly, but other packages
+  ;; reference its configuration.
+  :custom
+  (ispell-dictionary "en_AU")
+  (ispell-personal-dictionary (file-name-concat org-directory "aspell.en.pws"))
+  :config
+  (unless (executable-find "aspell")
+    (warn "Could not find aspell program; spell checking will not work"))
+  (ispell-set-spellchecker-params))
+
+(use-package spell-fu :ensure t
+  ;; A more lightweight spell-checker than the built-in.
+  :hook (text-mode-hook prog-mode-hook conf-mode-hook)
+  :general
+  (:states '(normal motion)
+           "zn" #'spell-fu-goto-next-error
+           "zp" #'spell-fu-goto-previous-error
+           "zg" #'spell-fu-word-add
+           "zx" #'spell-fu-word-remove)
+
+  :config
+  (add-hook! 'spell-fu-mode-hook
+    (spell-fu-dictionary-add (spell-fu-get-ispell-dictionary "en_AU"))
+    (spell-fu-dictionary-add (spell-fu-get-ispell-dictionary "fr")))
+
+  (setq-hook! 'org-mode-hook
+    spell-fu-faces-exclude '(org-meta-line org-link org-code org-block
+                             org-block-begin-line org-block-end-line
+                             org-footnote org-tag org-modern-tag org-verbatim)))
+
+(use-package flyspell-correct :ensure t
+  ;; Provides a nicer command for working with spelling corrections.
+  :after spell-fu
+  :general
+  (:states 'normal "z SPC" #'flyspell-correct-at-point))
+
+;;; Dired & dirvish
+
+(use-package dired
+  ;; Emacs' built-in file management interface.
+  :hook
+  (dired-mode-hook . dired-hide-details-mode)
+  (dired-mode-hook . hl-line-mode)
+  :custom
+  (dired-garbage-files-regexp (rx (or ".log" ".toc" ".dvi" ".bak" ".orig" ".rej" ".aux" ".DS_Store")
+                                  eos))
+  (dired-recursive-copies 'always)
+  (dired-recursive-deletes 'always)
+  (dired-kill-when-opening-new-dired-buffer t)
+  (delete-by-moving-to-trash t)
+  (dired-use-ls-dired t)
+  (dired-dwim-target t)
+  (dired-auto-revert-buffer 'dired-directory-changed-p)
+  (dired-listing-switches
+   "--almost-all --human-readable --group-directories-first --no-group"))
+
+(use-package dired-aux
+  :custom
+  (dired-create-destination-dirs 'ask)
+  (dired-vc-rename-file t))
+
+(use-package nerd-icons :ensure t
+  :disabled t
+  ;; Icon set used by various packages.
+  :autoload nerd-icons-codicon nerd-icons-faicon)
+
+(use-package nerd-icons-dired :ensure t
+  :disabled t
+  ;; Show icons in dired.
+  :hook dired-mode-hook)
+
+(use-package wdired
+  ;; Makes dired buffers directly editable; the changes are interpreted into
+  ;; operations on the corresponding file names.
+  :general
+  (:keymaps 'dired-mode-map "C-c C-e" #'wdired-change-to-wdired-mode))
+
+(use-package dirvish :ensure t
+  ;; Wrapper around `dired' that provides better UX.
+  :hook (+first-input-hook . dirvish-override-dired-mode)
+
+  :general
+  (:keymaps '(dirvish-mode-map dired-mode-map) :states 'normal
+            "q" #'dirvish-quit)
+  (:keymaps 'dirvish-mode-map :states 'normal
+            "<tab>" #'dirvish-layout-toggle)
+  :custom
+  (dirvish-reuse-session nil)
+  (dirvish-attributes '(file-size subtree-state))
+  (dirvish-mode-line-format '(:left (sort file-time symlink) :right (omit yank index)))
+  (dirvish-subtree-always-show-state t)
+  (dirvish-hide-details '(dirvish dirvish-side))
+  (dirvish-hide-cursor '(dirvish dirvish-side))
+
+  :config
+  (when (featurep 'nerd-icons)
+    (setq dirvish-path-separators (list
+                                   (format "  %s " (nerd-icons-codicon "nf-cod-home"))
+                                   (format "  %s " (nerd-icons-codicon "nf-cod-root_folder"))
+                                   (format " %s " (nerd-icons-faicon "nf-fa-angle_right")))))
+
+
+  :config
+  (dirvish-peek-mode +1))
+
+(use-package diredfl :ensure t
+  ;; Add extra font-lock to dired/dirvish file listings.
+  :hook ((dired-mode-hook dirvish-directory-view-mode-hook) . diredfl-mode))
+
+(use-package evil :ensure t
+  ;; Evil is a better vim emulation implementation than the one that
+  ;; ships with Emacs.
+  :demand t
+
+  :config
+  (defun +find-refs-at-point ()
+    (interactive)
+    (if-let ((sym (thing-at-point 'symbol)))
+        (xref-find-references sym)
+      (call-interactively #'xref-find-references)))
+
+  (defun +select-non-empty-line ()
+    (interactive)
+    (back-to-indentation)
+    (set-mark (point))
+    (end-of-line)
+    (backward-char 1))
+  
+  :general-config
+  (:states 'emacs "ESC ESC" #'evil-normal-state)
+  (:states '(normal motion)
+           "gd" #'xref-find-definitions
+           "gD" #'xref-find-definitions-other-window
+           "gb" #'xref-go-back
+           "R" #'+find-refs-at-point
+           "C-l" #'+select-non-empty-line)
+  (:states '(insert normal emacs)
+           "M-." #'xref-find-definitions
+           "C-x RET" #'insert-char)
+  ;; `comment-indent-new-line' is a nicer default--it inserts comment delimiters
+  ;; for you when you do a newline in a comment. However, it breaks
+  ;; electric-pair's special newline padding functionality, so only call it if
+  ;; we're actually on a comment.
+  (:states 'insert "RET"
+           (general-predicate-dispatch #'newline-and-indent
+             (nth 4 (syntax-ppss)) ; at a comment?
+             #'comment-indent-new-line))
+  :custom
+  (evil-symbol-word-search t)
+  (evil-undo-system 'undo-redo)
+  (evil-v$-excludes-newline t)
+  (evil-want-C-g-bindings)
+  (evil-want-C-u-delete nil)
+  (evil-want-C-u-scroll t)
+  (evil-want-C-w-delete t)
+  (evil-want-Y-yank-to-eol t)
+  (evil-want-abbrev-expand-on-insert-exit nil)
+  (evil-want-integration t)
+  (evil-want-keybinding nil)
+
+  ;; Cursor customisation
+  :config
+  (setq evil-normal-state-cursor 'box)
+  (setq evil-emacs-state-cursor  'hollow)
+  (setq evil-insert-state-cursor 'bar)
+  (setq evil-visual-state-cursor 'hollow)
+
+  :config
+  ;; Keep shift-width in sync if mode changes.
+  (setq-hook! 'after-change-major-mode
+    evil-shift-width tab-width)
+
+  :config
+  (add-hook '+escape-hook
+            (defun +evil-disable-ex-highlights-h ()
+              (when (evil-ex-hl-active-p 'evil-ex-search)
+                (evil-ex-nohighlight)
+                t)))
+
+  :init
+  (evil-mode +1)
+
+  ;; Use more natural Emacs/readline keybindings in ex.
+  :general-config
+  (:keymaps '(evil-ex-completion-map evil-ex-search-keymap)
+            "C-a" #'evil-beginning-of-line
+            "C-b" #'evil-backward-char
+            "C-f" #'evil-forward-char)
+
+  :config
+  (defun +delete-backward-word-no-kill (arg)
+    "Like `backward-kill-word', but doesn't affect the kill-ring."
+    (interactive "p")
+    (let ((kill-ring nil) (kill-ring-yank-pointer nil))
+      (ignore-errors (backward-kill-word arg))))
+
+  :general-config
+  (:keymaps +default-minibuffer-maps
+            "C-a"    #'move-beginning-of-line
+            "C-r"    #'evil-paste-from-register
+            "C-u"    #'evil-delete-back-to-indentation
+            "C-v"    #'yank
+            "C-h"    #'+delete-backward-word-no-kill))
+
+(use-package evil-escape :ensure t
+  :after evil
+  :custom
+  (evil-escape-key-sequence "jk")
+  :init
+  (evil-escape-mode))
+
+(use-package vundo :ensure (vundo :host github :repo "casouri/vundo")
+  ;; Visualise the Emacs undo history.
+  :general ("C-x u" #'vundo)
+  :config
+  (setq vundo-glyph-alist vundo-unicode-symbols))
+
+(use-package evil-collection :ensure t
+  ;; Community-managed collection of evil keybindings; makes evil behave more
+  ;; consistently across many modes.
+  :custom
+  ;; Ensure we do not overwrite the global leader key binding.
+  (evil-collection-key-blacklist '("SPC" "S-SPC"))
+
+  ;; Org-mode derives from outline-mode; disable the outline bindings to prevent
+  ;; conflicts.
+  (evil-collection-outline-enable-in-minor-mode-p nil)
+
+  ;; Be a bit smarter about the evil-collection load sequence; in particular,
+  ;; set up bindings in hooks first time we activate a major-mode. This makes
+  ;; key binding setup more performant and more predictable.
+  :init
+  (with-eval-after-load 'evil
+    (require '+evil-collection)
+    (+evil-collection-defer-install-to-mode-activation))
+  :config
+  (+evil-collection-init 'comint)
+
+  ;; Fix leader keybindings that get clobbered by evil-collection.
+
+  (define-advice evil-collection-magit-init (:after (&rest _) bind-leader)
+    (general-define-key :keymaps (append evil-collection-magit-maps
+                                         evil-collection-magit-section-maps)
+                        :states '(normal)
+                        "SPC" #'+leader-key)))
+
+(use-package evil-surround :ensure t
+  ;; Evil-surround makes the S key work as an operator to surround an
+  ;; object with, e.g., matched parentheses.
+  :hook ((text-mode-hook prog-mode-hook) . evil-surround-mode)
+  ;; Use lowercase 's' for surround instead of 'S'.
+  :general (:states '(visual) :keymaps 'evil-surround-mode-map "s" #'evil-surround-region)
+  :custom
+  (evil-surround-pairs-alist '((?\( . ("(" . ")"))
+                               (?\) . ("(" . ")"))
+                               (?\[ . ("[" . "]"))
+                               (?\] . ("[" . "]"))
+                               (?\{ . ("{" . "}"))
+                               (?\} . ("{" . "}"))
+                               (?# . ("#{" . "}"))
+                               (?> . ("<" . ">"))
+                               (?f . evil-surround-function)
+                               (?t . evil-surround-read-tag)
+                               (?< . evil-surround-read-tag)))
+
+  :config
+  (add-hook! 'emacs-lisp-mode-hook
+    (make-local-variable 'evil-surround-pairs-alist)
+    (alist-set! evil-surround-pairs-alist ?` '("`" . "'"))
+    (alist-set! evil-surround-pairs-alist ?' '("`" . "'"))
+    (alist-set! evil-surround-pairs-alist ?f #'evil-surround-prefix-function)))
+
+(use-package expreg :ensure t
+  ;; Use tree-sitter to mark syntactic elements.
+  :init
+  (defun +expreg-expand-n (n)
+    "Expand to N syntactic units, defaulting to 1 if none is provided interactively."
+    (interactive "p")
+    (dotimes (_ n)
+      (expreg-expand)))
+
+  (defun +expreg-expand-dwim ()
+    "Do-What-I-Mean `expreg-expand' to start with symbol or word.
+If over a real symbol, mark that directly, else start with a
+word.  Fall back to regular `expreg-expand'."
+    (interactive)
+    (let ((symbol (bounds-of-thing-at-point 'symbol)))
+      (cond
+       ((equal (bounds-of-thing-at-point 'word) symbol)
+        (+expreg-expand-n 1))
+       (symbol (+expreg-expand-n 2))
+       (t (expreg-expand))))))
+
+;;; Navigation
+
+(use-package avy :ensure t
+  ;; Jump to things or execute other actions by typing a few letters.
+  :general ("M-g" #'avy-goto-char-timer)
+
+  ;; Customise the action keys to make actions a bit more vimmy.
+  :config
+  (require '+avy)
+  :custom
+  (avy-dispatch-alist '((?x . avy-action-kill-stay)
+                        (?d . avy-action-kill-move)
+                        (?c . +avy-action-change-move)
+                        (?t . avy-action-teleport)
+                        (?v . avy-action-mark)
+                        (?y . avy-action-copy)
+                        (?p . avy-action-yank)
+                        (?P . avy-action-yank-line)
+                        (?i . avy-action-ispell)
+                        (?K . +avy-action-evil-lookup)
+                        (? . avy-action-zap-to-char)))
+
+  ;; Integrate avy with pulsar for better visual feedback
+
+  :config
+  (with-eval-after-load 'pulsar
+    (define-advice avy-process (:filter-return (result) pulse-red-on-no-matches)
+      (when (eq t result)
+        (when pulsar-mode
+          (pulsar-pulse-line-red)))
+      result)
+
+    (defun +avy-pulse-for-move (&rest _)
+      (when pulsar-mode
+        (pulsar-pulse-line)))
+
+    (advice-add #'avy-action-goto :after #'+avy-pulse-for-move)
+
+    (defun +avy-pulse-for-change (&rest _)
+      (when pulsar-mode
+        (pulsar-pulse-line-magenta)))
+
+    (advice-add #'avy-action-kill-move :after #'+avy-pulse-for-change)
+    (advice-add #'+avy-action-change-move :after #'+avy-pulse-for-change)
+
+    (defun +avy-pulse-for-change-elsewhere (fn pt)
+      (+with-clean-up-in-starting-buffer-and-window (funcall fn pt)
+        (when pulsar-mode
+          (goto-char pt)
+          (pulsar-pulse-line-magenta))))
+
+    (advice-add #'avy-action-kill-stay :around #'+avy-pulse-for-change-elsewhere)
+
+    (defun +avy-pulse-for-action-elsewhere (fn pt)
+      (+with-clean-up-in-starting-buffer-and-window (funcall fn pt)
+        (when pulsar-mode
+          (goto-char pt)
+          (pulsar-pulse-line-green))))
+
+    (advice-add #'+avy-action-evil-lookup :around #'+avy-pulse-for-action-elsewhere)
+    (advice-add #'avy-action-copy :around #'+avy-pulse-for-action-elsewhere)
+    (advice-add #'avy-action-ispell :around #'+avy-pulse-for-action-elsewhere))
+
+  ;; KLUDGE: Pre-configure indentation for dynamically-loaded macro. Ensures
+  ;; Apheleia applies correct indentation if I touch this file without avy being
+  ;; loaded in the editing session.
+  :init
+  (function-put '+with-clean-up-in-starting-buffer-and-window 'lisp-indent-function 1))
+
+;; Use +/- to mark syntactic elements with tree-sitter. However, if I don't have
+;; a selection, make - call avy.
+(general-define-key :states '(normal motion)
+                    "-" (general-predicate-dispatch #'avy-goto-char-timer
+                          (region-active-p) #'expreg-contract)
+                    "+" #'+expreg-expand-dwim)
+
+(use-package ace-window :ensure t
+  ;; Jump to specific windows
+  :general ("M-o" #'ace-window))
+
+;;; Completion
+
+(use-package vertico :ensure t
+  ;; Vertico provides a better completion UI than the built-in default.
+  :hook +first-input-hook
+  :custom
+  (vertico-preselect 'no-prompt)
+  (vertico-cycle t)
+  :general-config (:keymaps 'vertico-map
+                            "C-<return>" #'vertico-exit-input
+                            "C-j" #'next-line-or-history-element
+                            "C-k" #'previous-line-or-history-element
+                            "RET" #'vertico-directory-enter
+                            "DEL" #'vertico-directory-delete-char
+                            "C-l" #'vertico-insert
+                            "C-h" #'vertico-directory-delete-word
+                            "M-l" #'vertico-insert
+                            "M-h" #'vertico-directory-delete-word
+                            "M-P" #'vertico-repeat-previous
+                            "M-N" #'vertico-repeat-next)
+  :init
+  (vertico-mode +1)
+
+  (use-package vertico-directory
+    ;; Extension that teaches vertico how to operate on filename
+    ;; components in a more ergonomic way.
+    :demand t
+    :hook (rfn-eshadow-update-overlay-hook . vertico-directory-tidy))
+
+  (use-package vertico-repeat
+    ;; Quickly restore the previous vertico command you ran.
+    :hook (minibuffer-setup-hook . vertico-repeat-save)
+    :config
+    (with-eval-after-load 'savehist
+      (add-to-list 'savehist-additional-variables 'vertico-repeat-history))))
+
+(use-package marginalia :ensure t
+  ;; Marginalia shows extra information alongside minibuffer items
+  ;; during completion.
+  :hook +first-input-hook
+  :general
+  (:keymaps 'minibuffer-local-map "M-A" #'marginalia-cycle))
+
+(use-package minibuffer
+  ;; Customise minibuffer completion behaviour.
+  ;;
+  ;; The configuration that determines which style to use is rather subtle; see
+  ;; § 5.4.1:
+  ;; https://protesilaos.com/emacs/dotemacs#h:14b09958-279e-4069-81e3-5a16c9b69892
+  ;;
+  ;; Briefly, use the following approach:
+  ;;
+  ;; 1. Prefer explicit and prefix matches first, falling back to orderless
+  ;; matching last.
+  ;;
+  ;; 2. Override this behaviour explicitly for a few select types of completion.
+
+  :custom
+  ;; To determine a completion style when entering text in the minibuffer,
+  ;; consult `completion-category-overrides' according to the type of thing
+  ;; we're trying to complete. Fall back to `completion-styles' if there are no
+  ;; specific style set for that type.
+  ;;
+  ;; Completion strategies are tried in order until a match is found. Putting
+  ;; orderless last means more precise approaches are tried first.
+  ;;
+  ;; See `completion-styles-alist' for the behaviour of specific completion
+  ;; styles.
+
+  (completion-category-overrides
+   '((file (styles . (basic partial-completion orderless)))
+     (bookmark (styles . (basic substring)))
+     (library (styles . (basic substring)))
+     (imenu (styles . (basic substring orderless)))
+     (kill-ring (styles . (emacs22 orderless)))
+     (eglot (styles . (emacs22 substring orderless)))))
+
+  (completion-styles '(orderless basic))
+
+  ;; Disable any out-of-the-box defaults.
+  (completion-category-defaults nil)
+
+  :init
+  (use-package orderless :ensure t
+    ;; Orderless allows you to filter completion candidates by typing
+    ;; space-separated terms in any order.
+    :after-call +first-input-hook))
+
+(use-package savehist
+  ;; Persists Emacs completion history. Used by vertico.
+  :init (savehist-mode +1)
+  :custom
+  (savehist-autosave-interval nil) ; on exit
+  (history-delete-duplicates t)
+  :config
+  (pushnew! savehist-additional-variables
+            'kill-ring
+            'register-alist
+            'mark-ring 'global-mark-ring
+            'search-ring 'regexp-search-ring)
+
+  (setq-hook! 'savehist-save-hook
+    ;; Reduce size of savehist's cache by dropping text properties.
+    kill-ring (mapcar #'substring-no-properties (cl-remove-if-not #'stringp kill-ring))
+    register-alist (cl-loop for (reg . item) in register-alist
+                            if (stringp item)
+                            collect (cons reg (substring-no-properties item))
+                            else collect (cons reg item))
+
+    ;; Avoid attempts to save unprintable registers, e.g. window configurations.
+    register-alist (seq-filter #'savehist-printable register-alist)))
+
+(setq enable-recursive-minibuffers t)
+(setq read-file-name-completion-ignore-case t)
+(setq read-buffer-completion-ignore-case t)
+(setq completion-ignore-case t)
+
+(use-package crm
+  ;; Provides a variant of completing-read that allows users to enter multiple
+  ;; values, separated by a delimiter.
+  :config
+  (define-advice completing-read-multiple (:filter-args (args) crm-indicator)
+    "Display the separator during `completing-read-multiple'."
+    (let ((sans-brackets
+           (replace-regexp-in-string (rx (or (and bos "[" (*? any) "]*")
+                                             (and "[" (*? any) "]*" eos)))
+                                     ""
+                                     crm-separator)))
+      (cons (format "[CRM %s] %s" (propertize sans-brackets 'face 'error) (car args))
+            (cdr args)))))
+
+(use-package corfu :ensure t
+  ;; Corfu provides in-buffer completions as you type.
+  :hook (+first-input-hook . global-corfu-mode)
+  :general-config (:keymaps 'corfu-map
+                            "RET" #'corfu-send
+                            "<escape>" #'corfu-reset
+                            "C-n" #'corfu-next
+                            "C-p" #'corfu-previous)
+  :custom
+  (corfu-auto t)
+  (corfu-auto-delay 0.24)
+  (corfu-quit-no-match t)
+  (corfu-cycle t)
+  (corfu-preselect 'prompt)
+  (corfu-count 16)
+  (corfu-max-width 120)
+  (corfu-on-exact-match nil)
+  (corfu-quit-at-boundary 'separator)
+  (corfu-quit-no-match 'separator)
+  (tab-always-indent 'complete)
+  (corfu-popupinfo-delay '(1.0 . 0.5))
+  (global-corfu-modes '((not org-mode help-mode) t))
+  :init
+  (setq-hook! 'eshell-mode-hook corfu-auto nil)
+  :config
+  (corfu-popupinfo-mode +1)
+  (add-hook 'evil-insert-state-exit-hook #'corfu-quit)
+
+  (with-eval-after-load 'savehist
+    (add-to-list 'savehist-additional-variables 'corfu-history)))
+
+(use-package nerd-icons-corfu :ensure t
+  :disabled t
+  ;; Adds icons to corfu popups.
+  :after corfu
+  :init
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
+
+(use-package cape :ensure t
+  ;; Adds useful functionality for `completion-at-point-functions'.
+  :init
+  (add-hook! 'prog-mode-hook
+    (add-hook 'completion-at-point-functions #'cape-file -10 t))
+  (add-hook! 'org-mode-hook
+    (add-hook 'completion-at-point-functions #'cape-elisp-block 0 t))
+
+  (advice-add #'comint-completion-at-point :around #'cape-wrap-nonexclusive)
+  (advice-add #'eglot-completion-at-point :around #'cape-wrap-nonexclusive)
+  (advice-add #'pcomplete-completions-at-point :around #'cape-wrap-nonexclusive))
+
+(use-package which-key
+  ;; which-key displays a UI popup of available key commands as you type.
+  :demand t
+  :init
+  (which-key-mode +1)
+  :custom
+  (which-key-prefix-prefix "…")
+  (which-key-idle-delay 0.4)
+  (which-key-sort-order #'which-key-key-order-alpha)
+  (which-key-sort-uppercase-first nil)
+  (which-key-add-column-padding 1)
+  (which-key-min-display-lines 6)
+  (which-key-side-window-slot -10)
+  :config
+  (which-key-setup-side-window-bottom)
+  (setq-hook! 'which-key-init-buffer-hook line-spacing 3))
+
+(use-package consult :ensure t
+  ;; Consult provides commands for common tasks that leverage the Emacs
+  ;; completion system. It composes well with the above packages.
+  :general
+  ([remap bookmark-jump]                 #'consult-bookmark
+   [remap evil-show-marks]               #'consult-mark
+   [remap evil-show-registers]           #'consult-register
+   [remap goto-line]                     #'consult-goto-line
+   [remap imenu]                         #'consult-imenu
+   [remap Info-search]                   #'consult-info
+   [remap locate]                        #'consult-locate
+   [remap load-theme]                    #'consult-theme
+   [remap recentf-open-files]            #'consult-recent-file
+   [remap switch-to-buffer]              #'consult-buffer
+   [remap switch-to-buffer-other-window] #'consult-buffer-other-window
+   [remap switch-to-buffer-other-frame]  #'consult-buffer-other-frame
+   [remap yank-pop]                      #'consult-yank-pop)
+
+  :general
+  (:states '(motion normal)
+           "C-'" #'consult-imenu-multi
+           "/" #'consult-line)
+
+  :custom
+  ;; Use Consult to select xref locations with preview
+  (xref-show-xrefs-function #'consult-xref)
+  (xref-show-definitions-function #'consult-xref)
+  (consult-narrow-key "<")
+
+  ;; Optimise for responsive input.
+  (consult-async-min-input 2)
+  (consult-async-refresh-delay  0.15)
+  (consult-async-input-throttle 0.2)
+  (consult-async-input-debounce 0.1)
+  (consult-fd-args
+   '((if (executable-find "fdfind" 'remote) "fdfind" "fd")
+     "--color=never"
+     ;; https://github.com/sharkdp/fd/issues/839
+     "--full-path --absolute-path"
+     "--hidden --exclude .git"))
+
+  :config
+  (consult-customize
+   consult-ripgrep consult-git-grep consult-grep
+   consult-bookmark consult-recent-file
+   consult--source-recent-file consult--source-project-recent-file consult--source-bookmark
+   :preview-key "C-SPC")
+  (consult-customize
+   consult-theme
+   :preview-key (list "C-SPC" :debounce 0.5 'any))
+
+  ;; Tweak the register preview for `consult-register-load',
+  ;; `consult-register-store' and the built-in commands.  This improves the
+  ;; register formatting, adds thin separator lines, register sorting and hides
+  ;; the window mode line.
+  (advice-add #'register-preview :override #'consult-register-window)
+  (setq register-preview-delay 0.5))
+
+(use-package embark :ensure t
+  ;; Embark provides a UI for performing contextual actions on selected items
+  ;; within completing-read.
+  :general
+  (:states '(normal emacs motion)
+           "C-." #'embark-act
+           "C-t" #'embark-dwim)
+  (:keymaps +default-minibuffer-maps
+            "C-." #'embark-act
+            "C-c C-e" #'embark-export
+            "C-c C-c" #'embark-collect))
+
+(use-package embark-consult :ensure t
+  ;; Integrate embark with consult
+  :after (:any consult embark)
+  :demand t
+  :hook (embark-collect-mode-hook . consult-preview-at-point-mode))
+
+(pushnew! completion-ignored-extensions
+          ".DS_Store"
+          ".eln"
+          ".drv"
+          ".direnv/"
+          ".git/")
+
+(use-package minibuf-eldef
+  ;; Set how the default option for empty input is displayed in the minibuffer.
+  :hook (after-init . minibuffer-electric-default-mode)
+  :custom
+  (minibuffer-default-prompt-format " [%s]"))
+
+(use-package dabbrev
+  ;; Dynamically complete using identifier-like words entered in this or other
+  ;; buffers.
+  :custom
+  (dabbrev-abbrev-skip-leading-regexp "[$*/=~']")
+  (dabbrev-upcase-means-case-search t)
+  :config
+  (pushnew! dabbrev-ignored-buffer-modes
+            'docview-mode 'pdf-view-mode))
+
+;;; VC & magit
+
+(use-package transient :ensure t
+  ;; Lib for showing pop-up menus of key commands, often with switches to modify
+  ;; behaviour.
+  ;;
+  ;; Magit depends on a more recent version of transient than the one that ships
+  ;; with Emacs.
+  :custom
+  (transient-display-buffer-action '(display-buffer-below-selected))
+  :general-config
+  (:keymaps 'transient-map [escape] #'transient-quit-one))
+
+(use-package magit :ensure t
+  ;; Magit is the definitive UX for working with git.
+  :config
+  ;; Set initial evil state depending on whether the line is empty or not. Empty
+  ;; line = new commit message, whereas non-empty means we're editing an
+  ;; existing one.
+  (add-hook! 'git-commit-mode-hook
+    (when (and (bolp) (eolp))
+      (evil-insert-state)))
+  :custom
+  (magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1)
+  (magit-bury-buffer-function #'magit-restore-window-configuration)
+  (magit-diff-refine-hunk t)
+  (magit-save-repository-buffers 'dontask)
+  (magit-revision-insert-related-refs nil)
+  (magit-format-file-function #'magit-format-file-nerd-icons))
+
+(use-package git-timemachine :ensure t
+  :general-config
+  (:states 'normal
+   :keymaps 'git-timemachine-mode-map
+   "C-p" #'git-timemachine-show-previous-revision
+   "C-n" #'git-timemachine-show-next-revision
+   "gb"  #'git-timemachine-blame
+   "gtc" #'git-timemachine-show-commit)
+
+  :config
+  ;; git-timemachine uses `delay-mode-hooks', which can suppress font-lock.
+  (add-hook 'git-timemachine-mode-hook #'font-lock-mode)
+  ;; Ensure evil keymaps are applied
+  (add-hook 'git-timemachine-mode-hook #'evil-normalize-keymaps)
+
+  ;; Show information in header-line for better visibility.
+  :custom
+  (git-timemachine-show-minibuffer-details t)
+  :config
+  (define-advice git-timemachine--show-minibuffer-details (:override (revision) use-header-line)
+    "Show revision details in the header-line, instead of the minibuffer."
+    (let* ((date-relative (nth 3 revision))
+           (date-full (nth 4 revision))
+           (author (if git-timemachine-show-author (concat (nth 6 revision) ": ") ""))
+           (sha-or-subject (if (eq git-timemachine-minibuffer-detail 'commit) (car revision) (nth 5 revision))))
+      (setq header-line-format
+            (format "%s%s [%s (%s)]"
+                    (propertize author 'face 'git-timemachine-minibuffer-author-face)
+                    (propertize sha-or-subject 'face 'git-timemachine-minibuffer-detail-face)
+                    date-full date-relative)))))
+
+(use-package browse-at-remote :ensure t
+  :custom
+  (browse-at-remote-add-line-number-if-no-region-selected nil)
+
+  :config
+  (define-advice browse-at-remote--get-local-branch (:after-until () const-main)
+    "Return 'main' in detached state."
+    "main")
+
+  ;; Integrate browse-at-remote with git-timemachine
+  :config
+  (define-advice browse-at-remote-get-url (:around (fn &rest args) git-timemachine-integration)
+    "Allow `browse-at-remote' commands in git-timemachine buffers to open that
+file in your browser at the visited revision."
+    (if (bound-and-true-p git-timemachine-mode)
+        (let* ((start-line (line-number-at-pos (min (region-beginning) (region-end))))
+               (end-line (line-number-at-pos (max (region-beginning) (region-end))))
+               (remote-ref (browse-at-remote--remote-ref buffer-file-name))
+               (remote (car remote-ref))
+               (ref (car git-timemachine-revision))
+               (relname
+                (file-relative-name
+                 buffer-file-name (expand-file-name (vc-git-root buffer-file-name))))
+               (target-repo (browse-at-remote--get-url-from-remote remote))
+               (remote-type (browse-at-remote--get-remote-type target-repo))
+               (repo-url (cdr target-repo))
+               (url-formatter (browse-at-remote--get-formatter 'region-url remote-type)))
+          (unless url-formatter
+            (error (format "Origin repo parsing failed: %s" repo-url)))
+          (funcall url-formatter repo-url ref relname
+                   (if start-line start-line)
+                   (if (and end-line (not (equal start-line end-line))) end-line)))
+      (apply fn args))))
+
+(use-package forge :ensure t
+  ;; Teach magit how to work with pull requests on GitHub and other git hosting
+  ;; services.
+  :after-call magit-status ; avoids compilation until first use
+
+  :preface
+  (setq forge-database-file (file-name-concat user-emacs-directory "forge/forge-database.sqlite"))
+  :general
+  (:keymaps 'magit-mode-map [remap magit-browse-thing] #'forge-browse)
+  (:keymaps 'magit-remote-section-map [remap magit-browse-thing] #'forge-browse-remote)
+  (:keymaps 'magit-branch-section-map [remap magit-browse-thing] #'forge-browse-branch)
+  :general-config
+  (:keymaps 'forge-topic-list-mode-map :states 'normal "q" #'kill-current-buffer))
+
+(use-package vc
+  :custom
+  ;; Don't prompt when following links to files that are under version control.
+  (vc-follow-symlinks t)
+  ;; I literally only ever use Git these days.
+  (vc-handled-backends '(Git))
+  :config
+  (pushnew! vc-directory-exclusion-list
+            "node_modules"
+            "cdk.out"
+            "target"
+            ".direnv"))
+;;; Modeline
+
+(use-package doom-modeline :ensure t
+  ;; The modeline from doom, packaged independently.
+  :hook elpaca-after-init-hook
+  :custom
+  (doom-modeline-bar-width 3)
+  (doom-modeline-buffer-encoding 'nondefault)
+  (doom-modeline-buffer-state-icon nil)
+  (doom-modeline-major-mode-icon nil)
+  (doom-modeline-check-simple-format t)
+  (doom-modeline-modal nil)
+  :config
+  (add-hook! 'magit-mode-hook
+    (defun +modeline-hide-in-non-status-buffer-h ()
+      "Show minimal modeline in magit-status buffer, no modeline elsewhere."
+      (if (eq major-mode 'magit-status-mode)
+          (doom-modeline-set-modeline 'magit)
+        (hide-mode-line-mode)))))
 
 ;;; CHRIS CONFIG ABOVE
+
+(use-package gptel :ensure t
+  ;; Provides LLM integrations.
+  :hook (gptel-mode-hook . visual-line-mode)
+  :general (:states 'visual "RET" #'gptel-rewrite)
+  :init
+  (defun +gptel-send ()
+    (interactive)
+    (unless (region-active-p)
+      (goto-char (line-end-position)))
+    (gptel-send)
+    (evil-normal-state))
+  :general
+  (:keymaps 'gptel-mode-map :states '(normal insert) "C-c C-s" #'+gptel-send)
+  :custom
+  (gptel-model 'claude-3-7-sonnet-20250219)
+  (gptel-default-mode 'org-mode)
+  :config
+  (alist-set! gptel-prompt-prefix-alist 'org-mode "* ")
+  (setq-hook! 'gptel-mode-hook
+    org-pretty-entities-include-sub-superscripts nil)
+
+  (setq gptel-backend
+        (gptel-make-anthropic "Claude"
+          :stream t
+          :key (lambda ()
+                 (auth-source-pick-first-password :host "api.anthropic.com"))))
+
+  (add-hook 'gptel-mode-hook 'evil-insert-state)
+
+  ;; Prevent transient from creating extra windows due to conflicts with custom
+  ;; display-buffer rules. See:
+  ;; https://github.com/magit/transient/discussions/358
+  (setq transient-display-buffer-action
+        '(display-buffer-below-selected
+          (dedicated . t)
+          (inhibit-same-window . t)))
+
+  ;; Pulse the part of the buffer being sent to the LLM.
+
+  (define-advice gptel-send (:after (&optional show-transient) pulse)
+    (when (bound-and-true-p pulsar-mode)
+      (unless show-transient
+        (let ((pulsar-region-face 'pulsar-green))
+          (cond ((region-active-p)
+                 (pulsar-pulse-region))
+                ((and gptel-mode (org-at-heading-p))
+                 (pulsar-pulse-line-green))
+                (t
+                 (pulsar--pulse nil 'pulsar-green (point-min) (point)))))))))
 
 (setq gc-cons-threshold (* 800 1024))
 
@@ -1173,32 +2055,8 @@ With optional prefix arg CONTINUE-P, keep profiling."
 (setq user-full-name "Raghuvir Kasturi")
 (setq user-mail-address "raghuvir.kasturi@gmail.com")
 
-;; Set up evil
-
-(use-package evil :ensure t
-  :init
-  (evil-mode +1))
-
-(use-package evil-escape :ensure t
-  :after evil
-  :custom
-  (evil-escape-key-sequence "jk")
-  :init
-  (evil-escape-mode))
-
-
-
 ;; Set up Vertico
 
-(use-package vertico
-  :ensure t
-  :init
-  (vertico-mode)
-  ;; :general (:keymaps 'vertico-map
-  ;;                    "C-j" #'next-line-or-history-element
-  ;;                    "C-k" #'previous-line-or-history-element
-  ;;                    "C-<return>" #'vertico-exit-input)
-  )
 
 ;; Set up general to auto unbind keys (override everything)
 
