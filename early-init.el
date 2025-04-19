@@ -33,32 +33,26 @@
 (require '+load-incrementally)
 (+load-incrementally-setup-use-package-keywords)
 
-;;; Customise UI early in init sequence.
+;;; Customise as much UI as possible early in init sequence.
 
-;; Configure theme early to ensure we don't observe the change during the
-;; startup process.
-
-(setq modus-themes-italic-constructs t)
-(setq modus-themes-bold-constructs nil)
+;; Theme + fonts
 
 (require '+theme)
 (setq +theme-light 'modus-operandi)
-(setq +theme-dark 'modus-vivendi)
 
 (set-face-attribute 'default nil :family "JetBrainsMono Nerd Font")
+(set-face-attribute 'default nil :height 190)
 (set-face-attribute 'variable-pitch nil :family "Helvetica Neue")
 
-;; Sync the theme with the window system.
 (+theme-update)
 
 ;; Make the window-borders appear as padding instead. Not sure if this is really
 ;; usable yet, but it sure looks pretty.
 
 (defun +sync-frame-parameters (&optional in-early-init)
-  (modify-all-frames-parameters `((right-divider-width . 10)
-                                  (internal-border-width . 10)
-                                  ,@(when (equal system-type 'darwin)
-                                      '((undecorated . t)))))
+  (modify-all-frames-parameters `((vertical-scroll-bars . nil)
+                                  (right-divider-width . 24)
+                                  (internal-border-width . 24)))
 
   ;; Themes aren't initialised until after early-init, so we can't access the
   ;; background colour yet.
@@ -90,6 +84,19 @@
 (setq scroll-bar-mode nil)
 (setq frame-resize-pixelwise t)
 (setq frame-inhibit-implied-resize t)
+
+;; Mode & header
+(setq-default mode-line-format "")
+(setq-default header-line-format "")
+
+;; Title bar
+(when (eq system-type 'darwin)
+  (setq frame-title-format nil)
+  (setq ns-use-native-fullscreen nil)
+  (when (executable-find "gls")
+    (setq insert-directory-program "gls"))
+  (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
+  (add-to-list 'default-frame-alist '(ns-appearance . light)))
 
 ;;; Customise native compilation
 
