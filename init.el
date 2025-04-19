@@ -1332,6 +1332,22 @@ With optional prefix arg CONTINUE-P, keep profiling."
   :demand t
 
   :config
+  (defun +shift-left (&optional beg end)
+    "Shift left, keeping the region active.
+    BEG and END are the bounds of the active region."
+    (interactive "r")
+    (evil-shift-left beg end)
+    (evil-normal-state)
+    (evil-visual-restore))
+
+  (defun +shift-right (&optional beg end)
+    "Shift right, keeping the region active.
+BEG and END are the bounds of the active region."
+    (interactive "r")
+    (evil-shift-right beg end)
+    (evil-normal-state)
+    (evil-visual-restore))
+
   (defun +find-refs-at-point ()
     (interactive)
     (if-let ((sym (thing-at-point 'symbol)))
@@ -1347,6 +1363,9 @@ With optional prefix arg CONTINUE-P, keep profiling."
   
   :general-config
   (:states 'emacs "ESC ESC" #'evil-normal-state)
+  (:states 'visual
+           "<" #'+shift-left
+           ">" #'+shift-right)
   (:states '(normal motion)
            "gd" #'xref-find-definitions
            "gD" #'xref-find-definitions-other-window
