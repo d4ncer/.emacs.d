@@ -821,6 +821,7 @@ With optional prefix arg CONTINUE-P, keep profiling."
       t)))
 
 (use-package better-jumper :ensure t
+  :disabled t
   ;; Maintains a jump list so you can more easily get back to where you were if
   ;; a command takes you somewhere else.
   :after-call +first-file-hook +first-buffer-hook
