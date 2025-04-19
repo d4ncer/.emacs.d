@@ -1,5 +1,11 @@
 ;;; -*- lexical-binding: t; -*-
 
+(defconst +colors-yellow "#b58900")
+(defconst +colors-red "#dc322f")
+(defconst +colors-magenta "#d33682")
+(defconst +colors-blue "#268bd2")
+(defconst +colors-green "#859900")
+
 (defvar +theme-light nil)
 (defvar +theme-dark nil)
 
@@ -12,6 +18,18 @@
 
 (cl-defmethod +system-theme-query ((_ (eql 'gnu/linux)))
   (shell-command-to-string "gsettings get org.gnome.desktop.interface gtk-theme"))
+
+(defun +after-enable-theme ()
+  "Delete posframes after changing themes."
+  (when (fboundp 'posframe-delete-all)
+    (posframe-delete-all))
+  ;; Force org buffers to refontify to fix org-bullet properties.
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (derived-mode-p 'org-mode)
+        (font-lock-flush (point-min) (point-max))))))
+
+(add-hook '+theme-changed-hook #'+after-enable-theme)
 
 ;;;###autoload
 (defun +theme-for-system-theme ()
