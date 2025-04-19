@@ -163,12 +163,10 @@ Runs `+escape-hook'."
    "|" '(rotate-layout :wk "rotate window layout")
    "-" '(window-toggle-side-windows :wk "side windows")
    ":" '(pp-eval-expression :wk "eval")
-   ";" '(ielm :wk "REPL")
-   "d" '(dirvish :wk "dir editor")
+   ";" '(comment-dwim :wk "REPL")
+   "d" '(dired :wk "dir editor")
    "i" '(consult-imenu :wk "imenu")
    "r" #'vertico-repeat
-   "s" '(save-buffer :wk "save buf")
-   "S" '(save-some-buffers :wk "save some bufs...")
    "u" '(universal-argument :wk "C-u")
    "x" '(execute-extended-command :wk "M-x")
    "K" 'man
@@ -255,6 +253,7 @@ Runs `+escape-hook'."
    "apv" #'elpaca-visit
 
    "b"  '(nil :wk "buffers")
+   "ba" '(mark-whole-buffer :wk "select buffer")
    "bb" '(bury-buffer :wk "bury")
    "bd" '(bury-buffer :wk "bury")
    "bD" '(kill-current-buffer :wk "kill")
@@ -271,6 +270,7 @@ Runs `+escape-hook'."
    "ff" '(find-file :wk "find")
    "fF" '(find-file-other-window :wk "find (other window)")
    "fs" '(save-buffer :wk "save")
+   "fS" '(save-some-buffers :wk "save some")
    "fR" '(rename-visited-file :wk "rename")
    "fr" '(recentf :wk "recent")
    "fw" '(write-file :wk "write copy")
@@ -420,9 +420,22 @@ Runs `+escape-hook'."
 
    "kr" '(consult-yank-pop :wk "kill-ring")
 
+   "q" '(nil :wk "quit")
+   "qq" '(save-buffers-kill-emacs :wk "quit emacs")
+
+   "s" '(nil :wk "selection/search")
+   "se" '(evil-iedit-state/iedit-mode :wk "iedit")
+   ;; TODO FIX THIS FIRST - see buffer on right for help
+   "ss" (list (defun +symbol-in-file ()
+                (interactive)
+                (let ((selection (if (use-region-p)
+                           (buffer-substring-no-properties (region-beginning) (region-end))
+                         (substring-no-properties (thing-at-point 'symbol)))))
+                  (consult-line selection)))
+              :wk "search symbol in file")
+
    "t"  '(nil :wk "toggles")
    "tb" '(breadcrumb-mode :wk "breadcrumbs (header)")
-   "td" '(dirvish-side :wk "dirvish (side window)")
    "th" '(global-hl-line-mode :wk "highlight line")
    "tf" '(toggle-frame-maximized :wk "frame")
    "ti" '(indent-bars-mode :wk "indent bars")
@@ -432,6 +445,8 @@ Runs `+escape-hook'."
    "tr" '(read-only-mode :wk "readonly")
    "tw" '(whitespace-mode :wk "whitespace")
 
+   "v" '(er/expand-region :wk "expand")
+
    "w"  '(nil :wk "windows")
    "w-" '(+split-window-vertically-dwim :wk "vsplit")
    "w/" '(+split-window-horizontally-dwim :wk "hsplit")
@@ -439,6 +454,10 @@ Runs `+escape-hook'."
    "wd" '(delete-window :wk "delete")
    "wo"  '(+delete-nondedicated-windows :wk "delete others")
    "wO"  '(delete-other-windows :wk "delete (+dedicated)")
+   "wh" '(windmove-left :wk "move left")
+   "wl" '(windmove-right :wk "move right")
+   "wk" '(windmove-up :wk "move up")
+   "wj" '(windmove-down :wk "move down")
    "wq" '(delete-window :wk "delete")
    "wr" '(evil-window-rotate-downwards :wk "rotate")
    "ws" '(consult-register-load :wk "registers")
@@ -461,6 +480,9 @@ Runs `+escape-hook'."
 (custom-theme-set-faces 'user
                         '(region ((t (:foreground unspecified :background unspecified :inherit modus-themes-search-lazy))))
                         '(iedit-occurrence ((t (:inherit modus-themes-search-replace))))
+                        ;; Set a light modeline
+                        '(mode-line ((t (:height 10 :background "#bbb" :box nil))))
+                        '(mode-line-inactive ((t (:height 10 :background "#ddd" :box nil))))
                         ;; Dim delimiters like commas, semicolons, etc.
                         '(font-lock-delimiter-face ((t (:inherit shadow)))))
 
@@ -539,9 +561,8 @@ Runs `+escape-hook'."
 (use-package frame
   ;; Frame management settings
   :custom
-  (window-divider-default-places t)
-  (window-divider-default-bottom-width 1)
-  (window-divider-default-right-width 1)
+  (window-divider-default-places 'right-only)
+  (window-divider-default-right-width 24)
   :init
   (window-divider-mode +1))
 
@@ -649,9 +670,9 @@ Runs `+escape-hook'."
   :hook (text-mode-hook prog-mode-hook conf-mode-hook)
   :general
   (:keymaps 'puni-mode-map :states 'insert "C-w" #'puni-backward-kill-word)
-  (:keymaps 'puni-mode-map :states '(visual) "C-k" #'puni-kill-active-region)
+  (:keymaps 'puni-mode-map :states '(visual) "M-k" #'puni-kill-active-region)
   (:keymaps 'puni-mode-map :states '(insert normal emacs)
-            "C-k" #'+kill-line
+            "M-k" #'+kill-line
             "M-(" #'puni-wrap-round
             "M-[" #'puni-wrap-square
             "M-S-{" #'puni-wrap-curly))
@@ -817,11 +838,6 @@ With optional prefix arg CONTINUE-P, keep profiling."
   (advice-add #'org-mark-ring-push :before #'+set-jump-point)
   (add-hook 'org-open-at-point-functions #'+set-jump-point)
 
-  :general
-  (:states 'normal
-           "C-." #'better-jumper-jump-forward
-           "C-," #'better-jumper-jump-backward)
-
   :general-config
   ([remap evil-jump-forward]  #'better-jumper-jump-forward
    [remap evil-jump-backward] #'better-jumper-jump-backward
@@ -871,9 +887,6 @@ With optional prefix arg CONTINUE-P, keep profiling."
 ;; Silence "For information about GNU Emacs and the GNU system..." on startup.
 (advice-add #'display-startup-echo-area-message :override #'ignore)
 
-;; Don't tell me what key I could have used instead of M-x.
-;; (advice-add #'execute-extended-command--describe-binding-msg :override #'ignore)
-
 (use-package eshell
   ;; Emacs' built-in shell combining Emacs Lisp evaluation with Unix shell
   ;; features.
@@ -909,6 +922,11 @@ With optional prefix arg CONTINUE-P, keep profiling."
   (delq! "-i" exec-path-from-shell-arguments)
 
   (exec-path-from-shell-initialize))
+
+(use-package helpful :ensure t
+  :general
+  (:keymaps 'emacs-lisp-mode-map :states '(normal)
+            "K" #'helpful-at-point))
 
 (use-package ligature :ensure t
   ;; Teach Emacs how to display ligatures when available.
@@ -1258,6 +1276,7 @@ With optional prefix arg CONTINUE-P, keep profiling."
   (:keymaps 'dired-mode-map "C-c C-e" #'wdired-change-to-wdired-mode))
 
 (use-package dirvish :ensure t
+  :disabled t
   ;; Wrapper around `dired' that provides better UX.
   :hook (+first-input-hook . dirvish-override-dired-mode)
 
@@ -1315,7 +1334,9 @@ With optional prefix arg CONTINUE-P, keep profiling."
            "gD" #'xref-find-definitions-other-window
            "gb" #'xref-go-back
            "R" #'+find-refs-at-point
-           "C-l" #'+select-non-empty-line)
+           "C-l" #'+select-non-empty-line
+           "C-j" #'evil-scroll-page-down
+           "C-k" #'evil-scroll-page-up)
   (:states '(insert normal emacs)
            "M-." #'xref-find-definitions
            "C-x RET" #'insert-char)
@@ -1342,10 +1363,11 @@ With optional prefix arg CONTINUE-P, keep profiling."
 
   ;; Cursor customisation
   :config
-  (setq evil-normal-state-cursor 'box)
-  (setq evil-emacs-state-cursor  'hollow)
-  (setq evil-insert-state-cursor 'bar)
-  (setq evil-visual-state-cursor 'hollow)
+  (setq evil-motion-state-cursor '("#9b59b6" box)
+        evil-visual-state-cursor '("#eee8d5" (hbar . 2))
+        evil-normal-state-cursor '("#f1c40f" box)
+        evil-insert-state-cursor '("#2ecc71" (bar . 2))
+        evil-emacs-state-cursor  '("#3498db" hbar))
 
   :config
   ;; Keep shift-width in sync if mode changes.
@@ -1452,26 +1474,51 @@ With optional prefix arg CONTINUE-P, keep profiling."
     (alist-set! evil-surround-pairs-alist ?' '("`" . "'"))
     (alist-set! evil-surround-pairs-alist ?f #'evil-surround-prefix-function)))
 
-(use-package expreg :ensure t
-  ;; Use tree-sitter to mark syntactic elements.
-  :init
-  (defun +expreg-expand-n (n)
-    "Expand to N syntactic units, defaulting to 1 if none is provided interactively."
-    (interactive "p")
-    (dotimes (_ n)
-      (expreg-expand)))
+(use-package evil-multiedit :ensure t
+  ;; Evil-compatible multiple cursors.
+  :after evil
+  :disabled t
+  :config
+  (evil-multiedit-default-keybinds)
 
-  (defun +expreg-expand-dwim ()
-    "Do-What-I-Mean `expreg-expand' to start with symbol or word.
-If over a real symbol, mark that directly, else start with a
-word.  Fall back to regular `expreg-expand'."
+  :init
+  (defun +multiedit ()
     (interactive)
-    (let ((symbol (bounds-of-thing-at-point 'symbol)))
-      (cond
-       ((equal (bounds-of-thing-at-point 'word) symbol)
-        (+expreg-expand-n 1))
-       (symbol (+expreg-expand-n 2))
-       (t (expreg-expand))))))
+    (evil-normal-state)
+    (unless (eolp)
+      (forward-char -1))
+    (evil-multiedit-match-all))
+
+  :general
+  (:states 'visual
+           "E" (general-predicate-dispatch #'evil-multiedit-match-all
+                 (equal last-command 'evil-visual-char) #'+multiedit))
+
+  :general-config
+  (:keymaps 'evil-multiedit-mode-map
+   :states 'normal
+   "Y" (defun +evil-multiedit-copy ()
+         (interactive)
+         (when-let* ((str (iedit-current-occurrence-string)))
+           (kill-new str)
+           (message "Copied to kill ring")))
+   "<tab>" #'iedit-toggle-selection
+   "n" #'evil-multiedit-next
+   "N" #'evil-multiedit-prev
+   "S" #'evil-multiedit--change-line))
+
+(use-package iedit :ensure t)
+
+(use-package evil-iedit-state :ensure t
+  :after evil
+  :commands (evil-iedit-state evil-iedit-state/iedit-mode)
+  :init
+  (require 'iedit))
+
+(use-package expand-region :ensure t
+  :custom
+  (expand-region-contract-fast-key "V")
+  (expand-region-reset-fast-key "r"))
 
 ;;; Navigation
 
@@ -1544,10 +1591,10 @@ word.  Fall back to regular `expreg-expand'."
 
 ;; Use +/- to mark syntactic elements with tree-sitter. However, if I don't have
 ;; a selection, make - call avy.
-(general-define-key :states '(normal motion)
-                    "-" (general-predicate-dispatch #'avy-goto-char-timer
-                          (region-active-p) #'expreg-contract)
-                    "+" #'+expreg-expand-dwim)
+;; (general-define-key :states '(normal motion)
+;;                     "-" (general-predicate-dispatch #'avy-goto-char-timer
+;;                           (region-active-p) #'expreg-contract)
+;;                     "+" #'+expreg-expand-dwim)
 
 (use-package ace-window :ensure t
   ;; Jump to specific windows
@@ -1874,11 +1921,7 @@ word.  Fall back to regular `expreg-expand'."
       (evil-insert-state)))
   :custom
   (magit-display-buffer-function #'magit-display-buffer-fullframe-status-v1)
-  (magit-bury-buffer-function #'magit-restore-window-configuration)
-  (magit-diff-refine-hunk t)
-  (magit-save-repository-buffers 'dontask)
-  (magit-revision-insert-related-refs nil)
-  (magit-format-file-function #'magit-format-file-nerd-icons))
+  (magit-bury-buffer-function #'magit-restore-window-configuration))
 
 (use-package git-timemachine :ensure t
   :general-config
@@ -1971,25 +2014,42 @@ file in your browser at the visited revision."
             "cdk.out"
             "target"
             ".direnv"))
+
 ;;; Modeline
 
-(use-package doom-modeline :ensure t
-  ;; The modeline from doom, packaged independently.
-  :hook elpaca-after-init-hook
-  :custom
-  (doom-modeline-bar-width 3)
-  (doom-modeline-buffer-encoding 'nondefault)
-  (doom-modeline-buffer-state-icon nil)
-  (doom-modeline-major-mode-icon nil)
-  (doom-modeline-check-simple-format t)
-  (doom-modeline-modal nil)
+(use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
+  :demand t
+  :init
+  (defun +modeline-org-buffer-name (&optional name)
+    (propertize
+     (cond (name
+            name)
+           ((buffer-narrowed-p)
+            (format "%s [%s]" (or (buffer-base-buffer) (buffer-name))
+                    (org-link-display-format
+                     (substring-no-properties
+                      (or (org-get-heading 'no-tags) "-")))))
+           ((file-equal-p (file-name-directory (buffer-file-name))
+                      +org--roam-dir)
+            (format "(roam) %s" (car (last (s-split "-" (buffer-file-name))))))
+           (t
+            (buffer-name)))
+     'face (nano-modeline-face 'name)))
+
+  ;; TODO this isn't wired up (yet)
+  (defun +modeline-org-mode ()
+    (nano-modeline (cons
+                    '(nano-modeline-element-buffer-status
+                      nano-modeline-element-space
+                      +modeline-org-buffer-name
+                      nano-modeline-element-space
+                      nano-modeline-element-buffer-vc-mode)
+                    '(nano-modeline-element-buffer-position
+                      nano-modeline-element-window-status
+                      nano-modeline-element-space))))
   :config
-  (add-hook! 'magit-mode-hook
-    (defun +modeline-hide-in-non-status-buffer-h ()
-      "Show minimal modeline in magit-status buffer, no modeline elsewhere."
-      (if (eq major-mode 'magit-status-mode)
-          (doom-modeline-set-modeline 'magit)
-        (hide-mode-line-mode)))))
+  (nano-modeline nil nil t)
+  (setq-default mode-line-format ""))
 
 ;;; CHRIS CONFIG ABOVE
 
@@ -2042,6 +2102,8 @@ file in your browser at the visited revision."
                  (pulsar-pulse-line-green))
                 (t
                  (pulsar--pulse nil 'pulsar-green (point-min) (point)))))))))
+
+;;; OLD CONFIG BELOW
 
 (setq gc-cons-threshold (* 800 1024))
 
