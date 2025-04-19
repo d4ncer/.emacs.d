@@ -212,7 +212,24 @@ Runs `+escape-hook'."
                  :wk "swap bufs")
 
    "p"  '(nil :wk "project")
-   "p" project-prefix-map
+   "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
+   "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
+   "pI" '(projectile-invalidate-cache :wk "invalidate cache")
+   "pc" '(projectile-compile-project :wk "compile project")
+   "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
+   "pr" '(projectile-replace :wk "replace (project)")
+   "pt" '(projectile-test-project :wk "test (project)")
+   "pu" '(projectile-run-project :wk "run (project)")
+   "pp" '(projectile-switch-project :wk "switch project")
+   "pf" '(projectile-find-file :wk "find file (project)")
+   "pF" '(projectile-recentf :wk "find recent file (project)")
+   "pd" '(projectile-find-dir :wk "find dir (project)")
+   "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)")
+   "ps" (list (defun +find-file-in-project ()
+                 (interactive)
+                 (let ((projectile-switch-project-action #'projectile-find-file))
+                   (projectile-switch-project)))
+               :wk "find file (other project)")
 
    "h"  '(nil :wk "help")
    "h" help-map
@@ -2051,6 +2068,41 @@ file in your browser at the visited revision."
   :config
   (nano-modeline nil nil t)
   (setq-default mode-line-format ""))
+
+;;; projects
+
+(use-package projectile :ensure t
+  :custom
+  (projectile-indexing-method 'alien)
+  (projectile-completion-system 'default)
+  (projectile-switch-project-action #'+switch-project-action)
+  (projectile-enable-caching t)
+  (projectile-globally-ignored-files '("TAGS" ".DS_Store"))
+  (projectile-globally-ignored-file-suffixes '("meta" "jsbundle" "gz" "zip" "tar" "elc"))
+  (projectile-globally-ignored-directoriess '(".bzr"
+                                              ".ensime_cache"
+                                              ".eunit"
+                                              ".fslckout"
+                                              ".g8"
+                                              ".git"
+                                              ".hg"
+                                              ".idea"
+                                              ".stack-work"
+                                              ".svn"
+                                              "build"
+                                              "dist"
+                                              "node_modules"
+                                              "vendor"
+                                              "straight/repos"
+                                              "target"))
+  :config
+  (autoload 'magit-status "magit")
+  (defun +switch-project-action ()
+    (let ((project-root (projectile-acquire-root)))
+      (if (file-exists-p (expand-file-name ".git" project-root))
+          (magit-status project-root)
+        (dired project-root))))
+  (projectile-mode +1))
 
 ;;; CHRIS CONFIG ABOVE
 
