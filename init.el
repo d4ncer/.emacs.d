@@ -2147,8 +2147,17 @@ file in your browser at the visited revision."
       (goto-char (line-end-position)))
     (gptel-send)
     (evil-normal-state))
+  (defun +gptel-go-to-insert ()
+    "Go to end of buffer and enter evil insert state."
+    (interactive)
+    (goto-char (point-max))
+    (backward-char)
+    (evil-insert-state))
+
   :general
-  (:keymaps 'gptel-mode-map :states '(normal insert) "C-c C-s" #'+gptel-send)
+  (:keymaps 'gptel-mode-map :states '(normal insert)
+            "C-c C-s" #'+gptel-send
+            "A" #'+gptel-go-to-insert)
   :custom
   (gptel-model 'claude-3-7-sonnet-20250219)
   (gptel-default-mode 'org-mode)
