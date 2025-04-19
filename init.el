@@ -2106,6 +2106,36 @@ file in your browser at the visited revision."
 
 ;;; CHRIS CONFIG ABOVE
 
+(use-package highlight-thing :ensure t
+  :hook (prog-mode-hook . highlight-thing-mode)
+  :custom
+  (highlight-thing-what-thing 'symbol)
+  (highlight-thing-delay-seconds 0.2)
+  (highlight-thing-limit-to-defun nil)
+  (highlight-thing-case-sensitive-p t)
+  :config
+  (defun +face-ancestors (face)
+    "List all faces that FACE transitively inherits from."
+    (let (result)
+      (while (and face (not (equal face 'unspecified)))
+        (setq result (cons face result))
+        (setq face (face-attribute face :inherit)))
+      (nreverse result)))
+
+  (defun +should-highlight-p (res)
+    (unless (or (bound-and-true-p lsp-ui-mode)
+                (bound-and-true-p tide-mode))
+      (when res
+        (let ((excluded-faces '(font-lock-string-face
+                                font-lock-keyword-face
+                                font-lock-comment-face
+                                font-lock-preprocessor-face
+                                font-lock-builtin-face))
+              (faces (seq-mapcat #'+face-ancestors (face-at-point nil t))))
+          (null (seq-intersection faces excluded-faces))))))
+  (advice-add 'highlight-thing-should-highlight-p :filter-return
+              #'+should-highlight-p))
+
 (use-package gptel :ensure t
   ;; Provides LLM integrations.
   :hook (gptel-mode-hook . visual-line-mode)
