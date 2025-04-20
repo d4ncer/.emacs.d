@@ -1107,6 +1107,7 @@ With optional prefix arg CONTINUE-P, keep profiling."
   (hl-todo-highlight-punctuation ":")
   (hl-todo-keyword-faces
    '(("TODO" warning bold)
+     ("KLUDGE" warning bold)
      ("FIXME" error bold)
      ("HACK" font-lock-constant-face bold)
      ("DEPRECATED" font-lock-doc-face bold)
@@ -2057,6 +2058,13 @@ file in your browser at the visited revision."
 (use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
   :demand t
   :init
+  ;; KLUDGE nano-modeline needs this color as 'nano-subtle
+  (defconst +colors-subtle "#ECEFF1")
+  ;; Define a face called 'nano-subtle that has the :background set to +colors-subtle
+  (defface nano-subtle
+    `((t :background ,+colors-subtle))
+    "Face with a subtle background color.")
+
   (defun +modeline-org-buffer-name (&optional name)
     (propertize
      (cond (name
