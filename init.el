@@ -497,6 +497,8 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
 (custom-theme-set-faces 'user
                         '(region ((t (:foreground unspecified :background unspecified :inherit modus-themes-search-lazy))))
                         '(iedit-occurrence ((t (:inherit modus-themes-search-replace))))
+                        ;; Make tooltip not grey
+                        `(tooltip ((t (:background ,+colors-subtle))))
                         ;; Set a light modeline
                         '(mode-line ((t (:height 10 :background "#bbb" :box nil))))
                         '(mode-line-inactive ((t (:height 10 :background "#ddd" :box nil))))
@@ -2263,6 +2265,260 @@ file in your browser at the visited revision."
   :general-config
   (:keymaps 'Info-mode-map [remap consult-imenu] #'Info-menu))
 
+;;; Text & programming modes
+
+(use-package text-mode
+  ;; Emacs' general parent mode for non-programming-language text files.
+  :mode  ("/LICENSE\\'")
+
+  ;; Not sure of the performance impact of this... leave off for now.
+  ;; :hook (text-mode-hook . visual-line-mode)
+
+  :custom
+  (text-mode-ispell-word-completion nil))
+
+(use-package lisp-mode
+  ;; General configuration for all derived lisp modes.
+  :config
+  (add-hook! '(lisp-data-mode-hook emacs-lisp-mode-hook)
+    (add-hook 'before-save-hook #'check-parens nil t)))
+
+(use-package elisp-mode
+  :general-config (:keymaps 'emacs-lisp-mode-map "C-c RET" #'pp-macroexpand-last-sexp)
+
+  ;; Make lambdas look like λ.
+  :hook (emacs-lisp-mode-hook . prettify-symbols-mode)
+
+  :config
+  (+local-leader-set-key 'emacs-lisp-mode-map
+    "e" '(nil :which-key "eval")
+    "es" '(eval-last-sexp :wk "last sexp")
+    "eb" (list (defun +eval-buffer ()
+                 (interactive)
+                 (let ((inhibit-redisplay t))
+                   (call-interactively #'eval-buffer)
+                   (message "Buffer evaluated" ))
+                 (when pulsar-mode
+                   (pulsar--pulse nil 'pulsar-yellow (point-min) (point-max))))
+               :wk "buffer"))
+
+  :init
+  (use-package checkdoc
+    :custom
+    (checkdoc-force-docstrings-flag nil))
+
+  (use-package +elisp
+    :general (:keymaps 'emacs-lisp-mode-map "C-c C-c" #'+elisp-eval-dwim)
+
+    :config
+    (+local-leader-set-key 'emacs-lisp-mode-map
+      "ee" '(+elisp-eval-dwim :wk "dwim"))
+
+    ;; Improve plist indentation
+    :autoload +elisp--calculate-lisp-indent-a
+    :init
+    (advice-add #'calculate-lisp-indent :override #'+elisp--calculate-lisp-indent-a))
+
+  :custom
+  (define-advice eval-region (:around (fn &rest args) clear-visual-state)
+    (unwind-protect (apply fn args)
+      (when (eq evil-state 'visual)
+        (evil-normal-state)))))
+
+(use-package yaml-ts-mode
+  :config
+  (setq-hook! 'yaml-ts-mode-hook
+    tab-width 2))
+
+(use-package typescript-ts-mode
+  :config
+  (pushnew! find-sibling-rules
+            ;; Tests -> impl
+            (list (rx (group (+? any)) (or ".test" ".integration") ".ts" eos)
+                  (rx (backref 1) ".ts"))
+            ;; Impl -> tests
+            (list (rx (group (+? any)) ".ts" eos)
+                  (rx (backref 1) ".test.ts")
+                  (rx (backref 1) ".integration.ts"))))
+
+(use-package conf-mode
+  ;; Unix configuration files
+  :mode ("rc\\'" "\\.dockerignore\\'" "\\.gitignore\\'"))
+
+(use-package treesit-auto :ensure t
+  ;; Automatic installation of treesitter grammars.
+  :after-call +first-buffer-hook +first-file-hook
+  :commands global-treesit-auto-mode
+  :custom
+  (treesit-auto-install 'prompt)
+  :config
+  (treesit-auto-add-to-auto-mode-alist 'all)
+  (global-treesit-auto-mode +1))
+
+(use-package flymake
+  ;; Frontend for in-buffer error checking & navigation.
+  ;;
+  ;; c.f. `next-error' and friends, which operate on compilation & grep results
+  ;; across any number of buffers.
+  :hook (prog-mode-hook . flymake-mode)
+  :general-config (:keymaps 'flymake-mode-map
+                            "M-n" #'flymake-goto-next-error
+                            "M-p" #'flymake-goto-prev-error))
+
+
+(use-package flymake-posframe :ensure '(flymake-posframe :type git :host github
+                                        :repo "d4ncer/flymake-posframe")
+  :after flymake
+  :custom
+  (flymake-posframe-warning-prefix "⚠️")
+  (flymake-posframe-error-prefix "❌")
+  (flymake-posframe-note-prefix "ℹ️")
+  (flymake-posframe-default-prefix "❓")
+  (flymake-posframe-border-color +colors-subtle)
+  :hook (flymake-mode-hook . flymake-posframe-mode))
+
+(use-package eglot
+  ;; Emacs' built-in LSP integration.
+  :general
+  (:keymaps 'eglot-mode-map
+   :states '(insert normal)
+   "M-RET" #'eglot-code-actions)
+  (:keymaps 'eglot-mode-map
+   :states '(normal)
+   "C-c C-r" #'eglot-rename))
+
+(use-package markdown
+  :custom
+  (markdown-fontify-code-blocks-natively t))
+
+(use-package elixir-ts-mode
+  :mode ("\\.ex\\'" "\\.exs\\'")
+  :config
+  (with-eval-after-load 'eglot
+    (add-to-list 'eglot-server-programs '(elixir-ts-mode "elixir-ls")))
+
+  ;; Switching between files & tests
+
+  (pushnew! find-sibling-rules
+            ;; Impl -> tests
+            (list (rx (group-n 1 (+? nonl)) "/lib/" (group-n 2 (+? any)) ".ex" eos)
+                  (rx (backref 1) "/test/" (backref 2) "_test.exs"))
+
+            ;; Tests -> impl
+            (list (rx (group-n 1 (+? nonl)) "/test/" (group-n 2 (+? any)) "_test.exs" eos)
+                  (rx (backref 1) "/lib/" (backref 2) ".ex"))))
+
+(use-package inf-elixir :ensure t)
+
+(use-package erlang :ensure t
+  :mode (("\\.erl\\'" . erlang-mode)
+         ("\\.hrl\\'" . erlang-mode))
+  :init
+  (with-eval-after-load 'dired
+    (pushnew! completion-ignored-extensions ".jam" ".vee" ".beam"))
+  (with-eval-after-load 'dired-x
+    (pushnew! dired-omit-extensions ".jam" ".vee" ".beam")))
+
+;; Use tree-sitter modes.
+
+(dolist (pair '((yaml-mode . yaml-ts-mode)
+                (c-mode . c-ts-mode)
+                (bash-mode . bash-ts-mode)
+                (java-mode . java-ts-mode)
+                (js2-mode . js-ts-mode)
+                (javascript-mode . js-ts-mode)
+                (typescript-mode . typescript-ts-mode)
+                (js-json-mode . json-ts-mode)
+                (css-mode . css-ts-mode)
+                (rust-mode . rust-ts-mode)
+                (python-mode . python-ts-mode)))
+  (alist-set! major-mode-remap-alist (car pair) (cdr pair)))
+
+;; Make shell-scripts etc executable on save.
+
+(add-hook 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)
+
+;;; Debuggers
+
+(use-package debug
+  ;; The built-in debugger for the Emacs Lisp runtime.
+  :init
+  (defun +debugger-toggle-on-exit-frame ()
+    (interactive)
+    (let ((enabled-for-line (save-excursion
+                              (goto-char (line-beginning-position))
+                              (looking-at (rx (* space) "*" (+ space))))))
+      (cond
+       (enabled-for-line
+        (debugger-frame-clear)
+        (message "debug on exit for frame disabled"))
+       (t
+        (debugger-frame)
+        (message "debug on exit for frame enabled")))))
+
+  :general
+  (:keymaps 'debugger-mode-map :states 'normal "t" #'+debugger-toggle-on-exit-frame)
+
+  :config
+  (define-advice debugger-record-expression (:after (&rest _) display-buffer)
+    (display-buffer debugger-record-buffer))
+
+  ;; Show keybindings in the header line for Backtrace buffers.
+
+  (defconst +debugger-mode-line-format
+    (cl-labels ((low-emphasis (str)
+                  (propertize str 'face 'parenthesis))
+                (key (key desc)
+                  (concat (propertize key 'face 'which-key-key-face) (low-emphasis ":") " " desc))
+                (group (&rest children)
+                  (concat (low-emphasis "|") "  " (apply #'distribute children)))
+                (distribute (&rest strs)
+                  (string-join strs "  ")))
+      (distribute
+       (propertize "  " 'face 'font-lock-builtin-face)
+       (group
+        (key "d" "step")
+        (key "c" "continue")
+        (key "r" "return"))
+       (group
+        (key "t" "toggle debug on exit frame")
+        (key "J" "jump")
+        (key "L" "locals"))
+       (group
+        (key "E" "eval")
+        (key "R" "eval & record")))))
+
+  (setq-hook! 'debugger-mode-hook
+    header-line-format +debugger-mode-line-format))
+
+
+;;; Code formatting
+
+(use-package apheleia :ensure t
+  ;; Apply code formatting on save. Works for a range of languages.
+  :after-call +first-file-hook
+  :config
+  (apheleia-global-mode +1))
+
+;; By default, trim trailing whitespace aggressively.
+
+;; (defvar-local +trim-trailing-whitespace-aggressively t)
+;;
+;; (add-hook! 'before-save-hook
+;;   (when +trim-trailing-whitespace-aggressively
+;;     (delete-trailing-whitespace)))
+
+(use-package ws-butler :ensure t
+  ;; Delete trailing whitespace on visited lines.
+  :hook (prog-mode-hook text-mode-hook conf-mode-hook)
+  :config
+  (pushnew! ws-butler-global-exempt-modes
+            'special-mode
+            'comint-mode
+            'term-mode
+            'eshell-mode
+            'diff-mode))
+
 ;;; CHRIS CONFIG ABOVE
 
 (use-package highlight-thing :ensure t
@@ -2320,6 +2576,8 @@ file in your browser at the visited revision."
   :custom
   (gptel-model 'claude-3-7-sonnet-20250219)
   (gptel-default-mode 'org-mode)
+  ;; Use nano-modeline's special format
+  (gptel-use-header-line nil)
   :config
   (alist-set! gptel-prompt-prefix-alist 'org-mode "* ")
   (setq-hook! 'gptel-mode-hook
