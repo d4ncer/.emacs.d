@@ -28,7 +28,7 @@
 (load-file (file-name-concat user-emacs-directory "elpaca-bootstrap.el"))
 
 (elpaca elpaca-use-package
-	(elpaca-use-package-mode))
+  (elpaca-use-package-mode))
 
 ;; Make sure I don't accidentally start loading super-expensive packages on startup.
 
@@ -110,7 +110,7 @@
 
 (defun +escape (&optional interactive)
   "Quit things, abort things, and finish things.
-Runs `+escape-hook'."
+Runs `+escape-hook'. Supports INTERACTIVE use."
   (interactive (list 'interactive))
   (let ((inhibit-quit t)
         (in-minibuffer? (minibuffer-window-active-p (minibuffer-window))))
@@ -226,10 +226,10 @@ Runs `+escape-hook'."
    "pd" '(projectile-find-dir :wk "find dir (project)")
    "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)")
    "ps" (list (defun +find-file-in-project ()
-                 (interactive)
-                 (let ((projectile-switch-project-action #'projectile-find-file))
-                   (projectile-switch-project)))
-               :wk "find file (other project)")
+                (interactive)
+                (let ((projectile-switch-project-action #'projectile-find-file))
+                  (projectile-switch-project)))
+              :wk "find file (other project)")
 
    "h"  '(nil :wk "help")
    "h" help-map
@@ -446,8 +446,8 @@ Runs `+escape-hook'."
    "ss" (list (defun +symbol-in-file ()
                 (interactive)
                 (let ((selection (if (use-region-p)
-                           (buffer-substring-no-properties (region-beginning) (region-end))
-                         (substring-no-properties (thing-at-point 'symbol)))))
+                                     (buffer-substring-no-properties (region-beginning) (region-end))
+                                   (substring-no-properties (thing-at-point 'symbol)))))
                   (consult-line selection)))
               :wk "search symbol in file")
 
@@ -1360,7 +1360,7 @@ BEG and END are the bounds of the active region."
     (set-mark (point))
     (end-of-line)
     (backward-char 1))
-  
+
   :general-config
   (:states 'emacs "ESC ESC" #'evil-normal-state)
   (:states 'visual
@@ -2067,7 +2067,7 @@ file in your browser at the visited revision."
                      (substring-no-properties
                       (or (org-get-heading 'no-tags) "-")))))
            ((file-equal-p (file-name-directory (buffer-file-name))
-                      +org--roam-dir)
+                          +org--roam-dir)
             (format "(roam) %s" (car (last (s-split "-" (buffer-file-name))))))
            (t
             (buffer-name)))
