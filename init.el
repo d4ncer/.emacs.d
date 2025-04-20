@@ -2058,6 +2058,7 @@ file in your browser at the visited revision."
 (use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
   :demand t
   :init
+
   ;; KLUDGE nano-modeline needs this color as 'nano-subtle
   (defconst +colors-subtle "#ECEFF1")
   ;; Define a face called 'nano-subtle that has the :background set to +colors-subtle
@@ -2065,6 +2066,8 @@ file in your browser at the visited revision."
     `((t :background ,+colors-subtle))
     "Face with a subtle background color.")
 
+  ;; Improve org-mode mode line
+  ;; TODO this isn't wired up (yet)
   (defun +modeline-org-buffer-name (&optional name)
     (propertize
      (cond (name
@@ -2081,19 +2084,89 @@ file in your browser at the visited revision."
             (buffer-name)))
      'face (nano-modeline-face 'name)))
 
-  ;; TODO this isn't wired up (yet)
-  (defun +modeline-org-mode ()
-    (nano-modeline (cons
-                    '(nano-modeline-element-buffer-status
-                      nano-modeline-element-space
-                      +modeline-org-buffer-name
-                      nano-modeline-element-space
-                      nano-modeline-element-buffer-vc-mode)
-                    '(nano-modeline-element-buffer-position
-                      nano-modeline-element-window-status
-                      nano-modeline-element-space))))
+  (defcustom nano-modeline-format-org
+    (cons
+     '(nano-modeline-element-buffer-status
+       nano-modeline-element-space
+       +modeline-org-buffer-name
+       nano-modeline-element-space
+       nano-modeline-element-buffer-vc-mode)
+     '(nano-modeline-element-buffer-position
+       nano-modeline-element-window-status
+       nano-modeline-element-space))
+    "Custom format for org + org-roam buffers."
+    :type 'nano-modeline-type
+    :group 'nano-modeline-modes)
+
+  (defun +nano-modeline-org ()
+    (nano-modeline nano-modeline-format-org))
+
+  ;; Add flymake stats to modeline
+  (require 'flymake)
+  (defun +modeline-element-flymake-statistics ()
+    "Display Flymake diagnostics statistics or loading status."
+    (when (bound-and-true-p flymake-mode)
+      (let* ((running (flymake-running-backends))
+             (reporting (flymake-reporting-backends))
+             (waiting (cl-set-difference running reporting))
+             (face 'nano-modeline-face-default))
+        (if waiting
+            ;; Show loading indicator when backends are running but not yet reported
+            (propertize "⟳" 'face 'nano-modeline-face-default)
+          ;; Show diagnostics statistics
+          (let ((counts (make-hash-table)))
+            ;; Count diagnostics by type using hash table
+            (dolist (diag (flymake-diagnostics))
+              (let ((severity (flymake-diagnostic-type diag)))
+                (puthash severity (1+ (gethash severity counts 0)) counts)))
+
+            ;; Get counts for standard types
+            (let ((error-count (gethash :error counts 0))
+                  (warning-count (gethash :warning counts 0))
+                  (note-count (gethash :note counts 0)))
+
+              ;; Change face if there are errors
+              (when (> error-count 0)
+                (setq face 'nano-modeline-face-buffer-marked))
+
+              ;; Format the statistics
+              (propertize
+               (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
+                   (format "(%d/%d/%d)" error-count warning-count note-count)
+                 "✔")
+               'face face)))))))
+
+  (defcustom nano-modeline-format-prog
+    (cons '(nano-modeline-element-buffer-status
+            nano-modeline-element-space
+            nano-modeline-element-buffer-name
+            nano-modeline-element-space
+            nano-modeline-element-buffer-mode
+            nano-modeline-element-space
+            nano-modeline-element-buffer-vc-mode)
+          '(
+            +modeline-element-flymake-statistics
+            nano-modeline-element-half-space
+            nano-modeline-element-buffer-position
+            nano-modeline-element-window-status
+            nano-modeline-element-space))
+    "Format for programming modes with flymake statistics"
+    :type 'nano-modeline-type
+    :group 'nano-modeline-modes)
+
+  (defun +nano-modeline-prog ()
+    (nano-modeline nano-modeline-format-prog))
+
+  (defun +nano-modeline-default ()
+    (nano-modeline nano-modeline-format-default))
+
+  (defun +nano-modeline-gptel ()
+    (nano-modeline nano-modeline-format-gptel))
+
   :config
-  (nano-modeline nil nil t)
+  (add-hook! '(text-mode-hook magit-mode-hook help-mode-hook helpful-mode-hook) #'+nano-modeline-default)
+  (add-hook! 'gptel-mode-hook #'+nano-modeline-gptel)
+  (add-hook 'prog-mode-hook #'+nano-modeline-prog)
   (setq-default mode-line-format ""))
 
 ;;; projects
