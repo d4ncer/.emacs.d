@@ -24,6 +24,7 @@
 (defvar org-default-notes-file "~/org/notes.org")
 
 (defvar +ligatures-dir (file-name-concat user-emacs-directory "ligatures/"))
+(defvar +templates-dir (file-name-concat user-emacs-directory "templates/"))
 
 (load-file (file-name-concat user-emacs-directory "elpaca-bootstrap.el"))
 
@@ -1722,6 +1723,9 @@ BEG and END are the bounds of the active region."
   ;; Disable any out-of-the-box defaults.
   (completion-category-defaults nil)
 
+  :general
+  (:states 'insert
+           "C-." #'completion-at-point)
   :init
   (use-package orderless :ensure t
     ;; Orderless allows you to filter completion candidates by typing
@@ -2518,6 +2522,33 @@ file in your browser at the visited revision."
             'term-mode
             'eshell-mode
             'diff-mode))
+
+(use-package tempel :ensure t
+  ;; Text snippets.
+  ;;
+  :general
+  (:keymaps 'tempel-map :states 'normal
+            "<escape>" #'tempel-done)
+  :custom
+  (tempel-path (file-name-concat +templates-dir "*.eld"))
+  :init
+  (add-hook! '(prog-mode-hook text-mode-hook config-mode-hook)
+    (add-hook 'completion-at-point-functions #'tempel-expand -90 t)))
+
+(use-package autoinsert
+  :after-call +first-buffer-hook +first-file-hook
+  :custom
+  (auto-insert-directory (file-name-concat user-emacs-directory "file-templates/"))
+  (auto-insert-alist nil)
+  (auto-insert-query nil)
+  :config
+  (auto-insert-mode +1))
+
+(use-package +file-templates
+  :after autoinsert
+  :demand t
+  :config
+  (+define-file-template (rx ".el" eos) "emacs-lisp.eld"))
 
 ;;; CHRIS CONFIG ABOVE
 
