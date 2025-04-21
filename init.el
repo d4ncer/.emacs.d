@@ -1986,17 +1986,51 @@ BEG and END are the bounds of the active region."
   :custom
   (git-timemachine-show-minibuffer-details t)
   :config
-  (define-advice git-timemachine--show-minibuffer-details (:override (revision) use-header-line)
-    "Show revision details in the header-line, instead of the minibuffer."
-    (let* ((date-relative (nth 3 revision))
-           (date-full (nth 4 revision))
-           (author (if git-timemachine-show-author (concat (nth 6 revision) ": ") ""))
-           (sha-or-subject (if (eq git-timemachine-minibuffer-detail 'commit) (car revision) (nth 5 revision))))
-      (setq header-line-format
-            (format "%s%s [%s (%s)]"
-                    (propertize author 'face 'git-timemachine-minibuffer-author-face)
-                    (propertize sha-or-subject 'face 'git-timemachine-minibuffer-detail-face)
-                    date-full date-relative)))))
+  (with-eval-after-load 'nano-modeline
+    (defcustom nano-modeline-format-git-timemachine
+      (cons '(nano-modeline-element-buffer-status
+              nano-modeline-element-space
+              nano-modeline-element-git-timemachine-author
+              nano-modeline-element-git-timemachine-sha
+              nano-modeline-element-space
+              nano-modeline-element-git-timemachine-date)
+            '(nano-modeline-element-window-status
+              nano-modeline-element-space))
+      "Modeline format for git-timemachine"
+      :type 'nano-modeline-type
+      :group 'nano-modeline-modes)
+
+    (defun nano-modeline-element-git-timemachine-author ()
+      "Git timemachine author"
+      (when (and (boundp 'git-timemachine-show-author)
+                 git-timemachine-show-author
+                 (boundp 'git-timemachine-revision)
+                 git-timemachine-revision)
+        (propertize (concat (nth 6 git-timemachine-revision) ": ")
+                    'face 'git-timemachine-minibuffer-author-face)))
+
+    (defun nano-modeline-element-git-timemachine-sha ()
+      "Git timemachine SHA or subject"
+      (when (and (boundp 'git-timemachine-revision)
+                 git-timemachine-revision)
+        (let ((sha-or-subject (if (and (boundp 'git-timemachine-minibuffer-detail)
+                                       (eq git-timemachine-minibuffer-detail 'commit))
+                                  (car git-timemachine-revision)
+                                (nth 5 git-timemachine-revision))))
+          (propertize sha-or-subject 'face 'git-timemachine-minibuffer-detail-face))))
+
+    (defun nano-modeline-element-git-timemachine-date ()
+      "Git timemachine date"
+      (when (and (boundp 'git-timemachine-revision)
+                 git-timemachine-revision)
+        (let ((date-full (nth 4 git-timemachine-revision))
+              (date-relative (nth 3 git-timemachine-revision)))
+          (propertize (format "[%s (%s)]" date-full date-relative)
+                      'face 'nano-modeline-face-default))))
+
+    (define-advice git-timemachine--show-minibuffer-details (:override (revision) use-nano-modeline)
+      "Show revision details using nano-modeline instead of the minibuffer."
+      (nano-modeline nano-modeline-format-git-timemachine))))
 
 (use-package browse-at-remote :ensure t
   :custom
@@ -2160,6 +2194,16 @@ file in your browser at the visited revision."
 
   (defun +nano-modeline-gptel ()
     (nano-modeline nano-modeline-format-gptel))
+
+  ;; Turn off borders in nano modeline buttons
+
+  (defun +nano-modeline-remove-border-in-buttons (orig-fun &rest args)
+    "Advice to temporarily set nano-modeline-border-color to nil during function execution."
+    (let ((nano-modeline-border-color nil))
+      (apply orig-fun args)))
+
+  ;; Install the advice
+  (advice-add 'nano-modeline--button :around #'+nano-modeline-remove-border-in-buttons)
 
   :config
   (add-hook! '(text-mode-hook magit-mode-hook help-mode-hook helpful-mode-hook) #'+nano-modeline-default)
