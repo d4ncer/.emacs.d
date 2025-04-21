@@ -946,7 +946,7 @@ With optional prefix arg CONTINUE-P, keep profiling."
 
 (use-package helpful :ensure t
   :general
-  (:keymaps 'emacs-lisp-mode-map :states '(normal)
+  (:keymaps '(emacs-lisp-mode-map lisp-data-mode-map) :states '(normal)
             "K" #'helpful-at-point))
 
 (use-package ligature :ensure t
@@ -2487,7 +2487,6 @@ file in your browser at the visited revision."
   (setq-hook! 'debugger-mode-hook
     header-line-format +debugger-mode-line-format))
 
-
 ;;; Code formatting
 
 (use-package apheleia :ensure t
