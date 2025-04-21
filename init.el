@@ -11,6 +11,10 @@
 (when (< emacs-major-version 30)
   (user-error "Emacs 30 required"))
 
+(setq gc-cons-threshold (* 800 1024))
+
+(defconst emacs-start-time (current-time))
+
 (require 'use-package)
 
 (eval-and-compile
@@ -2680,67 +2684,6 @@ file in your browser at the visited revision."
 
 ;;; OLD CONFIG BELOW
 
-(setq gc-cons-threshold (* 800 1024))
-
-(defconst emacs-start-time (current-time))
-
-(unless noninteractive
-  (message "Loading %s..." load-file-name))
-
-;; Set up personal settings
-
-(setq user-full-name "Raghuvir Kasturi")
-(setq user-mail-address "raghuvir.kasturi@gmail.com")
-
-;; Set up Vertico
-
-
-;; Set up general to auto unbind keys (override everything)
-
-;; (general-auto-unbind-keys)
-
-;; Setup paths & features
-
-;; (require 'paths (expand-file-name "paths.el" (concat user-emacs-directory "/config")))
-;; (paths-initialise)
-;; (add-to-list 'custom-theme-load-path paths-themes-directory)
-
-;; Up sub-process throughput data size
-;; https://github.com/emacs-mirror/emacs/commit/cc78faee7d23dd0433ba537818a68cbd20fa52a3
-
-;; (setq read-process-output-max (* 1024 1024))
-
-
-;; Ack org-roam V2
-
-;; (defvar org-roam-v2-ack)
-;; (setq org-roam-v2-ack t)
-
-;; Aggressively load persist
-
-;; (use-package persist
-;;   :straight t
-;;   :demand t
-;;   :config
-;;   (setq persist--directory-location (f-join paths-cache-directory "persist")))
-
-;; Aggressively load themes
-
-;; (use-package rk-themes)
-
-;; Aggressively load flyspell-lazy
-;; It has to load before flyspell
-(use-package flyspell-lazy
-  :ensure t
-  :demand t
-  :commands (flyspell-lazy-mode)
-  :custom
-  (flyspell-lazy-idle-seconds 1)
-  (flyspell-lazy-window-idle-seconds 3)
-  :config
-  (flyspell-lazy-mode +1))
-
-
 ;; Load features.
 
 ;; Base setup
@@ -2826,60 +2769,6 @@ file in your browser at the visited revision."
   :ensure t
   :config
   (keychain-refresh-environment))
-
-;;; Improve eval-expression
-
-(defvar eval-expression-interactively-map
-  (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map read-expression-map)
-    (define-key map (kbd "<escape>") #'abort-minibuffers)
-    (define-key map (kbd "C-g") #'abort-minibuffers)
-    map))
-
-(defun eval-expression-interactively--read (prompt &optional initial-contents)
-  (let ((minibuffer-completing-symbol t))
-    (minibuffer-with-setup-hook
-        (lambda ()
-          (let ((inhibit-message t))
-            (emacs-lisp-mode)
-            (use-local-map eval-expression-interactively-map)
-            (setq font-lock-mode t)
-            (funcall font-lock-function 1)))
-      (read-from-minibuffer prompt initial-contents
-                            eval-expression-interactively-map nil
-                            'read-expression-history))))
-
-(autoload 'pp-display-expression "pp")
-(autoload 'pp-to-string "pp")
-
-(defun eval-expression-interactively (expression &optional arg)
-  "Like `eval-expression' with nicer input handling.
-
-- Use `emacs-lisp-mode' to provide font locking and better
-  integration with other packages.
-
-- Use the `pp' library to display the output in a readable form.
-
-EXPRESSION is a Lisp form to evaluate.
-
-With optional prefix ARG, insert the results into the buffer at
-point."
-  (interactive (list (read (eval-expression-interactively--read "Eval: "))
-                     current-prefix-arg))
-  (if arg
-      (insert (pp-to-string (eval expression lexical-binding)))
-    (pp-display-expression (eval expression lexical-binding)
-                           "*Pp Eval Output*")))
-
-;; (require 'general)
-;; (general-define-key :keymaps 'override :states '(normal motion visual)
-;;                     "M-:" 'eval-expression-interactively)
-
-;;; Hack
-
-;; (general-unbind global-map "M-<return>")
-;; (general-unbind org-mode-map "M-<return>")
-;; (general-unbind org-capture-mode-map "M-<return>")
 
 ;;; Print overall startup time.
 

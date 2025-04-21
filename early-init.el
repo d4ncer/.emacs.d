@@ -14,6 +14,11 @@
 
 (setq package-enable-at-startup nil)
 
+;; Set up personal settings
+
+(setq user-full-name "Raghuvir Kasturi")
+(setq user-mail-address "raghuvir.kasturi@gmail.com")
+
 ;;; Configure use-package
 
 (setq use-package-verbose init-file-debug)
