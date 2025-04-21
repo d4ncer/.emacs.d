@@ -153,8 +153,9 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
   (require '+edit-cmds)
 
   (general-define-key
-   :states '(normal motion)
+   :states '(normal motion insert)
    :prefix "SPC"
+   :non-normal-prefix "C-SPC"
    :prefix-command '+leader-key
 
    "SPC" '(execute-extended-command :wk "M-x")
