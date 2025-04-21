@@ -495,12 +495,11 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
   `(general-define-key :prefix "," :states '(normal motion) :keymaps ,keymaps ,@general-args))
 
 ;;; General editing
-
 (custom-theme-set-faces 'user
                         '(region ((t (:foreground unspecified :background unspecified :inherit modus-themes-search-lazy))))
                         '(iedit-occurrence ((t (:inherit modus-themes-search-replace))))
                         ;; Make tooltip not grey
-                        `(tooltip ((t (:background ,+colors-subtle))))
+                        `(tooltip ((t (:inherit nano-subtle))))
                         ;; Set a light modeline
                         '(mode-line ((t (:height 10 :background "#bbb" :box nil))))
                         '(mode-line-inactive ((t (:height 10 :background "#ddd" :box nil))))
@@ -2065,14 +2064,6 @@ file in your browser at the visited revision."
 (use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
   :demand t
   :init
-
-  ;; KLUDGE nano-modeline needs this color as 'nano-subtle
-  (defconst +colors-subtle "#ECEFF1")
-  ;; Define a face called 'nano-subtle that has the :background set to +colors-subtle
-  (defface nano-subtle
-    `((t :background ,+colors-subtle))
-    "Face with a subtle background color.")
-
   ;; Improve org-mode mode line
   ;; TODO this isn't wired up (yet)
   (defun +modeline-org-buffer-name (&optional name)

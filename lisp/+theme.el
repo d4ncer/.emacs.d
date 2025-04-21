@@ -6,6 +6,12 @@
 (defconst +colors-blue "#268bd2")
 (defconst +colors-green "#859900")
 
+;; KLUDGE nano-subtle is needed for nano-modeline
+(defconst +colors-subtle "#ECEFF1")
+(defface nano-subtle
+  `((t :background ,+colors-subtle))
+  "Face with a subtle background color.")
+
 (defvar +theme-light nil)
 (defvar +theme-dark nil)
 
