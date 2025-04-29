@@ -2180,8 +2180,7 @@ file in your browser at the visited revision."
             nano-modeline-element-buffer-mode
             nano-modeline-element-space
             nano-modeline-element-buffer-vc-mode)
-          '(
-            +modeline-element-flymake-statistics
+          '(+modeline-element-flymake-statistics
             nano-modeline-element-half-space
             nano-modeline-element-buffer-position
             nano-modeline-element-window-status
@@ -2588,6 +2587,35 @@ file in your browser at the visited revision."
   :demand t
   :config
   (+define-file-template (rx ".el" eos) "emacs-lisp.eld"))
+
+(use-package pdf-tools :ensure t
+  ;; A better PDF viewer for Emacs
+  :mode ("\\.pdf\\'" . pdf-view-mode)
+  :magic ("%PDF" . pdf-view-mode)
+  :init
+  (defun +unset-evil-cursor ()
+    (setq-local evil-normal-state-cursor (list nil)))
+  :hook (pdf-view-mode-hook . +unset-evil-cursor)
+  :config
+  (pdf-tools-install :no-query)
+  :custom
+  (pdf-view-display-size 'fit-page)
+  (pdf-view-resize-factor 1.1)
+  :general
+  (:keymaps 'pdf-view-mode-map :states '(normal motion)
+            "j" #'pdf-view-next-line-or-next-page
+            "k" #'pdf-view-previous-line-or-previous-page
+            "J" #'pdf-view-next-page
+            "K" #'pdf-view-previous-page
+            "gg" #'pdf-view-first-page
+            "G" #'pdf-view-last-page
+            "=" #'pdf-view-enlarge
+            "-" #'pdf-view-shrink
+            "0" #'pdf-view-scale-reset
+            "/" #'isearch-forward)
+  :config
+  (with-eval-after-load 'nano-modeline
+    (add-hook 'pdf-view-mode-hook #'+nano-modeline-default)))
 
 ;;; CHRIS CONFIG ABOVE
 
