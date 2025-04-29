@@ -502,8 +502,6 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
 (custom-theme-set-faces 'user
                         '(region ((t (:foreground unspecified :background unspecified :inherit modus-themes-search-lazy))))
                         '(iedit-occurrence ((t (:inherit modus-themes-search-replace))))
-                        ;; Make tooltip not grey
-                        `(tooltip ((t (:inherit nano-subtle))))
                         ;; Set a light modeline
                         '(mode-line ((t (:height 10 :background "#bbb" :box nil))))
                         '(mode-line-inactive ((t (:height 10 :background "#ddd" :box nil))))
@@ -2408,16 +2406,18 @@ file in your browser at the visited revision."
                             "M-n" #'flymake-goto-next-error
                             "M-p" #'flymake-goto-prev-error))
 
-
 (use-package flymake-posframe :ensure '(flymake-posframe :type git :host github
-                                        :repo "d4ncer/flymake-posframe")
+                                        :repo "Ladicle/flymake-posframe")
   :after flymake
   :custom
   (flymake-posframe-warning-prefix "⚠️")
   (flymake-posframe-error-prefix "❌")
   (flymake-posframe-note-prefix "ℹ️")
   (flymake-posframe-default-prefix "❓")
-  (flymake-posframe-border-color +colors-subtle)
+  :config
+  (custom-set-faces
+   '(flymake-posframe-face ((t (:inherit nano-subtle))))
+   '(flymake-posframe-border-face ((t (:inherit nano-subtle)))))
   :hook (flymake-mode-hook . flymake-posframe-mode))
 
 (use-package eglot
