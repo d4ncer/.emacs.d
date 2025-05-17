@@ -1777,6 +1777,8 @@ BEG and END are the bounds of the active region."
       (cons (format "[CRM %s] %s" (propertize sans-brackets 'face 'error) (car args))
             (cdr args)))))
 
+(use-package parent-mode :ensure t)
+
 (use-package corfu :ensure t
   ;; Corfu provides in-buffer completions as you type.
   :hook (+first-input-hook . global-corfu-mode)
