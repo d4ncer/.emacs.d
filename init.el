@@ -2879,9 +2879,10 @@ file in your browser at the visited revision."
       (display-buffer response-buffer)
       (gptel-request prompt
         :callback (lambda (response _info)
-                    (with-current-buffer response-buffer
-                      (goto-char (point-max))
-                      (insert response)))
+                    (when (stringp response)
+                      (with-current-buffer response-buffer
+                        (goto-char (point-max))
+                        (insert response))))
         :buffer response-buffer
         :stream t)))
 
