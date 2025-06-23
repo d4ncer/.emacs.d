@@ -2381,7 +2381,13 @@ file in your browser at the visited revision."
   (setq-hook! 'yaml-ts-mode-hook
     tab-width 2))
 
+(use-package json-ts-mode
+  :hook
+  (json-ts-mode-hook . eglot-ensure))
+
 (use-package typescript-ts-mode
+  :hook
+  (typescript-ts-mode-hook . eglot-ensure)
   :config
   (pushnew! find-sibling-rules
             ;; Tests -> impl
@@ -2446,6 +2452,8 @@ file in your browser at the visited revision."
 
 (use-package elixir-ts-mode
   :mode ("\\.ex\\'" "\\.exs\\'")
+  :hook
+  (elixir-ts-mode-hook . eglot-ensure)
   :config
   (with-eval-after-load 'eglot
     (add-to-list 'eglot-server-programs '(elixir-ts-mode "elixir-ls")))
