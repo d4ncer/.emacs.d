@@ -2858,6 +2858,32 @@ file in your browser at the visited revision."
     (backward-char)
     (evil-insert-state))
 
+  (defun +gptel-explain-code ()
+    "Explain the selected code using gptel, with language inference from major mode."
+    (interactive)
+    (unless (region-active-p)
+      (user-error "No region selected. Please select code to explain"))
+    (let* ((code (buffer-substring-no-properties (region-beginning) (region-end)))
+           (language (or (when (symbolp major-mode)
+                           (replace-regexp-in-string "-mode$" "" (symbol-name major-mode)))
+                         "text"))
+           (prompt (format "Please explain this %s code:\n\n```%s\n%s\n```"
+                           language language code))
+           (response-buffer (get-buffer-create "*gptel-response*")))
+      (with-current-buffer response-buffer
+        (visual-line-mode 1)
+        (goto-char (point-max))
+        (unless (bobp)
+          (insert "\n\n" (make-string 40 ?-) "\n\n")))
+      (display-buffer response-buffer)
+      (gptel-request prompt
+        :callback (lambda (response _info)
+                    (with-current-buffer response-buffer
+                      (goto-char (point-max))
+                      (insert response)))
+        :buffer response-buffer
+        :stream t)))
+
   :general
   (:keymaps 'gptel-mode-map :states '(normal insert)
             "C-c C-s" #'+gptel-send
