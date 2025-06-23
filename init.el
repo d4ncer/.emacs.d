@@ -2147,38 +2147,39 @@ file in your browser at the visited revision."
 
   ;; Add flymake stats to modeline
   (require 'flymake)
+
+  (defun +flymake-count-type (type)
+    (let ((count 0))
+      (dolist (d (flymake-diagnostics))
+        (when (= (flymake--severity type)
+                 (flymake--severity (flymake-diagnostic-type d)))
+          (cl-incf count)))
+      count))
+
   (defun +modeline-element-flymake-statistics ()
     "Display Flymake diagnostics statistics or loading status."
-    (when (bound-and-true-p flymake-mode)
-      (let* ((running (flymake-running-backends))
-             (reporting (flymake-reporting-backends))
-             (waiting (cl-set-difference running reporting))
-             (face 'nano-modeline-face-default))
-        (if waiting
-            ;; Show loading indicator when backends are running but not yet reported
-            (propertize "⟳" 'face 'nano-modeline-face-default)
-          ;; Show diagnostics statistics
-          (let ((counts (make-hash-table)))
-            ;; Count diagnostics by type using hash table
-            (dolist (diag (flymake-diagnostics))
-              (let ((severity (flymake-diagnostic-type diag)))
-                (puthash severity (1+ (gethash severity counts 0)) counts)))
+    (let* ((running (flymake-running-backends))
+           (reporting (flymake-reporting-backends))
+           (waiting (cl-set-difference running reporting))
+           (face 'nano-modeline-face-default))
+      (if waiting
+          ;; Show loading indicator when backends are running but not yet reported
+          (propertize "⟳" 'face 'nano-modeline-face-default)
+        ;; Show diagnostics statistics
+        (let ((error-count (+flymake-count-type :error))
+              (warning-count (+flymake-count-type :warning))
+              (note-count (+flymake-count-type :note)))
 
-            ;; Get counts for standard types
-            (let ((error-count (gethash :error counts 0))
-                  (warning-count (gethash :warning counts 0))
-                  (note-count (gethash :note counts 0)))
+          ;; Change face if there are errors
+          (when (> error-count 0)
+            (setq face 'nano-modeline-face-buffer-marked))
 
-              ;; Change face if there are errors
-              (when (> error-count 0)
-                (setq face 'nano-modeline-face-buffer-marked))
-
-              ;; Format the statistics
-              (propertize
-               (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
-                   (format "(%d/%d/%d)" error-count warning-count note-count)
-                 "✔")
-               'face face)))))))
+          ;; Format the statistics
+          (propertize
+           (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
+               (format " (%d/%d/%d) " error-count warning-count note-count)
+             "✔")
+           'face face)))))
 
   (defcustom nano-modeline-format-prog
     (cons '(nano-modeline-element-buffer-status
