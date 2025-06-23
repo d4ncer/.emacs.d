@@ -95,6 +95,8 @@
               (kill-new url)
               (message (concat "Copied: " url))))))))
 
+  ;; TODO This needs to be refactored to better support WAITING/SOMEDAY tasks in a project.
+  ;; Once that's done, this should automatically fire on changes to Tasks.
   (defun rk-org--sort-tasks ()
     (interactive)
     (when (eq 'org-mode major-mode)
@@ -102,7 +104,7 @@
         (if-let ((marker (org-find-exact-headline-in-buffer "Tasks")))
             (save-excursion
               (goto-char marker)
-              (org-sort-entries t ?d)
+              (org-sort-entries t ?d ?t)
               (org-fold-show-children)
               (org-next-visible-heading 1)
               (org-todo "NEXT"))))))
@@ -203,9 +205,9 @@ Do not scheduled items or repeating todos."
 
   :init
   (rk-leader-def
-    "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
-    "ol" '(org-store-link :wk "store link")
-    "ous" '(org-save-all-org-buffers :wk "save all"))
+   "ns" '(org-narrow-to-subtree :wk "narrow to subtree")
+   "ol" '(org-store-link :wk "store link")
+   "ous" '(org-save-all-org-buffers :wk "save all"))
 
   :hook ((org-mode . rk-org--setup-org))
   :config
@@ -216,13 +218,13 @@ Do not scheduled items or repeating todos."
   (add-hook 'org-after-todo-state-change-hook #'rk-org--set-next-todo-state)
   (add-hook 'org-mode-hook #'auto-fill-mode)
   (rk-local-leader-def :keymaps 'org-mode-map
-    "d" '(org-deadline :wk "deadline")
-    "s" '(org-schedule :wk "schedule")
+                       "d" '(org-deadline :wk "deadline")
+                       "s" '(org-schedule :wk "schedule")
 
-    "u"  '(:ignore t :wk "utils")
+                       "u"  '(:ignore t :wk "utils")
 
-    "l"  '(org-insert-link :wk "insert link")
-    "L"  '(rk-org--copy-url-at-point :wk "copy link"))
+                       "l"  '(org-insert-link :wk "insert link")
+                       "L"  '(rk-org--copy-url-at-point :wk "copy link"))
 
   (setf (cdr (assoc 'file org-link-frame-setup)) #'find-file)
 
@@ -234,7 +236,7 @@ Do not scheduled items or repeating todos."
   :preface
   :init
   (rk-leader-def
-    "."  '(org-capture :wk "capture")))
+   "."  '(org-capture :wk "capture")))
 
 (use-package ob-python
   :after org
@@ -287,9 +289,9 @@ Do not scheduled items or repeating todos."
 
 (use-package ob-elixir
   :straight (:type git
-                   :host github
-                   :repo "d4ncer/ob-elixir"
-                   :branch "master")
+             :host github
+             :repo "d4ncer/ob-elixir"
+             :branch "master")
   :after org)
 
 (use-package ob-shell
@@ -394,6 +396,8 @@ Do not scheduled items or repeating todos."
   (org-agenda-use-time-grid nil)
   (org-agenda-inhibit-startup t)
   (org-agenda-tags-column 0)
+  (org-agenda-dim-blocked-tasks nil)  ; Disable expensive blocked task calculation
+  (org-agenda-use-tag-inheritance nil) ; Disable tag inheritance for performance
   (org-agenda-clockreport-parameter-plist
    (list
     :compact t
@@ -402,13 +406,14 @@ Do not scheduled items or repeating todos."
     :step 'week))
   :init
   (rk-leader-def
-    "o a"   '(rk-org--general-agenda :wk "agenda")
-    "o y"   '(rk-org--past-agenda :wk "done (14d)")
-    "o A"   '(org-agenda :wk "all agendas"))
+  "o a"   '(rk-org--general-agenda :wk "agenda")
+  "o y"   '(rk-org--past-agenda :wk "done (14d)")
+  "o A"   '(org-agenda :wk "all agendas")
+    "o C"   '(vulpea-invalidate-cache :wk "clear agenda cache"))
   :config
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
-    "d" '(org-agenda-deadline :wk "deadline")
-    "p" '(org-agenda-set-property :wk "set property"))
+                       "d" '(org-agenda-deadline :wk "deadline")
+                       "p" '(org-agenda-set-property :wk "set property"))
 
   (add-hook 'org-agenda-finalize-hook #'org-agenda-delete-empty-blocks)
   (add-hook 'org-agenda-finalize-hook #'org-agenda-to-appt))
@@ -451,9 +456,9 @@ Do not scheduled items or repeating todos."
       (switch-to-buffer (current-buffer))))
   :config
   (rk-local-leader-def :keymaps 'org-mode-map
-    "R" '(rk-org--refile :wk "refile"))
+                       "R" '(rk-org--refile :wk "refile"))
   (rk-local-leader-def :keymaps 'org-agenda-mode-map
-    "r" '(rk-org-agenda--refile :wk "refile")))
+                       "r" '(rk-org-agenda--refile :wk "refile")))
 
 (use-package org-archive
   :after org
@@ -479,7 +484,7 @@ Do not scheduled items or repeating todos."
 
   :config
   (rk-local-leader-def :keymaps 'org-mode-map
-    "ua" '(org-archive-subtree :wk "archive"))
+                       "ua" '(org-archive-subtree :wk "archive"))
   (advice-add 'org-archive-subtree :before #'rk-org--apply-inherited-tags))
 
 (use-package org-src
@@ -546,7 +551,7 @@ Do not scheduled items or repeating todos."
 
   :config
   (rk-local-leader-def :keymaps 'org-mode-map
-    "uc" '(org-clock-transient :wk "clock"))
+                       "uc" '(org-clock-transient :wk "clock"))
   (org-clock-persistence-insinuate)
   (add-hook 'org-clock-out-hook #'rk-org--remove-empty-clock-drawers t))
 
@@ -665,10 +670,10 @@ table tr.tr-even td {
 (use-package rk-org-goto
   :config
   (rk-leader-def
-    "o g"  '(:ignore t :wk "goto")
-    "o g t"  '(rk-org-goto-todo-list :wk "todos")
-    "o g v"  '(rk-org-goto-tags-list :wk "tags")
-    "o g i"  '(rk-org-goto-inbox :wk "inbox")))
+   "o g"  '(:ignore t :wk "goto")
+   "o g t"  '(rk-org-goto-todo-list :wk "todos")
+   "o g v"  '(rk-org-goto-tags-list :wk "tags")
+   "o g i"  '(rk-org-goto-inbox :wk "inbox")))
 
 (use-package evil-org
   :straight t
@@ -721,9 +726,9 @@ table tr.tr-even td {
 
 (use-package org-roam
   :straight (:type git
-                   :host github
-                   :repo "org-roam/org-roam"
-                   :branch "main")
+             :host github
+             :repo "org-roam/org-roam"
+             :branch "main")
   :after org
   :preface
   (defvar rk-org-roam--dailies-prev-buffer nil)
@@ -749,14 +754,14 @@ table tr.tr-even td {
      (unless (org-entry-get (point) "CREATED")
        (org-set-property "CREATED" (format-time-string (org-time-stamp-format t t))))))
   (pretty-hydra-define rk-org-roam--daily-utils
-    (:title "Roam Utilities" :quit-key "q"
-            :foreign-keys run)
-    ("Dailies"
-     (("C-n"  org-roam-dailies-goto-today "today")
-      ("C-y"  org-roam-dailies-goto-yesterday "yesterday")
-      ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
-      ("C-j" org-roam-dailies-goto-next-note "next")
-      ("C-k" org-roam-dailies-goto-previous-note "previous"))))
+                       (:title "Roam Utilities" :quit-key "q"
+                        :foreign-keys run)
+                       ("Dailies"
+                        (("C-n"  org-roam-dailies-goto-today "today")
+                         ("C-y"  org-roam-dailies-goto-yesterday "yesterday")
+                         ("C-t"  org-roam-dailies-goto-tomorrow "tomorrow")
+                         ("C-j" org-roam-dailies-goto-next-note "next")
+                         ("C-k" org-roam-dailies-goto-previous-note "previous"))))
   :hook
   (org-roam-dailies-find-file . rk-org-roam--move-to-end)
   :general
@@ -782,18 +787,18 @@ table tr.tr-even td {
                                          (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n#+filetags: :daily:\n\n* Habits\n\n- exercise :: %(format \"%s\" (y-or-n-p \"Have you exercised today?\"))\n\n* Food\n\n* General\n\n* Work\n\n"))))
   :init
   (rk-leader-def
-    "oS"  '(rk-org-roam/force-sync :wk "roam sync")
-    "od"  '(:ignore t :wk "date")
-    "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
-    "odt" '(org-roam-dailies-goto-today :wk "today")
-    "odd" '(org-roam-dailies-goto-date :wk "for date")
-    "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
-    "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
+   "oS"  '(rk-org-roam/force-sync :wk "roam sync")
+   "od"  '(:ignore t :wk "date")
+   "odD" '(rk-org-roam--daily-utils/body :wk "dailies hydra")
+   "odt" '(org-roam-dailies-goto-today :wk "today")
+   "odd" '(org-roam-dailies-goto-date :wk "for date")
+   "ody" '(org-roam-dailies-goto-yesterday :wk "yesterday")
+   "odT" '(org-roam-dailies-goto-tomorrow :wk "tomorrow"))
   :config
   (rk-local-leader-def :keymaps 'org-mode-map
-    "t" '(:ignore t :wk "tags")
-    "ta" '(org-roam-tag-add :wk "add filetag(s)")
-    "tx" '(org-roam-tag-remove :wk "remove filetag(s)"))
+                       "t" '(:ignore t :wk "tags")
+                       "ta" '(org-roam-tag-add :wk "add filetag(s)")
+                       "tx" '(org-roam-tag-remove :wk "remove filetag(s)"))
   (cl-defmethod org-roam-node-directories ((node org-roam-node))
     (if-let ((dirs (file-name-directory (file-relative-name (org-roam-node-file node) org-roam-directory))))
         (format "(%s)" (car (f-split dirs)))
@@ -802,9 +807,9 @@ table tr.tr-even td {
   (cl-defmethod org-roam-node-backlinkscount ((node org-roam-node))
     (let* ((count (caar (org-roam-db-query
                          [:select (funcall count source)
-                                  :from links
-                                  :where (= dest $s1)
-                                  :and (= type "id")]
+                          :from links
+                          :where (= dest $s1)
+                          :and (= type "id")]
                          (org-roam-node-id node)))))
       (format "[%d]" count)))
 
@@ -898,14 +903,35 @@ tasks."
       #'car
       (org-roam-db-query
        [:select [nodes:file]
-                :from tags
-                :left-join nodes
-                :on (= tags:node-id nodes:id)
-                :where (like tag (quote "%\"project\"%"))]))))
+        :from tags
+        :left-join nodes
+        :on (= tags:node-id nodes:id)
+        :where (like tag (quote "%\"project\"%"))]))))
 
   (defun vulpea-agenda-files-update (&rest _)
-    "Update the value of `org-agenda-files'."
-    (setq org-agenda-files (vulpea-project-files)))
+  "Update the value of `org-agenda-files'."
+  (setq org-agenda-files (vulpea-project-files-cached)))
+
+  ;; Cache for project files to avoid repeated database queries
+  (defvar vulpea--project-files-cache nil
+    "Cached list of project files.")
+  (defvar vulpea--project-files-cache-time nil
+    "Time when project files cache was last updated.")
+
+  (defun vulpea-project-files-cached ()
+    "Return cached project files, refreshing cache if older than 300 seconds."
+    (let ((now (current-time)))
+      (when (or (null vulpea--project-files-cache-time)
+                (> (float-time (time-subtract now vulpea--project-files-cache-time)) 300))
+        (setq vulpea--project-files-cache (vulpea-project-files)
+              vulpea--project-files-cache-time now))
+      vulpea--project-files-cache))
+
+  (defun vulpea-invalidate-cache ()
+    "Invalidate the project files cache."
+    (interactive)
+    (setq vulpea--project-files-cache nil
+          vulpea--project-files-cache-time nil))
 
   (defun rk-vulpea--org-roam-file-name (title)
     "Return the slug of NODE."
@@ -1019,8 +1045,8 @@ tasks."
                     :tags tags)))))
       (progn
         (vulpea-utils-with-note note
-          (org-align-tags t)
-          (save-buffer))
+                                (org-align-tags t)
+                                (save-buffer))
         (when insert-p
           (insert (org-link-make-string (concat "id:" (vulpea-note-id note)) title)))
         (when jump-to
@@ -1129,18 +1155,18 @@ as its argument a `vulpea-note'."
             "C-c i" #'rk-vulpea--insert)
   :init
   (rk-leader-def
-    "of" '(rk-org--all-notes :wk "find file node")
-    "oP" '(rk-org--project-notes :wk "find projects"))
+   "of" '(rk-org--all-notes :wk "find file node")
+   "oP" '(rk-org--project-notes :wk "find projects"))
   :config
   (org-roam-db-sync)
   (rk-local-leader-def :keymaps 'org-mode-map
-    "b" '(vulpea-find-backlink :wk "find backlinks")
-    "m"   '(:ignore t :wk "meta")
-    "m a" '(vulpea-meta-add :wk "add")
-    "m A" '(vulpea-meta-add-list :wk "add list")
-    "m x" '(vulpea-meta-remove :wk "remove")
-    "m X" '(vulpea-meta-clean :wk "remove all")
-    "m p" '(rk-vulpea--update-project-status :wk "project status"))
+                       "b" '(vulpea-find-backlink :wk "find backlinks")
+                       "m"   '(:ignore t :wk "meta")
+                       "m a" '(vulpea-meta-add :wk "add")
+                       "m A" '(vulpea-meta-add-list :wk "add list")
+                       "m x" '(vulpea-meta-remove :wk "remove")
+                       "m X" '(vulpea-meta-clean :wk "remove all")
+                       "m p" '(rk-vulpea--update-project-status :wk "project status"))
   (add-hook 'vulpea-insert-handle-functions #'rk-vulpea--insert-handle)
 
   (add-hook 'find-file-hook #'vulpea-project-update-tag)
@@ -1165,7 +1191,7 @@ as its argument a `vulpea-note'."
       (org-capture nil "t")))
   :config
   (rk-leader-def
-    "o ." '(rk-org--capture-to-inbox :wk "capture to inbox")))
+   "o ." '(rk-org--capture-to-inbox :wk "capture to inbox")))
 
 (use-package vulpea
   :straight t
@@ -1226,7 +1252,7 @@ Refer to `org-agenda-prefix-format' for more information."
         (org-agenda nil "M"))))
   :init
   (rk-leader-def
-    "o p" '(vulpea-agenda-person :wk "for person"))
+   "o p" '(vulpea-agenda-person :wk "for person"))
   :config
   (setq org-agenda-custom-commands
         '(("g" "General"
@@ -1249,14 +1275,14 @@ Refer to `org-agenda-prefix-format' for more information."
             (org-ql-block '(todo "WAITING")
                           ((org-ql-block-header "Waiting")))
             (agenda ""))
-           ((org-agenda-files (-concat (vulpea-project-files) (if (boundp 'org-jira-working-dir) `(,org-jira-working-dir) '())))
-            (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s")
+           ((org-agenda-files (-concat (vulpea-project-files-cached) (if (boundp 'org-jira-working-dir) `(,org-jira-working-dir) '())))
+           (org-agenda-prefix-format '((agenda . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (todo . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (tags . " %i %(vulpea-agenda-category 24)%?-24t% s")
                                         (search . " %i %(vulpea-agenda-category 24)%?-24t% s")))))
           ("y" "Last 14 days"
            ((agenda ""))
-           ((org-agenda-files (vulpea-project-files))
+           ((org-agenda-files (vulpea-project-files-cached))
             (org-agenda-start-day "-14d")
             (org-agenda-span 16)
             (org-agenda-start-on-weekday 1)
@@ -1285,16 +1311,16 @@ Refer to `org-agenda-prefix-format' for more information."
   :preface
   (defun rk-org/someday-projects ()
     (interactive)
-    (org-ql-search (vulpea-project-files) '(todo "SOMEDAY") :super-groups '((:auto-title t)))
+    (org-ql-search (vulpea-project-files-cached) '(todo "SOMEDAY") :super-groups '((:auto-title t)))
     (delete-other-windows))
   :init
   (rk-leader-def
-    "o s"   '(rk-org/someday-projects :wk "someday"))
+   "o s"   '(rk-org/someday-projects :wk "someday"))
   :config
   (org-super-agenda--def-auto-group title "their TITLE property"
-    :key-form (org-super-agenda--when-with-marker-buffer (org-super-agenda--get-marker item)
-                (vulpea-buffer-title-get))
-    :header-form (concat "Project: " key))
+                                    :key-form (org-super-agenda--when-with-marker-buffer (org-super-agenda--get-marker item)
+                                                                                         (vulpea-buffer-title-get))
+                                    :header-form (concat "Project: " key))
   (org-super-agenda-mode +1))
 
 ;; Misc
@@ -1362,10 +1388,10 @@ Refer to `org-agenda-prefix-format' for more information."
   (citar-note-format-function #'rk-citar--format-note)
   :init
   (rk-leader-def
-    "o c"   '(:ignore t :wk "cite")
-    "o c o" '(citar-open :wk "open")
+   "o c"   '(:ignore t :wk "cite")
+   "o c o" '(citar-open :wk "open")
 
-    "G b" '(rk-citar--goto-bib :wk "goto bib refs"))
+   "G b" '(rk-citar--goto-bib :wk "goto bib refs"))
   :config
   (require 'citar-org))
 
@@ -1413,11 +1439,11 @@ Refer to `org-agenda-prefix-format' for more information."
       (org-roam-review-set-seedling)))
   :init
   (rk-leader-def
-    "o r" '(:ignore t :wk "review")
-    "o r s" '(org-roam-review :wk "status")
-    "o r v" '(org-roam-review-list-due :wk "to review")
-    "o r u" '(org-roam-review-list-by-maturity :wk "to categorize")
-    "o r r" '(org-roam-review-list-recently-added :wk "recently added"))
+   "o r" '(:ignore t :wk "review")
+   "o r s" '(org-roam-review :wk "status")
+   "o r v" '(org-roam-review-list-due :wk "to review")
+   "o r u" '(org-roam-review-list-by-maturity :wk "to categorize")
+   "o r r" '(org-roam-review-list-recently-added :wk "recently added"))
   :config
   (add-hook 'org-roam-capture-new-node-hook #'rk-orr--review-note-p)
   (add-to-list 'display-buffer-alist
@@ -1427,13 +1453,13 @@ Refer to `org-agenda-prefix-format' for more information."
                  (window-width    . 0.5)
                  (window-height   . fit-window-to-buffer)))
   (rk-local-leader-def :keymaps 'org-mode-map
-    "r"   '(:ignore t :wk "review")
-    "r r" '(org-roam-review-accept :wk "accept")
-    "r u" '(org-roam-review-bury :wk "bury")
-    "r x" '(org-roam-review-set-excluded :wk "set excluded")
-    "r b" '(org-roam-review-set-budding :wk "set budding")
-    "r s" '(org-roam-review-set-seedling :wk "set seedling")
-    "r e" '(org-roam-review-set-evergreen :wk "set evergreen")))
+                       "r"   '(:ignore t :wk "review")
+                       "r r" '(org-roam-review-accept :wk "accept")
+                       "r u" '(org-roam-review-bury :wk "bury")
+                       "r x" '(org-roam-review-set-excluded :wk "set excluded")
+                       "r b" '(org-roam-review-set-budding :wk "set budding")
+                       "r s" '(org-roam-review-set-seedling :wk "set seedling")
+                       "r e" '(org-roam-review-set-evergreen :wk "set evergreen")))
 
 (straight-use-package
  '(nursery :type git :host github :repo "chrisbarrett/nursery"))
@@ -1441,12 +1467,12 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package org-roam-gc
   :init
   (rk-leader-def
-    "oug" '(org-roam-gc :wk "gc")))
+   "oug" '(org-roam-gc :wk "gc")))
 
 (use-package org-roam-search
   :init
   (rk-leader-def
-    "o/" '(org-roam-search :wk "search")))
+   "o/" '(org-roam-search :wk "search")))
 
 (use-package org-format
   :after org
@@ -1457,7 +1483,7 @@ Refer to `org-agenda-prefix-format' for more information."
 (use-package org-roam-links
   :init
   (rk-leader-def
-    "ob" '(org-roam-links :wk "evergreen links")))
+   "ob" '(org-roam-links :wk "evergreen links")))
 
 (use-package org-modern
   :straight (:type git :host github :repo "minad/org-modern" :branch "main")
