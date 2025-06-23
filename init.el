@@ -456,6 +456,14 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
                                    (substring-no-properties (thing-at-point 'symbol)))))
                   (consult-line selection)))
               :wk "search symbol in file")
+   "sp" (list (defun +symbol-in-project ()
+                "Search for occurrences of the symbol or sub-string at point in the project."
+                (interactive)
+                (let ((selection (if (use-region-p)
+                                     (buffer-substring-no-properties (region-beginning) (region-end))
+                                   (substring-no-properties (thing-at-point 'symbol)))))
+                  (consult-ripgrep (project-root (project-current)) selection)))
+              :wk "search symbol in project")
 
    "t"  '(nil :wk "toggles")
    "tb" '(breadcrumb-mode :wk "breadcrumbs (header)")
