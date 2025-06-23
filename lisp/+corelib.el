@@ -60,7 +60,7 @@
     (setq exp (cadr exp)))
   exp)
 
-(defun +corelib--resolve-hook-forms (hooks)
+(defun +resolve-hook-forms (hooks)
   "Converts a list of modes into a list of hook symbols.
 
 If a mode is quoted, it is left as is. If the entire HOOKS list is quoted, the
@@ -74,7 +74,7 @@ list is returned as-is."
                collect (cadr hook)
                else collect (intern (format "%s-hook" (symbol-name hook)))))))
 
-(defun --setq-hook-fns (hooks rest &optional singles)
+(defun +setq-hook-fns (hooks rest &optional singles)
   (unless (or singles (= 0 (% (length rest) 2)))
     (signal 'wrong-number-of-arguments (list #'cl-evenp (length rest))))
   (cl-loop with vars = (let ((args rest)
@@ -85,7 +85,7 @@ list is returned as-is."
                                    (cons (pop args) (pop args)))
                                  vars))
                          (nreverse vars))
-           for hook in (+corelib--resolve-hook-forms hooks)
+           for hook in (+resolve-hook-forms hooks)
            for mode = (string-remove-suffix "-hook" (symbol-name hook))
            append
            (cl-loop for (var . val) in vars
@@ -100,7 +100,7 @@ list is returned as-is."
 \(fn HOOKS &rest [SYM VAL]...)"
   (declare (indent 1))
   (macroexp-progn
-   (cl-loop for (var val hook fn) in (--setq-hook-fns hooks var-vals)
+   (cl-loop for (var val hook fn) in (+setq-hook-fns hooks var-vals)
             collect `(defun ,fn (&rest _)
                        ,(format "%s = %s" var (pp-to-string val))
                        (setq-local ,var ,val))
@@ -220,7 +220,7 @@ This macro accepts, in order:
                      (when (looking-at-p "\\s-*(")
                        (lisp-indent-defform state indent-point))))
            (debug t))
-  (let* ((hook-forms (+corelib--resolve-hook-forms hooks))
+  (let* ((hook-forms (+resolve-hook-forms hooks))
          (func-forms ())
          (defn-forms ())
          append-p local-p remove-p depth)
