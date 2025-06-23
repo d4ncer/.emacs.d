@@ -2465,7 +2465,8 @@ file in your browser at the visited revision."
   (elixir-ts-mode-hook . eglot-ensure)
   :config
   (with-eval-after-load 'eglot
-    (add-to-list 'eglot-server-programs '(elixir-ts-mode "elixir-ls")))
+    (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
+      (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,+elixir-ls-bin))))
 
   ;; Switching between files & tests
 
