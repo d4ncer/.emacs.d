@@ -2889,7 +2889,7 @@ file in your browser at the visited revision."
             "C-c C-s" #'+gptel-send
             "A" #'+gptel-go-to-insert)
   :custom
-  (gptel-model 'claude-3-7-sonnet-20250219)
+  (gptel-model 'claude-sonnet-4-20250514)
   (gptel-default-mode 'org-mode)
   ;; Use nano-modeline's special format
   (gptel-use-header-line nil)
