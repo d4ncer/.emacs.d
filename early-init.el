@@ -114,7 +114,7 @@
   (setq native-comp-warning-on-missing-source ncomp-warn-level))
 
 ;; If native comp breaks, double check these paths
-(setenv "LIBRARY_PATH" "/opt/homebrew/opt/gcc/lib/gcc/14:/opt/homebrew/opt/libgccjit/lib/gcc/14:/opt/homebrew/opt/gcc/lib/gcc/14/gcc/aarch64-apple-darwin23/14")
+(setenv "LIBRARY_PATH" "/opt/homebrew/opt/gcc/lib/gcc/15:/opt/homebrew/opt/libgccjit/lib/gcc/15:/opt/homebrew/opt/gcc/lib/gcc/15/gcc/aarch64-apple-darwin24/15")
 
 ;; Always prompt for "y" or "n", rather than "yes" or "no".
 (setq use-short-answers t)
