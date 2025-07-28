@@ -2865,6 +2865,30 @@ file in your browser at the visited revision."
     (backward-char)
     (evil-insert-state))
 
+  (defmacro +gptel-request-with-buffer (prompt response-buffer-name &rest body)
+    "Make a gptel request with PROMPT, displaying response in RESPONSE-BUFFER-NAME.
+BODY is executed to prepare the response buffer."
+    `(let ((response-buffer (get-buffer-create ,response-buffer-name)))
+       (with-current-buffer response-buffer
+         (let ((inhibit-read-only t))
+           (visual-line-mode 1)
+           (markdown-ts-mode)
+           (goto-char (point-max))
+           (unless (bobp)
+             (insert "\n\n" (make-string 40 ?-) "\n\n"))
+           ,@body)
+         (read-only-mode 1))
+       (display-buffer response-buffer)
+       (gptel-request ,prompt
+         :callback (lambda (response _info)
+                     (when (stringp response)
+                       (with-current-buffer response-buffer
+                         (let ((inhibit-read-only t))
+                           (goto-char (point-max))
+                           (insert response)))))
+         :buffer response-buffer
+         :stream t)))
+
   (defun +gptel-explain-code ()
     "Explain the selected code using gptel, with language inference from major mode."
     (interactive)
@@ -2875,22 +2899,18 @@ file in your browser at the visited revision."
                            (replace-regexp-in-string "-mode$" "" (symbol-name major-mode)))
                          "text"))
            (prompt (format "Please explain this %s code:\n\n```%s\n%s\n```"
-                           language language code))
-           (response-buffer (get-buffer-create "*gptel-response*")))
-      (with-current-buffer response-buffer
-        (visual-line-mode 1)
-        (goto-char (point-max))
-        (unless (bobp)
-          (insert "\n\n" (make-string 40 ?-) "\n\n")))
-      (display-buffer response-buffer)
-      (gptel-request prompt
-        :callback (lambda (response _info)
-                    (when (stringp response)
-                      (with-current-buffer response-buffer
-                        (goto-char (point-max))
-                        (insert response))))
-        :buffer response-buffer
-        :stream t)))
+                           language language code)))
+      (+gptel-request-with-buffer prompt "*gptel-response*")))
+
+  (defun +gptel-explain-emacs-error ()
+    "Explain the selected emacs error message and offer suggestions to fix."
+    (interactive)
+    (unless (region-active-p)
+      (user-error "No region selected. Please select an error message to explain"))
+    (let* ((error-text (buffer-substring-no-properties (region-beginning) (region-end)))
+           (prompt (format "Please explain this Emacs error message and provide suggestions to fix it:\n\n```\n%s\n```\n\nPlease include:\n1. What this error means\n2. Common causes\n3. Step-by-step solutions\n4. Prevention tips"
+                           error-text)))
+      (+gptel-request-with-buffer prompt "*gptel-response*")))
 
   :general
   (:keymaps 'gptel-mode-map :states '(normal insert)
