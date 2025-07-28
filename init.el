@@ -2843,6 +2843,7 @@ file in your browser at the visited revision."
 
 (use-package gptel :ensure t
   ;; Provides LLM integrations.
+  :demand t
   :hook (gptel-mode-hook . visual-line-mode)
   :general (:states 'visual "RET" #'gptel-rewrite)
   :init
