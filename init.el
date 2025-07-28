@@ -954,6 +954,10 @@ With optional prefix arg CONTINUE-P, keep profiling."
 
   (exec-path-from-shell-initialize))
 
+(use-package mise :ensure t
+  :demand t
+  :hook (+first-file-hook . global-mise-mode))
+
 (use-package helpful :ensure t
   :general
   (:keymaps '(emacs-lisp-mode-map lisp-data-mode-map) :states '(normal)
