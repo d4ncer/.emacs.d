@@ -1,7 +1,0 @@
-# key: it
-# name: it
-# condition: (yas-funcs-bolp)
-# --
-it('${1:behaviour}', () => {
-  $0
-});

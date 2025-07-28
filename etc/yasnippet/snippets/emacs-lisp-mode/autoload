@@ -1,7 +1,0 @@
-# -*- mode: snippet; require-final-newline: nil -*-
-# name: autoload
-# key: al
-# binding: direct-keybinding
-# condition: (and (yas-funcs-bolp) (not (yas/at-line-above-decl?)))
-# --
-(autoload '${1:ident} "${1:$(yas/autoload-file-for-function yas/text)}")

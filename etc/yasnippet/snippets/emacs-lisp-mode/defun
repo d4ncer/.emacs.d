@@ -1,6 +1,0 @@
-# key: d
-# name: defun
-# condition: (yas-funcs-bolp)
-# --
-(defun `nameless-current-name`-${1:name} ($2)
-  $0)
