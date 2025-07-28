@@ -2452,10 +2452,11 @@ file in your browser at the visited revision."
    "C-c C-r" #'eglot-rename))
 
 (use-package eldoc-box :ensure t
+  :demand t
   ;; Displays eldoc info in a floating box instead of the echo area.
-  :after eglot
   :config
-  (add-hook 'eglot-managed-mode-hook #'eldoc-box-hover-at-point-mode t)
+  (with-eval-after-load 'eglot
+    (add-hook 'eglot-managed-mode-hook #'eldoc-box-hover-at-point-mode))
   :general
   (:states '(normal motion)
            "K" #'eldoc-box-help-at-point))
