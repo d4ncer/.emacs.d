@@ -669,7 +669,7 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
     "Auto revert stale buffers in visible windows, if necessary."
     (dolist (buf (+visible-buffers))
       (with-current-buffer buf
-	(+auto-revert-current-buffer-h))))
+        (+auto-revert-current-buffer-h))))
   :hook
   (after-save-hook . +auto-revert-visible-buffers-h)
   (+switch-buffer-hook . +auto-revert-current-buffer-h)
@@ -2081,20 +2081,6 @@ file in your browser at the visited revision."
                    (if start-line start-line)
                    (if (and end-line (not (equal start-line end-line))) end-line)))
       (apply fn args))))
-
-(use-package forge :ensure t
-  ;; Teach magit how to work with pull requests on GitHub and other git hosting
-  ;; services.
-  :after-call magit-status ; avoids compilation until first use
-
-  :preface
-  (setq forge-database-file (file-name-concat user-emacs-directory "forge/forge-database.sqlite"))
-  :general
-  (:keymaps 'magit-mode-map [remap magit-browse-thing] #'forge-browse)
-  (:keymaps 'magit-remote-section-map [remap magit-browse-thing] #'forge-browse-remote)
-  (:keymaps 'magit-branch-section-map [remap magit-browse-thing] #'forge-browse-branch)
-  :general-config
-  (:keymaps 'forge-topic-list-mode-map :states 'normal "q" #'kill-current-buffer))
 
 (use-package vc
   :custom
