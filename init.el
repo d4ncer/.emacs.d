@@ -23,9 +23,10 @@
   (require '+corelib)
   (require '+load-incrementally))
 
-(defvar org-directory "~/org/")
-(defvar org-roam-directory "~/org/roam/")
-(defvar org-default-notes-file "~/org/notes.org")
+(defvar +cloud-dir (format "/Users/%s/Library/Mobile Documents/com~apple~CloudDocs/rkdev" user-login-name))
+(defvar org-directory (file-name-concat +cloud-dir "org"))
+(defvar +org-brain-dir (file-name-concat org-directory "brain"))
+(defvar org-default-notes-file (file-name-concat org-directory "notes.org"))
 
 (defvar +ligatures-dir (file-name-concat user-emacs-directory "ligatures/"))
 (defvar +templates-dir (file-name-concat user-emacs-directory "templates/"))
@@ -37,7 +38,7 @@
 
 ;; Make sure I don't accidentally start loading super-expensive packages on startup.
 
-(defconst +expensive-packages '(org org-roam org-agenda forge))
+(defconst +expensive-packages '(org org-node org-agenda forge))
 
 (add-transient-hook! 'after-init-hook
   (when-let* ((loaded (seq-filter #'featurep +expensive-packages)))
@@ -392,13 +393,13 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
                 (interactive)
                 (find-file org-default-notes-file))
               :wk "notes")
-   "oi" (list (defun +goto-org-roam-index ()
+   "oi" (list (defun +goto-org-index ()
                 (interactive)
-                (find-file (file-name-concat org-roam-directory "notes/index.org")))
-              :wk "roam index")
+                (find-file (file-name-concat org-directory "index.org")))
+              :wk "index")
    "ot" (list (defun +goto-org-todos ()
                 (interactive)
-                (find-file (file-name-concat org-roam-directory "todos.org")))
+                (find-file (file-name-concat org-directory "todos.org")))
               :wk "todos")
    "oa" (list (defun +org-agenda-dwim ()
                 (interactive)
@@ -410,8 +411,8 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
    "ov" '(org-tags-view :wk "search by tag")
    "ok" #'org-capture
    "ol" '(org-store-link :wk "store link")
-   "of" '(+roam-node-find :wk "find (roam)")
-   "os" '(org-roam-search :wk "search (roam)")
+   "of" '(org-node-find :wk "find (node)")
+   "os" '(org-node-grep :wk "search (node)")
    "ow" '(timekeep-visit-node :wk "work file")
 
    "oc" '(nil :wk "clock")
@@ -430,11 +431,19 @@ Runs `+escape-hook'. Supports INTERACTIVE use."
    "ocg" '(org-clock-goto :wk "goto clock")
    "ocq" '(org-clock-cancel :wk "cancel")
 
-   "or" '(nil :wk "roam/review")
-   "ord" '(org-roam-review-list-recently-added :wk "list recent")
-   "orl" '(org-roam-links :wk "linked nodes")
-   "orr" '(org-roam-review :wk "review")
-   "ort" '(org-roam-search-tags :wk "search by tag")
+   "or" '(nil :wk "node")
+   "ord" (list (defun +org-node-daily ()
+                 (interactive)
+                 (let* ((date (format-time-string "%Y-%m-%d"))
+                        (title (format "Daily: %s" date))
+                        (filename (format "%s-daily.org" date)))
+                   (find-file (file-name-concat org-directory "daily" filename))
+                   (when (= (buffer-size) 0)
+                     (insert (format "#+TITLE: %s\n#+DATE: %s\n\n* Daily Notes\n\n" title date)))))
+               :wk "daily journal")
+   "orl" '(org-node-extract-subtree :wk "extract subtree")
+   "orr" '(org-node-reset :wk "reset cache")
+   "ort" '(org-node-tag-grep :wk "search by tag")
 
    "e"  '(nil :wk "errors")
    "el" '(consult-flymake :wk "error list")
@@ -1113,7 +1122,7 @@ With optional prefix arg CONTINUE-P, keep profiling."
           help-mode-hook
           shell-command-mode-hook
           gptel-mode-hook
-          org-roam-mode-hook
+          org-node-mode-hook
           )
          . hide-mode-line-mode))
 
@@ -2112,8 +2121,8 @@ file in your browser at the visited revision."
                      (substring-no-properties
                       (or (org-get-heading 'no-tags) "-")))))
            ((file-equal-p (file-name-directory (buffer-file-name))
-                          +org--roam-dir)
-            (format "(roam) %s" (car (last (s-split "-" (buffer-file-name))))))
+                          org-directory)
+            (format "(org) %s" (car (last (s-split "-" (buffer-file-name))))))
            (t
             (buffer-name)))
      'face (nano-modeline-face 'name)))
@@ -2128,7 +2137,7 @@ file in your browser at the visited revision."
      '(nano-modeline-element-buffer-position
        nano-modeline-element-window-status
        nano-modeline-element-space))
-    "Custom format for org + org-roam buffers."
+    "Custom format for org + org-node buffers."
     :type 'nano-modeline-type
     :group 'nano-modeline-modes)
 
@@ -2700,7 +2709,7 @@ file in your browser at the visited revision."
                     (derived-mode . grep-mode)
                     (derived-mode . embark-collect-mode)
                     ,(rx bos "*Embark Export: ")
-                    ,(rx bos "*org-roam-search"))
+                    ,(rx bos "*org-node-grep"))
                   '(window-width 80))))
 
          ;; Right side - documentation, reference buffers & command outputs.
@@ -2727,9 +2736,8 @@ file in your browser at the visited revision."
                      (derived-mode . Man-mode)
                      (derived-mode . woman-mode)
 
-                     ;; org-roam links
-                     ,(rx bos "*org-roam*" eos)
-                     ,(rx bos "*org-roam-links*" eos)
+                     ;; org-node buffers
+                     ,(rx bos "*org-node*" eos)
                      )
                    '(window-width . 80))))
 
@@ -2831,6 +2839,73 @@ file in your browser at the visited revision."
           (null (seq-intersection faces excluded-faces))))))
   (advice-add 'highlight-thing-should-highlight-p :filter-return
               #'+should-highlight-p))
+
+(use-package org
+  :ensure t
+  :after-call +first-file-hook
+  :hook ((org-mode-hook . visual-line-mode))
+  :general (:keymaps 'org-mode-map :states '(normal visual motion)
+                     "TAB" #'org-cycle
+                     "S-TAB" #'org-shifttab)
+  :custom
+  (org-directory org-directory)
+  (org-default-notes-file org-default-notes-file)
+  (org-startup-folded 'content)
+  (org-startup-indented t)
+  (org-hide-emphasis-markers t)
+  (org-pretty-entities t)
+  (org-use-sub-superscripts '{})
+  (org-export-with-sub-superscripts nil)
+  (org-support-shift-select nil)
+  (org-log-done 'time)
+  (org-log-into-drawer t)
+  (org-clock-into-drawer t)
+  (org-return-follows-link t)
+  (org-mouse-1-follows-link t)
+  (org-link-descriptive t)
+  :config
+  (add-to-list 'org-modules 'org-habit t))
+
+(use-package evil-org
+  :ensure t
+  :after org
+  :hook (org-mode-hook . evil-org-mode)
+  :custom
+  (evil-org-retain-visual-state-on-shift t)
+  (evil-org-special-o/O '(table-row))
+  (evil-org-use-additional-insert-keys nil)
+  :config
+  (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
+
+(use-package org-node
+  :ensure (:host github :repo "meedstrom/org-node")
+  :after org
+  :hook (org-mode-hook . org-node-cache-mode)
+  :general (:keymaps 'org-mode-map :states '(normal visual motion)
+                     "C-c C-l" #'org-node-insert-link
+                     "C-c C-o" #'org-node-open)
+  :custom
+  (org-node-creation-fn #'org-node-new-file)
+  (org-node-file-directory-ask +org-brain-dir)
+  (org-node-slug-fn #'org-node-slugify-for-web)
+  (org-node-datestamp-format "%Y%m%d%H%M%S")
+  (org-node-extra-id-dirs (list +org-brain-dir))
+  :config
+  (org-node-cache-ensure))
+
+(use-package org-modern
+  :ensure t
+  :after org
+  :custom
+  (org-modern-list '((?+ . "◦")
+                     (?* . "–")
+                     (?- . "•")))
+  :config
+  (set-face-attribute 'org-modern-symbol nil :family "Iosevka")
+  (set-face-attribute 'org-modern-label nil :family "Iosevka")
+  (global-org-modern-mode))
 
 (use-package gptel :ensure t
   ;; Provides LLM integrations.
@@ -2942,83 +3017,6 @@ BODY is executed to prepare the response buffer."
                  (pulsar--pulse nil 'pulsar-green (point-min) (point)))))))))
 
 ;;; OLD CONFIG BELOW
-
-;; Load features.
-
-;; Base setup
-
-;; (use-package rk-emacs)
-;; (use-package rk-basic-settings)
-;; (use-package rk-auto-insert)
-;; (use-package rk-leader-keys)
-;; (use-package rk-darwin :if (equal system-type 'darwin))
-
-;; Editor capabilities
-
-;; (use-package rk-evil)
-;; (use-package rk-tree-sitter)
-;; (use-package rk-completions)
-;; (use-package rk-highlight-thing)
-;; (use-package rk-auto-save)
-;; (use-package rk-search)
-;; (use-package rk-help)
-;; (use-package rk-projectile)
-;; (use-package rk-magit)
-;; (use-package rk-parentheses)
-;; (use-package rk-smartparens)
-;; (use-package rk-restclient)
-;; (use-package rk-dired)
-;; (use-package rk-hl-todo)
-;; (use-package rk-lsp)
-;; (use-package rk-ws-butler)
-;; (use-package rk-aggressive-indent)
-;; (use-package rk-flymake)
-;; (use-package rk-ibuffer)
-;; (use-package rk-org)
-;; (use-package rk-spelling)
-;; (use-package rk-string)
-;; (use-package rk-expand-region)
-;; (use-package rk-yasnippet)
-;; (use-package rk-prodigy)
-;; (use-package rk-ledger)
-;; (use-package rk-pdf)
-;; (use-package rk-sql)
-;; (use-package rk-mermaid)
-;; (use-package rk-bazel)
-;; (use-package rk-fmt)
-
-;; Programming language support
-
-;; (use-package rk-elisp)
-;; (use-package rk-web-mode)
-;; (use-package rk-typescript)
-;; (use-package rk-graphql)
-;; (use-package rk-haskell)
-;; (use-package rk-go)
-;; (use-package rk-markdown)
-;; (use-package rk-yaml)
-;; (use-package rk-docker)
-;; (use-package rk-python)
-;; (use-package rk-rust)
-;; (use-package rk-nim)
-;; (use-package rk-racket)
-;; (use-package rk-protobuf)
-;; (use-package rk-sh)
-;; (use-package rk-hashicorp)
-;; (use-package rk-nix)
-;; (use-package rk-clojure)
-;; (use-package rk-java)
-;; (use-package rk-zig)
-;; (use-package rk-c)
-;; (use-package rk-elixir)
-
-;; Setup envrc
-;; (use-package rk-envrc)
-
-
-;; (use-package opam-user-setup
-;;   :when (f-exists-p "~/.emacs.d/opam-user-setup.el")
-;;   :load-path "~/.emacs.d/opam-user-setup.el")
 
 ;;; Post init setup.
 
