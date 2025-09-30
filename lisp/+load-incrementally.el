@@ -131,22 +131,22 @@ If this is a daemon session, load them all immediately instead."
       (let ((fn (make-symbol (format "+after-call-%s-h" name))))
         (use-package-concat
          `((fset ',fn
-                 (lambda (&rest _)
-                   (condition-case e
-                       ;; If `default-directory' is a directory that doesn't
-                       ;; exist or is unreadable, Emacs throws up file-missing
-                       ;; errors, so we set it to a directory we know exists and
-                       ;; is readable.
-                       (let ((default-directory user-emacs-directory))
-                         (require ',name))
-                     ((debug error)
-                      (message "Failed to load deferred package %s: %s" ',name e)))
-                   (when-let (deferral-list (assq ',name +load-packages--work-queue))
-                     (dolist (hook (cdr deferral-list))
-                       (advice-remove hook #',fn)
-                       (remove-hook hook #',fn))
-                     (delq! deferral-list +load-packages--work-queue)
-                     (unintern ',fn nil)))))
+            (lambda (&rest _)
+              (condition-case e
+                  ;; If `default-directory' is a directory that doesn't
+                  ;; exist or is unreadable, Emacs throws up file-missing
+                  ;; errors, so we set it to a directory we know exists and
+                  ;; is readable.
+                  (let ((default-directory user-emacs-directory))
+                    (require ',name))
+                ((debug error)
+                 (message "Failed to load deferred package %s: %s" ',name e)))
+              (when-let* ((deferral-list (assq ',name +load-packages--work-queue)))
+                (dolist (hook (cdr deferral-list))
+                  (advice-remove hook #',fn)
+                  (remove-hook hook #',fn))
+                (delq! deferral-list +load-packages--work-queue)
+                (unintern ',fn nil)))))
          (let (forms)
            (dolist (hook hooks forms)
              (push (if (string-match-p "-\\(?:functions\\|hook\\)$" (symbol-name hook))

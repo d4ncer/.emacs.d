@@ -134,6 +134,8 @@ advised)."
 
 ;;; Hooks
 
+(define-error '+corelib-hook-error "Error in hook" 'error)
+
 (defvar +corelib--this-hook nil)
 
 (defun +run-hook (hook)

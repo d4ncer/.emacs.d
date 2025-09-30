@@ -82,7 +82,7 @@ current window."
   "Show and copy the full path to the current file in the minibuffer."
   (interactive)
   ;; list-buffers-directory is the variable set in dired buffers
-  (if-let ((path (or (buffer-file-name) list-buffers-directory)))
+  (if-let* ((path (or (buffer-file-name) list-buffers-directory)))
       (message (kill-new path))
     (error "Buffer not visiting a file")))
 

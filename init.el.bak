@@ -1,0 +1,954 @@
+;;; init.el --- Startup file for Emacs.  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2017 Raghuvir Kasturi
+
+;; Author: Raghuvir Kasturi <raghuvir.kasturi@gmail.com>
+
+;;; Commentary:
+
+;;; Code:
+
+(when (< emacs-major-version 30)
+  (user-error "Emacs 30 required"))
+
+(require 'use-package)
+
+;; Bootstrap elpaca package manager
+(load-file (file-name-concat user-emacs-directory "elpaca-bootstrap.el"))
+
+;; Setup elpaca use-package integration
+(elpaca elpaca-use-package
+  (elpaca-use-package-mode))
+
+;; Add modules directory to load-path
+(eval-and-compile
+  (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/"))
+  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/")))
+
+;;; Leader key
+
+(use-package general :ensure (:wait t) :demand t
+  ;; General provides a featureful key binding system. It makes defining leader
+  ;; key bindings much easier.
+  :init
+  (general-auto-unbind-keys)
+  (general-unbind :states '(normal motion) "SPC")
+  :config
+  (require '+window)
+  (require '+roam)
+  (require '+edit-cmds)
+
+  (general-define-key
+   :states '(normal motion insert)
+   :prefix "SPC"
+   :non-normal-prefix "C-SPC"
+   :prefix-command '+leader-key
+
+   "SPC" '(execute-extended-command :wk "M-x")
+   "RET" '(gptel-menu :wk "LLM...")
+   "." '(other-window-prefix :wk "in other window...")
+   "!" '(async-shell-command :wk "shell command")
+   "|" '(rotate-layout :wk "rotate window layout")
+   "-" '(window-toggle-side-windows :wk "side windows")
+   ":" '(pp-eval-expression :wk "eval")
+   ";" '(comment-dwim :wk "REPL")
+   "d" '(dired :wk "dir editor")
+   "i" '(consult-imenu :wk "imenu")
+   "r" #'vertico-repeat
+   "u" '(universal-argument :wk "C-u")
+   "x" '(execute-extended-command :wk "M-x")
+   "K" 'man
+   "T" (list (defun +goto-mode-template-file ()
+               (interactive)
+               (let* ((modes (nreverse (parent-mode-list major-mode)))
+                      (mode (completing-read "Snippets table for mode: " modes nil t))
+                      (filename (format "%s.eld" (string-remove-suffix "-mode" mode))))
+                 (find-file (file-name-concat user-emacs-directory "templates" filename))))
+             :wk "edit templates...")
+
+
+   "'" (general-predicate-dispatch #'poporg-dwim
+
+         ;; Exit indirect edit session if active
+
+         (bound-and-true-p poporg-mode) #'poporg-edit-exit
+         (bound-and-true-p edit-indirect--overlay) #'edit-indirect-commit
+         (bound-and-true-p org-src-mode) #'org-edit-src-exit
+
+         ;; Otherwise, open indirect-edit buffer
+
+         (and (derived-mode-p 'prog-mode)
+              ;; Are we in a string or comment? See: `parse-partial-sexp'
+              (or (nth 3 (syntax-ppss)) (nth 4 (syntax-ppss))))
+         #'poporg-dwim
+
+         (and (derived-mode-p 'prog-mode) (region-active-p)) #'edit-indirect-region
+         (equal (buffer-name) "*Edit Formulas*") #'org-table-fedit-finish
+         (derived-mode-p 'org-mode) #'org-edit-special
+         (and (derived-mode-p 'markdown-mode) (markdown-code-block-at-point-p)) 'markdown-edit-code-block)
+
+   "/" '(consult-ripgrep :wk "search (rg)")
+   "*" (list (defun +consult-ripgrep-symbol ()
+               (interactive)
+               (consult-ripgrep nil (format "%s" (symbol-at-point))))
+             :wk "search (symbol)")
+
+   "<tab>" (list (defun +swap-buffers ()
+                   "Switch between the previous buffer and the current one."
+                   (interactive)
+                   (switch-to-buffer nil))
+                 :wk "swap bufs")
+
+   "p"  '(nil :wk "project")
+   "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
+   "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
+   "pI" '(projectile-invalidate-cache :wk "invalidate cache")
+   "pc" '(projectile-compile-project :wk "compile project")
+   "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
+   "pr" '(projectile-replace :wk "replace (project)")
+   "pt" '(projectile-test-project :wk "test (project)")
+   "pu" '(projectile-run-project :wk "run (project)")
+   "pp" '(projectile-switch-project :wk "switch project")
+   "pf" '(projectile-find-file :wk "find file (project)")
+   "pF" '(projectile-recentf :wk "find recent file (project)")
+   "pd" '(projectile-find-dir :wk "find dir (project)")
+   "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)")
+   "ps" (list (defun +find-file-in-project ()
+                (interactive)
+                (let ((projectile-switch-project-action #'projectile-find-file))
+                  (projectile-switch-project)))
+              :wk "find file (other project)")
+
+   "h"  '(nil :wk "help")
+   "h" help-map
+
+   "," '(nil :wk "structure")
+   ",n" '(puni-forward-sexp :wk "forward-sexp")
+   ",p" '(puni-backward-sexp :wk "backward-sexp")
+   ",<" '(puni-backward-sexp-or-up-list :wk "backward-sexp-or-up-list")
+   ",c" '(puni-convolute :wk "convolute")
+   ",d" '(+forward-kill-sexp :wk "kill sexp forward")
+   ",D" '(+backward-kill-sexp :wk "kill sexp back")
+
+   ",k" '(puni-splice-killing-forward :wk "splice-killing-forward")
+   ",K" '(puni-splice-killing-backward :wk "splice-killing-backward")
+   ;; TODO: define a killing-around variant.
+   ",s" '(puni-splice-killing-backward :wk "splice-killing-backward")
+   ",r" '(puni-raise :wk "raise")
+   ",b" '(puni-barf-forward :wk "barf-forward")
+   ",B" '(puni-barf-backward :wk "barf-backward")
+   ",m" '(puni-slurp-forward :wk "slurp-forward")
+   ",M" '(puni-slurp-backward :wk "slurp-backward")
+   ",t" '(puni-transpose :wk "transpose")
+   ",u" '(puni-splice :wk "splice")
+   ",x" '(puni-split :wk "split")
+
+   "a"  '(nil :wk "apps")
+   "ac" #'quick-calc
+   "aC" #'full-calc
+   "ae" #'eshell
+   "ar" (general-predicate-dispatch 'profiler-start
+          (and (featurep 'profiler) (profiler-running-p)) #'+profiler-stop-and-report)
+
+   "ap"  '(nil :wk "elpaca")
+   "app" #'elpaca-manager
+   "apl" #'elpaca-log
+   "api" #'elpaca-info
+   "apb" #'elpaca-browse
+   "apv" #'elpaca-visit
+
+   "b"  '(nil :wk "buffers")
+   "ba" '(mark-whole-buffer :wk "select buffer")
+   "bb" '(bury-buffer :wk "bury")
+   "bd" '(bury-buffer :wk "bury")
+   "bD" '(kill-current-buffer :wk "kill")
+   "bl" '(ibuffer :wk "list")
+   "bn" '(next-buffer :wk "next")
+   "bs" '(switch-to-buffer :wk "switch buffer")
+   "bp" '(previous-buffer :wk "prev")
+   "bc" (list
+         (general-predicate-dispatch #'clone-indirect-buffer
+           (region-active-p) #'+clone-indirect-buffer-of-region)
+         :wk "clone indirect")
+
+   "f"  '(nil :wk "files")
+   "ff" '(find-file :wk "find")
+   "fF" '(find-file-other-window :wk "find (other window)")
+   "fs" '(save-buffer :wk "save")
+   "fS" '(save-some-buffers :wk "save some")
+   "fR" '(rename-visited-file :wk "rename")
+   "fr" '(recentf :wk "recent")
+   "fw" '(write-file :wk "write copy")
+   "fo" '(find-sibling-file :wk "other file")
+
+   "fD" (list (defun +delete-file-and-buffer ()
+                (interactive)
+                (let ((file (buffer-file-name)))
+                  (kill-buffer (current-buffer))
+                  (when file
+                    (delete-file file))))
+              :wk "delete file & buf")
+
+   "fy" (list (defun +copy-file-path ()
+                (interactive)
+                (if-let* ((file (buffer-file-name)))
+                    (progn
+                      (kill-new file)
+                      (message "Copied to clipboard => %s" file))
+                  (user-error "Buffer is not visiting a file")))
+              :wk "copy (full path)")
+
+   "fd" (list (defun +copy-file-directory ()
+                (interactive)
+                (if-let* ((file (buffer-file-name))
+                          (dir (file-name-directory file)))
+                    (progn
+                      (kill-new dir)
+                      (message "Copied to clipboard => %s" dir))
+                  (user-error "Buffer is not visiting a file")))
+              :wk "copy (dir)")
+
+   "fv" (list (defun +revisit-file ()
+                (interactive)
+                (if-let* ((file (buffer-file-name)))
+                    (find-alternate-file file)
+                  (user-error "Buffer is not visiting a file")))
+              :wk "reload")
+
+   "n"  '(nil :wk "narrowing")
+   "nf" '(narrow-to-defun :wk "defun")
+   "nr" '(narrow-to-region :wk "region")
+   "nw" #'widen
+
+   "c"  '(nil :wk "code/comments")
+   "cm" '(xref-find-references :wk "find refs")
+   "cr" '(comment-dwim :wk "comment (dwim)")
+   "cd" '(eglot-find-typeDefinition :wk "find type def")
+   "cc" '(eglot-find-declaration :wk "find decl")
+   "ci" '(eglot-find-implementation :wk "find impl")
+   "cl" '(comment-line :wk "comment out")
+
+   "g"  '(nil :wk "git/goto")
+   "gb" '(magit-blame :wk "blame")
+   "gd" '(magit-diff-buffer-file :wk "buffer diff")
+   "gf" '(magit-file-dispatch :wk "file actions...")
+   "gs" '(magit-status :wk "status")
+   "gl" '(magit-log-buffer-file :wk "buffer log")
+   "gr" '(browse-at-remote :wk "open on GitHub")
+   "gt" '(git-timemachine-toggle :wk "file history")
+   "gy" '(browse-at-remote-kill :wk "copy GitHub link ")
+
+   "g?" (list (defun +goto-messages ()
+                (interactive)
+                (display-buffer "*Messages*"))
+              :wk "messages")
+
+   "ge" (list (defun +goto-emacs-init-file ()
+                (interactive)
+                (find-file (file-name-concat user-emacs-directory "init.el")))
+              :wk "init file")
+
+   "gS" (list (defun +goto-emacs-site-file ()
+                (interactive)
+                (find-file
+                 (read-file-name "Site file: " +site-files-directory)))
+              :wk "site file...")
+
+   "gn" (list (defun +goto-nix-file ()
+                (interactive)
+                (project-find-file-in  "flake.nix" nil
+                                       (project-current nil "~/.config/nix-configuration")))
+              :wk "nix config file...")
+
+   "L" '(gptel-menu :wk "LLM menu")
+   "l" '(nil :wk "LLMs")
+   "la" '(gptel-add :wk "add/remove from context")
+   "lf" '(gptel-add-file :wk "add file to context")
+   "ls" '(gptel-send :wk "send")
+   "l?" '(gptel-menu :wk "menu")
+   "ll" '(gptel :wk "open chat")
+   "lw" '(gptel :wk "rewrite")
+
+   "o"  '(nil :wk "org")
+   "on" (list (defun +org-goto-notes ()
+                (interactive)
+                (find-file org-default-notes-file))
+              :wk "notes")
+   "oi" (list (defun +goto-org-index ()
+                (interactive)
+                (find-file (file-name-concat org-directory "index.org")))
+              :wk "index")
+   "ot" (list (defun +goto-org-todos ()
+                (interactive)
+                (find-file (file-name-concat org-directory "todos.org")))
+              :wk "todos")
+   "oa" (list (defun +org-agenda-dwim ()
+                (interactive)
+                (org-agenda nil "p"))
+              :wk "agenda")
+
+   "oj" '(consult-org-agenda :wk "agenda file heading...")
+   "og" '(org-capture-goto-last-stored :wk "goto captured")
+   "ov" '(org-tags-view :wk "search by tag")
+   "ok" #'org-capture
+   "ol" '(org-store-link :wk "store link")
+   "of" '(org-node-find :wk "find (node)")
+   "os" '(org-node-grep :wk "search (node)")
+   "ow" '(timekeep-visit-node :wk "work file")
+
+   "oc" '(nil :wk "clock")
+   "occ" '(org-clock-in-last :wk "clock in (last)")
+   "ocd" (list (general-predicate-dispatch #'org-clock-display
+                 (not (derived-mode-p 'org-mode))
+                 (defun +org-clock-display-last (&optional arg)
+                   "Jump to the latest clock and display clocking info in that buffer."
+                   (interactive "P")
+                   (org-clock-goto arg)
+                   (org-clock-display)))
+               :wk "display")
+   "oci" '(org-clock-in :wk "clock in")
+   "oco" '(org-clock-out :wk "clock out")
+   "ocr" '(org-resolve-clocks :wk "resolve")
+   "ocg" '(org-clock-goto :wk "goto clock")
+   "ocq" '(org-clock-cancel :wk "cancel")
+
+   "or" '(nil :wk "node")
+   "ord" (list (defun +org-node-daily ()
+                 (interactive)
+                 (let* ((date (format-time-string "%Y-%m-%d"))
+                        (title (format "Daily: %s" date))
+                        (filename (format "%s-daily.org" date)))
+                   (find-file (file-name-concat org-directory "daily" filename))
+                   (when (= (buffer-size) 0)
+                     (insert (format "#+TITLE: %s\n#+DATE: %s\n\n* Daily Notes\n\n" title date)))))
+               :wk "daily journal")
+   "orl" '(org-node-extract-subtree :wk "extract subtree")
+   "orr" '(org-node-reset :wk "reset cache")
+   "ort" '(org-node-tag-grep :wk "search by tag")
+
+   "e"  '(nil :wk "errors")
+   "el" '(consult-flymake :wk "error list")
+   "en" '(next-error :wk "next error")
+   "ep" '(previous-error :wk "prev error")
+
+   "kr" '(consult-yank-pop :wk "kill-ring")
+
+   "q" '(nil :wk "quit")
+   "qq" '(save-buffers-kill-emacs :wk "quit emacs")
+
+   "s" '(nil :wk "selection/search")
+   "se" '(evil-iedit-state/iedit-mode :wk "iedit")
+   ;; TODO FIX THIS FIRST - see buffer on right for help
+   "ss" (list (defun +symbol-in-file ()
+                (interactive)
+                (let ((selection (if (use-region-p)
+                                     (buffer-substring-no-properties (region-beginning) (region-end))
+                                   (substring-no-properties (thing-at-point 'symbol)))))
+                  (consult-line selection)))
+              :wk "search symbol in file")
+   "sp" (list (defun +symbol-in-project ()
+                "Search for occurrences of the symbol or sub-string at point in the project."
+                (interactive)
+                (let ((selection (if (use-region-p)
+                                     (buffer-substring-no-properties (region-beginning) (region-end))
+                                   (substring-no-properties (thing-at-point 'symbol)))))
+                  (consult-ripgrep (project-root (project-current)) selection)))
+              :wk "search symbol in project")
+
+   "t"  '(nil :wk "toggles")
+   "tb" '(breadcrumb-mode :wk "breadcrumbs (header)")
+   "th" '(global-hl-line-mode :wk "highlight line")
+   "tf" '(toggle-frame-maximized :wk "frame")
+   "ti" '(indent-bars-mode :wk "indent bars")
+   "tl" '(global-display-line-numbers-mode :wk "line numbers")
+   "tm" '(toggle-input-method :wk "input method")
+   "ts" '(spell-fu-mode :wk "spellchecks")
+   "tr" '(read-only-mode :wk "readonly")
+   "tw" '(whitespace-mode :wk "whitespace")
+
+   "v" '(er/expand-region :wk "expand")
+
+   "w"  '(nil :wk "windows")
+   "w-" '(+split-window-vertically-dwim :wk "vsplit")
+   "w/" '(+split-window-horizontally-dwim :wk "hsplit")
+   "w="  '(balance-windows :wk "balance")
+   "wd" '(delete-window :wk "delete")
+   "wo"  '(+delete-nondedicated-windows :wk "delete others")
+   "wO"  '(delete-other-windows :wk "delete (+dedicated)")
+   "wh" '(windmove-left :wk "move left")
+   "wl" '(windmove-right :wk "move right")
+   "wk" '(windmove-up :wk "move up")
+   "wj" '(windmove-down :wk "move down")
+   "wq" '(delete-window :wk "delete")
+   "wr" '(evil-window-rotate-downwards :wk "rotate")
+   "ws" '(consult-register-load :wk "registers")
+   "wS" '(window-configuration-to-register :wk "save to reg")
+   "wt"  '(+toggle-window-dedication :wk "toggle dedication")
+   "ww" '(other-window :wk "other")
+
+   "z" '(global-text-scale-adjust :wk "text scaling"))
+
+  ;; Support multiple SPC-u calls in sequence to chain universal-argument calls.
+
+  (keymap-set universal-argument-map "SPC u" #'universal-argument-more))
+
+(defmacro +local-leader-set-key (keymaps &rest general-args)
+  (declare (indent 1))
+  `(general-define-key :prefix "," :states '(normal motion) :keymaps ,keymaps ,@general-args))
+
+;;; Modules
+
+;; Load core infrastructure
+(require 'mod-core)
+
+;; Load evil mode
+(require 'mod-evil)
+
+;; Load completion infrastructure
+(require 'mod-completion)
+
+;; Load UI and themes
+(require 'mod-ui)
+
+;; Load window management
+(require 'mod-windows)
+
+;; Load editor utilities
+(require 'mod-editor)
+
+;; Load navigation tools
+(require 'mod-nav)
+
+;; Load project management
+(require 'mod-project)
+
+;; Load git and version control
+(require 'mod-git)
+
+;; Load LSP and tree-sitter
+(require 'mod-lsp)
+
+;; Load code formatting
+(require 'mod-format)
+
+;; Load debugging tools
+(require 'mod-debug)
+
+;; Load dired file manager
+(require 'mod-dired)
+
+;; Load eshell
+(require 'mod-eshell)
+
+;; Load AI integration
+(require 'mod-ai)
+
+;; Load programming languages
+(require 'mod-languages)
+
+;; Load org mode (deferred)
+(require 'mod-org)
+
+(use-package paragraphs
+  ;; Emacs' core paragraph parser.
+  :custom
+  (sentence-end-double-space nil))
+
+(defvar +auto-save-dir (file-name-concat user-emacs-directory "autosave/"))
+
+(use-package files
+  ;; General built-in file IO.
+  :custom
+  (backup-inhibited t)
+  (require-final-newline t)
+  (find-file-visit-truename t)
+  (make-backup-files nil)
+  (confirm-nonexistent-file-or-buffer nil)
+  (auto-mode-case-fold nil)
+  (version-control nil)
+  (backup-by-copying t)
+  (delete-old-versions t)
+  (kept-old-versions 5)
+  (kept-new-versions 5)
+  (insert-directory-program "gls")
+  (backup-directory-alist `(("." . ,+auto-save-dir)))
+  (auto-save-list-file-prefix (file-name-concat +auto-save-dir ".saves-"))
+  (auto-save-file-name-transforms `((".*" ,+auto-save-dir t)))
+
+  ;; Used by `find-sibling-file' to figure out what files are related.
+  (find-sibling-rules
+   `(
+     ;; Tests -> impl in TS
+     ,(list (rx (group (+? any)) (or ".test" ".integration") ".ts" eos)
+            (rx (backref 1) ".ts"))
+
+     ;; Impl -> tests in TS
+     ,(list (rx (group (+? any)) ".ts" eos)
+            (rx (backref 1) ".test.ts")
+            (rx (backref 1) ".integration.ts"))
+     ))
+
+  :config
+  (define-advice after-find-file (:around (fn &rest args) dont-block-on-autosave-exists)
+    "Prevent the editor blocking to inform you when an autosave file exists."
+    (cl-letf (((symbol-function #'sit-for) #'ignore))
+      (apply fn args))))
+
+(use-package tramp
+  ;; Provides remote editing support, e.g. over SSH connections.
+  :after files
+  :config
+  (setq tramp-backup-directory-alist backup-directory-alist)
+  (setq tramp-auto-save-directory (file-name-concat user-emacs-directory "tramp-autosave/")))
+
+(use-package uniquify
+  ;; Controls how buffers with conflicting names are managed.
+  :custom
+  (uniquify-buffer-name-style 'forward))
+
+
+;; Disable bidirectional text by default.
+(setq-default bidi-display-reordering 'left-to-right)
+(setq-default bidi-paragraph-direction 'left-to-right)
+(setq bidi-inhibit-bpa t)
+
+;; Don't render cursors or regions in non-focused windows.
+(setq-default cursor-in-non-selected-windows nil)
+(setq highlight-nonselected-windows nil)
+
+(setq fast-but-imprecise-scrolling t)
+
+(setq redisplay-skip-fontification-on-input t)
+
+(use-package elpaca
+  ;; Configure aspects of elpaca not required for initial package bootstrap.
+  :general-config
+  (:states 'normal :keymaps 'elpaca-manager-mode-map "/" #'elpaca-ui-search)
+  (:keymaps 'elpaca-info-mode-map "q" #'quit-window))
+
+(use-package profiler
+  :config
+  (defun +profiler-stop-and-report (&optional continue-p)
+    "Stop the profiler and show results.
+
+With optional prefix arg CONTINUE-P, keep profiling."
+    (interactive "P")
+    (let ((ran-p (profiler-running-p)))
+
+      (unless continue-p
+        (profiler-stop))
+      (profiler-report)
+      (when ran-p
+        (if continue-p
+            (message "Profiler still recording")
+          (message "Profiler stopped"))))))
+
+(use-package goto-addr
+  ;; Turns URLs in the buffer into clickable buttons.
+  :init
+  (defun +goto-address-maybe-h ()
+    (unless (derived-mode-p 'org-mode 'org-agenda-mode)
+      (goto-address)
+      (goto-address-mode +1)))
+  :hook ((prog-mode-hook text-mode-hook conf-mode-hook magit-process-mode-hook) . +goto-address-maybe-h)
+
+  ;; Teach evil-ret to open URLs.
+  :init
+  (define-advice evil-ret (:before-until (&rest _) goto-addr)
+    (when-let* ((url (thing-at-point 'url)))
+      (browse-url url)
+      t)))
+
+(use-package better-jumper :ensure t
+  :disabled t
+  ;; Maintains a jump list so you can more easily get back to where you were if
+  ;; a command takes you somewhere else.
+  :after-call +first-file-hook +first-buffer-hook
+  :preface
+  (defun +set-jump-point ()
+    (when (get-buffer-window)
+      (better-jumper-set-jump))
+    nil)
+  :init
+  (better-jumper-mode +1)
+
+  :config
+  (add-hook 'kill-buffer-hook #'+set-jump-point)
+  (advice-add #'consult-imenu :before #'+set-jump-point)
+  (advice-add #'org-mark-ring-push :before #'+set-jump-point)
+  (add-hook 'org-open-at-point-functions #'+set-jump-point)
+
+  :general-config
+  ([remap evil-jump-forward]  #'better-jumper-jump-forward
+   [remap evil-jump-backward] #'better-jumper-jump-backward
+   [remap xref-pop-marker-stack] #'better-jumper-jump-backward
+   [remap xref-go-back] #'better-jumper-jump-backward
+   [remap pop-tag-mark] #'better-jumper-jump-backward
+   [remap xref-go-forward] #'better-jumper-jump-forward))
+
+(use-package server
+  ;; Use existing Emacs instances to edit files as $EDITOR.
+  :if (display-graphic-p)
+  :after-call +first-input-hook +first-file-hook
+  :config
+  (unless (server-running-p)
+    (server-start)))
+
+(use-package so-long
+  ;; Improve performance of files with very long lines.
+  :hook (elpaca-after-init-hook . global-so-long-mode))
+
+;; Teach Emacs that C-i and C-m do in fact exist.
+(pcase-dolist (`(,key ,fallback . ,events)
+               '(([C-i] [?\C-i] tab kp-tab)
+                 ([C-m] [?\C-m] return kp-return)))
+  (define-key
+   input-decode-map fallback
+   (lambda (&rest _args)
+     (interactive)
+     (if (when-let ((keys (this-single-command-raw-keys)))
+           (and (display-graphic-p)
+                (not (cl-loop for event in events
+                              if (cl-position event keys)
+                              return t))
+                ;; Use FALLBACK if nothing is bound to KEY, otherwise we've
+                ;; broken all pre-existing FALLBACK keybinds.
+                (key-binding (vconcat (if (= 0 (length keys)) [] (cl-subseq keys 0 -1))
+                                      key)
+                             nil t)))
+         key fallback))))
+
+;; TODO: Why is this bound on some installations but not others? 🤔
+(when (boundp 'trusted-content)
+  (add-to-list 'trusted-content (file-name-concat user-emacs-directory "early-init.el"))
+  (add-to-list 'trusted-content (file-name-concat user-emacs-directory "init.el"))
+  (add-to-list 'trusted-content (file-name-concat user-emacs-directory "modules/"))
+  (add-to-list 'trusted-content (file-name-concat user-emacs-directory "lisp/")))
+
+(use-package string-inflection :ensure t
+  ;; Provides commands for cycling different string casing styles for the ident
+  ;; at point, e.g. UpperCamelCase, lowerCamelCase, etc.
+  :general (:states '(normal insert) "M--" #'string-inflection-all-cycle))
+
+(use-package envrc :ensure t
+  ;; Adds direnv support.
+  :hook (+first-file-hook . envrc-global-mode)
+  :custom
+  (envrc-show-summary-in-minibuffer nil) ; very noisy.
+  )
+
+(use-package exec-path-from-shell :ensure t
+  ;; Use the shell to get some environment vars; necessary when the window
+  ;; system runs Emacs under a very different process environment.
+  ;;
+  ;; Also, turns out we need this for direnv to work right in compilation buffers.
+  :after-call +first-buffer-hook +first-file-hook
+  :if (memq system-type '(darwin x))
+  :demand t
+  :config
+  (pushnew! exec-path-from-shell-variables
+            "SSH_AUTH_SOCK"
+            "SSH_AGENT_PID")
+
+  ;; Speed up by using a non-interactive shell.
+  (delq! "-i" exec-path-from-shell-arguments)
+
+  (exec-path-from-shell-initialize))
+
+(use-package mise :ensure t
+  :demand t
+  :hook (+first-file-hook . global-mise-mode))
+
+
+(use-package proced
+  ;; User-process management UI.
+  :custom
+  (proced-enable-color-flag t))
+
+(use-package replace
+  ;; Defines search+replace functionality, including `occur'.
+  :hook
+  (occur-mode-hook . hl-line-mode))
+
+(use-package grep
+  ;; Buffers showing filesystem search results. The default program is grep;
+  ;; change it to ripgrep.
+  :custom
+  (grep-use-headings t)
+  (grep-template "rg --line-number --with-filename --null --regexp <R> <F>"))
+
+(use-package wgrep :ensure t
+  ;; Adds a mode for grep-like results buffers that allows you to edit the
+  ;; underlying files directly.
+  ;;
+  ;; TODO: Replace with built-in `grep-edit-mode' once I'm on Emacs 31.
+  :commands wgrep-change-to-wgrep-mode
+  :custom
+  (wgrep-auto-save-buffer t))
+
+(use-package xref
+  ;; Provides the interface for navigating symbol definitions & references, etc.
+  :custom
+  (xref-search-program 'ripgrep))
+
+(use-package indent
+  ;; Indentation behaviour.
+  :custom
+  (tab-first-completion 'word-or-paren-or-punct))
+
+;;; Visual enhancements
+
+(use-package hideshow
+  ;; Basic code folding.
+  :hook (prog-mode-hook . hs-minor-mode))
+
+(use-package page-break-lines :ensure t
+  ;; Displays ^L page break characters as a horizontal rule. Useful for
+  ;; demarcating sections of a file.
+  :after-call +first-file-hook +first-buffer-hook
+  :config
+  (global-page-break-lines-mode +1))
+
+(use-package hide-mode-line :ensure (hide-mode-line
+                                     :host github
+                                     :repo "hlissner/emacs-hide-mode-line")
+  ;; Disable the mode-line in situations where it's not useful.
+  :hook ((completion-list-mode-hook
+          Man-mode-hook
+          ielm-mode-hook
+          calendar-mode-hook
+          eshell-mode-hook
+          compilation-mode-hook
+          help-mode-hook
+          shell-command-mode-hook
+          gptel-mode-hook
+          org-node-mode-hook
+          )
+         . hide-mode-line-mode))
+
+
+(use-package paren
+  ;; Provides `show-paren-mode', which highlights the matched pair at point.
+  :custom
+  (show-paren-delay 0.1)
+  (show-paren-when-point-inside-paren t)
+  (show-paren-when-point-in-periphery t)
+  (show-paren-context-when-offscreen 'overlay))
+
+(use-package paren-face :ensure t
+  ;; Adds a face for parentheses in lisps. I hijack it to dim semicolons and
+  ;; other non-critical syntax elements in other langs.
+  :hook (lisp-data-mode-hook c-ts-base-mode-hook)
+
+  :config
+  (setq-hook! 'c-ts-base-mode-hook
+    paren-face-regexp (rx (any ";,"))))
+
+(use-package breadcrumb :ensure t
+  :custom
+  (breadcrumb-idle-time 0.3))
+
+;;; Documentation systems
+
+(use-package help
+  ;; Defines the main help functionality for Emacs & Emacs-Lisp.
+  :hook (help-mode-hook . turn-on-visual-line-mode)
+  :custom
+  (help-window-select t)
+  :general
+  (:keymaps 'help-map
+            "h" nil ; view-hello-file: never intended, always annoying
+            "l" #'find-library
+            "c" #'describe-face
+            "P" #'describe-text-properties))
+
+(use-package help-fns
+  :general
+  (:keymaps 'help-map
+            "K" #'describe-keymap))
+
+(use-package help-mode
+  ;; Major-mode for help buffers.
+  :general (:keymaps 'help-mode-map :states 'normal
+                     "^" #'help-go-back
+                     "M-n" #'forward-button
+                     "M-p" #'backward-button
+                     "C-n" #'forward-button
+                     "C-p" #'backward-button))
+
+(use-package eldoc
+  ;; Display help hints in the echo area as you move around.
+  :config
+  ;; Teach eldoc to re-run after these commands.
+  (eldoc-add-command 'evil-normal-state
+                     'evil-insert
+                     'evil-change
+                     'evil-delete
+                     'evil-replace))
+
+(use-package info
+  ;; Emacs' built-in system for reading texinfo manuals.
+  :general
+  (:keymaps 'help-map "s" #'info-apropos)
+  (:keymaps 'Info-mode-map :states 'normal
+            "^" #'Info-up
+            "C-n" #'Info-forward-node
+            "C-p" #'Info-backward-node))
+
+(use-package man
+  ;; Built-in manpage reader.
+  :custom
+  ;; Tell man to use pop-to-buffer under the hood, which uses display-buffer and
+  ;; selects the window.
+  (Man-notify-method 'aggressive))
+
+(use-package imenu
+  ;; Emacs' built-in navigator for points of interest in a buffer.
+  :general-config
+  (:keymaps 'Info-mode-map [remap consult-imenu] #'Info-menu))
+
+;;; Text & programming modes
+
+(use-package text-mode
+  ;; Emacs' general parent mode for non-programming-language text files.
+  :mode  ("/LICENSE\\'")
+
+  ;; Not sure of the performance impact of this... leave off for now.
+  ;; :hook (text-mode-hook . visual-line-mode)
+  )
+
+(use-package tempel :ensure t
+  ;; Text snippets.
+  ;;
+  :general
+  (:keymaps 'tempel-map :states 'normal
+            "<escape>" #'tempel-done)
+  :custom
+  (tempel-path (file-name-concat +templates-dir "*.eld"))
+  :init
+  (add-hook! '(prog-mode-hook text-mode-hook config-mode-hook)
+    (add-hook 'completion-at-point-functions #'tempel-expand -90 t)))
+
+(use-package autoinsert
+  :after-call +first-buffer-hook +first-file-hook
+  :custom
+  (auto-insert-directory (file-name-concat user-emacs-directory "file-templates/"))
+  (auto-insert-alist nil)
+  (auto-insert-query nil)
+  :config
+  (auto-insert-mode +1))
+
+(use-package +file-templates
+  :after autoinsert
+  :demand t
+  :config
+  (+define-file-template (rx ".el" eos) "emacs-lisp.eld"))
+
+(use-package pdf-tools :ensure t
+  ;; A better PDF viewer for Emacs
+  :mode ("\\.pdf\\'" . pdf-view-mode)
+  :magic ("%PDF" . pdf-view-mode)
+  :init
+  (defun +unset-evil-cursor ()
+    (setq-local evil-normal-state-cursor (list nil)))
+  :hook (pdf-view-mode-hook . +unset-evil-cursor)
+  :config
+  (pdf-tools-install :no-query)
+  :custom
+  (pdf-view-display-size 'fit-page)
+  (pdf-view-resize-factor 1.1)
+  :general
+  (:keymaps 'pdf-view-mode-map :states '(normal motion)
+            "j" #'pdf-view-next-line-or-next-page
+            "k" #'pdf-view-previous-line-or-previous-page
+            "J" #'pdf-view-next-page
+            "K" #'pdf-view-previous-page
+            "gg" #'pdf-view-first-page
+            "G" #'pdf-view-last-page
+            "=" #'pdf-view-enlarge
+            "-" #'pdf-view-shrink
+            "0" #'pdf-view-scale-reset
+            "/" #'isearch-forward)
+  :config
+  (with-eval-after-load 'nano-modeline
+    (add-hook 'pdf-view-mode-hook #'+nano-modeline-default)))
+
+
+
+(use-package org
+  :ensure t
+  :after-call +first-file-hook
+  :hook ((org-mode-hook . visual-line-mode))
+  :general (:keymaps 'org-mode-map :states '(normal visual motion)
+                     "TAB" #'org-cycle
+                     "S-TAB" #'org-shifttab)
+  :custom
+  (org-directory org-directory)
+  (org-default-notes-file org-default-notes-file)
+  (org-startup-folded 'content)
+  (org-startup-indented t)
+  (org-hide-emphasis-markers t)
+  (org-pretty-entities t)
+  (org-use-sub-superscripts '{})
+  (org-export-with-sub-superscripts nil)
+  (org-support-shift-select nil)
+  (org-log-done 'time)
+  (org-log-into-drawer t)
+  (org-clock-into-drawer t)
+  (org-return-follows-link t)
+  (org-mouse-1-follows-link t)
+  (org-link-descriptive t)
+  :config
+  (add-to-list 'org-modules 'org-habit t))
+
+
+(use-package org-node
+  :ensure (:host github :repo "meedstrom/org-node")
+  :after org
+  :hook (org-mode-hook . org-node-cache-mode)
+  :general (:keymaps 'org-mode-map :states '(normal visual motion)
+                     "C-c C-l" #'org-node-insert-link
+                     "C-c C-o" #'org-node-open)
+  :custom
+  (org-node-creation-fn #'org-node-new-file)
+  (org-node-file-directory-ask +org-brain-dir)
+  (org-node-slug-fn #'org-node-slugify-for-web)
+  (org-node-datestamp-format "%Y%m%d%H%M%S")
+  (org-node-extra-id-dirs (list +org-brain-dir))
+  :config
+  (org-node-cache-ensure))
+
+(use-package org-modern
+  :ensure t
+  :after org
+  :custom
+  (org-modern-list '((?+ . "◦")
+                     (?* . "–")
+                     (?- . "•")))
+  :config
+  (set-face-attribute 'org-modern-symbol nil :family "Iosevka"))
+
+;;; OLD CONFIG BELOW
+
+;;; Post init setup.
+
+;; Load keychain after everything else to ensure env is setup
+
+(use-package keychain-environment
+  :ensure t
+  :config
+  (keychain-refresh-environment))
+
+;;; Print overall startup time.
+
+(unless noninteractive
+  (let ((elapsed (float-time (time-subtract (current-time) emacs-start-time))))
+    (message "Loading %s...done (%.3fs)" load-file-name elapsed)))
+
+(use-package private-config
+  :when (file-directory-p "~/private")
+  :load-path "~/private")
+
+(provide 'init)
+
+;;; init.el ends here

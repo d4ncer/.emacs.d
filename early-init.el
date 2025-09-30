@@ -10,7 +10,8 @@
 
 
 (eval-and-compile
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/")))
+  (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/"))
+  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/")))
 
 (setq package-enable-at-startup nil)
 
