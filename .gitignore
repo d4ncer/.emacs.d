@@ -54,6 +54,5 @@ codeium
 # AI
 chatgpt
 AGENT.md
-CLAUDE.md
 .claude/
 cleanup-elc.sh
