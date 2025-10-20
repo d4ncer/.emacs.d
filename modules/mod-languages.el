@@ -115,8 +115,14 @@
   (elixir-ts-mode-hook . eglot-ensure)
   :config
   (with-eval-after-load 'eglot
-    (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
-      (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,+elixir-ls-bin))))
+    (setf (alist-get '(elixir-mode elixir-ts-mode heex-ts-mode)
+                     eglot-server-programs
+                     nil nil #'equal)
+          (if (and (fboundp 'w32-shell-dos-semantics)
+                   (w32-shell-dos-semantics))
+              '("expert-ls")
+            (eglot-alternatives
+             '("expert-ls" "start_lexical.sh")))))
 
   ;; Switching between files & tests
 
