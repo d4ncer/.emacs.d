@@ -58,7 +58,7 @@ Each function is passed the path of the file that was deleted.")
 (defun rk-reload-file ()
   "Revisit the current file."
   (interactive)
-  (when-let (path (buffer-file-name))
+  (when-let* ((path (buffer-file-name)))
     (find-alternate-file path)))
 
 (defun rk-alternate-buffer (&optional window)
@@ -136,7 +136,7 @@ current window."
   (when (and (f-exists? dest) (not (y-or-n-p "File exists.  Overwrite? ")))
     (user-error "Aborted"))
   (rename-file src dest t)
-  (-when-let (buf (get-file-buffer src))
+  (when-let* ((buf (get-file-buffer src)))
     (with-current-buffer buf
       (rename-buffer dest)
       (set-visited-file-name dest)

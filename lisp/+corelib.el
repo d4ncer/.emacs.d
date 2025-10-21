@@ -354,7 +354,7 @@ P is the point at which we run `syntax-ppss'"
               ;; starters and enders, because `syntax-ppss' does not yet know if
               ;; we are inside a comment or not (e.g. / can be a division or
               ;; comment starter...).
-              (when-let ((s (car (syntax-after pt))))
+              (when-let* ((s (car (syntax-after pt))))
                 (or (and (/= 0 (logand (ash 1 16) s))
                          (nth 4 (syntax-ppss (+ pt 2))))
                     (and (/= 0 (logand (ash 1 17) s))
