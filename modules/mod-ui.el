@@ -203,30 +203,40 @@
           (cl-incf count)))
       count))
 
+  (defvar-local +modeline-flymake-cache nil
+    "Cached flymake statistics to avoid repeated computation.")
+
+  (defvar-local +modeline-flymake-cache-tick nil
+    "Buffer modification tick when cache was last updated.")
+
   (defun +modeline-element-flymake-statistics ()
     "Display Flymake diagnostics statistics or loading status."
-    (let* ((running (flymake-running-backends))
-           (reporting (flymake-reporting-backends))
-           (waiting (cl-set-difference running reporting))
-           (face 'nano-modeline-face-default))
-      (if waiting
-          ;; Show loading indicator when backends are running but not yet reported
-          (propertize "⟳" 'face 'nano-modeline-face-default)
-        ;; Show diagnostics statistics
-        (let ((error-count (+flymake-count-type :error))
-              (warning-count (+flymake-count-type :warning))
-              (note-count (+flymake-count-type :note)))
-
-          ;; Change face if there are errors
-          (when (> error-count 0)
-            (setq face 'nano-modeline-face-buffer-marked))
-
-          ;; Format the statistics
-          (propertize
-           (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
-               (format " (%d/%d/%d) " error-count warning-count note-count)
-             "✔")
-           'face face)))))
+    (if (not (bound-and-true-p flymake-mode))
+        ""  ;; Return empty string if flymake not active
+      (let* ((running (flymake-running-backends))
+             (reporting (flymake-reporting-backends))
+             (waiting (cl-set-difference running reporting))
+             (current-tick (buffer-modified-tick)))
+        (if waiting
+            ;; Show loading indicator when backends are running but not yet reported
+            (propertize "⟳" 'face 'nano-modeline-face-default)
+          ;; Use cache if buffer hasn't changed
+          (when (or (null +modeline-flymake-cache-tick)
+                    (not (equal +modeline-flymake-cache-tick current-tick)))
+            (let* ((error-count (+flymake-count-type :error))
+                   (warning-count (+flymake-count-type :warning))
+                   (note-count (+flymake-count-type :note))
+                   (face (if (> error-count 0)
+                             'nano-modeline-face-buffer-marked
+                           'nano-modeline-face-default)))
+              (setq +modeline-flymake-cache
+                    (propertize
+                     (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
+                         (format " (%d/%d/%d) " error-count warning-count note-count)
+                       "✔")
+                     'face face))
+              (setq +modeline-flymake-cache-tick current-tick)))
+          +modeline-flymake-cache))))
 
   (defcustom nano-modeline-format-prog
     (cons '(nano-modeline-element-buffer-status
