@@ -15,6 +15,28 @@
 
 ;;; Tree-sitter
 
+;; Performance optimizations for tree-sitter
+(setq treesit-font-lock-level 3)  ; Use level 3 (good balance of features/performance)
+
+;; Enable tree-sitter query caching to avoid recompiling queries
+;; This prevents the 93MB memory allocation on every file open
+(defvar +treesit-query-cache (make-hash-table :test 'equal)
+  "Cache for compiled tree-sitter queries to avoid recompilation.")
+
+;; Advice treesit-query-compile to use caching
+(define-advice treesit-query-compile (:around (orig-fn language query &optional eager) cache)
+  "Cache compiled tree-sitter queries to avoid expensive recompilation."
+  (if eager
+      ;; Don't cache eager queries
+      (funcall orig-fn language query eager)
+    ;; Check cache for non-eager queries
+    (let* ((cache-key (cons language query))
+           (cached (gethash cache-key +treesit-query-cache)))
+      (or cached
+          (let ((compiled (funcall orig-fn language query eager)))
+            (puthash cache-key compiled +treesit-query-cache)
+            compiled)))))
+
 (use-package treesit-auto :ensure t
   ;; Automatic installation of treesitter grammars.
   :after-call +first-buffer-hook +first-file-hook
