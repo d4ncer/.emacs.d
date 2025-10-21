@@ -77,15 +77,11 @@
   (setq-hook! 'yaml-ts-mode-hook
     tab-width 2))
 
-(use-package json-ts-mode
-  :hook
-  (json-ts-mode-hook . eglot-ensure))
+(use-package json-ts-mode)
 
 ;;; TypeScript/JavaScript
 
 (use-package typescript-ts-mode
-  :hook
-  (typescript-ts-mode-hook . eglot-ensure)
   :config
   (pushnew! find-sibling-rules
             ;; Tests -> impl
@@ -111,18 +107,20 @@
 
 (use-package elixir-ts-mode
   :mode ("\\.ex\\'" "\\.exs\\'")
-  :hook
-  (elixir-ts-mode-hook . eglot-ensure)
   :config
+  ;; (with-eval-after-load 'eglot
+  ;;   (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
+  ;;     (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,+elixir-ls-bin))))
   (with-eval-after-load 'eglot
-    (setf (alist-get '(elixir-mode elixir-ts-mode heex-ts-mode)
-                     eglot-server-programs
-                     nil nil #'equal)
-          (if (and (fboundp 'w32-shell-dos-semantics)
-                   (w32-shell-dos-semantics))
-              '("expert-ls")
-            (eglot-alternatives
-             '("expert-ls" "start_lexical.sh")))))
+    (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
+      (setf (alist-get '(elixir-mode elixir-ts-mode heex-ts-mode)
+                       eglot-server-programs
+                       nil nil #'equal)
+            (if (and (fboundp 'w32-shell-dos-semantics)
+                     (w32-shell-dos-semantics))
+                `(,+elixir-ls-bin)
+              (eglot-alternatives
+               `(,+elixir-ls-bin "start_lexical.sh"))))))
 
   ;; Switching between files & tests
 
