@@ -59,18 +59,9 @@
 
 ;;; Visual highlighting
 
-(use-package hl-todo :ensure t
-  ;; Display TODO comments with special highlights.
-  :hook (prog-mode-hook yaml-ts-mode-hook conf-mode-hook)
-  :custom
-  (hl-todo-highlight-punctuation ":")
-  (hl-todo-keyword-faces
-   '(("TODO" warning bold)
-     ("KLUDGE" warning bold)
-     ("FIXME" error bold)
-     ("HACK" font-lock-constant-face bold)
-     ("DEPRECATED" font-lock-doc-face bold)
-     ("NOTE" success bold))))
+;; hl-todo disabled due to performance issues with tree-sitter modes
+;; (use-package hl-todo :ensure t
+;;   :disabled t)
 
 (use-package pulsar :ensure t
   ;; Temporarily highlights the current line after performing certain operations
