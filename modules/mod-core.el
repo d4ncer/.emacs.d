@@ -16,7 +16,9 @@
 
 ;;; Performance and initialization
 
-(setq gc-cons-threshold (* 800 1024))
+;; Increase GC threshold to reduce collections during file operations
+;; 16MB is a reasonable balance between memory and performance
+(setq gc-cons-threshold (* 16 1024 1024))
 (defconst emacs-start-time (current-time))
 
 ;;; Load path and core utilities

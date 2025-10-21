@@ -67,7 +67,8 @@
 
 (use-package breadcrumb :ensure t
   :custom
-  (breadcrumb-idle-time 0.3))
+  ;; Increase idle time to reduce recalculation frequency
+  (breadcrumb-idle-time 0.8))
 
 (provide 'mod-misc)
 ;;; mod-misc.el ends here
