@@ -15,7 +15,11 @@
   ;; Apply code formatting on save. Works for a range of languages.
   :after-call +first-file-hook
   :config
-  (apheleia-global-mode +1))
+  (apheleia-global-mode +1)
+
+  ;; Add mix-format support for heex-ts-mode
+  (with-eval-after-load 'apheleia-formatters
+    (add-to-list 'apheleia-mode-alist '(heex-ts-mode . mix-format))))
 
 ;; By default, trim trailing whitespace aggressively.
 

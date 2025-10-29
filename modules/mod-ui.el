@@ -269,6 +269,7 @@
   (add-hook! '(text-mode-hook magit-mode-hook help-mode-hook helpful-mode-hook) #'+nano-modeline-default)
   (add-hook! 'gptel-mode-hook #'+nano-modeline-gptel)
   (add-hook 'prog-mode-hook #'+nano-modeline-prog)
+  (add-hook 'heex-ts-mode-hook #'+nano-modeline-prog)
   (setq-default mode-line-format ""))
 
 (provide 'mod-ui)
