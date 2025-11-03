@@ -3,6 +3,10 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with
 code in this repository.
 
+**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads)
+for issue tracking. Use `bd` commands instead of markdown TODOs.
+See AGENTS.md for workflow details.
+
 ## Overview
 
 This is a sophisticated Emacs configuration that requires Emacs 30+ and uses a
