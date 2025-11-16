@@ -95,39 +95,5 @@
    :states '(normal)
    "C-c C-r" #'eglot-rename))
 
-(use-package eldoc-box :ensure t
-  :demand t
-  ;; Displays eldoc info in a floating box instead of the echo area.
-  :config
-  (with-eval-after-load 'eglot
-    (add-hook 'eglot-managed-mode-hook #'eldoc-box-hover-at-point-mode))
-
-  ;; Fix for Emacs 31: prevent negative coordinates that cause
-  ;; "wrong-type-argument wholenump" errors when frame geometry changes
-  (defun +eldoc-box--position-fix (pos)
-    "Ensure eldoc-box position coordinates are non-negative.
-POS is a cons (X . Y) representing frame position."
-    (cons (max 0 (car pos))
-          (max 0 (cdr pos))))
-
-  (advice-add 'eldoc-box--default-at-point-position-function-1
-              :filter-return #'+eldoc-box--position-fix)
-
-  ;; Cleanup childframe when switching to buffers without eldoc-box modes
-  ;; Fixes issue where childframe persists after switching buffers
-  (defun +eldoc-box--cleanup-on-buffer-switch ()
-    "Hide eldoc-box childframe if current buffer shouldn't display it."
-    (when (and (frame-live-p eldoc-box--frame)
-               (frame-parameter eldoc-box--frame 'visibility)
-               (not (or eldoc-box-hover-mode eldoc-box-hover-at-point-mode)))
-      (eldoc-box-quit-frame)))
-
-  (add-hook '+switch-buffer-hook #'+eldoc-box--cleanup-on-buffer-switch)
-  (add-hook 'window-configuration-change-hook #'+eldoc-box--cleanup-on-buffer-switch)
-
-  :general
-  (:states '(normal motion)
-           "K" #'eldoc-box-help-at-point))
-
 (provide 'mod-lsp)
 ;;; mod-lsp.el ends here
