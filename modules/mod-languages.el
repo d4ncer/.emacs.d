@@ -116,15 +116,13 @@
   ;;   (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
   ;;     (add-to-list 'eglot-server-programs `((elixir-mode elixir-ts-mode heex-ts-mode) ,+elixir-ls-bin))))
   (with-eval-after-load 'eglot
-    (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
+    (let* ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh"))
+           (+expert-ls-bin (file-name-concat "/Users/rk/.local/bin/expert-ls")))
       (setf (alist-get '(elixir-mode elixir-ts-mode heex-ts-mode)
                        eglot-server-programs
                        nil nil #'equal)
-            (if (and (fboundp 'w32-shell-dos-semantics)
-                     (w32-shell-dos-semantics))
-                `(,+elixir-ls-bin)
-              (eglot-alternatives
-               `(,+elixir-ls-bin "start_lexical.sh"))))))
+            (eglot-alternatives
+             `((,+expert-ls-bin "--stdio") "start_lexical.sh")))))
 
   ;; Switching between files & tests
 
