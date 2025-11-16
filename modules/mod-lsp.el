@@ -86,6 +86,7 @@
 
 (use-package eglot
   ;; Emacs' built-in LSP integration.
+  :custom (eglot-code-action-indications '(eldoc-hint))
   :general
   (:keymaps 'eglot-mode-map
    :states '(insert normal)
