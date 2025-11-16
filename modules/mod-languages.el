@@ -99,9 +99,13 @@
   (:states '(normal motion)
            "K" #'eldoc-box-help-at-point))
 
-(use-package markdown
-  :custom
-  (markdown-fontify-code-blocks-natively t))
+(use-package markdown-mode
+  :ensure t
+  :mode ("README\\.md\\'" . gfm-mode)
+  :custom (markdown-fontify-code-block-natively t)
+  :init (setq markdown-command "multimarkdown")
+  :bind (:map markdown-mode-map
+              ("C-c C-e" . markdown-do)))
 
 ;;; Elixir and Erlang
 
