@@ -107,7 +107,7 @@
   (define-advice evil-yank (:after (start end &rest _) pulsar)
     "Pulse yanked lines & regions."
     (when pulsar-mode
-      (pulsar--pulse nil 'pulsar-generic start end)))
+      (pulsar--create-pulse (cons start end) 'pulsar-generic)))
 
   (define-advice evil-jump-item (:after (&rest _) pulsar)
     "Pulse if jumping to a different line."

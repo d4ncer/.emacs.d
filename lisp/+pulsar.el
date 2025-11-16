@@ -28,10 +28,8 @@ buffer modifications have happened."
            (let ((,gstart ,start)
                  (,gend ,end))
              (when (and ,gstart ,gend)
-               (pulsar--pulse nil
-                              (if ,gfailed 'pulsar-red 'pulsar-green)
-                              ,gstart
-                              ,gend))))))))
+               (pulsar--create-pulse (cons ,gstart ,gend)
+                                     (if ,gfailed 'pulsar-red 'pulsar-green)))))))))
 
 
 (provide '+pulsar)

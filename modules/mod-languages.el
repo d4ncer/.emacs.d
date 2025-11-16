@@ -44,7 +44,7 @@
                    (call-interactively #'eval-buffer)
                    (message "Buffer evaluated" ))
                  (when pulsar-mode
-                   (pulsar--pulse nil 'pulsar-yellow (point-min) (point-max))))
+                   (pulsar--create-pulse (cons (point-min) (point-max)) 'pulsar-yellow)))
                :wk "buffer"))
 
   :init

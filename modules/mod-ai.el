@@ -122,7 +122,7 @@ BODY is executed to prepare the response buffer."
                 ((and gptel-mode (org-at-heading-p))
                  (pulsar-pulse-line-green))
                 (t
-                 (pulsar--pulse nil 'pulsar-green (point-min) (point)))))))))
+                 (pulsar--create-pulse (cons (point-min) (point)) 'pulsar-green))))))))
 
 (provide 'mod-ai)
 ;;; mod-ai.el ends here
