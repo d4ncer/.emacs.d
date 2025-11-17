@@ -107,7 +107,9 @@
 
                      ;; org-node buffers
                      ,(rx bos "*org-node*" eos)
-                     )
+
+                     ;; eldoc
+                     ,(rx bos "*eldoc*" eos))
                    '(window-width . 80))))
 
 
@@ -140,8 +142,7 @@
                       ,(rx bos "*Org-Babel Error Output*" eos)
 
                       ;; misc
-                      (derived-mode . ert-simple-view-mode)
-                      ,(rx bos "*eldoc*" eos)))))
+                      (derived-mode . ert-simple-view-mode)))))
 
          ;; Buffers that should never pop up.
 
