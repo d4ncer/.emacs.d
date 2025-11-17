@@ -87,12 +87,26 @@
 (use-package eglot
   ;; Emacs' built-in LSP integration.
   :custom (eglot-code-action-indications '(eldoc-hint))
+  :preface
+  (defun +toggle-eldoc-buffer ()
+    "Toggle the eldoc documentation buffer.
+If the eldoc buffer is visible, close it. Otherwise, show documentation
+for the symbol at point in a dedicated buffer."
+    (interactive)
+    (let ((eldoc-buffer (get-buffer "*eldoc*")))
+      (if (and eldoc-buffer (get-buffer-window eldoc-buffer 'visible))
+          ;; Buffer is visible, close it
+          (quit-window nil (get-buffer-window eldoc-buffer 'visible))
+        ;; Buffer not visible, show it
+        (eldoc-doc-buffer t))))
+
   :general
   (:keymaps 'eglot-mode-map
    :states '(insert normal)
    "M-RET" #'eglot-code-actions)
   (:keymaps 'eglot-mode-map
    :states '(normal)
+   "K" #'+toggle-eldoc-buffer
    "C-c C-r" #'eglot-rename))
 
 (provide 'mod-lsp)
