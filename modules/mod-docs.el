@@ -45,6 +45,9 @@
 
 (use-package eldoc
   ;; Display help hints in the echo area as you move around.
+  :general
+  (:keymaps 'special-mode-map :states 'normal
+            "q" #'quit-window)
   :config
   ;; Teach eldoc to re-run after these commands.
   (eldoc-add-command 'evil-normal-state

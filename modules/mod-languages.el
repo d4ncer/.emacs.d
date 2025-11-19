@@ -94,11 +94,6 @@
 
 ;;; Configuration and Markup
 
-(use-package conf-mode
-  :general
-  (:states '(normal motion)
-           "K" #'eldoc-box-help-at-point))
-
 (use-package markdown-mode
   :ensure t
   :mode ("README\\.md\\'" . gfm-mode)

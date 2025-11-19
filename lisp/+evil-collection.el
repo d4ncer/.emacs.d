@@ -239,6 +239,7 @@ symbol and `cdr' the packages to register.")
     comint
     company
     custom
+    eglot
     eldoc
     elisp-mode
     ert
