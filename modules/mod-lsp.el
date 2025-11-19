@@ -100,12 +100,15 @@ for the symbol at point in a dedicated buffer."
         ;; Buffer not visible, show it
         (eldoc-doc-buffer t))))
 
+  (with-eval-after-load 'evil
+    (add-hook 'eglot-managed-mode-hook 'evil-normalize-keymaps))
+
   :general
   (:keymaps 'eglot-mode-map
    :states '(insert normal)
    "M-RET" #'eglot-code-actions)
   (:keymaps 'eglot-mode-map
-   :states '(normal motion)
+   :states 'normal
    "K" #'+toggle-eldoc-buffer
    "C-c C-r" #'eglot-rename))
 
