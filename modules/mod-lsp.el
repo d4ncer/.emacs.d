@@ -112,5 +112,11 @@ for the symbol at point in a dedicated buffer."
    "K" #'+toggle-eldoc-buffer
    "C-c C-r" #'eglot-rename))
 
+(use-package eglot-tempel
+  :ensure t
+  :preface (eglot-tempel-mode)
+  :init
+  (eglot-tempel-mode t))
+
 (provide 'mod-lsp)
 ;;; mod-lsp.el ends here

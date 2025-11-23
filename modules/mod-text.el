@@ -30,8 +30,10 @@
   ;; Text snippets.
   ;;
   :general
-  (:keymaps 'tempel-map :states 'normal
-            "<escape>" #'tempel-done)
+  (:keymaps 'tempel-map :states 'insert
+            "<escape>" #'tempel-done
+            "M-n" #'tempel-next
+            "M-p" #'tempel-previous)
   :custom
   (tempel-path (file-name-concat +templates-dir "*.eld"))
   :init
