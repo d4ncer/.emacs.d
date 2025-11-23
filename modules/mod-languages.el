@@ -99,6 +99,7 @@
   :mode ("README\\.md\\'" . gfm-mode)
   :custom (markdown-fontify-code-block-natively t)
   :init (setq markdown-command "multimarkdown")
+  :hook (markdown-ts-mode-hook . visual-line-mode)
   :bind (:map markdown-mode-map
               ("C-c C-e" . markdown-do)))
 
