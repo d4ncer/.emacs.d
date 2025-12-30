@@ -253,7 +253,7 @@ Modules are loaded in the following order from `init.el`:
 - **File management:** files, tramp, uniquify, find-sibling-rules
 - **Performance:** bidi settings, scrolling, redisplay
 - **Profiler:** Custom profiler utilities
-- **System integration:** server, envrc, exec-path-from-shell, mise
+- **System integration:** server, envrc, exec-path-from-shell
 - **Utilities:** goto-addr, better-jumper (disabled), string-inflection, so-long
 - **Search:** grep, wgrep, xref
 - **Built-ins:** paragraphs, indent, replace, proced
