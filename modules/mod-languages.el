@@ -11,6 +11,7 @@
 ;; - Configuration files
 ;; - Markdown
 ;; - Elixir and Erlang
+;; - Nix
 ;; - Tree-sitter mode remapping
 
 ;;; Code:
@@ -142,6 +143,12 @@
   (with-eval-after-load 'dired-x
     (pushnew! dired-omit-extensions ".jam" ".vee" ".beam")))
 
+;;; Nix
+
+(use-package nix-ts-mode
+  :ensure t
+  :mode "\\.nix\\'")
+
 ;;; Tree-sitter mode remapping
 
 ;; Remap old modes to tree-sitter equivalents
@@ -155,7 +162,8 @@
                 (js-json-mode . json-ts-mode)
                 (css-mode . css-ts-mode)
                 (rust-mode . rust-ts-mode)
-                (python-mode . python-ts-mode)))
+                (python-mode . python-ts-mode)
+                (nix-mode . nix-ts-mode)))
   (alist-set! major-mode-remap-alist (car pair) (cdr pair)))
 
 ;; Make shell-scripts etc executable on save.
