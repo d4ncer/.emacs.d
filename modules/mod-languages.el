@@ -146,7 +146,7 @@
 ;;; Nix
 
 (use-package nix-ts-mode
-  :ensure t
+  :ensure (:files ("nix-ts-mode.el"))
   :mode "\\.nix\\'")
 
 ;;; Tree-sitter mode remapping
