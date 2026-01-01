@@ -45,5 +45,17 @@
         (dired project-root))))
   (projectile-mode +1))
 
+;;; Beads - Issue tracking system interface
+
+(use-package beads
+  :ensure (:host codeberg :repo "ctietze/beads.el")
+  :defer t
+  :init
+  (autoload 'beads-create-issue "beads-transient" nil t)
+  :custom
+  (beads-auto-refresh t)
+  (beads-auto-refresh-interval 30)
+  (beads-per-project-buffer t))
+
 (provide 'mod-project)
 ;;; mod-project.el ends here

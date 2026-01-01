@@ -107,6 +107,10 @@
                   (projectile-switch-project)))
               :wk "find file (other project)")
 
+   "pi"  '(nil :wk "issues (beads)")
+   "pii" '(beads :wk "list issues")
+   "pic" '(beads-create-issue :wk "create issue")
+
    "h"  '(nil :wk "help")
    "h" help-map
 
