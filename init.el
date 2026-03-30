@@ -112,6 +112,8 @@
     (message "Loading %s...done (%.3fs)" load-file-name elapsed)))
 
 (use-package private-config
+  :ensure nil
+  :demand t
   :when (file-directory-p "~/private")
   :load-path "~/private")
 
