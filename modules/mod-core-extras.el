@@ -35,7 +35,7 @@
   (delete-old-versions t)
   (kept-old-versions 5)
   (kept-new-versions 5)
-  (insert-directory-program "gls")
+  (insert-directory-program "ls")
   (backup-directory-alist `(("." . ,+auto-save-dir)))
   (auto-save-list-file-prefix (file-name-concat +auto-save-dir ".saves-"))
   (auto-save-file-name-transforms `((".*" ,+auto-save-dir t)))
