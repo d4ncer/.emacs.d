@@ -86,5 +86,50 @@
 
 (use-package diredfl :ensure t)
 
+;;; Dired header line (nano-modeline)
+
+(with-eval-after-load 'nano-modeline
+  (defun +modeline-dired-directory ()
+    "Display abbreviated directory path for dired buffers."
+    (propertize (abbreviate-file-name default-directory)
+                'face 'nano-modeline-face-primary))
+
+  (defun +modeline-dired-file-count ()
+    "Display the number of files in the current dired buffer."
+    (let ((count 0))
+      (save-excursion
+        (goto-char (point-min))
+        (while (dired-next-line 1)
+          (cl-incf count)))
+      (propertize (format "%d items" count)
+                  'face 'nano-modeline-face-secondary)))
+
+  (defun +modeline-dired-free-space ()
+    "Display free disk space for the current directory."
+    (when-let* ((attr (file-system-info default-directory))
+                (free (nth 2 attr))
+                (gb (/ free 1073741824.0)))
+      (propertize (format "%.1f GB free" gb)
+                  'face 'nano-modeline-face-secondary)))
+
+  (defcustom nano-modeline-format-dired
+    (cons '(nano-modeline-element-buffer-status
+            nano-modeline-element-space
+            +modeline-dired-directory
+            nano-modeline-element-space
+            +modeline-dired-file-count)
+          '(+modeline-dired-free-space
+            nano-modeline-element-space
+            nano-modeline-element-window-status
+            nano-modeline-element-space))
+    "Modeline format for dired buffers."
+    :type 'nano-modeline-type
+    :group 'nano-modeline-modes)
+
+  (defun +nano-modeline-dired ()
+    (nano-modeline nano-modeline-format-dired))
+
+  (add-hook 'dired-mode-hook #'+nano-modeline-dired))
+
 (provide 'mod-dired)
 ;;; mod-dired.el ends here
