@@ -114,8 +114,8 @@ for the symbol at point in a dedicated buffer."
 
 (use-package eglot-tempel
   :ensure t
-  :preface (eglot-tempel-mode)
-  :init
+  :after eglot
+  :config
   (eglot-tempel-mode t))
 
 (provide 'mod-lsp)
