@@ -148,23 +148,17 @@
 (use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
   :demand t
   :init
-  ;; Improve org-mode mode line
-  ;; TODO this isn't wired up (yet)
   (defun +modeline-org-buffer-name (&optional name)
     (propertize
-     (cond (name
-            name)
+     (cond (name name)
            ((buffer-narrowed-p)
             (format "%s [%s]" (or (buffer-base-buffer) (buffer-name))
                     (org-link-display-format
                      (substring-no-properties
                       (or (org-get-heading 'no-tags) "-")))))
-           ((file-equal-p (file-name-directory (buffer-file-name))
-                          org-directory)
-            (format "(org) %s" (car (last (s-split "-" (buffer-file-name))))))
            (t
-            (buffer-name)))
-     'face (nano-modeline-face 'name)))
+            (or (org-get-title) "<UNTITLED>.org")))
+     'face 'nano-modeline-face-primary))
 
   (defcustom nano-modeline-format-org
     (cons
@@ -176,7 +170,7 @@
      '(nano-modeline-element-buffer-position
        nano-modeline-element-window-status
        nano-modeline-element-space))
-    "Custom format for org + org-node buffers."
+    "Custom format for org buffers."
     :type 'nano-modeline-type
     :group 'nano-modeline-modes)
 
@@ -194,40 +188,26 @@
           (cl-incf count)))
       count))
 
-  (defvar-local +modeline-flymake-cache nil
-    "Cached flymake statistics to avoid repeated computation.")
-
-  (defvar-local +modeline-flymake-cache-tick nil
-    "Buffer modification tick when cache was last updated.")
-
   (defun +modeline-element-flymake-statistics ()
     "Display Flymake diagnostics statistics or loading status."
     (if (not (bound-and-true-p flymake-mode))
-        ""  ;; Return empty string if flymake not active
+        ""
       (let* ((running (flymake-running-backends))
              (reporting (flymake-reporting-backends))
-             (waiting (cl-set-difference running reporting))
-             (current-tick (buffer-modified-tick)))
+             (waiting (cl-set-difference running reporting)))
         (if waiting
-            ;; Show loading indicator when backends are running but not yet reported
             (propertize "⟳" 'face 'nano-modeline-face-default)
-          ;; Use cache if buffer hasn't changed
-          (when (or (null +modeline-flymake-cache-tick)
-                    (not (equal +modeline-flymake-cache-tick current-tick)))
-            (let* ((error-count (+flymake-count-type :error))
-                   (warning-count (+flymake-count-type :warning))
-                   (note-count (+flymake-count-type :note))
-                   (face (if (> error-count 0)
-                             'nano-modeline-face-buffer-marked
-                           'nano-modeline-face-default)))
-              (setq +modeline-flymake-cache
-                    (propertize
-                     (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
-                         (format " (%d/%d/%d) " error-count warning-count note-count)
-                       "✔")
-                     'face face))
-              (setq +modeline-flymake-cache-tick current-tick)))
-          +modeline-flymake-cache))))
+          (let* ((error-count (+flymake-count-type :error))
+                 (warning-count (+flymake-count-type :warning))
+                 (note-count (+flymake-count-type :note))
+                 (face (if (> error-count 0)
+                           'nano-modeline-face-buffer-marked
+                         'nano-modeline-face-default)))
+            (propertize
+             (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
+                 (format " (%d/%d/%d) " error-count warning-count note-count)
+               "✔")
+             'face face))))))
 
   (defcustom nano-modeline-format-prog
     (cons '(nano-modeline-element-buffer-status
@@ -267,6 +247,7 @@
 
   :config
   (add-hook! '(text-mode-hook magit-mode-hook help-mode-hook helpful-mode-hook) #'+nano-modeline-default)
+  (add-hook 'org-mode-hook #'+nano-modeline-org)
   (add-hook! 'gptel-mode-hook #'+nano-modeline-gptel)
   (add-hook 'prog-mode-hook #'+nano-modeline-prog)
   (add-hook 'heex-ts-mode-hook #'+nano-modeline-prog)

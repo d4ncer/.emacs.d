@@ -20,7 +20,6 @@
   (general-unbind :states '(normal motion) "SPC")
   :config
   (require '+window)
-  (require '+roam)
   (require '+edit-cmds)
 
   (general-define-key
@@ -262,32 +261,47 @@
    "lw" '(gptel :wk "rewrite")
 
    "o"  '(nil :wk "org")
-   "on" (list (defun +org-goto-notes ()
-                (interactive)
-                (find-file org-default-notes-file))
-              :wk "notes")
-   "oi" (list (defun +goto-org-index ()
-                (interactive)
-                (find-file (file-name-concat org-directory "index.org")))
-              :wk "index")
-   "ot" (list (defun +goto-org-todos ()
-                (interactive)
-                (find-file (file-name-concat org-directory "todos.org")))
-              :wk "todos")
    "oa" (list (defun +org-agenda-dwim ()
                 (interactive)
                 (org-agenda nil "p"))
               :wk "agenda")
-
-   "oj" '(consult-org-agenda :wk "agenda file heading...")
+   "of" '(vulpea-find :wk "find (note)")
+   "oI" '(vulpea-insert :wk "insert link (note)")
    "og" '(org-capture-goto-last-stored :wk "goto captured")
-   "ov" '(org-tags-view :wk "search by tag")
-   "ok" #'org-capture
+   "oj" '(consult-org-agenda :wk "agenda file heading...")
    "ol" '(org-store-link :wk "store link")
-   "of" '(org-node-find :wk "find (node)")
-   "os" '(org-node-grep :wk "search (node)")
+   "os" (list (defun +org-search ()
+                (interactive)
+                (consult-ripgrep org-directory))
+              :wk "search (org)")
+   "ov" '(org-tags-view :wk "search by tag")
    "ow" '(timekeep-visit-node :wk "work file")
 
+   ;; Capture
+   "ok"  '(nil :wk "capture")
+   "oki" '(+life/capture-initiative :wk "initiative")
+   "okp" '(+life/capture-person :wk "person")
+   "oko" '(+life/capture-org :wk "org/team")
+   "okd" '(+life/capture-idea :wk "idea")
+   "okk" #'org-capture
+
+   ;; Zoom views
+   "oz"  '(nil :wk "zoom")
+   "ozp" '(+life/view-pillars :wk "pillars")
+   "ozg" '(+life/view-goals :wk "goals")
+   "ozr" '(+life/view-projects :wk "projects")
+   "ozt" '(+life/view-today :wk "today")
+
+   ;; Navigate
+   "on"  '(nil :wk "navigate")
+   "onp" '(+life/go-to-parent :wk "go to parent")
+   "onc" '(+life/show-children :wk "show children")
+   "ons" '(+life/show-stakeholders :wk "stakeholders")
+   "ona" '(+life/add-stakeholder :wk "add stakeholder")
+   "onr" '(+life/remove-stakeholder :wk "remove stakeholder")
+   "oni" '(+life/person-initiatives :wk "person initiatives")
+
+   ;; Clock
    "oc" '(nil :wk "clock")
    "occ" '(org-clock-in-last :wk "clock in (last)")
    "ocd" (list (general-predicate-dispatch #'org-clock-display
@@ -304,19 +318,13 @@
    "ocg" '(org-clock-goto :wk "goto clock")
    "ocq" '(org-clock-cancel :wk "cancel")
 
-   "or" '(nil :wk "node")
-   "ord" (list (defun +org-node-daily ()
-                 (interactive)
-                 (let* ((date (format-time-string "%Y-%m-%d"))
-                        (title (format "Daily: %s" date))
-                        (filename (format "%s-daily.org" date)))
-                   (find-file (file-name-concat org-directory "daily" filename))
-                   (when (= (buffer-size) 0)
-                     (insert (format "#+TITLE: %s\n#+DATE: %s\n\n* Daily Notes\n\n" title date)))))
-               :wk "daily journal")
-   "orl" '(org-node-extract-subtree :wk "extract subtree")
-   "orr" '(org-node-reset :wk "reset cache")
-   "ort" '(org-node-tag-grep :wk "search by tag")
+   ;; Roam / Journal
+   "or" '(nil :wk "roam")
+   "ord" '(vulpea-journal-today :wk "daily journal")
+   "orj" '(vulpea-journal-date :wk "journal (date)...")
+   "orn" '(vulpea-journal-next :wk "next journal")
+   "orp" '(vulpea-journal-previous :wk "prev journal")
+   "orr" '(vulpea-db-sync-full-scan :wk "resync db")
 
    "e"  '(nil :wk "errors")
    "el" '(consult-flymake :wk "error list")

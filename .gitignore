@@ -42,7 +42,8 @@ tramp
 /transient
 
 # Org
-org-roam.db
+vulpea-db.sqlite
+vulpea.db
 
 # lsp-mode
 workspace
@@ -55,3 +56,5 @@ codeium
 chatgpt
 .claude/
 cleanup-elc.sh
+agent/
+/.agent-shell/

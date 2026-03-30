@@ -78,7 +78,7 @@
                     (derived-mode . grep-mode)
                     (derived-mode . embark-collect-mode)
                     ,(rx bos "*Embark Export: ")
-                    ,(rx bos "*org-node-grep"))
+)
                   '(window-width 80))))
 
          ;; Right side - documentation, reference buffers & command outputs.
@@ -104,9 +104,6 @@
                      (derived-mode . helpful-mode)
                      (derived-mode . Man-mode)
                      (derived-mode . woman-mode)
-
-                     ;; org-node buffers
-                     ,(rx bos "*org-node*" eos)
 
                      ;; eldoc
                      ,(rx bos "*eldoc*" eos))

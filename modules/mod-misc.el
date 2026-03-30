@@ -43,7 +43,6 @@
           help-mode-hook
           shell-command-mode-hook
           gptel-mode-hook
-          org-node-mode-hook
           )
          . hide-mode-line-mode))
 

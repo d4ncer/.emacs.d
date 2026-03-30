@@ -6,7 +6,9 @@
 ;;; Commentary:
 ;; This module contains org-mode and related packages configuration including:
 ;; - org (the main org-mode package)
-;; - org-node (knowledge management with org-id)
+;; - vulpea (note-taking library built on org-id)
+;; - vulpea-journal (daily note interface)
+;; - vulpea-ui (sidebar and UI enhancements)
 ;; - org-modern (modern styling for org-mode)
 ;;
 ;; IMPORTANT: This module is designed to be deferred and must NOT be loaded eagerly.
@@ -21,13 +23,15 @@
   :after-call +first-file-hook
   :hook ((org-mode-hook . visual-line-mode))
   :general (:keymaps 'org-mode-map :states '(normal visual motion)
+                     "RET" #'org-open-at-point
                      "TAB" #'org-cycle
                      "S-TAB" #'org-shifttab)
   :custom
+  (org-id-locations-file (file-name-concat user-emacs-directory "var" "org-id-locations"))
   (org-directory org-directory)
   (org-default-notes-file org-default-notes-file)
   (org-startup-folded 'content)
-  (org-startup-indented t)
+  (org-startup-indented nil)
   (org-hide-emphasis-markers t)
   (org-pretty-entities t)
   (org-use-sub-superscripts '{})
@@ -39,35 +43,68 @@
   (org-return-follows-link t)
   (org-mouse-1-follows-link t)
   (org-link-descriptive t)
+  (org-todo-keywords '((sequence "TODO" "NEXT" "|" "DONE" "CANCELLED")
+                       (sequence "SOMEDAY" "|" "DONE" "CANCELLED")))
+  (org-agenda-files (list (file-name-concat org-directory "roam")))
+  (org-agenda-custom-commands
+   '(("p" "Tasks"
+      ((todo "NEXT" ((org-agenda-overriding-header "Next Actions")))
+       (todo "TODO" ((org-agenda-overriding-header "To Do")))))
+     ("d" "Today"
+      ((agenda "" ((org-agenda-span 'day)
+                   (org-agenda-start-day nil)))
+       (todo "NEXT" ((org-agenda-overriding-header "Next Actions")))))))
   :config
-  (add-to-list 'org-modules 'org-habit t))
+  (add-to-list 'org-modules 'org-habit t)
+  (setq org-capture-templates
+        `(("i" "Inbox" entry (file ,org-default-notes-file)
+           "* TODO %?\n%U\n" :prepend t))))
 
-
-(use-package org-node
-  :ensure (:host github :repo "meedstrom/org-node")
+(use-package vulpea
+  :ensure t
   :after org
-  :hook (org-mode-hook . org-node-cache-mode)
-  :general (:keymaps 'org-mode-map :states '(normal visual motion)
-                     "C-c C-l" #'org-node-insert-link
-                     "C-c C-o" #'org-node-open)
+  :commands (vulpea-find vulpea-insert vulpea-buffer-tags-get
+                         vulpea-buffer-tags-add vulpea-buffer-tags-remove)
   :custom
-  (org-node-creation-fn #'org-node-new-file)
-  (org-node-file-directory-ask +org-brain-dir)
-  (org-node-slug-fn #'org-node-slugify-for-web)
-  (org-node-datestamp-format "%Y%m%d%H%M%S")
-  (org-node-extra-id-dirs (list +org-brain-dir))
+  (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
   :config
-  (org-node-cache-ensure))
+  (vulpea-db-autosync-mode 1))
+
+(use-package vulpea-journal
+  :ensure t
+  :after vulpea
+  :commands (vulpea-journal-today vulpea-journal-date
+                                  vulpea-journal-next vulpea-journal-previous)
+  :custom
+  (vulpea-journal-tag "daily")
+  (vulpea-journal-default-template
+   '(:file-name "daily/%Y-%m-%d.org"
+     :title "%Y-%m-%d"
+     :tags ("daily")
+     :head "#+created: %<[%Y-%m-%d]>"))
+  :config
+  (vulpea-journal-setup))
+
+(use-package vulpea-ui
+  :ensure t
+  :after vulpea)
+
+(with-eval-after-load 'vulpea
+  (require '+life))
 
 (use-package org-modern
   :ensure t
-  :after org
+  :hook (org-mode-hook . org-modern-mode)
   :custom
   (org-modern-list '((?+ . "◦")
                      (?* . "–")
                      (?- . "•")))
   :config
   (set-face-attribute 'org-modern-symbol nil :family "Iosevka"))
+
+(with-eval-after-load 'org
+  (require '+org-format)
+  (add-hook 'org-mode-hook #'+org-format-on-save-mode))
 
 (provide 'mod-org)
 ;;; mod-org.el ends here

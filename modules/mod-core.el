@@ -32,15 +32,14 @@
 ;;; Global directory variables
 
 (defvar +cloud-dir (format "/Users/%s/Library/Mobile Documents/com~apple~CloudDocs/rkdev" user-login-name))
-(defvar org-directory (file-name-concat +cloud-dir "org"))
-(defvar +org-brain-dir (file-name-concat org-directory "brain"))
-(defvar org-default-notes-file (file-name-concat org-directory "notes.org"))
+(defvar org-directory (expand-file-name "~/life/org"))
+(defvar org-default-notes-file (file-name-concat org-directory "roam/20220128063937-inbox.org"))
 (defvar +ligatures-dir (file-name-concat user-emacs-directory "ligatures/"))
 (defvar +templates-dir (file-name-concat user-emacs-directory "templates/"))
 
 ;;; Expensive package check
 
-(defconst +expensive-packages '(org org-node org-agenda forge))
+(defconst +expensive-packages '(org org-agenda vulpea forge))
 
 (add-transient-hook! 'after-init-hook
   (when-let* ((loaded (seq-filter #'featurep +expensive-packages)))
