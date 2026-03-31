@@ -69,7 +69,9 @@
   :custom
   (pulsar-iterations 5)
   (pulsar-pulse-on-window-change t)
+  (pulsar-resolve-pulse-function-aliases nil)
   :config
+  (pulsar-resolve-function-aliases)
   (require '+pulsar)
 
   (add-hook 'next-error-hook #'pulsar-pulse-line)
