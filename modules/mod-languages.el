@@ -80,6 +80,10 @@
 
 (use-package json-ts-mode)
 
+(use-package kdl-mode
+  :ensure (:host github :repo "taquangtrung/emacs-kdl-mode")
+  :mode "\\.kdl\\'")
+
 ;;; TypeScript/JavaScript
 
 (use-package typescript-ts-mode
