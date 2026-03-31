@@ -37,6 +37,26 @@
             (puthash cache-key compiled +treesit-query-cache)
             compiled)))))
 
+(defvar +treesit-auto-remap-alist-cache nil
+  "Cached result of `treesit-auto--build-major-mode-remap-alist'.")
+
+(defun +treesit-auto-invalidate-remap-cache (&rest _)
+  "Invalidate the cached treesit-auto remap alist."
+  (interactive)
+  (setq +treesit-auto-remap-alist-cache nil))
+
+(with-eval-after-load 'treesit-auto
+  (define-advice treesit-auto--build-major-mode-remap-alist
+      (:around (orig-fn) cache-remap-alist)
+    "Cache the remap alist to avoid redundant grammar readiness checks."
+    (or +treesit-auto-remap-alist-cache
+        (setq +treesit-auto-remap-alist-cache (funcall orig-fn))))
+
+  (define-advice treesit-install-language-grammar
+      (:after (&rest _) invalidate-remap-cache)
+    "Invalidate remap cache after installing a new grammar."
+    (+treesit-auto-invalidate-remap-cache)))
+
 (use-package treesit-auto :ensure t
   ;; Automatic installation of treesitter grammars.
   :after-call +first-buffer-hook +first-file-hook
