@@ -263,7 +263,7 @@
    "o"  '(nil :wk "org")
    "oa" (list (defun +org-agenda-dwim ()
                 (interactive)
-                (org-agenda nil "p"))
+                (org-agenda nil " "))
               :wk "agenda")
    "of" '(vulpea-find :wk "find (note)")
    "oI" '(vulpea-insert :wk "insert link (note)")
@@ -276,6 +276,13 @@
               :wk "search (org)")
    "ov" '(org-tags-view :wk "search by tag")
    "ow" '(timekeep-visit-node :wk "work file")
+   "oA" '(+life/agenda-person :wk "agenda (person)")
+   "oR" '(+life/refile :wk "refile to initiative")
+   "oC" '(+life/invalidate-agenda-cache :wk "clear agenda cache")
+   "oy" (list (defun +org-agenda-past ()
+                (interactive)
+                (org-agenda nil "y"))
+              :wk "agenda (past 14d)")
 
    ;; Capture
    "ok"  '(nil :wk "capture")

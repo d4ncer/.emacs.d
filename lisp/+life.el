@@ -13,6 +13,55 @@
   (require 'vulpea)
   (require 'vulpea-db))
 
+;;; Agenda
+
+(defun +life/agenda-files ()
+  "Return list of org files for agenda: active initiatives + inbox."
+  (delete-dups
+   (cons org-default-notes-file
+         (mapcar #'vulpea-note-path
+                 (seq-filter #'+life/--active-p
+                             (vulpea-db-query-by-tags-every '("initiative")))))))
+
+(defvar +life/--initiative-files-cache nil
+  "Cached list of initiative file paths.")
+
+(defvar +life/--initiative-files-cache-time nil
+  "Timestamp of last cache fill.")
+
+(defconst +life/--initiative-files-cache-ttl 300
+  "Cache TTL in seconds.")
+
+(defun +life/initiative-files-cached ()
+  "Return initiative files from cache, refreshing if stale (5-minute TTL)."
+  (when (or (null +life/--initiative-files-cache-time)
+            (> (float-time (time-subtract (current-time)
+                                          +life/--initiative-files-cache-time))
+               +life/--initiative-files-cache-ttl))
+    (setq +life/--initiative-files-cache (+life/agenda-files)
+          +life/--initiative-files-cache-time (current-time)))
+  +life/--initiative-files-cache)
+
+;;;###autoload
+(defun +life/invalidate-agenda-cache ()
+  "Force refresh of the initiative files cache."
+  (interactive)
+  (setq +life/--initiative-files-cache nil
+        +life/--initiative-files-cache-time nil)
+  (message "Agenda files cache invalidated"))
+
+(defun +life/agenda-files-update (&rest _)
+  "Set `org-agenda-files' from cached initiative files."
+  (setq org-agenda-files (+life/initiative-files-cached)))
+
+;;;###autoload
+(defun +life/refresh-agenda-files ()
+  "Refresh agenda files by invalidating cache and updating."
+  (interactive)
+  (+life/invalidate-agenda-cache)
+  (+life/agenda-files-update)
+  (message "Agenda files: %d entries" (length org-agenda-files)))
+
 ;;; Helpers
 
 (defun +life/--active-p (note)
@@ -62,7 +111,8 @@ Optionally filter to those tagged with LEVEL-TAG."
                               :tags (list level "initiative")
                               :meta meta
                               :body body)))
-    (vulpea-visit note)))
+    (vulpea-visit note)
+    (+life/refresh-agenda-files)))
 
 ;;;###autoload
 (defun +life/capture-person ()
@@ -288,6 +338,69 @@ Prompts for a role and a person note, then sets the meta key."
                 (vulpea-visit sel)))
           (user-error "No initiatives reference this person")))
     (user-error "Current buffer has no ID property")))
+
+;;; Agenda helpers
+
+(defun +life/agenda-category (&optional len)
+  "Get agenda category for the current item, padded/truncated to LEN."
+  (let* ((len (or len 24))
+         (file-name (when buffer-file-name
+                      (file-name-sans-extension
+                       (file-name-nondirectory buffer-file-name))))
+         (title (vulpea-buffer-prop-get "title"))
+         (category (org-get-category))
+         (result (or (if (and title (string-equal category file-name))
+                         title
+                       category)
+                     ""))
+         (trimmed (if (> (length result) len)
+                      (truncate-string-to-width result (- len 1))
+                    result)))
+    (string-pad trimmed len)))
+
+;;;###autoload
+(defun +life/refile ()
+  "Refile current entry to an initiative's Tasks heading."
+  (interactive)
+  (let* ((initiatives (vulpea-db-query-by-tags-every '("initiative")))
+         (sel (vulpea-select-from "Refile to" initiatives :require-match t)))
+    (when (vulpea-note-id sel)
+      (let* ((file (vulpea-note-path sel))
+             (pos (with-current-buffer (find-file-noselect file)
+                    (org-find-exact-headline-in-buffer "Tasks"))))
+        (if pos
+            (org-refile nil nil (list "Tasks" file nil pos))
+          (user-error "No '* Tasks' heading found in %s"
+                      (vulpea-note-title sel)))))))
+
+;;;###autoload
+(defun +life/agenda-refile ()
+  "Refile current agenda item to an initiative's Tasks heading."
+  (interactive)
+  (let* ((initiatives (vulpea-db-query-by-tags-every '("initiative")))
+         (sel (vulpea-select-from "Refile to" initiatives :require-match t)))
+    (when (vulpea-note-id sel)
+      (let* ((file (vulpea-note-path sel))
+             (pos (with-current-buffer (find-file-noselect file)
+                    (org-find-exact-headline-in-buffer "Tasks"))))
+        (if pos
+            (org-agenda-refile nil (list "Tasks" file nil pos))
+          (user-error "No '* Tasks' heading found in %s"
+                      (vulpea-note-title sel)))))))
+
+;;;###autoload
+(defun +life/agenda-person ()
+  "Show agenda items related to a person."
+  (interactive)
+  (let* ((people (vulpea-db-query-by-tags-every '("person")))
+         (sel (vulpea-select-from "Person" people :require-match t)))
+    (when (vulpea-note-id sel)
+      (let* ((tags (vulpea-note-tags sel))
+             (handle (seq-find (lambda (tag) (string-prefix-p "@" tag)) tags)))
+        (if handle
+            (org-tags-view nil handle)
+          (user-error "Person %s has no handle tag"
+                      (vulpea-note-title sel)))))))
 
 ;;; Migration
 

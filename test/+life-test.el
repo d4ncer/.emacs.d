@@ -19,6 +19,96 @@
 ;;; because org files store meta under * Metadata heading which
 ;;; vulpea DB extraction does not index into the note struct.
 
+;;;; ---------------------------------------------------------------
+;;;; Agenda files
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/agenda-files/returns-active-initiative-paths ()
+  "Only active initiative file paths (plus inbox) are returned."
+  (let* ((active (+life-test/make-note :id "A1" :path "/org/active.org"
+                                       :tags '("project" "initiative")
+                                       :meta '(("status" . ("in progress")))))
+         (done (+life-test/make-note :id "A2" :path "/org/done.org"
+                                     :tags '("goal" "initiative")
+                                     :meta '(("status" . ("complete")))))
+         (org-default-notes-file "/org/inbox.org"))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list active done))))
+      (let ((result (+life/agenda-files)))
+        (should (member "/org/inbox.org" result))
+        (should (member "/org/active.org" result))
+        (should-not (member "/org/done.org" result))))))
+
+(ert-deftest +life/agenda-files/always-includes-inbox ()
+  "Inbox is included even when no initiatives exist."
+  (let ((org-default-notes-file "/org/inbox.org"))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) nil)))
+      (let ((result (+life/agenda-files)))
+        (should (equal '("/org/inbox.org") result))))))
+
+(ert-deftest +life/agenda-files/deduplicates-paths ()
+  "Inbox appearing as an initiative does not duplicate."
+  (let* ((inbox-note (+life-test/make-note :id "INB" :path "/org/inbox.org"
+                                           :tags '("initiative")
+                                           :meta '(("status" . ("in progress")))))
+         (org-default-notes-file "/org/inbox.org"))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list inbox-note))))
+      (let ((result (+life/agenda-files)))
+        (should (= 1 (length result)))
+        (should (equal "/org/inbox.org" (car result)))))))
+
+(ert-deftest +life/initiative-files-cached/returns-cached-value ()
+  "Returns cached files without re-querying within TTL."
+  (let* ((active (+life-test/make-note :id "R1" :path "/org/active.org"
+                                       :tags '("initiative")
+                                       :meta '(("status" . ("in progress")))))
+         (org-default-notes-file "/org/inbox.org")
+         (query-count 0)
+         (+life/--initiative-files-cache nil)
+         (+life/--initiative-files-cache-time nil))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (cl-incf query-count) (list active))))
+      (+life/initiative-files-cached)
+      (+life/initiative-files-cached)
+      (should (= 1 query-count)))))
+
+(ert-deftest +life/initiative-files-cached/refreshes-after-invalidation ()
+  "Re-queries after cache invalidation."
+  (let* ((active (+life-test/make-note :id "R1" :path "/org/active.org"
+                                       :tags '("initiative")
+                                       :meta '(("status" . ("in progress")))))
+         (org-default-notes-file "/org/inbox.org")
+         (query-count 0)
+         (+life/--initiative-files-cache nil)
+         (+life/--initiative-files-cache-time nil))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (cl-incf query-count) (list active))))
+      (+life/initiative-files-cached)
+      (+life/invalidate-agenda-cache)
+      (+life/initiative-files-cached)
+      (should (= 2 query-count)))))
+
+(ert-deftest +life/agenda-files-update/sets-org-agenda-files ()
+  "Sets org-agenda-files from cached initiative files."
+  (let* ((active (+life-test/make-note :id "R1" :path "/org/active.org"
+                                       :tags '("initiative")
+                                       :meta '(("status" . ("in progress")))))
+         (org-default-notes-file "/org/inbox.org")
+         (org-agenda-files nil)
+         (+life/--initiative-files-cache nil)
+         (+life/--initiative-files-cache-time nil))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list active))))
+      (+life/agenda-files-update)
+      (should (member "/org/inbox.org" org-agenda-files))
+      (should (member "/org/active.org" org-agenda-files)))))
+
+;;;; ---------------------------------------------------------------
+;;;; Helpers
+;;;; ---------------------------------------------------------------
+
 (ert-deftest +life/--active-p/in-progress-is-active ()
   "Notes with status 'in progress' are active."
   (let ((note (+life-test/make-note :id "1" :tags '("project"))))
@@ -563,6 +653,118 @@
             (should-not (string-match-p "^\\* Metadata" result))
             (should (string-match-p "^- type :: person" result))))
       (delete-directory dir t))))
+
+;;;; ---------------------------------------------------------------
+;;;; Agenda helpers
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/agenda-category/uses-title-when-category-matches-filename ()
+  "Returns note title when category equals filename."
+  (cl-letf (((symbol-function 'vulpea-buffer-prop-get)
+             (lambda (prop) (when (equal prop "title") "My Project")))
+            ((symbol-function 'org-get-category)
+             (lambda (&rest _) "20220101-my_project"))
+            (buffer-file-name "/org/roam/20220101-my_project.org"))
+    (let ((result (+life/agenda-category 24)))
+      (should (string= "My Project" (string-trim-right result))))))
+
+(ert-deftest +life/agenda-category/uses-category-when-different-from-filename ()
+  "Returns category when it differs from filename."
+  (cl-letf (((symbol-function 'vulpea-buffer-prop-get)
+             (lambda (_prop) "Some Title"))
+            ((symbol-function 'org-get-category)
+             (lambda (&rest _) "custom-cat"))
+            (buffer-file-name "/org/roam/something.org"))
+    (let ((result (+life/agenda-category 24)))
+      (should (string= "custom-cat" (string-trim-right result))))))
+
+(ert-deftest +life/agenda-category/pads-to-length ()
+  "Result is padded to the requested length."
+  (cl-letf (((symbol-function 'vulpea-buffer-prop-get)
+             (lambda (_prop) "Short"))
+            ((symbol-function 'org-get-category)
+             (lambda (&rest _) "Short"))
+            (buffer-file-name "/org/roam/Short.org"))
+    (should (= 24 (length (+life/agenda-category 24))))))
+
+(ert-deftest +life/agenda-category/truncates-long-names ()
+  "Long names are truncated to fit within LEN."
+  (cl-letf (((symbol-function 'vulpea-buffer-prop-get)
+             (lambda (_prop) "A Very Long Project Name That Exceeds"))
+            ((symbol-function 'org-get-category)
+             (lambda (&rest _) "A Very Long Project Name That Exceeds"))
+            (buffer-file-name "/org/roam/long.org"))
+    (should (= 10 (length (+life/agenda-category 10))))))
+
+;;;; ---------------------------------------------------------------
+;;;; Refile
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/refile/refiles-to-tasks-heading ()
+  "Refile dispatches to org-refile with correct target."
+  (let* ((initiative (+life-test/make-note :id "I1" :title "My Project"
+                                           :path "/org/roam/project.org"
+                                           :tags '("initiative")))
+         (refile-args nil))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list initiative)))
+              ((symbol-function 'vulpea-select-from)
+               (lambda (_prompt notes &rest _) (car notes)))
+              ((symbol-function 'find-file-noselect)
+               (lambda (_file &rest _) (current-buffer)))
+              ((symbol-function 'org-find-exact-headline-in-buffer)
+               (lambda (_heading &rest _) 42))
+              ((symbol-function 'org-refile)
+               (lambda (&rest args) (setq refile-args args))))
+      (+life/refile)
+      (should refile-args)
+      (let ((rfloc (nth 2 refile-args)))
+        (should (equal "Tasks" (nth 0 rfloc)))
+        (should (equal "/org/roam/project.org" (nth 1 rfloc)))
+        (should (equal 42 (nth 3 rfloc)))))))
+
+(ert-deftest +life/refile/errors-when-no-tasks-heading ()
+  "Signals user-error when initiative has no Tasks heading."
+  (let* ((initiative (+life-test/make-note :id "I1" :title "No Tasks"
+                                           :path "/org/roam/notasks.org"
+                                           :tags '("initiative"))))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list initiative)))
+              ((symbol-function 'vulpea-select-from)
+               (lambda (_prompt notes &rest _) (car notes)))
+              ((symbol-function 'find-file-noselect)
+               (lambda (_file &rest _) (current-buffer)))
+              ((symbol-function 'org-find-exact-headline-in-buffer)
+               (lambda (_heading &rest _) nil)))
+      (should-error (+life/refile) :type 'user-error))))
+
+;;;; ---------------------------------------------------------------
+;;;; Person agenda
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/agenda-person/calls-tags-view-with-handle ()
+  "Person agenda calls org-tags-view with the person's handle tag."
+  (let* ((person (+life-test/make-note :id "P1" :title "Jane Doe"
+                                       :tags '("person" "@JaneDoe")))
+         (tags-match nil))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list person)))
+              ((symbol-function 'vulpea-select-from)
+               (lambda (_prompt notes &rest _) (car notes)))
+              ((symbol-function 'org-tags-view)
+               (lambda (_todo-only match) (setq tags-match match))))
+      (+life/agenda-person)
+      (should (equal "@JaneDoe" tags-match)))))
+
+(ert-deftest +life/agenda-person/errors-when-no-handle-tag ()
+  "Signals user-error when person has no @ handle tag."
+  (let* ((person (+life-test/make-note :id "P1" :title "No Handle"
+                                       :tags '("person"))))
+    (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
+               (lambda (_tags) (list person)))
+              ((symbol-function 'vulpea-select-from)
+               (lambda (_prompt notes &rest _) (car notes))))
+      (should-error (+life/agenda-person) :type 'user-error))))
 
 (provide '+life-test)
 ;;; +life-test.el ends here

@@ -72,6 +72,44 @@
 (unless (fboundp 'vulpea-db-autosync-mode)
   (defun vulpea-db-autosync-mode (&optional _arg) nil))
 
+(unless (fboundp 'vulpea-buffer-prop-get)
+  (defun vulpea-buffer-prop-get (_name) nil))
+
+(unless (fboundp 'vulpea-buffer-meta-get-list)
+  (defun vulpea-buffer-meta-get-list (_prop &optional _type) nil))
+
+;;; Org stubs needed by +life agenda functions
+
+(unless (boundp 'org-default-notes-file)
+  (defvar org-default-notes-file nil))
+
+(unless (boundp 'org-agenda-files)
+  (defvar org-agenda-files nil))
+
+(unless (boundp 'org-agenda-archives-mode)
+  (defvar org-agenda-archives-mode nil))
+
+(unless (fboundp 'org-read-agenda-file-list)
+  (defun org-read-agenda-file-list () nil))
+
+(unless (fboundp 'org-add-archive-files)
+  (defun org-add-archive-files (files) files))
+
+(unless (fboundp 'org-get-category)
+  (defun org-get-category (&optional _pos _force-refresh) "???"))
+
+(unless (fboundp 'org-find-exact-headline-in-buffer)
+  (defun org-find-exact-headline-in-buffer (_heading &optional _buffer _pos-only) nil))
+
+(unless (fboundp 'org-refile)
+  (defun org-refile (&optional _arg _default-buffer _rfloc _msg) nil))
+
+(unless (fboundp 'org-agenda-refile)
+  (defun org-agenda-refile (&optional _goto _rfloc _no-update) nil))
+
+(unless (fboundp 'org-tags-view)
+  (defun org-tags-view (&optional _todo-only _match) nil))
+
 ;; Provide features so require calls in +life.el succeed
 (provide 'vulpea)
 (provide 'vulpea-db)
