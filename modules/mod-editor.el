@@ -337,5 +337,12 @@
   (advice-add 'highlight-thing-should-highlight-p :filter-return
               #'+should-highlight-p))
 
+;;; Bookmarks
+
+(use-package bookmark
+  :custom
+  (bookmark-default-file (file-name-concat user-emacs-directory "var" "bookmarks.eld"))
+  (bookmark-set-fringe-mark nil))
+
 (provide 'mod-editor)
 ;;; mod-editor.el ends here
