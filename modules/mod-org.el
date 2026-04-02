@@ -50,8 +50,9 @@
                           (gnus . org-gnus-no-new-news)
                           (file . find-file)
                           (wl . wl-other-frame)))
-  (org-todo-keywords '((sequence "TODO" "NEXT" "WAITING" "|" "DONE" "CANCELLED")
-                       (sequence "SOMEDAY" "|" "DONE" "CANCELLED")))
+  (org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "WAITING(w)" "|" "DONE(d)" "CANCELLED(c)")
+                       (sequence "SOMEDAY(o)" "|")
+                       (sequence "SCHEDULE(s)" "|")))
   :config
   (add-to-list 'org-modules 'org-habit t)
   (setq org-capture-templates
@@ -144,7 +145,15 @@
        (org-agenda-start-with-log-mode '(closed))
        (org-agenda-skip-function
         '(org-agenda-skip-entry-if 'notregexp "^\\*\\* DONE "))))))
+  :general (:keymaps 'org-agenda-mode-map
+            :states '(normal motion visual)
+            "SPC" nil)
   :config
+  (+local-leader-set-key 'org-agenda-mode-map
+    "d" '(org-agenda-deadline :wk "deadline")
+    "," '(org-agenda-priority :wk "priority")
+    "t" '(org-agenda-todo :wk "todo status")
+    "r" '(+life/agenda-refile :wk "refile"))
   (defun +org--update-agenda-files (&rest _)
     "Ensure vulpea/+life are loaded and update agenda files."
     (unless (featurep '+life)
@@ -165,12 +174,6 @@ not git status, visual pulsing, treesit grammars, or direnv."
   (add-hook 'org-agenda-finalize-hook #'+life/agenda-delete-empty-blocks)
   (with-eval-after-load 'evil
     (evil-set-initial-state 'org-agenda-mode 'normal))
-  (with-eval-after-load 'general
-    (general-define-key
-     :states '(normal motion)
-     :keymaps 'org-agenda-mode-map
-     :major-modes t
-     "r" #'+life/agenda-refile))
   (with-eval-after-load 'nano-modeline
     (defun +modeline-agenda-title ()
       "Display the agenda view title."
@@ -204,17 +207,17 @@ not git status, visual pulsing, treesit grammars, or direnv."
 (use-package vulpea
   :ensure t
   :commands (vulpea-find vulpea-insert vulpea-buffer-tags-get
-             vulpea-buffer-tags-add vulpea-buffer-tags-remove
-             vulpea-db-sync-full-scan
-             +life/capture-initiative +life/capture-person
-             +life/capture-org +life/capture-idea
-             +life/view-pillars +life/view-goals
-             +life/view-projects +life/view-today
-             +life/go-to-parent +life/show-children
-             +life/show-stakeholders +life/add-stakeholder
-             +life/remove-stakeholder +life/person-initiatives
-             +life/refresh-agenda-files +life/invalidate-agenda-cache
-             +life/refile +life/agenda-refile +life/agenda-person)
+                         vulpea-buffer-tags-add vulpea-buffer-tags-remove
+                         vulpea-db-sync-full-scan
+                         +life/capture-initiative +life/capture-person
+                         +life/capture-org +life/capture-idea
+                         +life/view-pillars +life/view-goals
+                         +life/view-projects +life/view-today
+                         +life/go-to-parent +life/show-children
+                         +life/show-stakeholders +life/add-stakeholder
+                         +life/remove-stakeholder +life/person-initiatives
+                         +life/refresh-agenda-files +life/invalidate-agenda-cache
+                         +life/refile +life/agenda-refile +life/agenda-person)
   :custom
   (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
   :config

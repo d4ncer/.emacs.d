@@ -290,7 +290,7 @@
    "okp" '(+life/capture-person :wk "person")
    "oko" '(+life/capture-org :wk "org/team")
    "okd" '(+life/capture-idea :wk "idea")
-   "okk" #'org-capture
+   "okk" '((lambda () (interactive) (org-capture nil "i")) :wk "inbox")
 
    ;; Zoom views
    "oz"  '(nil :wk "zoom")
