@@ -258,7 +258,14 @@ BEG and END are the bounds of the active region."
   :config
   (evil-org-set-key-theme '(textobjects insert navigation additional shift todo heading))
   (require 'evil-org-agenda)
-  (evil-org-agenda-set-keys))
+  (evil-org-agenda-set-keys)
+
+  ;; evil-org-agenda-set-keys binds SPC and sets initial state to motion,
+  ;; clobbering our org-agenda config. Fix both after the fact.
+  (evil-set-initial-state 'org-agenda-mode 'normal)
+  (general-define-key :keymaps 'org-agenda-mode-map
+                      :states '(normal motion)
+                      "SPC" #'+leader-key))
 
 (provide 'mod-evil)
 ;;; mod-evil.el ends here
