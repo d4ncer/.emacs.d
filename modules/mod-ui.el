@@ -187,7 +187,7 @@
         'face (doom-modeline-face 'doom-modeline-buffer-file)))))
 
   (doom-modeline-def-modeline '+org
-    '(bar modals +org-buffer-name buffer-position)
+    '(eldoc bar modals +org-buffer-name buffer-position)
     '(check vcs major-mode misc-info))
 
   (add-to-list 'doom-modeline-mode-alist '(org-mode . +org))

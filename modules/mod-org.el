@@ -184,7 +184,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
                    'face (doom-modeline-face 'doom-modeline-info))))
 
     (doom-modeline-def-modeline '+org-agenda
-      '(+agenda-info)
+      '(bar +agenda-info)
       '(misc-info))
 
     (add-to-list 'doom-modeline-mode-alist '(org-agenda-mode . +org-agenda))))
