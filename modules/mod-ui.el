@@ -18,6 +18,14 @@
   (add-to-list 'load-path +lisp-dir)
   (require '+corelib))
 
+;;; Theme
+
+(use-package batppuccin-themes
+  :ensure (:host github :repo "bbatsov/batppuccin-emacs")
+  :demand t
+  :config
+  (+theme-update))
+
 ;;; Custom faces
 
 (custom-theme-set-faces 'user
