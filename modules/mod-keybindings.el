@@ -266,9 +266,8 @@
                 (org-agenda nil " "))
               :wk "agenda")
    "of" '(vulpea-find :wk "find (note)")
-   "oI" '(vulpea-insert :wk "insert link (note)")
    "og" '(org-capture-goto-last-stored :wk "goto captured")
-   "oj" '(consult-org-agenda :wk "agenda file heading...")
+   "oh" '(consult-org-agenda :wk "agenda file heading...")
    "ol" '(org-store-link :wk "store link")
    "os" (list (defun +org-search ()
                 (interactive)
@@ -277,7 +276,6 @@
    "ov" '(org-tags-view :wk "search by tag")
    "ow" '(timekeep-visit-node :wk "work file")
    "oA" '(+life/agenda-person :wk "agenda (person)")
-   "oR" '(+life/refile :wk "refile to initiative")
    "oC" '(+life/invalidate-agenda-cache :wk "clear agenda cache")
    "oy" (list (defun +org-agenda-past ()
                 (interactive)
@@ -299,39 +297,27 @@
    "ozr" '(+life/view-projects :wk "projects")
    "ozt" '(+life/view-today :wk "today")
 
-   ;; Navigate
-   "on"  '(nil :wk "navigate")
-   "onp" '(+life/go-to-parent :wk "go to parent")
-   "onc" '(+life/show-children :wk "show children")
-   "ons" '(+life/show-stakeholders :wk "stakeholders")
-   "ona" '(+life/add-stakeholder :wk "add stakeholder")
-   "onr" '(+life/remove-stakeholder :wk "remove stakeholder")
-   "oni" '(+life/person-initiatives :wk "person initiatives")
-
-   ;; Clock
-   "oc" '(nil :wk "clock")
+   ;; Clock (global)
+   "oc"  '(nil :wk "clock")
    "occ" '(org-clock-in-last :wk "clock in (last)")
-   "ocd" (list (general-predicate-dispatch #'org-clock-display
-                 (not (derived-mode-p 'org-mode))
-                 (defun +org-clock-display-last (&optional arg)
-                   "Jump to the latest clock and display clocking info in that buffer."
-                   (interactive "P")
-                   (org-clock-goto arg)
-                   (org-clock-display)))
-               :wk "display")
-   "oci" '(org-clock-in :wk "clock in")
    "oco" '(org-clock-out :wk "clock out")
    "ocr" '(org-resolve-clocks :wk "resolve")
    "ocg" '(org-clock-goto :wk "goto clock")
    "ocq" '(org-clock-cancel :wk "cancel")
 
-   ;; Roam / Journal
-   "or" '(nil :wk "roam")
-   "ord" '(vulpea-journal-today :wk "daily journal")
-   "orj" '(vulpea-journal-date :wk "journal (date)...")
-   "orn" '(vulpea-journal-next :wk "next journal")
-   "orp" '(vulpea-journal-previous :wk "prev journal")
-   "orr" '(vulpea-db-sync-full-scan :wk "resync db")
+   ;; Journal / Roam
+   "oj"  '(nil :wk "journal")
+   "ojd" '(vulpea-journal-today :wk "daily journal")
+   "ojj" '(vulpea-journal-date :wk "journal (date)...")
+   "ojr" '(vulpea-db-sync-full-scan :wk "resync db")
+
+   ;; Bibliography
+   "ob"  '(nil :wk "bibliography")
+   "obb" '(citar-open :wk "browse")
+   "obn" '(+citar/open-note :wk "open/create note")
+   "obr" '(citar-open-entry :wk "open bib entry")
+   "obf" '(citar-open-files :wk "open files")
+   "obg" '(citar-refresh :wk "refresh cache")
 
    "e"  '(nil :wk "errors")
    "el" '(consult-flymake :wk "error list")

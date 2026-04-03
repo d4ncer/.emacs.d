@@ -10,6 +10,8 @@
 ;; - vulpea (note-taking library built on org-id)
 ;; - vulpea-journal (daily note interface)
 ;; - vulpea-ui (sidebar and UI enhancements)
+;; - citar (citation management backed by vulpea notes)
+;; - citar-embark (contextual actions on citations)
 ;; - org-modern (modern styling for org-mode)
 ;;
 ;; IMPORTANT: This module is designed to be deferred and must NOT be loaded eagerly.
@@ -59,7 +61,30 @@
         `(("i" "Inbox" entry (file ,org-default-notes-file)
            "* TODO %?\n%U\n" :prepend t)))
   (require '+org-format)
-  (add-hook 'org-mode-hook #'+org-format-on-save-mode))
+  (add-hook 'org-mode-hook #'+org-format-on-save-mode)
+  (+local-leader-set-key 'org-mode-map
+    "c" '(org-cite-insert :wk "cite")
+    "i" '(vulpea-insert :wk "insert link (note)")
+    "l" '(org-insert-link :wk "insert link")
+    "r" '(+life/refile :wk "refile to initiative")
+    "s" '(+life/summarize :wk "summarize")
+
+    "n"  '(nil :wk "navigate")
+    "np" '(+life/go-to-parent :wk "go to parent")
+    "nc" '(+life/show-children :wk "show children")
+    "ns" '(+life/show-stakeholders :wk "stakeholders")
+    "nS" '(+life/set-initiative-status :wk "set status")
+    "na" '(+life/add-stakeholder :wk "add stakeholder")
+    "nr" '(+life/remove-stakeholder :wk "remove stakeholder")
+    "ni" '(+life/person-initiatives :wk "person initiatives")
+
+    "k"  '(nil :wk "clock")
+    "ki" '(org-clock-in :wk "clock in")
+    "kd" '(org-clock-display :wk "display")
+
+    "j"  '(nil :wk "journal")
+    "jn" '(vulpea-journal-next :wk "next journal")
+    "jp" '(vulpea-journal-previous :wk "prev journal")))
 
 ;;; Org Agenda
 
@@ -145,9 +170,6 @@
        (org-agenda-start-with-log-mode '(closed))
        (org-agenda-skip-function
         '(org-agenda-skip-entry-if 'notregexp "^\\*\\* DONE "))))))
-  :general (:keymaps 'org-agenda-mode-map
-            :states '(normal motion visual)
-            "SPC" nil)
   :config
   (+local-leader-set-key 'org-agenda-mode-map
     "d" '(org-agenda-deadline :wk "deadline")
@@ -172,8 +194,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
           (envrc-global-mode nil))
       (funcall orig-fn files)))
   (add-hook 'org-agenda-finalize-hook #'+life/agenda-delete-empty-blocks)
-  (with-eval-after-load 'evil
-    (evil-set-initial-state 'org-agenda-mode 'normal))
+  (evil-set-initial-state 'org-agenda-mode 'normal)
   (with-eval-after-load 'doom-modeline
     (doom-modeline-def-segment +agenda-info
       "Agenda title and date."
@@ -201,7 +222,8 @@ not git status, visual pulsing, treesit grammars, or direnv."
                          +life/view-pillars +life/view-goals
                          +life/view-projects +life/view-today
                          +life/go-to-parent +life/show-children
-                         +life/show-stakeholders +life/add-stakeholder
+                         +life/show-stakeholders +life/set-initiative-status
+                         +life/add-stakeholder
                          +life/remove-stakeholder +life/person-initiatives
                          +life/refresh-agenda-files +life/invalidate-agenda-cache
                          +life/refile +life/agenda-refile +life/agenda-person)
@@ -252,7 +274,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
         (propertize "No note" 'face (doom-modeline-face 'doom-modeline-info))))
 
     (doom-modeline-def-modeline '+vulpea-sidebar
-      '(+vulpea-sidebar-info)
+      '(bar +vulpea-sidebar-info)
       '(misc-info))
 
     (add-to-list 'doom-modeline-mode-alist '(vulpea-ui-sidebar-mode . +vulpea-sidebar))))
@@ -268,6 +290,88 @@ not git status, visual pulsing, treesit grammars, or direnv."
                      (?- . "•")))
   :config
   (set-face-attribute 'org-modern-symbol nil :family "Iosevka"))
+
+;;; Citar (citation management)
+
+(use-package citar
+  :ensure t
+  :commands (citar-open citar-open-entry citar-open-notes
+             citar-insert-citation citar-open-files citar-refresh
+             +citar/open-note)
+  :custom
+  (citar-bibliography
+   (list (file-name-concat org-directory "bib/zotero-lib.bib")))
+  (citar-at-point-function 'embark-act)
+  (citar-notes-source 'vulpea)
+  :config
+  (require 'vulpea)
+
+  ;; Vulpea-backed notes source for citar
+  (defun +citar/--note-for-key (citekey)
+    "Return the vulpea note for CITEKEY, or nil."
+    (car (vulpea-db-query-by-property "ROAM_REFS" (concat "@" citekey))))
+
+  (defun +citar/--has-notes ()
+    "Return predicate testing whether a citekey has vulpea notes."
+    (lambda (citekey) (when (+citar/--note-for-key citekey) t)))
+
+  (defun +citar/--get-notes (&optional keys)
+    "Return hash table of KEYS to lists of note file paths."
+    (let ((result (make-hash-table :test 'equal)))
+      (dolist (key (or keys
+                       (mapcar (lambda (n)
+                                 (string-remove-prefix
+                                  "@" (or (cdr (assoc "ROAM_REFS" (vulpea-note-properties n))) "")))
+                               (vulpea-db-query-by-property-key "ROAM_REFS"))))
+        (when-let* ((note (+citar/--note-for-key key)))
+          (puthash key (list (vulpea-note-path note)) result)))
+      result))
+
+  (defun +citar/--open-note (path)
+    "Open the note at PATH."
+    (find-file path))
+
+  (defun +citar/--create-note (citekey _entry)
+    "Create a reference note for CITEKEY."
+    (let ((title (or (citar-get-value "title" citekey) citekey)))
+      (vulpea-visit
+       (vulpea-create
+        title
+        (file-name-concat org-directory "roam/references/${slug}.org")
+        :tags '("reference")
+        :properties `(("ROAM_REFS" . ,(concat "@" citekey)))
+        :body "* First read\n\n* Key insights\n\n* Further thinking required\n\n* Suggested Links\n"))))
+
+  (defun +citar/open-note (citekey &optional _entry)
+    "Open or create a reference note for CITEKEY."
+    (interactive (list (citar-select-ref)))
+    (if-let* ((note (+citar/--note-for-key citekey)))
+        (vulpea-visit note)
+      (+citar/--create-note citekey nil)))
+
+  ;; Register vulpea notes source and activate it
+  (citar-register-notes-source
+   'vulpea
+   (list :name "Vulpea notes"
+         :category 'org-heading
+         :hasitems #'+citar/--has-notes
+         :open #'+citar/--open-note
+         :create #'+citar/--create-note
+         :items #'+citar/--get-notes))
+
+  ;; Wire org-cite processors to citar
+  (require 'oc)
+  (setq org-cite-global-bibliography citar-bibliography)
+  (setq org-cite-insert-processor 'citar)
+  (setq org-cite-follow-processor 'citar)
+  (setq org-cite-activate-processor 'citar))
+
+(use-package citar-embark
+  :ensure t
+  :after (citar embark)
+  :demand t
+  :config
+  (citar-embark-mode 1))
 
 (provide 'mod-org)
 ;;; mod-org.el ends here
