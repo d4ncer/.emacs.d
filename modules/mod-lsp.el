@@ -78,11 +78,12 @@
   ;; Defer flymake to avoid blocking file open
   (add-hook 'prog-mode-hook
             (lambda ()
-              (run-with-idle-timer 1.0 nil
-                                   (lambda ()
-                                     (when (buffer-live-p (current-buffer))
-                                       (with-current-buffer (current-buffer)
-                                         (flymake-mode 1))))))
+              (let ((buf (current-buffer)))
+                (run-with-idle-timer 1.0 nil
+                                     (lambda ()
+                                       (when (buffer-live-p buf)
+                                         (with-current-buffer buf
+                                           (flymake-mode 1)))))))
             80)
   :general-config (:keymaps 'flymake-mode-map
                             "M-n" #'flymake-goto-next-error
