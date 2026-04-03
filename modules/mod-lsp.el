@@ -98,8 +98,8 @@
   (flymake-posframe-default-prefix "❓")
   :config
   (custom-set-faces
-   '(flymake-posframe-face ((t (:inherit nano-subtle))))
-   '(flymake-posframe-border-face ((t (:inherit nano-subtle)))))
+   '(flymake-posframe-face ((t (:inherit +subtle))))
+   '(flymake-posframe-border-face ((t (:inherit +subtle)))))
   :hook (flymake-mode-hook . flymake-posframe-mode))
 
 ;;; Eglot - LSP integration
