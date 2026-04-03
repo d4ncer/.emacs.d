@@ -111,55 +111,43 @@
 
 (ert-deftest +life/--active-p/in-progress-is-active ()
   "Notes with status 'in progress' are active."
-  (let ((note (+life-test/make-note :id "1" :tags '("project"))))
-    (cl-letf (((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "status") "in progress"))))
-      (should (+life/--active-p note)))))
+  (let ((note (+life-test/make-note :id "1" :tags '("project")
+                                    :meta '(("status" . ("in progress"))))))
+    (should (+life/--active-p note))))
 
 (ert-deftest +life/--active-p/not-started-is-active ()
   "Notes with status 'not started' are active."
-  (let ((note (+life-test/make-note :id "2" :tags '("goal"))))
-    (cl-letf (((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "status") "not started"))))
-      (should (+life/--active-p note)))))
+  (let ((note (+life-test/make-note :id "2" :tags '("goal")
+                                    :meta '(("status" . ("not started"))))))
+    (should (+life/--active-p note))))
 
 (ert-deftest +life/--active-p/complete-is-inactive ()
   "Notes with status 'complete' are not active."
-  (let ((note (+life-test/make-note :id "3" :tags '("project"))))
-    (cl-letf (((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "status") "complete"))))
-      (should-not (+life/--active-p note)))))
+  (let ((note (+life-test/make-note :id "3" :tags '("project")
+                                    :meta '(("status" . ("complete"))))))
+    (should-not (+life/--active-p note))))
 
 (ert-deftest +life/--active-p/abandoned-is-inactive ()
   "Notes with status 'abandoned' are not active."
-  (let ((note (+life-test/make-note :id "4" :tags '("project"))))
-    (cl-letf (((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "status") "abandoned"))))
-      (should-not (+life/--active-p note)))))
+  (let ((note (+life-test/make-note :id "4" :tags '("project")
+                                    :meta '(("status" . ("abandoned"))))))
+    (should-not (+life/--active-p note))))
 
 (ert-deftest +life/--active-p/no-status-is-active ()
   "Notes without a status meta are considered active."
   (let ((note (+life-test/make-note :id "5" :tags '("idea"))))
-    (cl-letf (((symbol-function 'vulpea-meta-get)
-               (lambda (_id _prop &optional _type) nil)))
-      (should (+life/--active-p note)))))
+    (should (+life/--active-p note))))
 
 (ert-deftest +life/--children-of/finds-children-by-parent-link ()
   "Returns notes whose parent meta links to the given ID."
-  (let* ((child-a (+life-test/make-note :id "c1" :tags '("project")))
-         (child-b (+life-test/make-note :id "c2" :tags '("goal")))
-         (unrelated (+life-test/make-note :id "c3" :tags '("project"))))
+  (let* ((child-a (+life-test/make-note :id "c1" :tags '("project")
+                                        :meta '(("parent" . ("P1")))))
+         (child-b (+life-test/make-note :id "c2" :tags '("goal")
+                                        :meta '(("parent" . ("P1")))))
+         (unrelated (+life-test/make-note :id "c3" :tags '("project")
+                                          :meta '(("parent" . ("OTHER"))))))
     (cl-letf (((symbol-function 'vulpea-db-query-by-links-some)
-               (lambda (_ids) (list child-a child-b unrelated)))
-              ((symbol-function 'vulpea-meta-get)
-               (lambda (id prop &optional _type)
-                 (when (equal prop "parent")
-                   (pcase id
-                     ("c1" "P1") ("c2" "P1") ("c3" "OTHER"))))))
+               (lambda (_ids) (list child-a child-b unrelated))))
       (let ((result (+life/--children-of "P1")))
         (should (= 2 (length result)))
         (should (member child-a result))
@@ -167,13 +155,12 @@
 
 (ert-deftest +life/--children-of/filters-by-level-tag ()
   "When LEVEL-TAG is given, only children with that tag are returned."
-  (let* ((project (+life-test/make-note :id "c1" :tags '("project")))
-         (goal (+life-test/make-note :id "c2" :tags '("goal"))))
+  (let* ((project (+life-test/make-note :id "c1" :tags '("project")
+                                        :meta '(("parent" . ("P1")))))
+         (goal (+life-test/make-note :id "c2" :tags '("goal")
+                                     :meta '(("parent" . ("P1"))))))
     (cl-letf (((symbol-function 'vulpea-db-query-by-links-some)
-               (lambda (_ids) (list project goal)))
-              ((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "parent") "P1"))))
+               (lambda (_ids) (list project goal))))
       (let ((result (+life/--children-of "P1" "project")))
         (should (= 1 (length result)))
         (should (equal "c1" (vulpea-note-id (car result))))))))
@@ -409,18 +396,14 @@
 (ert-deftest +life/view-goals/filters-to-active-only ()
   "Goals view excludes completed and abandoned goals."
   (let* ((active (+life-test/make-note :id "G1" :title "Active Goal"
-                                       :tags '("goal" "initiative")))
+                                       :tags '("goal" "initiative")
+                                       :meta '(("status" . ("in progress")))))
          (done (+life-test/make-note :id "G2" :title "Done Goal"
-                                     :tags '("goal" "initiative")))
+                                     :tags '("goal" "initiative")
+                                     :meta '(("status" . ("complete")))))
          (presented-notes nil))
     (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
                (lambda (_tags) (list active done)))
-              ((symbol-function 'vulpea-meta-get)
-               (lambda (id prop &optional _type)
-                 (when (equal prop "status")
-                   (pcase id
-                     ("G1" "in progress")
-                     ("G2" "complete")))))
               ((symbol-function 'vulpea-select-from)
                (lambda (_prompt notes &rest _)
                  (setq presented-notes notes)
@@ -434,18 +417,14 @@
 (ert-deftest +life/view-projects/filters-to-active-only ()
   "Projects view excludes completed and abandoned projects."
   (let* ((active (+life-test/make-note :id "PR1" :title "Active"
-                                       :tags '("project" "initiative")))
+                                       :tags '("project" "initiative")
+                                       :meta '(("status" . ("in progress")))))
          (abandoned (+life-test/make-note :id "PR2" :title "Abandoned"
-                                          :tags '("project" "initiative")))
+                                          :tags '("project" "initiative")
+                                          :meta '(("status" . ("abandoned")))))
          (presented nil))
     (cl-letf (((symbol-function 'vulpea-db-query-by-tags-every)
                (lambda (_tags) (list active abandoned)))
-              ((symbol-function 'vulpea-meta-get)
-               (lambda (id prop &optional _type)
-                 (when (equal prop "status")
-                   (pcase id
-                     ("PR1" "in progress")
-                     ("PR2" "abandoned")))))
               ((symbol-function 'vulpea-select-from)
                (lambda (_prompt notes &rest _)
                  (setq presented notes)
@@ -499,16 +478,14 @@
 (ert-deftest +life/show-children/presents-children-for-selection ()
   "Show-children finds children and presents them via vulpea-select-from."
   (let* ((child (+life-test/make-note
-                 :id "CH1" :title "Child" :tags '("project")))
+                 :id "CH1" :title "Child" :tags '("project")
+                 :meta '(("parent" . ("PAR1")))))
          (presented nil)
          (visited nil))
     (cl-letf (((symbol-function 'org-entry-get)
                (lambda (&rest _) "PAR1"))
               ((symbol-function 'vulpea-db-query-by-links-some)
                (lambda (_ids) (list child)))
-              ((symbol-function 'vulpea-meta-get)
-               (lambda (_id prop &optional _type)
-                 (when (equal prop "parent") "PAR1")))
               ((symbol-function 'vulpea-select-from)
                (lambda (_prompt notes &rest _)
                  (setq presented notes)
@@ -765,6 +742,156 @@
               ((symbol-function 'vulpea-select-from)
                (lambda (_prompt notes &rest _) (car notes))))
       (should-error (+life/agenda-person) :type 'user-error))))
+
+;;;; ---------------------------------------------------------------
+;;;; Ingress — signal client
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/ingress-result/dispatches-completed ()
+  "Completed result runs hook with correct args."
+  (let ((hook-args nil))
+    (cl-letf (((symbol-function 'run-hook-with-args)
+               (lambda (_hook type status detail)
+                 (setq hook-args (list type status detail)))))
+      (+life/ingress-result
+       '(:request-id "abc" :type "enrichment.summarize"
+         :status completed :detail "ok"))
+      (should (equal '("enrichment.summarize" completed "ok") hook-args)))))
+
+(ert-deftest +life/ingress-result/dispatches-failed ()
+  "Failed result runs hook with failure info."
+  (let ((hook-args nil))
+    (cl-letf (((symbol-function 'run-hook-with-args)
+               (lambda (_hook type status detail)
+                 (setq hook-args (list type status detail)))))
+      (+life/ingress-result
+       '(:request-id "def" :type "enrichment.summarize"
+         :status failed :detail "file not found"))
+      (should (equal '("enrichment.summarize" failed "file not found") hook-args)))))
+
+(ert-deftest +life/summarize/errors-outside-org-mode ()
+  "Summarize signals user-error when not in org-mode."
+  (with-temp-buffer
+    (fundamental-mode)
+    (should-error (+life/summarize) :type 'user-error)))
+
+(ert-deftest +life/summarize/errors-without-file ()
+  "Summarize signals user-error when buffer has no file."
+  (with-temp-buffer
+    (org-mode)
+    (should-error (+life/summarize) :type 'user-error)))
+
+;;;; Ingress — operation dispatcher
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/--on-enrichment-complete/schedules-ops ()
+  "Enrichment completion defers op execution via timer."
+  (let ((timer-args nil))
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (secs _repeat fn &rest args)
+                 (setq timer-args (list secs fn args)))))
+      (+life/--on-enrichment-complete
+       "enrichment.summarize" 'completed
+       '(:ops ((:op prepend-section :file "/tmp/t.org"
+                :heading "Abstract" :content "text"))))
+      (should timer-args)
+      (should (eq (nth 1 timer-args) #'+life/--execute-ops)))))
+
+(ert-deftest +life/--on-enrichment-complete/ignores-string-detail ()
+  "Enrichment completion is a no-op for plain string detail."
+  (let ((timer-called nil))
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (&rest _) (setq timer-called t))))
+      (+life/--on-enrichment-complete "enrichment.summarize" 'completed "ok")
+      (should-not timer-called))))
+
+(ert-deftest +life/--on-enrichment-complete/ignores-failed ()
+  "Enrichment completion is a no-op for failed status."
+  (let ((timer-called nil))
+    (cl-letf (((symbol-function 'run-with-timer)
+               (lambda (&rest _) (setq timer-called t))))
+      (+life/--on-enrichment-complete
+       "enrichment.summarize" 'failed "something broke")
+      (should-not timer-called))))
+
+;;;; Ingress — operation handlers
+;;;; ---------------------------------------------------------------
+
+(ert-deftest +life/--remove-section/removes-existing ()
+  "Remove-section deletes heading and its content."
+  (with-temp-buffer
+    (insert "#+title: Test\n\n* Abstract\nOld abstract.\n\n* Body\nContent.\n")
+    (org-mode)
+    (+life/--remove-section "Abstract")
+    (should-not (string-match-p "Abstract" (buffer-string)))
+    (should (string-match-p "\\* Body" (buffer-string)))))
+
+(ert-deftest +life/--remove-section/noop-when-missing ()
+  "Remove-section is a no-op when heading does not exist."
+  (with-temp-buffer
+    (let ((original "#+title: Test\n\n* Body\nContent.\n"))
+      (insert original)
+      (org-mode)
+      (+life/--remove-section "Abstract")
+      (should (string= (buffer-string) original)))))
+
+(ert-deftest +life/--op-prepend-section/inserts-before-first-heading ()
+  "Prepend-section inserts before existing headings."
+  (with-temp-buffer
+    (insert "#+title: Test\n\n* Body\nContent.\n")
+    (org-mode)
+    (+life/--op-prepend-section
+     '(:heading "Abstract" :content "New abstract."))
+    (let ((text (buffer-string)))
+      (should (string-match-p "\\* Abstract\nNew abstract\\." text))
+      (should (< (string-match "Abstract" text)
+                 (string-match "Body" text))))))
+
+(ert-deftest +life/--op-prepend-section/replaces-existing ()
+  "Prepend-section replaces an existing section with same heading."
+  (with-temp-buffer
+    (insert "#+title: Test\n\n* Abstract\nOld.\n\n* Body\nContent.\n")
+    (org-mode)
+    (+life/--op-prepend-section
+     '(:heading "Abstract" :content "New."))
+    (let ((text (buffer-string)))
+      (should (string-match-p "New\\." text))
+      (should-not (string-match-p "Old\\." text))
+      ;; Only one Abstract heading
+      (should (= 1 (cl-count-if
+                     (lambda (line) (string= line "* Abstract"))
+                     (split-string text "\n")))))))
+
+(ert-deftest +life/--op-prepend-section/handles-no-headings ()
+  "Prepend-section appends when buffer has no headings."
+  (with-temp-buffer
+    (insert "#+title: Test\n\nSome text.\n")
+    (org-mode)
+    (+life/--op-prepend-section
+     '(:heading "Abstract" :content "New."))
+    (should (string-match-p "\\* Abstract\nNew\\." (buffer-string)))))
+
+(ert-deftest +life/--op-append-section/appends-at-end ()
+  "Append-section inserts at end of buffer."
+  (with-temp-buffer
+    (insert "#+title: Test\n\n* Body\nContent.\n")
+    (org-mode)
+    (+life/--op-append-section
+     '(:heading "Links" :content "- link1\n- link2"))
+    (let ((text (buffer-string)))
+      (should (string-match-p "\\* Links\n- link1\n- link2" text))
+      (should (> (string-match "Links" text)
+                 (string-match "Body" text))))))
+
+(ert-deftest +life/--op-insert-heading/inserts-at-eof ()
+  "Insert-heading adds a new heading at end of buffer."
+  (with-temp-buffer
+    (insert "#+title: Test\n\n* Existing\nContent.\n")
+    (org-mode)
+    (+life/--op-insert-heading
+     '(:level 2 :title "New Task" :body "Task body."))
+    (let ((text (buffer-string)))
+      (should (string-match-p "^\\*\\* New Task\nTask body\\." text)))))
 
 (provide '+life-test)
 ;;; +life-test.el ends here

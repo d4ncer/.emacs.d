@@ -209,8 +209,10 @@ Optionally filter to those tagged with LEVEL-TAG."
   (interactive)
   (delete-other-windows)
   (vulpea-journal-today)
-  (let ((org-agenda-window-setup 'other-window))
-    (org-agenda nil "d")))
+  (let ((journal-buf (current-buffer)))
+    (let ((org-agenda-window-setup 'other-window))
+      (org-agenda nil "d"))
+    (pop-to-buffer journal-buf)))
 
 ;;; Navigation (Phase 3.4)
 
@@ -235,6 +237,25 @@ Optionally filter to those tagged with LEVEL-TAG."
                 (vulpea-visit sel)))
           (user-error "No children found")))
     (user-error "Current buffer has no ID property")))
+
+;;;###autoload
+(defun +life/set-initiative-status ()
+  "Set the status of the current initiative buffer."
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Not in an org-mode buffer"))
+  (if-let* ((id (org-entry-get (point-min) "ID"))
+            (note (vulpea-db-get-by-id id))
+            (_ (vulpea-note-tagged-all-p note "initiative")))
+      (let* ((statuses '("not started" "in progress" "blocked" "complete" "abandoned"))
+             (current (vulpea-buffer-meta-get "status" 'string))
+             (new (completing-read (format "Status [%s]: " (or current "none"))
+                                   statuses nil t nil nil current)))
+        (vulpea-buffer-meta-set "status" new)
+        (when (member new '("complete" "abandoned"))
+          (+life/invalidate-agenda-cache))
+        (message "Status: %s → %s" (or current "none") new))
+    (user-error "Not in an initiative buffer")))
 
 ;;;###autoload
 (defun +life/add-stakeholder ()
@@ -401,6 +422,252 @@ Prompts for a role and a person note, then sets the meta key."
             (org-tags-view nil handle)
           (user-error "Person %s has no handle tag"
                       (vulpea-note-title sel)))))))
+
+;;; Ingress — HTTP client for the Life BEAM backend
+
+(defcustom +life/ingress-url "http://127.0.0.1:4848"
+  "Base URL for the Life ingress HTTP endpoint."
+  :type 'string
+  :group 'life)
+
+(defun +life/signal (type data &optional callback)
+  "Send signal TYPE with DATA to the Life BEAM via HTTP POST.
+CALLBACK is the notification mechanism: \"emacs\" (default) or nil.
+Runs asynchronously; result is delivered via `+life/ingress-result'."
+  (let ((url-request-method "POST")
+        (url-request-extra-headers
+         '(("Content-Type" . "application/json")))
+        (url-request-data
+         (encode-coding-string
+          (json-encode
+           `(:type ,type
+             :data ,data
+             :source "/emacs"
+             :callback ,(or callback "emacs")))
+          'utf-8)))
+    (url-retrieve
+     (concat +life/ingress-url "/signal")
+     (lambda (status &rest _)
+       (if-let* ((err (plist-get status :error)))
+           (message "[Life] Signal failed: %s" err)
+         (goto-char url-http-end-of-headers)
+         (let ((body (json-parse-buffer :object-type 'alist)))
+           (message "[Life] Signal accepted: %s (id: %s)"
+                    (alist-get 'type body)
+                    (alist-get 'request_id body)))))
+     nil t)))
+
+;;;###autoload
+(defun +life/summarize ()
+  "Summarize the current org buffer via the Life BEAM backend.
+Sends an async request; the abstract is inserted when the result arrives."
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Not in an org-mode buffer"))
+  (unless buffer-file-name
+    (user-error "Buffer is not visiting a file"))
+  (when (buffer-modified-p)
+    (save-buffer))
+  (+life/signal "enrichment.summarize"
+                `(:file_path ,buffer-file-name))
+  (message "[Life] Summarize requested for %s"
+           (file-name-nondirectory buffer-file-name)))
+
+(defun +life/ingress-result (plist)
+  "Handle a result callback from the Life BEAM ingress layer.
+PLIST has keys :request-id, :type, :status, :detail.
+DETAIL is either a string or a plist with :ops."
+  (let ((type (plist-get plist :type))
+        (status (plist-get plist :status))
+        (detail (plist-get plist :detail)))
+    (pcase status
+      ('completed
+       (message "[Life] %s completed" type)
+       (run-hook-with-args '+life/ingress-result-functions type status detail))
+      ('failed
+       (message "[Life] %s failed: %s" type detail)
+       (run-hook-with-args '+life/ingress-result-functions type status detail))
+      (_ (message "[Life] %s: %s" type status)))))
+
+(defvar +life/ingress-result-functions nil
+  "Abnormal hook run when an ingress result arrives.
+Each function receives TYPE, STATUS, and DETAIL.")
+
+;;; Ingress — operation dispatcher
+
+;; Clean up stale hooks/advice from previous versions
+(remove-hook '+life/ingress-result-functions #'+life/--on-summarize-complete)
+(advice-remove 'ask-user-about-supersession-threat '+life/auto-revert)
+
+(defun +life/--on-enrichment-complete (_type status detail)
+  "Execute write operations from enrichment result.
+STATUS is completed or failed.  DETAIL is a plist with :ops when
+the action produced write operations, or a string otherwise."
+  (message "[Life] debug: on-enrichment-complete status=%s detail-type=%s detail=%S"
+           status (type-of detail) detail)
+  (when (eq status 'completed)
+    (when-let* ((ops (and (listp detail) (plist-get detail :ops))))
+      (message "[Life] debug: scheduling %d ops" (length ops))
+      ;; Defer to avoid running inside emacsclient eval context
+      (run-with-timer 0 nil #'+life/--execute-ops ops))))
+
+(defun +life/--execute-ops (ops)
+  "Execute write OPS on org buffers, saving each modified file once."
+  (message "[Life] debug: execute-ops called with %d ops" (length ops))
+  (condition-case err
+      (let ((modified-files nil))
+        (dolist (op ops)
+          (let ((file (plist-get op :file)))
+            (message "[Life] debug: executing op %s on %s" (plist-get op :op) file)
+            (vulpea-utils-with-file file
+                                    (+life/--dispatch-op op))
+            (cl-pushnew file modified-files :test #'string=)))
+        (dolist (file modified-files)
+          (when-let* ((buf (find-buffer-visiting file)))
+            (with-current-buffer buf
+              (let ((inhibit-message t))
+                (save-buffer)))))
+        (message "[Life] Applied %d op(s) across %d file(s)"
+                 (length ops) (length modified-files)))
+    (error (message "[Life] ERROR in execute-ops: %S" err))))
+
+(defun +life/--dispatch-op (op)
+  "Dispatch a single write OP in the current org buffer."
+  (pcase (plist-get op :op)
+    ('prepend-section  (+life/--op-prepend-section op))
+    ('append-section   (+life/--op-append-section op))
+    ('set-meta         (+life/--op-set-meta op))
+    ('add-link         (+life/--op-add-link op))
+    ('set-todo-state   (+life/--op-set-todo-state op))
+    ('append-to-heading (+life/--op-append-to-heading op))
+    ('insert-heading   (+life/--op-insert-heading op))
+    (other (message "[Life] Unknown op: %s" other))))
+
+(add-hook '+life/ingress-result-functions #'+life/--on-enrichment-complete)
+
+;;; Ingress — operation handlers
+
+(defun +life/--op-prepend-section (op)
+  "Insert or replace a section before the first heading.
+OP plist keys: :heading, :content."
+  (let ((heading (plist-get op :heading))
+        (content (plist-get op :content)))
+    (+life/--remove-section heading)
+    (goto-char (point-min))
+    (if (re-search-forward "^\\* " nil t)
+        (goto-char (line-beginning-position))
+      (goto-char (point-max))
+      (unless (bolp) (insert "\n")))
+    (insert "* " heading "\n" content "\n")))
+
+(defun +life/--op-append-section (op)
+  "Insert or replace a section at the end of the buffer.
+OP plist keys: :heading, :content."
+  (let ((heading (plist-get op :heading))
+        (content (plist-get op :content)))
+    (+life/--remove-section heading)
+    (goto-char (point-max))
+    (unless (bolp) (insert "\n"))
+    (insert "* " heading "\n" content "\n")))
+
+(defun +life/--op-set-meta (op)
+  "Set a bare description-list metadata entry.
+OP plist keys: :key, :value."
+  (let ((key (plist-get op :key))
+        (value (plist-get op :value)))
+    (vulpea-buffer-meta-set key value)))
+
+(defun +life/--op-add-link (op)
+  "Replace first plain-text occurrence with an org link.
+OP plist keys: :plain-text, :link.
+Skips occurrences inside existing [[...]] links."
+  (let ((plain (plist-get op :plain-text))
+        (link (plist-get op :link)))
+    (save-excursion
+      (goto-char (point-min))
+      (let ((found nil))
+        (while (and (not found)
+                    (search-forward plain nil t))
+          ;; Check we're not inside a link
+          (unless (save-excursion
+                    (goto-char (match-beginning 0))
+                    (let ((ppss (syntax-ppss)))
+                      (or (nth 3 ppss) (nth 4 ppss)))
+                    ;; Also check for enclosing [[...]]
+                    (save-excursion
+                      (and (re-search-backward "\\[\\[" (line-beginning-position) t)
+                           (not (re-search-forward "\\]\\]"
+                                                   (match-beginning 0) t)))))
+            (replace-match link t t)
+            (setq found t)))))))
+
+(defun +life/--op-set-todo-state (op)
+  "Change a heading's TODO state keyword.
+OP plist keys: :heading, :from, :to."
+  (let ((heading (plist-get op :heading))
+        (from-state (plist-get op :from))
+        (to-state (plist-get op :to)))
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward
+             (concat "^\\(\\*+ \\)" (regexp-quote from-state)
+                     " " (regexp-quote heading) "[[:space:]]*$")
+             nil t)
+        (replace-match (concat (match-string 1) to-state " " heading))
+        ;; Add CLOSED timestamp when transitioning to DONE
+        (when (string= to-state "DONE")
+          (forward-line 1)
+          (insert (format "CLOSED: [%s]\n"
+                          (format-time-string "%Y-%m-%d %a %H:%M"))))))))
+
+(defun +life/--op-append-to-heading (op)
+  "Append content to an existing heading's body.
+OP plist keys: :heading, :content."
+  (let ((heading (plist-get op :heading))
+        (content (plist-get op :content)))
+    (save-excursion
+      (goto-char (point-min))
+      (when (re-search-forward
+             (concat "^\\*+ .*" (regexp-quote heading) "[[:space:]]*$")
+             nil t)
+        ;; Move to end of this subtree (before next same-or-higher heading)
+        (let ((level (save-excursion
+                       (goto-char (match-beginning 0))
+                       (org-outline-level))))
+          (if (re-search-forward
+               (concat "^\\*\\{1," (number-to-string level) "\\} ")
+               nil t)
+              (goto-char (line-beginning-position))
+            (goto-char (point-max))))
+        (unless (bolp) (insert "\n"))
+        (insert content "\n")))))
+
+(defun +life/--op-insert-heading (op)
+  "Insert a new heading at the end of the buffer.
+OP plist keys: :level, :title, :body (optional)."
+  (let ((level (plist-get op :level))
+        (title (plist-get op :title))
+        (body (plist-get op :body)))
+    (goto-char (point-max))
+    (unless (bolp) (insert "\n"))
+    (insert (make-string level ?*) " " title "\n")
+    (when body
+      (insert body "\n"))))
+
+(defun +life/--remove-section (heading)
+  "Remove the section with HEADING from the current org buffer.
+Deletes from the heading line through to (but not including)
+the next heading at the same or higher level, or end of buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward
+           (concat "^\\* " (regexp-quote heading) "[[:space:]]*$")
+           nil t)
+      (let ((beg (line-beginning-position))
+            (end (if (re-search-forward "^\\* " nil t)
+                     (line-beginning-position)
+                   (point-max))))
+        (delete-region beg end)))))
 
 ;;; Migration
 
