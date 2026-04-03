@@ -11,7 +11,8 @@
 
 (eval-and-compile
   (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/")))
+  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/"))
+  (add-to-list 'load-path (expand-file-name "~/life/elisp/")))
 
 (setq package-enable-at-startup nil)
 
