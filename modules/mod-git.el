@@ -61,55 +61,8 @@
   ;; Ensure evil keymaps are applied
   (add-hook 'git-timemachine-mode-hook #'evil-normalize-keymaps)
 
-  ;; Show information in header-line for better visibility.
   :custom
-  (git-timemachine-show-minibuffer-details t)
-  :config
-  (with-eval-after-load 'nano-modeline
-    (defcustom nano-modeline-format-git-timemachine
-      (cons '(nano-modeline-element-buffer-status
-              nano-modeline-element-space
-              nano-modeline-element-git-timemachine-author
-              nano-modeline-element-git-timemachine-sha
-              nano-modeline-element-space
-              nano-modeline-element-git-timemachine-date)
-            '(nano-modeline-element-window-status
-              nano-modeline-element-space))
-      "Modeline format for git-timemachine"
-      :type 'nano-modeline-type
-      :group 'nano-modeline-modes)
-
-    (defun nano-modeline-element-git-timemachine-author ()
-      "Git timemachine author"
-      (when (and (boundp 'git-timemachine-show-author)
-                 git-timemachine-show-author
-                 (boundp 'git-timemachine-revision)
-                 git-timemachine-revision)
-        (propertize (concat (nth 6 git-timemachine-revision) ": ")
-                    'face 'git-timemachine-minibuffer-author-face)))
-
-    (defun nano-modeline-element-git-timemachine-sha ()
-      "Git timemachine SHA or subject"
-      (when (and (boundp 'git-timemachine-revision)
-                 git-timemachine-revision)
-        (let ((sha-or-subject (if (and (boundp 'git-timemachine-minibuffer-detail)
-                                       (eq git-timemachine-minibuffer-detail 'commit))
-                                  (car git-timemachine-revision)
-                                (nth 5 git-timemachine-revision))))
-          (propertize sha-or-subject 'face 'git-timemachine-minibuffer-detail-face))))
-
-    (defun nano-modeline-element-git-timemachine-date ()
-      "Git timemachine date"
-      (when (and (boundp 'git-timemachine-revision)
-                 git-timemachine-revision)
-        (let ((date-full (nth 4 git-timemachine-revision))
-              (date-relative (nth 3 git-timemachine-revision)))
-          (propertize (format "[%s (%s)]" date-full date-relative)
-                      'face 'nano-modeline-face-default))))
-
-    (define-advice git-timemachine--show-minibuffer-details (:override (revision) use-nano-modeline)
-      "Show revision details using nano-modeline instead of the minibuffer."
-      (nano-modeline nano-modeline-format-git-timemachine))))
+  (git-timemachine-show-minibuffer-details t))
 
 ;;; Browse-at-remote - Open files on GitHub
 

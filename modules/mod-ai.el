@@ -88,8 +88,7 @@ BODY is executed to prepare the response buffer."
   :custom
   (gptel-model 'claude-sonnet-4-20250514)
   (gptel-default-mode 'org-mode)
-  ;; Use nano-modeline's special format
-  (gptel-use-header-line nil)
+  (gptel-use-header-line t)
   :config
   (alist-set! gptel-prompt-prefix-alist 'org-mode "* ")
   (setq-hook! 'gptel-mode-hook

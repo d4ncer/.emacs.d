@@ -174,33 +174,20 @@ not git status, visual pulsing, treesit grammars, or direnv."
   (add-hook 'org-agenda-finalize-hook #'+life/agenda-delete-empty-blocks)
   (with-eval-after-load 'evil
     (evil-set-initial-state 'org-agenda-mode 'normal))
-  (with-eval-after-load 'nano-modeline
-    (defun +modeline-agenda-title ()
-      "Display the agenda view title."
-      (propertize "Agenda"
-                  'face 'nano-modeline-face-primary))
+  (with-eval-after-load 'doom-modeline
+    (doom-modeline-def-segment +agenda-info
+      "Agenda title and date."
+      (concat
+       (propertize "Agenda" 'face (doom-modeline-face 'doom-modeline-buffer-file))
+       (doom-modeline-spc)
+       (propertize (format-time-string "%A, %d %B %Y")
+                   'face (doom-modeline-face 'doom-modeline-info))))
 
-    (defun +modeline-agenda-date ()
-      "Display the current date in the agenda."
-      (propertize (format-time-string "%A, %d %B %Y")
-                  'face 'nano-modeline-face-secondary))
+    (doom-modeline-def-modeline '+org-agenda
+      '(+agenda-info)
+      '(misc-info))
 
-    (defcustom nano-modeline-format-org-agenda
-      (cons '(nano-modeline-element-buffer-status
-              nano-modeline-element-space
-              +modeline-agenda-title
-              nano-modeline-element-space
-              +modeline-agenda-date)
-            '(nano-modeline-element-window-status
-              nano-modeline-element-space))
-      "Modeline format for org-agenda buffers."
-      :type 'nano-modeline-type
-      :group 'nano-modeline-modes)
-
-    (defun +nano-modeline-org-agenda ()
-      (nano-modeline nano-modeline-format-org-agenda))
-
-    (add-hook 'org-agenda-mode-hook #'+nano-modeline-org-agenda)))
+    (add-to-list 'doom-modeline-mode-alist '(org-agenda-mode . +org-agenda))))
 
 ;;; Vulpea
 
@@ -245,51 +232,30 @@ not git status, visual pulsing, treesit grammars, or direnv."
   :config
   (advice-add 'vulpea-find :after
               (lambda (&rest _) (vulpea-ui-sidebar-open)))
-  (with-eval-after-load 'nano-modeline
-    (defun +modeline-vulpea-sidebar-spacer ()
-      "Invisible spacer that preserves header line height."
-      (nano-modeline-element-buffer-status " " 'nano-modeline-face-secondary))
+  (with-eval-after-load 'doom-modeline
+    (doom-modeline-def-segment +vulpea-sidebar-info
+      "Vulpea sidebar: note title, tags, backlinks."
+      (if-let* ((note vulpea-ui--current-note))
+          (concat
+           (propertize (or (vulpea-note-title note) "No note")
+                       'face (doom-modeline-face 'doom-modeline-buffer-file))
+           (when-let* ((tags (vulpea-note-tags note)))
+             (concat (doom-modeline-spc)
+                     (propertize (mapconcat (lambda (tag) (concat "#" tag)) tags " ")
+                                 'face (doom-modeline-face 'doom-modeline-info))))
+           (when-let* ((id (vulpea-note-id note))
+                       (backlinks (vulpea-db-query-by-links-some
+                                   (list (cons "id" id)))))
+             (concat (doom-modeline-spc)
+                     (propertize (format "%d backlinks" (length backlinks))
+                                 'face (doom-modeline-face 'doom-modeline-buffer-minor-mode)))))
+        (propertize "No note" 'face (doom-modeline-face 'doom-modeline-info))))
 
-    (defun +modeline-vulpea-sidebar-note-title ()
-      "Display the current note title in the vulpea sidebar."
-      (if-let* ((note vulpea-ui--current-note)
-                (title (vulpea-note-title note)))
-          (propertize title 'face 'nano-modeline-face-primary)
-        (propertize "No note" 'face 'nano-modeline-face-secondary)))
+    (doom-modeline-def-modeline '+vulpea-sidebar
+      '(+vulpea-sidebar-info)
+      '(misc-info))
 
-    (defun +modeline-vulpea-sidebar-tags ()
-      "Display tags for the current note in the vulpea sidebar."
-      (when-let* ((note vulpea-ui--current-note)
-                  (tags (vulpea-note-tags note)))
-        (propertize (mapconcat (lambda (tag) (concat "#" tag)) tags " ")
-                    'face 'nano-modeline-face-secondary)))
-
-    (defun +modeline-vulpea-sidebar-backlinks ()
-      "Display backlink count for the current note in the vulpea sidebar."
-      (when-let* ((note vulpea-ui--current-note)
-                  (id (vulpea-note-id note))
-                  (backlinks (vulpea-db-query-by-links-some
-                              (list (cons "id" id)))))
-        (propertize (format "%d backlinks" (length backlinks))
-                    'face 'nano-modeline-face-secondary)))
-
-    (defcustom nano-modeline-format-vulpea-sidebar
-      (cons '(+modeline-vulpea-sidebar-spacer
-              +modeline-vulpea-sidebar-note-title
-              nano-modeline-element-space
-              +modeline-vulpea-sidebar-tags)
-            '(+modeline-vulpea-sidebar-backlinks
-              nano-modeline-element-space
-              nano-modeline-element-window-status
-              nano-modeline-element-space))
-      "Modeline format for vulpea sidebar buffers."
-      :type 'nano-modeline-type
-      :group 'nano-modeline-modes)
-
-    (defun +nano-modeline-vulpea-sidebar ()
-      (nano-modeline nano-modeline-format-vulpea-sidebar))
-
-    (add-hook 'vulpea-ui-sidebar-mode-hook #'+nano-modeline-vulpea-sidebar)))
+    (add-to-list 'doom-modeline-mode-alist '(vulpea-ui-sidebar-mode . +vulpea-sidebar))))
 
 ;;; Org Modern
 

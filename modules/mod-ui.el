@@ -21,11 +21,6 @@
 ;;; Custom faces
 
 (custom-theme-set-faces 'user
-                        '(region ((t (:foreground unspecified :background unspecified :inherit modus-themes-search-lazy))))
-                        '(iedit-occurrence ((t (:inherit modus-themes-search-replace))))
-                        ;; Set a light modeline
-                        '(mode-line ((t (:height 10 :background "#bbb" :box nil))))
-                        '(mode-line-inactive ((t (:height 10 :background "#ddd" :box nil))))
                         ;; Dim delimiters like commas, semicolons, etc.
                         '(font-lock-delimiter-face ((t (:inherit shadow)))))
 
@@ -147,113 +142,49 @@
 
 ;;; Modeline
 
-(use-package nano-modeline :ensure (:host github :repo "rougier/nano-modeline" :branch "rewrite")
+(use-package doom-modeline :ensure t
   :demand t
-  :init
-  (defun +modeline-org-buffer-name (&optional name)
-    (propertize
-     (cond (name name)
-           ((buffer-narrowed-p)
-            (format "%s [%s]" (or (buffer-base-buffer) (buffer-name))
-                    (org-link-display-format
-                     (substring-no-properties
-                      (or (org-get-heading 'no-tags) "-")))))
-           (t
-            (or (org-get-title) "<UNTITLED>.org")))
-     'face 'nano-modeline-face-primary))
-
-  (defcustom nano-modeline-format-org
-    (cons
-     '(nano-modeline-element-buffer-status
-       nano-modeline-element-space
-       +modeline-org-buffer-name
-       nano-modeline-element-space
-       nano-modeline-element-buffer-vc-mode)
-     '(nano-modeline-element-buffer-position
-       nano-modeline-element-window-status
-       nano-modeline-element-space))
-    "Custom format for org buffers."
-    :type 'nano-modeline-type
-    :group 'nano-modeline-modes)
-
-  (defun +nano-modeline-org ()
-    (nano-modeline nano-modeline-format-org))
-
-  ;; Add flymake stats to modeline
-  (require 'flymake)
-
-  (defun +flymake-count-type (type)
-    (let ((count 0))
-      (dolist (d (flymake-diagnostics))
-        (when (= (flymake--severity type)
-                 (flymake--severity (flymake-diagnostic-type d)))
-          (cl-incf count)))
-      count))
-
-  (defun +modeline-element-flymake-statistics ()
-    "Display Flymake diagnostics statistics or loading status."
-    (if (not (bound-and-true-p flymake-mode))
-        ""
-      (let* ((running (flymake-running-backends))
-             (reporting (flymake-reporting-backends))
-             (waiting (cl-set-difference running reporting)))
-        (if waiting
-            (propertize "⟳" 'face 'nano-modeline-face-default)
-          (let* ((error-count (+flymake-count-type :error))
-                 (warning-count (+flymake-count-type :warning))
-                 (note-count (+flymake-count-type :note))
-                 (face (if (> error-count 0)
-                           'nano-modeline-face-buffer-marked
-                         'nano-modeline-face-default)))
-            (propertize
-             (if (or (> error-count 0) (> warning-count 0) (> note-count 0))
-                 (format " (%d/%d/%d) " error-count warning-count note-count)
-               "✔")
-             'face face))))))
-
-  (defcustom nano-modeline-format-prog
-    (cons '(nano-modeline-element-buffer-status
-            nano-modeline-element-space
-            nano-modeline-element-buffer-name
-            nano-modeline-element-space
-            nano-modeline-element-buffer-mode
-            nano-modeline-element-space
-            nano-modeline-element-buffer-vc-mode)
-          '(+modeline-element-flymake-statistics
-            nano-modeline-element-half-space
-            nano-modeline-element-buffer-position
-            nano-modeline-element-window-status
-            nano-modeline-element-space))
-    "Format for programming modes with flymake statistics"
-    :type 'nano-modeline-type
-    :group 'nano-modeline-modes)
-
-  (defun +nano-modeline-prog ()
-    (nano-modeline nano-modeline-format-prog))
-
-  (defun +nano-modeline-default ()
-    (nano-modeline nano-modeline-format-default))
-
-  (defun +nano-modeline-gptel ()
-    (nano-modeline nano-modeline-format-gptel))
-
-  ;; Turn off borders in nano modeline buttons
-
-  (defun +nano-modeline-remove-border-in-buttons (orig-fun &rest args)
-    "Advice to temporarily set nano-modeline-border-color to nil during function execution."
-    (let ((nano-modeline-border-color nil))
-      (apply orig-fun args)))
-
-  ;; Install the advice
-  (advice-add 'nano-modeline--button :around #'+nano-modeline-remove-border-in-buttons)
-
+  :custom
+  (doom-modeline-icon nil)
+  (doom-modeline-buffer-file-name-style 'truncate-upto-project)
+  (doom-modeline-minor-modes nil)
+  (doom-modeline-enable-word-count nil)
+  (doom-modeline-buffer-encoding nil)
+  (doom-modeline-indent-info nil)
+  (doom-modeline-vcs-max-length 20)
+  (doom-modeline-persp-name nil)
+  (doom-modeline-workspace-name nil)
+  (doom-modeline-modal nil)
+  (doom-modeline-env-version nil)
+  (doom-modeline-height 28)
+  (doom-modeline-bar-width 0)
+  (doom-modeline-hud nil)
   :config
-  (add-hook! '(text-mode-hook magit-mode-hook help-mode-hook helpful-mode-hook) #'+nano-modeline-default)
-  (add-hook 'org-mode-hook #'+nano-modeline-org)
-  (add-hook! 'gptel-mode-hook #'+nano-modeline-gptel)
-  (add-hook 'prog-mode-hook #'+nano-modeline-prog)
-  (add-hook 'heex-ts-mode-hook #'+nano-modeline-prog)
-  (setq-default mode-line-format ""))
+  (doom-modeline-mode 1)
+  (setq-default header-line-format nil)
+
+  ;; Custom org segment: show title instead of filename
+  (doom-modeline-def-segment +org-buffer-name
+    "Show org title, narrowed heading, or <UNTITLED>.org."
+    (when (derived-mode-p 'org-mode)
+      (concat
+       (doom-modeline-spc)
+       (propertize
+        (cond ((buffer-narrowed-p)
+               (format "%s [%s]" (or (buffer-base-buffer) (buffer-name))
+                       (org-link-display-format
+                        (substring-no-properties
+                         (or (org-get-heading 'no-tags) "-")))))
+              (t (or (org-get-title) "<UNTITLED>.org")))
+        'face (doom-modeline-face 'doom-modeline-buffer-file)))))
+
+  (doom-modeline-def-modeline '+org
+    '(bar modals +org-buffer-name buffer-position)
+    '(check vcs major-mode misc-info))
+
+  (add-to-list 'doom-modeline-mode-alist '(org-mode . +org))
+
+  )
 
 (provide 'mod-ui)
 ;;; mod-ui.el ends here

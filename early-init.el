@@ -92,8 +92,7 @@
 (setq frame-inhibit-implied-resize t)
 
 ;; Mode & header
-(setq-default mode-line-format "")
-(setq-default header-line-format "")
+(setq-default header-line-format nil)
 
 ;; Title bar
 (when (eq system-type 'darwin)

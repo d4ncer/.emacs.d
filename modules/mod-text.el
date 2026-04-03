@@ -79,10 +79,7 @@
             "=" #'pdf-view-enlarge
             "-" #'pdf-view-shrink
             "0" #'pdf-view-scale-reset
-            "/" #'isearch-forward)
-  :config
-  (with-eval-after-load 'nano-modeline
-    (add-hook 'pdf-view-mode-hook #'+nano-modeline-default)))
+            "/" #'isearch-forward))
 
 (provide 'mod-text)
 ;;; mod-text.el ends here
