@@ -29,7 +29,8 @@
                      "RET" (general-predicate-dispatch #'evil-ret
                              (org-in-regexp org-link-any-re) #'org-open-at-point)
                      "TAB" #'org-cycle
-                     "S-TAB" #'org-shifttab)
+                     "S-TAB" #'org-shifttab
+                     "gb" #'org-mark-ring-goto)
   :custom
   (org-id-locations-file (file-name-concat user-emacs-directory "var" "org-id-locations"))
   (org-directory org-directory)
@@ -68,6 +69,8 @@
     "l" '(org-insert-link :wk "insert link")
     "r" '(+life/refile :wk "refile to initiative")
     "s" '(+life/summarize :wk "summarize")
+    "e" '(+life/extract-entities :wk "extract entities")
+    "t" '(+life/manage-todos :wk "manage todos")
 
     "n"  '(nil :wk "navigate")
     "np" '(+life/go-to-parent :wk "go to parent")
@@ -251,6 +254,24 @@ not git status, visual pulsing, treesit grammars, or direnv."
 (use-package vulpea-ui
   :ensure t
   :after vulpea
+  :general
+  (:keymaps 'vulpea-ui-sidebar-mode-map :states 'normal
+            ;; journal day navigation
+            "J" #'vulpea-journal-ui-next
+            "K" #'vulpea-journal-ui-previous
+            "." #'vulpea-journal-ui-today
+            "D" #'vulpea-journal-ui-date
+            ;; widget section navigation
+            "]]" #'widget-forward
+            "[[" #'widget-backward
+            ;; link cycling
+            "<tab>" #'widget-forward
+            "<S-tab>" #'widget-backward
+            ;; toggle sections
+            "za" #'vulpea-ui-widget-toggle-at-point
+            ;; follow link
+            "<return>" #'vulpea-ui-follow-link-at-point
+            "o" #'vulpea-ui-follow-link-at-point)
   :config
   (advice-add 'vulpea-find :after
               (lambda (&rest _) (vulpea-ui-sidebar-open)))
