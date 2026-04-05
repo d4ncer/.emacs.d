@@ -232,6 +232,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
                          +life/refile +life/agenda-refile +life/agenda-person)
   :custom
   (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
+  (vulpea-db-location (expand-file-name "~/life/internals/vulpea.db"))
   :config
   (vulpea-db-autosync-mode 1)
   (require '+life))
