@@ -247,7 +247,8 @@ not git status, visual pulsing, treesit grammars, or direnv."
    '(:file-name "daily/%Y-%m-%d.org"
      :title "%Y-%m-%d"
      :tags ("daily")
-     :head "#+created: %<[%Y-%m-%d]>"))
+     :head "#+created: %<[%Y-%m-%d]>"
+     :body "* Notes"))
   :config
   (vulpea-journal-setup))
 
