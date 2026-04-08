@@ -24,7 +24,9 @@
 (use-package org
   :ensure t
   :after-call +first-file-hook
-  :hook ((org-mode-hook . visual-line-mode))
+  :hook ((org-mode-hook . visual-line-mode)
+         (org-mode-hook . auto-fill-mode)
+         (org-mode-hook . (lambda () (setq-local fill-column 80))))
   :general (:keymaps 'org-mode-map :states '(normal visual motion)
                      "RET" (general-predicate-dispatch #'evil-ret
                              (org-in-regexp org-link-any-re) #'org-open-at-point)
