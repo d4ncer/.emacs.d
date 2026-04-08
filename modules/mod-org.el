@@ -86,6 +86,7 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
          (org-insert-link)))))
   (+local-leader-set-key 'org-mode-map
     "c" '(org-cite-insert :wk "cite")
+    "d" '(org-deadline :wk "deadline")
     "i" '(vulpea-insert :wk "insert link (note)")
     "l" '(+org/link-dwim :wk "link dwim")
     "r" '(+life/refile :wk "refile to initiative")
