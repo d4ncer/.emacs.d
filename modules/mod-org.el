@@ -31,6 +31,9 @@
                      "TAB" #'org-cycle
                      "S-TAB" #'org-shifttab
                      "gb" #'org-mark-ring-goto)
+           (:keymaps 'org-read-date-minibuffer-local-map
+                     "C-j" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-day 1)))
+                     "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1))))
   :custom
   (org-id-locations-file (file-name-concat user-emacs-directory "var" "org-id-locations"))
   (org-directory org-directory)
@@ -63,10 +66,28 @@
            "* TODO %?\n%U\n" :prepend t)))
   (require '+org-format)
   (add-hook 'org-mode-hook #'+org-format-on-save-mode)
+  (defun +org/link-dwim ()
+    "DWIM link insertion/editing.
+If point is on a link, prompt to change it to a vulpea note link or org link.
+If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
+    (interactive)
+    (let* ((link-bounds (when (org-in-regexp org-link-any-re)
+                          (cons (match-beginning 0) (match-end 0))))
+           (prompt (if link-bounds
+                       "Change link: [v]ulpea note  [o]rg link"
+                     "Insert link: [v]ulpea note  [o]rg link"))
+           (choice (read-char-choice prompt '(?v ?o))))
+      (pcase choice
+        (?v
+         (when link-bounds
+           (delete-region (car link-bounds) (cdr link-bounds)))
+         (vulpea-insert))
+        (?o
+         (org-insert-link)))))
   (+local-leader-set-key 'org-mode-map
     "c" '(org-cite-insert :wk "cite")
     "i" '(vulpea-insert :wk "insert link (note)")
-    "l" '(org-insert-link :wk "insert link")
+    "l" '(+org/link-dwim :wk "link dwim")
     "r" '(+life/refile :wk "refile to initiative")
     "s" '(+life/summarize :wk "summarize")
     "e" '(+life/extract-entities :wk "extract entities")
