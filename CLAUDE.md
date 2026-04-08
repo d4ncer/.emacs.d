@@ -136,6 +136,7 @@ Custom utility libraries (14 files):
 - **Local Leader**: `,` for mode-specific commands
 - Uses General.el (configured in `mod-keybindings.el`)
 - Include `:wk` descriptions for which-key integration
+- **Always use `:general` use-package keyword** for all keybindings — never use `define-key` directly in `:config`
 
 ## Coding Standards
 
