@@ -46,6 +46,7 @@
   (org-pretty-entities t)
   (org-use-sub-superscripts '{})
   (org-export-with-sub-superscripts nil)
+  (org-insert-heading-respect-content t)
   (org-support-shift-select nil)
   (org-log-done 'time)
   (org-log-into-drawer t)
@@ -273,7 +274,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
      :title "%Y-%m-%d"
      :tags ("daily")
      :head "#+created: %<[%Y-%m-%d]>"
-     :body "* Notes"))
+     :body "* Notes\n** General\n** Work"))
   :config
   (vulpea-journal-setup))
 
