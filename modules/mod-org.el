@@ -88,6 +88,7 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
         (?o
          (org-insert-link)))))
   (+local-leader-set-key 'org-mode-map
+    "," '(vulpea-ui-sidebar-toggle :wk "toggle sidebar")
     "c" '(org-cite-insert :wk "cite")
     "d" '(org-deadline :wk "deadline")
     "i" '(vulpea-insert :wk "insert link (note)")
