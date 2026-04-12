@@ -389,7 +389,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
         (file-name-concat org-directory "roam/references/${slug}.org")
         :tags '("reference")
         :properties `(("ROAM_REFS" . ,(concat "@" citekey)))
-        :body "* First read\n\n* Key insights\n\n* Further thinking required\n\n* Suggested Links\n"))))
+        :body "* First read\n\n* Key insights\n\n* Further thinking required\n\n* Oracle notes\n\n* Suggested Links\n"))))
 
   (defun +citar/open-note (citekey &optional _entry)
     "Open or create a reference note for CITEKEY."
