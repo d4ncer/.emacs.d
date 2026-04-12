@@ -33,9 +33,9 @@
                      "TAB" #'org-cycle
                      "S-TAB" #'org-shifttab
                      "gb" #'org-mark-ring-goto)
-           (:keymaps 'org-read-date-minibuffer-local-map
-                     "C-j" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-day 1)))
-                     "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1))))
+  (:keymaps 'org-read-date-minibuffer-local-map
+            "C-j" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-day 1)))
+            "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1))))
   :custom
   (org-id-locations-file (file-name-concat user-emacs-directory "var" "org-id-locations"))
   (org-directory org-directory)
@@ -110,7 +110,10 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
 
     "j"  '(nil :wk "journal")
     "jn" '(vulpea-journal-next :wk "next journal")
-    "jp" '(vulpea-journal-previous :wk "prev journal")))
+    "jp" '(vulpea-journal-previous :wk "prev journal")
+
+    "p" '(+life/process-note :wk "process note")
+    "b" '(+life/request-briefing :wk "request briefing")))
 
 ;;; Org Agenda
 
@@ -343,8 +346,8 @@ not git status, visual pulsing, treesit grammars, or direnv."
 (use-package citar
   :ensure t
   :commands (citar-open citar-open-entry citar-open-notes
-             citar-insert-citation citar-open-files citar-refresh
-             +citar/open-note)
+                        citar-insert-citation citar-open-files citar-refresh
+                        +citar/open-note)
   :custom
   (citar-bibliography
    (list (file-name-concat org-directory "bib/zotero-lib.bib")))
