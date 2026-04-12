@@ -94,9 +94,6 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
     "i" '(vulpea-insert :wk "insert link (note)")
     "l" '(+org/link-dwim :wk "link dwim")
     "r" '(+life/refile :wk "refile to initiative")
-    "s" '(+life/summarize :wk "summarize")
-    "e" '(+life/extract-entities :wk "extract entities")
-    "t" '(+life/manage-todos :wk "manage todos")
 
     "n"  '(nil :wk "navigate")
     "np" '(+life/go-to-parent :wk "go to parent")
@@ -255,7 +252,8 @@ not git status, visual pulsing, treesit grammars, or direnv."
                          +life/add-stakeholder
                          +life/remove-stakeholder +life/person-initiatives
                          +life/refresh-agenda-files +life/invalidate-agenda-cache
-                         +life/refile +life/agenda-refile +life/agenda-person)
+                         +life/refile +life/agenda-refile +life/agenda-person
+                         +life/process-note +life/request-briefing +life/oracle)
   :custom
   (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
   (vulpea-db-location (expand-file-name "~/life/internals/vulpea.db"))
