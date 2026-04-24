@@ -29,7 +29,7 @@
          (org-mode-hook . (lambda () (setq-local fill-column 80))))
   :general (:keymaps 'org-mode-map :states '(normal visual motion)
                      "RET" (general-predicate-dispatch #'evil-ret
-                             (org-in-regexp org-link-any-re) #'org-open-at-point)
+                             (eq 'link (org-element-type (org-element-context))) #'org-open-at-point)
                      "TAB" #'org-cycle
                      "S-TAB" #'org-shifttab
                      "gb" #'org-mark-ring-goto)
