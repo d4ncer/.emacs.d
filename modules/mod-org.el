@@ -40,6 +40,9 @@
   (org-id-locations-file (file-name-concat user-emacs-directory "var" "org-id-locations"))
   (org-directory org-directory)
   (org-default-notes-file org-default-notes-file)
+  (org-attach-id-dir (file-name-concat org-directory "attachments"))
+  (org-attach-dir-relative nil)
+  (org-attach-use-inheritance t)
   (org-startup-folded 'content)
   (org-startup-indented nil)
   (org-hide-emphasis-markers t)
@@ -69,6 +72,34 @@
            "* TODO %?\n%U\n" :prepend t)))
   (require '+org-format)
   (add-hook 'org-mode-hook #'+org-format-on-save-mode)
+  (defun +org/insert-screenshot (&optional name)
+    "Capture an area screenshot and attach it to the entry at point.
+Uses macOS `screencapture -i' for interactive region select. The PNG
+is written to the entry's `org-attach' directory (creating an ID and
+the dir if needed) and an attachment link is inserted at point.
+With prefix arg, prompt for NAME; otherwise use a timestamp slug."
+    (interactive (list (when current-prefix-arg
+                         (read-string "Screenshot name: "))))
+    (unless (eq system-type 'darwin)
+      (user-error "+org/insert-screenshot currently supports macOS only"))
+    (unless (derived-mode-p 'org-mode)
+      (user-error "Not in an org-mode buffer"))
+    (require 'org-attach)
+    (let* ((slug (if (and name (not (string-empty-p name)))
+                     (replace-regexp-in-string "[^A-Za-z0-9_-]+" "-" name)
+                   (format-time-string "%Y-%m-%d-%H%M%S")))
+           (filename (concat "screenshot-" slug ".png"))
+           (attach-dir (org-attach-dir 'create))
+           (target (expand-file-name filename attach-dir)))
+      (message "Select a screenshot region (ESC to cancel)...")
+      (call-process "screencapture" nil nil nil "-i" target)
+      (if (file-exists-p target)
+          (progn
+            (insert (format "[[attachment:%s]]" filename))
+            (org-display-inline-images)
+            (message "Inserted screenshot: %s" filename))
+        (message "Screenshot cancelled"))))
+
   (defun +org/link-dwim ()
     "DWIM link insertion/editing.
 If point is on a link, prompt to change it to a vulpea note link or org link.
@@ -94,6 +125,7 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
     "i" '(vulpea-insert :wk "insert link (note)")
     "l" '(+org/link-dwim :wk "link dwim")
     "r" '(+life/refile :wk "refile to initiative")
+    "s" '(+org/insert-screenshot :wk "screenshot")
 
     "n"  '(nil :wk "navigate")
     "np" '(+life/go-to-parent :wk "go to parent")
