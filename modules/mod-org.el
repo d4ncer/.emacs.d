@@ -45,6 +45,7 @@
   (org-attach-use-inheritance t)
   (org-startup-folded 'content)
   (org-startup-indented nil)
+  (org-startup-with-inline-images t)
   (org-hide-emphasis-markers t)
   (org-pretty-entities t)
   (org-use-sub-superscripts '{})
