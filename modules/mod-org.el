@@ -33,6 +33,8 @@
                      "TAB" #'org-cycle
                      "S-TAB" #'org-shifttab
                      "gb" #'org-mark-ring-goto)
+  (:keymaps 'org-mode-map :states 'insert
+            "C-i" #'+org/link-dwim)
   (:keymaps 'org-read-date-minibuffer-local-map
             "C-j" (lambda () (interactive) (org-eval-in-calendar '(calendar-forward-day 1)))
             "C-k" (lambda () (interactive) (org-eval-in-calendar '(calendar-backward-day 1))))
@@ -118,7 +120,10 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
            (delete-region (car link-bounds) (cdr link-bounds)))
          (vulpea-insert))
         (?o
-         (org-insert-link)))))
+         (if (use-region-p)
+             (org-insert-link)
+           (let ((desc (read-string "Link title: ")))
+             (org-insert-link nil nil (unless (string-empty-p desc) desc))))))))
   (+local-leader-set-key 'org-mode-map
     "," '(vulpea-ui-sidebar-toggle :wk "toggle sidebar")
     "c" '(org-cite-insert :wk "cite")
@@ -146,7 +151,11 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
     "jp" '(vulpea-journal-previous :wk "prev journal")
 
     "p" '(+life/process-note :wk "process note")
-    "b" '(+life/request-briefing :wk "request briefing")))
+    "b" '(+life/request-briefing :wk "request briefing")
+
+    "D"  '(nil :wk "done")
+    "Dr" '(+life/review-done :wk "review done")
+    "Da" '(+life/archive-done :wk "archive done")))
 
 ;;; Org Agenda
 
@@ -289,7 +298,8 @@ not git status, visual pulsing, treesit grammars, or direnv."
                          +life/remove-stakeholder +life/person-initiatives
                          +life/refresh-agenda-files +life/invalidate-agenda-cache
                          +life/refile +life/agenda-refile +life/agenda-person
-                         +life/process-note +life/request-briefing +life/oracle)
+                         +life/process-note +life/request-briefing +life/oracle
+                         +life/review-done +life/archive-done)
   :custom
   (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
   (vulpea-db-location (expand-file-name "~/life/internals/vulpea.db"))
