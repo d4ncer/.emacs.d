@@ -114,8 +114,20 @@
   (setq native-comp-async-report-warnings-errors ncomp-warn-level)
   (setq native-comp-warning-on-missing-source ncomp-warn-level))
 
-;; If native comp breaks, double check these paths
-(setenv "LIBRARY_PATH" "/opt/homebrew/opt/gcc/lib/gcc/15:/opt/homebrew/opt/libgccjit/lib/gcc/15:/opt/homebrew/opt/gcc/lib/gcc/15/gcc/aarch64-apple-darwin24/15")
+;; If native comp breaks, double check these paths.
+;; Globbed rather than hardcoded so they survive Homebrew gcc major-version
+;; bumps and macOS target-triple changes (e.g. darwin24 -> darwin25 on Tahoe).
+;; The third path holds the crt*.o startup objects + libgcc the driver links
+;; against; a stale triple there makes libgccjit fail with "error invoking gcc
+;; driver".
+(when (eq system-type 'darwin)
+  (let* ((globs '("/opt/homebrew/opt/gcc/lib/gcc/*"
+                  "/opt/homebrew/opt/libgccjit/lib/gcc/*"
+                  "/opt/homebrew/opt/gcc/lib/gcc/*/gcc/*/*"))
+         (paths (delete-dups
+                 (mapcan (lambda (g) (file-expand-wildcards g t)) globs))))
+    (when paths
+      (setenv "LIBRARY_PATH" (string-join paths ":")))))
 
 ;; Always prompt for "y" or "n", rather than "yes" or "no".
 (setq use-short-answers t)
