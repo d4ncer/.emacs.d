@@ -20,8 +20,9 @@
 
 ;;; Theme
 
-(use-package batppuccin-themes
-  :ensure (:host github :repo "bbatsov/batppuccin-emacs")
+(use-package batppuccin
+  :ensure (batppuccin-themes :host github :repo "bbatsov/batppuccin-emacs"
+                             :main "batppuccin.el")
   :demand t
   :config
   (+theme-update))
