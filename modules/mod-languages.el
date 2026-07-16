@@ -129,6 +129,7 @@
 
 (use-package elixir-ts-mode
   :mode ("\\.ex\\'" "\\.exs\\'")
+  :hook ((elixir-ts-mode-hook heex-ts-mode-hook) . eglot-ensure)
   :config
   ;; (with-eval-after-load 'eglot
   ;;   (let ((+elixir-ls-bin (file-name-concat user-emacs-directory "var/lsp-servers/elixir-ls/language_server.sh")))
