@@ -136,6 +136,13 @@ for the symbol at point in a dedicated buffer."
 (use-package eglot-tempel
   :ensure t
   :after eglot
+  ;; `:demand' is required: without it, use-package has no autoload trigger for
+  ;; this package, so the `:config' body is wrapped in a nested
+  ;; `eval-after-load' on eglot-tempel itself that nothing ever fires.
+  ;;
+  ;; `eglot-tempel-mode' must also be on before a server connects, since eglot
+  ;; sends `snippetSupport' at initialize time.
+  :demand t
   :config
   (eglot-tempel-mode t))
 
