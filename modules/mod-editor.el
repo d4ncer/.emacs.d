@@ -272,7 +272,7 @@
   ;; Built-in spellchecker. I don't actually use it directly, but other packages
   ;; reference its configuration.
   :custom
-  (ispell-dictionary "en_AU")
+  (ispell-dictionary "en_GB")
   (ispell-personal-dictionary (file-name-concat org-directory "aspell.en.pws"))
   :config
   (unless (executable-find "aspell")
@@ -291,8 +291,7 @@
 
   :config
   (add-hook! 'spell-fu-mode-hook
-    (spell-fu-dictionary-add (spell-fu-get-ispell-dictionary "en_AU"))
-    (spell-fu-dictionary-add (spell-fu-get-ispell-dictionary "fr")))
+    (spell-fu-dictionary-add (spell-fu-get-ispell-dictionary "en_GB")))
 
   (setq-hook! 'org-mode-hook
     spell-fu-faces-exclude '(org-meta-line org-link org-code org-block
