@@ -7,7 +7,7 @@
 ;; This module contains LSP and tree-sitter configuration including:
 ;; - treesit-auto for automatic tree-sitter grammar installation
 ;; - flymake for error checking
-;; - flymake-posframe for visual error display
+;; - +flymake-posframe for visual error display
 ;; - eglot for LSP integration
 ;; - eldoc-box for documentation display
 
@@ -89,19 +89,25 @@
                             "M-n" #'flymake-goto-next-error
                             "M-p" #'flymake-goto-prev-error))
 
-(use-package flymake-posframe :ensure '(flymake-posframe :type git :host github
-                                        :repo "Ladicle/flymake-posframe")
+(use-package posframe :ensure t
+  ;; Child-frame library, used by `+flymake-posframe'.
+  :defer t)
+
+(use-package +flymake-posframe
+  ;; Local replacement for the unmaintained `flymake-posframe', which called the
+  ;; internal `flymake--diag-text' -- removed in Emacs 30+, so every invocation
+  ;; signalled from `post-command-hook'.
   :after flymake
   :custom
-  (flymake-posframe-warning-prefix "⚠️")
-  (flymake-posframe-error-prefix "❌")
-  (flymake-posframe-note-prefix "ℹ️")
-  (flymake-posframe-default-prefix "❓")
+  (+flymake-posframe-warning-prefix "⚠️")
+  (+flymake-posframe-error-prefix "❌")
+  (+flymake-posframe-note-prefix "ℹ️")
+  (+flymake-posframe-default-prefix "❓")
   :config
   (custom-set-faces
-   '(flymake-posframe-face ((t (:inherit +subtle))))
-   '(flymake-posframe-border-face ((t (:inherit +subtle)))))
-  :hook (flymake-mode-hook . flymake-posframe-mode))
+   '(+flymake-posframe-face ((t (:inherit +subtle))))
+   '(+flymake-posframe-border-face ((t (:inherit +subtle)))))
+  :hook (flymake-mode-hook . +flymake-posframe-mode))
 
 ;;; Eglot - LSP integration
 
