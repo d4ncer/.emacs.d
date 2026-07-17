@@ -29,11 +29,16 @@
 (use-package tempel :ensure t
   ;; Text snippets.
   ;;
+  ;; NB. Don't use `:states' here. Tempel installs `tempel-map' via
+  ;; `minor-mode-overriding-map-alist', which evil doesn't scan for auxiliary
+  ;; keymaps, so state-scoped bindings are never consulted. Bind plainly
+  ;; instead; evil leaves TAB alone in insert state, so these still win.
   :general
-  (:keymaps 'tempel-map :states 'insert
-            "<escape>" #'tempel-done
-            "M-n" #'tempel-next
-            "M-p" #'tempel-previous)
+  (:keymaps 'tempel-map
+            "TAB" #'tempel-next
+            "<tab>" #'tempel-next
+            "<backtab>" #'tempel-previous
+            "S-TAB" #'tempel-previous)
   :custom
   (tempel-path (file-name-concat +templates-dir "*.eld"))
   :init
