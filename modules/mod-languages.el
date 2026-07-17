@@ -154,6 +154,32 @@
             (list (rx (group-n 1 (+? nonl)) "/test/" (group-n 2 (+? any)) "_test.exs" eos)
                   (rx (backref 1) "/lib/" (backref 2) ".ex"))))
 
+;; Expert (as of 0.1.6) mishandles incremental `textDocument/didChange' edits at
+;; the end of a document: it drops the leading indent of the final line, then
+;; clamps the now out-of-range character offsets to 0, so typing "def" lands in
+;; its copy as "fed". It then resolves `{:variable, :fed}' and returns zero
+;; completions until the document is resynced.
+;;
+;; Eglot's payloads are correct -- verified against the wire log -- so work
+;; around it by sending the whole buffer instead of ranges. `:emacs-messup' is
+;; the sentinel `eglot--signal-textDocument/didChange' already checks to decide
+;; on a full sync.
+;;
+;; Scoped to Expert alone: remove once upstream fixes the incremental path.
+
+(defun +eglot-expert-p (server)
+  "Return non-nil if SERVER is an Expert language server."
+  (equal "Expert" (plist-get (eglot--server-info server) :name)))
+
+(define-advice eglot--signal-textDocument/didChange
+    (:before (&rest _) +expert-force-full-sync)
+  "Force full-document sync on Expert servers."
+  (when-let* (((not (eq eglot--recent-changes :emacs-messup)))
+              (eglot--recent-changes)
+              (server (eglot-current-server))
+              ((+eglot-expert-p server)))
+    (setq eglot--recent-changes :emacs-messup)))
+
 (use-package inf-elixir :ensure t)
 
 (use-package erlang :ensure t
