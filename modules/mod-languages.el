@@ -180,6 +180,32 @@
               ((+eglot-expert-p server)))
     (setq eglot--recent-changes :emacs-messup)))
 
+;; Expert re-derives its own PATH by spawning a login shell (`/bin/zsh`) and so
+;; never sees the per-project Elixir/Erlang that direnv + Nix put on this
+;; buffer's `exec-path'. When the probe fails it silently falls back to its
+;; bundled Elixir. Expert added an escape hatch in
+;; https://github.com/expert-lsp/expert/pull/682: the `elixirExecutablePath' /
+;; `erlangExecutablePath' settings, which it consults *before* the login-shell
+;; probe (Expert.Port.project_executable/2). Changing either makes Expert
+;; restart its engine node with that binary. It only reads these from a pushed
+;; `workspace/didChangeConfiguration' (no pull, no initializationOptions), and
+;; expects them at the top level of `settings' -- exactly the shape Eglot sends
+;; `eglot-workspace-configuration' in. Resolve via `executable-find' rather than
+;; hardcoding a /nix/store path so it survives `nix flake update'.
+
+(defun +expert-pin-toolchain ()
+  "Point Expert at the Elixir/Erlang on this buffer's (direnv/Nix) PATH."
+  (when-let* ((server (eglot-current-server))
+              ((+eglot-expert-p server))
+              (elixir (executable-find "elixir")))
+    (setq-local eglot-workspace-configuration
+                (append (list :elixirExecutablePath elixir)
+                        (when-let* ((erl (executable-find "erl")))
+                          (list :erlangExecutablePath erl))))
+    (eglot-signal-didChangeConfiguration server)))
+
+(add-hook 'eglot-managed-mode-hook #'+expert-pin-toolchain)
+
 (use-package inf-elixir :ensure t)
 
 (use-package erlang :ensure t
