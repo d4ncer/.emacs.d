@@ -123,5 +123,26 @@ BODY is executed to prepare the response buffer."
                 (t
                  (pulsar--create-pulse (cons (point-min) (point)) 'pulsar-green))))))))
 
+;;; agent-shell - ACP agent client (Claude Code, Gemini, etc.)
+
+;; agent-shell derives from comint (via shell-maker), which is intentionally
+;; excluded from evil-collection (see +evil-collection); its evil bindings come
+;; from evil-collection's dedicated agent-shell module instead.
+
+(use-package agent-shell
+  :ensure t
+  :general
+  ;; Evil bindings come from evil-collection (agent-shell is registered in
+  ;; `evil-collection-mode-list'): normal-state permission approval on y/n/!/v,
+  ;; cycle navigation, and the map-level n/p unbinding that keeps insert-state
+  ;; typing working. It only remaps RET in the viewport modes, though, so bind
+  ;; RET to submit from normal state here too (insert-state RET already submits
+  ;; via comint).
+  (:keymaps 'agent-shell-mode-map :states 'normal
+            "RET" #'shell-maker-submit)
+  :config
+  ;; Start in insert state, ready to type a prompt (as with gptel).
+  (evil-set-initial-state 'agent-shell-mode 'insert))
+
 (provide 'mod-ai)
 ;;; mod-ai.el ends here

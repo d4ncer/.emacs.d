@@ -22,6 +22,7 @@
 (defvar evil-collection-mode-list
   `(2048-game
     ag
+    agent-shell
     alchemist
     anaconda-mode
     apropos
