@@ -126,20 +126,46 @@ BODY is executed to prepare the response buffer."
 ;;; agent-shell - ACP agent client (Claude Code, Gemini, etc.)
 
 ;; agent-shell derives from comint (via shell-maker), which is intentionally
-;; excluded from evil-collection (see +evil-collection); its evil bindings come
-;; from evil-collection's dedicated agent-shell module instead.
+;; excluded from evil-collection (see +evil-collection).  Configure its
+;; modal behavior locally so that normal state is for navigating responses and
+;; A returns to the live prompt.
 
 (use-package agent-shell
   :ensure t
+  :init
+  (defun +agent-shell-append-to-latest-prompt ()
+    "Enter insert state at the end of the latest prompt."
+    (interactive)
+    (goto-char (point-max))
+    (evil-insert-state))
+
+  (defun +agent-shell-setup-evil ()
+    "Configure Evil behavior local to an agent-shell buffer."
+    (setq-local evil-move-cursor-back nil
+                evil-move-beyond-eol t)
+    (evil-local-set-key 'normal (kbd "A")
+                        #'+agent-shell-append-to-latest-prompt)
+    (evil-local-set-key 'normal (kbd "RET")
+                        #'agent-shell-ui-toggle-fragment)
+    (evil-local-set-key 'normal (kbd "<return>")
+                        #'agent-shell-ui-toggle-fragment)
+    (evil-local-set-key 'insert (kbd "C-p") #'comint-previous-input)
+    (evil-local-set-key 'insert (kbd "C-n") #'comint-next-input))
+
+  :hook (agent-shell-mode-hook . +agent-shell-setup-evil)
   :general
-  ;; Evil bindings come from evil-collection (agent-shell is registered in
-  ;; `evil-collection-mode-list'): normal-state permission approval on y/n/!/v,
-  ;; cycle navigation, and the map-level n/p unbinding that keeps insert-state
-  ;; typing working. It only remaps RET in the viewport modes, though, so bind
-  ;; RET to submit from normal state here too (insert-state RET already submits
-  ;; via comint).
+  (:keymaps 'agent-shell-mode-map :states 'insert
+            "RET" #'newline
+            "TAB" #'self-insert-command
+            "<tab>" #'self-insert-command
+            "C-RET" #'shell-maker-submit
+            "C-<return>" #'shell-maker-submit)
   (:keymaps 'agent-shell-mode-map :states 'normal
-            "RET" #'shell-maker-submit)
+            "TAB" #'agent-shell-next-item
+            "<tab>" #'agent-shell-next-item
+            "<backtab>" #'agent-shell-previous-item
+            "C-RET" #'shell-maker-submit
+            "C-<return>" #'shell-maker-submit)
   :config
   ;; Start in insert state, ready to type a prompt (as with gptel).
   (evil-set-initial-state 'agent-shell-mode 'insert))
