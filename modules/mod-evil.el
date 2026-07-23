@@ -165,8 +165,6 @@ BEG and END are the bounds of the active region."
     (require '+evil-collection)
     (+evil-collection-defer-install-to-mode-activation))
   :config
-  (+evil-collection-init 'comint)
-
   ;; Fix leader keybindings that get clobbered by evil-collection.
 
   (define-advice evil-collection-magit-init (:after (&rest _) bind-leader)
