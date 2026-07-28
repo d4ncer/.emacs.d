@@ -30,7 +30,7 @@
 
    "SPC" '(execute-extended-command :wk "M-x")
    "RET" '(gptel-menu :wk "LLM...")
-   "." '(other-window-prefix :wk "in other window...")
+   "." '(agent-shell-toggle :wk "toggle agent shell")
    "!" '(async-shell-command :wk "shell command")
    "|" '(rotate-layout :wk "rotate window layout")
    "-" '(window-toggle-side-windows :wk "side windows")
@@ -89,6 +89,8 @@
    "p"  '(nil :wk "project")
    "p!" '(projectile-run-shell-command-in-root :wk "shell cmd as root")
    "p&" '(projectile-run-async-shell-command-in-root :wk "async shell cmd as root")
+   "pa" '(+agent-shell-project :wk "agent shell")
+   "pA" '(+agent-shell-in-project :wk "agent shell (other project)")
    "pI" '(projectile-invalidate-cache :wk "invalidate cache")
    "pc" '(projectile-compile-project :wk "compile project")
    "pC" '(projectile-cleanup-known-projects :wk "cleanup known projects")
@@ -253,6 +255,7 @@
    "lf" '(gptel-add-file :wk "add file to context")
    "ls" '(gptel-send :wk "send")
    "l?" '(gptel-menu :wk "menu")
+   "lb" '(agent-shell-switch-buffer :wk "switch agent shell")
    "ll" '(gptel :wk "open chat")
    "lw" '(gptel :wk "rewrite")
 

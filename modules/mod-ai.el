@@ -133,6 +133,59 @@ BODY is executed to prepare the response buffer."
 (use-package agent-shell
   :ensure t
   :init
+  (defun +agent-shell-project (&optional arg)
+    "Open the current project's agent shell without toggling it.
+With prefix ARG, preserve `agent-shell' prefix behavior."
+    (interactive "P")
+    (if (and (derived-mode-p 'agent-shell-mode)
+             (null arg))
+        (switch-to-buffer (agent-shell-shell-buffer :no-create t))
+      (agent-shell arg)))
+
+  (defun +agent-shell--project-buffer (project)
+    "Return the most recently used agent shell for PROJECT."
+    (let ((project-root
+           (file-name-as-directory (expand-file-name project))))
+      (seq-find
+       (lambda (buffer)
+         (equal project-root
+                (with-current-buffer buffer
+                  (agent-shell-cwd))))
+       (agent-shell-buffers))))
+
+  (defun +agent-shell--start-in-project (project)
+    "Start and display an agent shell rooted at PROJECT."
+    (let* ((project-root
+            (file-name-as-directory (expand-file-name project)))
+           (config
+            (or (agent-shell--auto-preferred-config)
+                (agent-shell-select-config :prompt "Start new agent: ")
+                (error "No agent config found")))
+           (shell-buffer
+            (with-temp-buffer
+              (setq default-directory project-root)
+              (agent-shell--start
+               :config config
+               :no-focus t
+               :new-session t
+               :session-strategy agent-shell-session-strategy))))
+      (agent-shell--display-and-insert-context shell-buffer nil)
+      shell-buffer))
+
+  (defun +agent-shell-in-project ()
+    "Choose a Projectile project, then open its agent shell."
+    (interactive)
+    (let ((projects (projectile-relevant-known-projects)))
+      (unless projects
+        (user-error "There are no known projects"))
+      (let ((project (projectile-completing-read
+                      "Agent shell project: "
+                      projects)))
+        (if-let* ((shell-buffer
+                   (+agent-shell--project-buffer project)))
+            (switch-to-buffer shell-buffer)
+          (+agent-shell--start-in-project project)))))
+
   (defun +agent-shell-append-to-latest-prompt ()
     "Enter insert state at the end of the latest prompt."
     (interactive)
