@@ -54,7 +54,7 @@
   (org-export-with-sub-superscripts nil)
   (org-insert-heading-respect-content t)
   (org-support-shift-select nil)
-  (org-log-done 'time)
+  (org-log-done 'note)
   (org-log-into-drawer t)
   (org-clock-into-drawer t)
   (org-return-follows-link t)
