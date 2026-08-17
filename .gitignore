@@ -11,6 +11,7 @@ eln-cache/
 elpa
 .cache
 projectile-bookmarks.eld
+projectile-frecency.eld
 auto-save-list
 custom.el
 eshell/
