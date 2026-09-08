@@ -223,6 +223,62 @@
   :ensure (:files ("nix-ts-mode.el"))
   :mode "\\.nix\\'")
 
+;;; Bazel
+
+(use-package bazel :ensure t
+  ;; Major modes for BUILD/WORKSPACE/MODULE/.bzl files plus bazelrc &
+  ;; bazelignore, with build/test/run commands, buildifier integration
+  ;; (flymake + apheleia), xref for labels and completion-at-point.
+  ;;
+  ;; The package registers its own `auto-mode-alist' entries via autoloads,
+  ;; so only the commands need listing here.
+  :commands (bazel-build
+             bazel-test
+             bazel-run
+             bazel-coverage
+             bazel-test-at-point
+             bazel-compile-current-file
+             bazel-buildifier
+             bazel-find-build-file
+             bazel-find-workspace-file
+             bazel-find-module-file
+             bazel-show-consuming-target
+             bazel-find-project)
+  :preface
+  (defun +bazel-find-project (directory)
+    "Return the Bazel project for DIRECTORY, if it is inside a workspace.
+Cheap wrapper around `bazel-find-project' that avoids loading the package
+unless a workspace marker file exists above DIRECTORY."
+    (when (locate-dominating-file
+           directory
+           (lambda (dir)
+             (seq-some (lambda (file) (file-exists-p (expand-file-name file dir)))
+                       '("MODULE.bazel" "WORKSPACE.bazel" "WORKSPACE" "WORKSPACE.bzlmod"))))
+      (bazel-find-project directory)))
+  :init
+  ;; Let project.el (and therefore eglot) treat a Bazel workspace as a project
+  ;; even when it isn't the VC root.
+  (add-hook 'project-find-functions #'+bazel-find-project)
+  :config
+  ;; Formatting on save is handled by apheleia's buildifier formatter.
+  (setq bazel-buildifier-before-save nil)
+
+  ;; `bazel-mode-map' is inherited by all the derived modes
+  ;; (bazel-build-mode, bazel-workspace-mode, bazel-starlark-mode, ...).
+  (+local-leader-set-key 'bazel-mode-map
+    "b" '(bazel-build :wk "build")
+    "t" '(bazel-test :wk "test")
+    "T" '(bazel-test-at-point :wk "test at point")
+    "r" '(bazel-run :wk "run")
+    "c" '(bazel-coverage :wk "coverage")
+    "C" '(bazel-compile-current-file :wk "compile file")
+    "f" '(bazel-buildifier :wk "buildifier")
+    "g" '(nil :which-key "goto")
+    "gb" '(bazel-find-build-file :wk "BUILD file")
+    "gw" '(bazel-find-workspace-file :wk "WORKSPACE file")
+    "gm" '(bazel-find-module-file :wk "MODULE file")
+    "gc" '(bazel-show-consuming-target :wk "consuming target")))
+
 ;;; Tree-sitter mode remapping
 
 ;; Remap old modes to tree-sitter equivalents

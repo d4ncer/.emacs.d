@@ -202,6 +202,7 @@ Modules are loaded in the following order from `init.el`:
 - **Configuration:** conf-mode with eldoc
 - **Markdown:** Code block fontification
 - **Elixir/Erlang:** Custom LSP setup, test/impl navigation
+- **Bazel:** `bazel` package for BUILD/WORKSPACE/MODULE/.bzl files, buildifier via apheleia, `,` local-leader build/test/run
 - **Tree-sitter remapping:** 11 mode remappings to tree-sitter equivalents
 - Requires: `+corelib`, `+elisp` libraries
 

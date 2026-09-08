@@ -224,6 +224,7 @@ Language support is configured in `modules/mod-languages.el`:
 - **TypeScript/JavaScript**: eglot, sibling file rules for tests
 - **Python, Elixir, Erlang**: Custom LSP configurations
 - **Data formats**: JSON, YAML (with eglot)
+- **Bazel**: `bazel` package (BUILD/WORKSPACE/MODULE/.bzl), buildifier via apheleia, `,` bindings for build/test/run
 - **Tree-sitter**: 11 mode remappings to tree-sitter equivalents
 - All languages use eglot for LSP integration
 

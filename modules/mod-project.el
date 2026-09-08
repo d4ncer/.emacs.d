@@ -18,24 +18,28 @@
   (projectile-completion-system 'default)
   (projectile-switch-project-action #'+switch-project-action)
   (projectile-enable-caching t)
+  (projectile-auto-update-cache-with-watches t)
   (projectile-globally-ignored-files '("TAGS" ".DS_Store"))
   (projectile-globally-ignored-file-suffixes '("meta" "jsbundle" "gz" "zip" "tar" "elc"))
-  (projectile-globally-ignored-directoriess '(".bzr"
-                                              ".ensime_cache"
-                                              ".eunit"
-                                              ".fslckout"
-                                              ".g8"
-                                              ".git"
-                                              ".hg"
-                                              ".idea"
-                                              ".stack-work"
-                                              ".svn"
-                                              "build"
-                                              "dist"
-                                              "node_modules"
-                                              "vendor"
-                                              "straight/repos"
-                                              "target"))
+  (projectile-globally-ignored-directories '(".bzr"
+                                             ".ensime_cache"
+                                             ".eunit"
+                                             ".fslckout"
+                                             ".g8"
+                                             ".git"
+                                             ".hg"
+                                             ".idea"
+                                             ".stack-work"
+                                             ".svn"
+                                             "bazel-bin"
+                                             "bazel-out"
+                                             "bazel-testlogs"
+                                             "build"
+                                             "dist"
+                                             "node_modules"
+                                             "vendor"
+                                             "straight/repos"
+                                             "target"))
   :config
   (autoload 'magit-status "magit")
   (defun +switch-project-action ()
