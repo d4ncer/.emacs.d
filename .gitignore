@@ -12,6 +12,7 @@ elpa
 .cache
 projectile-bookmarks.eld
 projectile-frecency.eld
+.projectile-cache.eld
 auto-save-list
 custom.el
 eshell/
@@ -59,3 +60,4 @@ chatgpt
 cleanup-elc.sh
 agent/
 /.agent-shell/
+/life-agent/

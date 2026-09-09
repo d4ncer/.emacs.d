@@ -35,7 +35,8 @@
   (delete-old-versions t)
   (kept-old-versions 5)
   (kept-new-versions 5)
-  (insert-directory-program "ls")
+  ;; Prefer GNU ls (coreutils) on macOS; BSD ls lacks --dired & long options.
+  (insert-directory-program (or (executable-find "gls") "ls"))
   (backup-directory-alist `(("." . ,+auto-save-dir)))
   (auto-save-list-file-prefix (file-name-concat +auto-save-dir ".saves-"))
   (auto-save-file-name-transforms `((".*" ,+auto-save-dir t)))
