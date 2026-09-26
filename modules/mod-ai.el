@@ -134,6 +134,7 @@ BODY is executed to prepare the response buffer."
   :ensure t
   :custom
   (agent-shell-openai-default-model-id "gpt-6-sol")
+  (agent-shell-preferred-agent-config (agent-shell-openai-make-codex-config))
   :init
   (defun +agent-shell-project (&optional arg)
     "Open the current project's agent shell without toggling it.
@@ -195,6 +196,15 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
     (goto-char (point-max))
     (evil-insert-state))
 
+  (defun +agent-shell-activate-at-point ()
+    "Activate the link or button at point, or use normal Evil RET behavior."
+    (interactive)
+    (if-let* ((map (get-char-property (point) 'keymap))
+              (action (lookup-key map (kbd "RET")))
+              ((commandp action)))
+        (call-interactively action)
+      (evil-ret)))
+
   (defun +agent-shell-setup-evil ()
     "Configure Evil behavior local to an agent-shell buffer."
     (setq-local evil-move-cursor-back nil
@@ -202,8 +212,12 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
     (evil-local-set-key 'normal (kbd "A")
                         #'+agent-shell-append-to-latest-prompt)
     (evil-local-set-key 'normal (kbd "RET")
-                        #'agent-shell-ui-toggle-fragment)
+                        #'+agent-shell-activate-at-point)
     (evil-local-set-key 'normal (kbd "<return>")
+                        #'+agent-shell-activate-at-point)
+    (evil-local-set-key 'normal (kbd "s-RET")
+                        #'agent-shell-ui-toggle-fragment)
+    (evil-local-set-key 'normal (kbd "s-<return>")
                         #'agent-shell-ui-toggle-fragment)
     (evil-local-set-key 'insert (kbd "C-p") #'comint-previous-input)
     (evil-local-set-key 'insert (kbd "C-n") #'comint-next-input))
@@ -223,17 +237,30 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
             "C-RET" #'shell-maker-submit
             "C-<return>" #'shell-maker-submit)
   :config
+  (add-hook 'agent-shell-artist-mode-hook #'evil-emacs-state)
+  (with-eval-after-load 'agent-shell-ui
+    (define-key agent-shell-ui-fragment-map (kbd "RET") nil)
+    (define-key agent-shell-ui-fragment-map (kbd "s-RET")
+                #'agent-shell-ui-toggle-fragment)
+    (define-key agent-shell-ui-fragment-map (kbd "s-<return>")
+                #'agent-shell-ui-toggle-fragment))
   ;; Start in insert state, ready to type a prompt (as with gptel).
   (evil-set-initial-state 'agent-shell-mode 'insert))
+
+(elpaca (latex-to-svg-backend
+         :host github :repo "alberti42/latex-to-svg-backend"))
 
 (use-package agent-shell-math-renderer
   :ensure (agent-shell-math-renderer
            :host github
            :repo "alberti42/agent-shell-math-renderer")
-  :after agent-shell
-  :demand t
+  :after (agent-shell latex-to-svg-backend)
+  :hook (agent-shell-mode . agent-shell-math-renderer-mode)
   :config
-  (setq agent-shell-math-renderer-enabled t))
+  (add-hook 'enable-theme-functions
+            #'agent-shell-math-renderer-on-appearance-change)
+  (add-hook 'after-setting-font-hook
+            #'agent-shell-math-renderer-on-appearance-change))
 
 (provide 'mod-ai)
 ;;; mod-ai.el ends here

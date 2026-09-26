@@ -10,6 +10,14 @@
 
 ;;; Code:
 
+(defun +dotfiles-switch ()
+  "Run `make switch' in the dotfiles repository."
+  (interactive)
+  (let ((default-directory (expand-file-name "~/code/dotfiles/")))
+    (unless (file-exists-p (expand-file-name "Makefile" default-directory))
+      (user-error "No dotfiles Makefile in %s" default-directory))
+    (compile "make switch" t)))
+
 ;;; Leader key
 
 (use-package general :ensure (:wait t) :demand t
@@ -138,6 +146,7 @@
    "ae" #'eshell
    "ar" (general-predicate-dispatch 'profiler-start
           (and (featurep 'profiler) (profiler-running-p)) #'+profiler-stop-and-report)
+   "aS" '(+dotfiles-switch :wk "switch dotfiles")
 
    "ap"  '(nil :wk "elpaca")
    "app" #'elpaca-manager
@@ -145,6 +154,7 @@
    "api" #'elpaca-info
    "apb" #'elpaca-browse
    "apv" #'elpaca-visit
+
 
    "b"  '(nil :wk "buffers")
    "ba" '(mark-whole-buffer :wk "select buffer")
