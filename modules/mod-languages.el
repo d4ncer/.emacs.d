@@ -196,6 +196,20 @@
   "Return non-nil if SERVER is an Expert language server."
   (equal "Expert" (plist-get (eglot--server-info server) :name)))
 
+;; Expert 0.1.5 strictly validates the parameterless LSP `exit'
+;; notification and rejects Eglot's empty object (`params: {}').  Omit the
+;; field for Expert so an intentional shutdown does not look like a crash.
+(defun +expert-omit-exit-params (args)
+  "Omit PARAMS from an Expert `exit' notification in ARGS."
+  (pcase-let ((`(,server ,method ,_params) args))
+    (if (and (eq method :exit)
+             (object-of-class-p server 'eglot-lsp-server)
+             (+eglot-expert-p server))
+        (list server method :jsonrpc-omit)
+      args)))
+
+(advice-add 'jsonrpc-notify :filter-args #'+expert-omit-exit-params)
+
 (define-advice eglot--signal-textDocument/didChange
     (:before (&rest _) +expert-force-full-sync)
   "Force full-document sync on Expert servers."
@@ -220,14 +234,18 @@
 
 (defun +expert-pin-toolchain ()
   "Point Expert at the Elixir/Erlang on this buffer's (direnv/Nix) PATH."
-  (when-let* ((server (eglot-current-server))
-              ((+eglot-expert-p server))
-              (elixir (executable-find "elixir")))
-    (setq-local eglot-workspace-configuration
-                (append (list :elixirExecutablePath elixir)
-                        (when-let* ((erl (executable-find "erl")))
-                          (list :erlangExecutablePath erl))))
-    (eglot-signal-didChangeConfiguration server)))
+  ;; `eglot-managed-mode-hook' runs both when Eglot starts and when it stops
+  ;; managing a buffer.  During teardown `eglot-current-server' can still
+  ;; return the cached (already dead) server, so do not try to notify it.
+  (when (eglot-managed-p)
+    (when-let* ((server (eglot-current-server))
+                ((+eglot-expert-p server))
+                (elixir (executable-find "elixir")))
+      (setq-local eglot-workspace-configuration
+                  (append (list :elixirExecutablePath elixir)
+                          (when-let* ((erl (executable-find "erl")))
+                            (list :erlangExecutablePath erl))))
+      (eglot-signal-didChangeConfiguration server))))
 
 (add-hook 'eglot-managed-mode-hook #'+expert-pin-toolchain)
 
