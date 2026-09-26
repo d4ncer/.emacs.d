@@ -86,7 +86,32 @@
 
 ;;; TypeScript/JavaScript
 
+(defun +deno-project-root (&optional directory)
+  "Return the Deno project root containing DIRECTORY, if any."
+  (locate-dominating-file
+   (or directory default-directory)
+   (lambda (directory)
+     (or (file-exists-p (expand-file-name "deno.json" directory))
+         (file-exists-p (expand-file-name "deno.jsonc" directory))))))
+
+(defun +typescript-eglot-server (_interactive _project)
+  "Select the Deno LSP for Deno projects, otherwise TypeScript LSP."
+  (if (+deno-project-root)
+      '("deno" "lsp")
+    '("typescript-language-server" "--stdio")))
+
+(with-eval-after-load 'eglot
+  (setf (alist-get '((js-mode :language-id "javascript")
+                     (js-ts-mode :language-id "javascript")
+                     (tsx-ts-mode :language-id "typescriptreact")
+                     (typescript-ts-mode :language-id "typescript")
+                     (typescript-mode :language-id "typescript"))
+                   eglot-server-programs nil nil #'equal)
+        #'+typescript-eglot-server))
+
 (use-package typescript-ts-mode
+  :hook ((js-mode-hook js-ts-mode-hook tsx-ts-mode-hook
+          typescript-mode-hook typescript-ts-mode-hook) . eglot-ensure)
   :config
   (pushnew! find-sibling-rules
             ;; Tests -> impl
