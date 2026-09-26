@@ -132,6 +132,8 @@ BODY is executed to prepare the response buffer."
 
 (use-package agent-shell
   :ensure t
+  :custom
+  (agent-shell-openai-default-model-id "gpt-6-sol")
   :init
   (defun +agent-shell-project (&optional arg)
     "Open the current project's agent shell without toggling it.
@@ -175,6 +177,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   (defun +agent-shell-in-project ()
     "Choose a Projectile project, then open its agent shell."
     (interactive)
+    (require 'projectile)
     (let ((projects (projectile-relevant-known-projects)))
       (unless projects
         (user-error "There are no known projects"))
@@ -222,6 +225,15 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   ;; Start in insert state, ready to type a prompt (as with gptel).
   (evil-set-initial-state 'agent-shell-mode 'insert))
+
+(use-package agent-shell-math-renderer
+  :ensure (agent-shell-math-renderer
+           :host github
+           :repo "alberti42/agent-shell-math-renderer")
+  :after agent-shell
+  :demand t
+  :config
+  (setq agent-shell-math-renderer-enabled t))
 
 (provide 'mod-ai)
 ;;; mod-ai.el ends here
