@@ -305,8 +305,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
   (vulpea-db-location (expand-file-name "~/life/internals/vulpea.db"))
   :config
   (vulpea-db-autosync-mode 1)
-  (require '+life)
-  (require '+life-memories))
+  (require '+life))
 
 (use-package vulpea-journal
   :ensure t
