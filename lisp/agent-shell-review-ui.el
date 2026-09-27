@@ -410,9 +410,10 @@ Return the sidebar window."
      (agent-shell-review--run-origin run)
      spec
      (agent-shell-review--run-clarifications run)
-     (and (eq (plist-get (agent-shell-review--run-result run) :kind)
-              'findings)
-          (agent-shell-review--run-result run))
+     (or (and (eq (plist-get (agent-shell-review--run-result run) :kind)
+                  'findings)
+              (agent-shell-review--run-result run))
+         (agent-shell-review--run-stale-result run))
      (and (eq (plist-get requirements :kind) 'entered)
           requirements))))
 

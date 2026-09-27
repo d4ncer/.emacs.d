@@ -132,6 +132,26 @@
           (should (equal closed '(old-transport))))
       (kill-buffer buffer))))
 
+(ert-deftest agent-shell-review-test-rerun-keeps-earlier-stale-findings ()
+  "Rerunning after an error keeps findings from the earlier pass visible."
+  (let* ((findings '(:kind findings :items ((:title "Earlier issue"))))
+         (old (make-agent-shell-review--run
+               :project temporary-file-directory :status 'error
+               :stale-result findings))
+         (buffer (generate-new-buffer " *review-stale-rerun*"))
+         carried)
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review--begin)
+                   (lambda (_root _origin _spec _answers stale
+                            &optional _requirements)
+                     (setq carried stale))))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run old)
+            (agent-shell-review-rerun))
+          (should (equal carried findings)))
+      (kill-buffer buffer))))
+
 (ert-deftest agent-shell-review-test-handoff-callback-and-copy ()
   "Send marked fixes through the captured callback or expose them for copy."
   (let* ((sent nil)
@@ -553,6 +573,35 @@
         (should (eq (agent-shell-review--run-transport run) 'transport))
         (should (eq (agent-shell-review--run-status run) 'reviewing))
         (should (string-match-p "Implement the feature" sent))))))
+
+(ert-deftest agent-shell-review-test-send-keeps-transport-error ()
+  "A failed send keeps the transport's specific visible error."
+  (let ((run (make-agent-shell-review--run
+              :project temporary-file-directory :transport 'transport
+              :status 'reviewing)))
+    (cl-letf (((symbol-function 'agent-shell-review-acp-send)
+               (lambda (_transport _prompt)
+                 (agent-shell-review--handle-event
+                  run '(:type error :message "read-only mode refused"))
+                 nil))
+              ((symbol-function 'agent-shell-review-acp-close) #'ignore))
+      (agent-shell-review--send run "Review now")
+      (should (eq (agent-shell-review--run-status run) 'error))
+      (should (equal (agent-shell-review--run-error-message run)
+                     "Reviewer failed: read-only mode refused")))))
+
+(ert-deftest agent-shell-review-test-send-without-transport-error ()
+  "An unreported failed send still produces a visible error."
+  (let ((run (make-agent-shell-review--run
+              :project temporary-file-directory :transport 'transport
+              :status 'reviewing)))
+    (cl-letf (((symbol-function 'agent-shell-review-acp-send)
+               (lambda (_transport _prompt) nil))
+              ((symbol-function 'agent-shell-review-acp-close) #'ignore))
+      (agent-shell-review--send run "Review now")
+      (should (eq (agent-shell-review--run-status run) 'error))
+      (should (equal (agent-shell-review--run-error-message run)
+                     "Reviewer prompt was not sent")))))
 
 (ert-deftest agent-shell-review-test-acp-questions-and-repair ()
   "Continue questions and one format repair on the same transport."

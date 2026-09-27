@@ -83,7 +83,9 @@ It runs in the invoking buffer and returns a plist with :context and :send."
   "Submit PROMPT to RUN's reviewer process."
   (unless (agent-shell-review-acp-send
            (agent-shell-review--run-transport run) prompt)
-    (agent-shell-review--terminal-error run "Reviewer prompt was not sent")))
+    (unless (agent-shell-review--run-error-message run)
+      (agent-shell-review--terminal-error
+       run "Reviewer prompt was not sent"))))
 
 (defun agent-shell-review--parse-result (run)
   "Parse RUN's complete turn, requesting one reformat when needed."
