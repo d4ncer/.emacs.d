@@ -247,6 +247,12 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   ;; Start in insert state, ready to type a prompt (as with gptel).
   (evil-set-initial-state 'agent-shell-mode 'insert))
 
+(use-package agent-shell-notify
+  :ensure nil
+  :after agent-shell
+  :config
+  (agent-shell-notify-mode 1))
+
 (elpaca (latex-to-svg-backend
          :host github :repo "alberti42/latex-to-svg-backend"))
 

@@ -18,6 +18,67 @@
 (defvar agent-shell-notify--subscriptions (make-hash-table :test #'eq)
   "Subscription token for each observed shell buffer.")
 
+(defvar agent-shell-notify--states (make-hash-table :test #'eq)
+  "Alert state for each shell buffer.")
+
+(defcustom agent-shell-notify-send-function #'agent-shell-notify--macos-send
+  "Function called with an alert title and body."
+  :type 'function)
+
+(defcustom agent-shell-notify-suppress-event-function
+  (lambda (_shell-buffer _event) nil)
+  "Return non-nil to suppress a generic alert for a shell event."
+  :type 'function)
+
+(defcustom agent-shell-notify-related-buffers-function
+  (lambda (shell-buffer) (list shell-buffer))
+  "Return buffers whose focused selection suppresses a shell alert."
+  :type 'function)
+
+(defconst agent-shell-notify--script
+  "on run argv\n  display notification (item 2 of argv) with title (item 1 of argv)\nend run"
+  "Fixed AppleScript for sending a notification.")
+
+(defun agent-shell-notify--macos-send (title body)
+  "Send TITLE and BODY via macOS without blocking Emacs."
+  (if-let* ((program (executable-find "osascript")))
+      (condition-case err
+          (make-process
+           :name "agent-shell-notify" :buffer nil :noquery t
+           :command (list program "-e" agent-shell-notify--script
+                          "--" title body)
+           :sentinel (lambda (process _event)
+                       (when (and (eq (process-status process) 'exit)
+                                  (not (zerop (process-exit-status process))))
+                         (message "agent-shell-notify: osascript exited %d"
+                                  (process-exit-status process)))))
+        (error (message "agent-shell-notify: %s" (error-message-string err))))
+    (message "agent-shell-notify: osascript is unavailable")))
+
+(defun agent-shell-notify-send (title body &optional relevant-buffers)
+  "Send TITLE and BODY unless a RELEVANT-BUFFERS buffer is focused."
+  (unless (cl-some
+           (lambda (frame)
+             (and (frame-focus-state frame)
+                  (memq (window-buffer (frame-selected-window frame))
+                        relevant-buffers)))
+           (frame-list))
+    (funcall agent-shell-notify-send-function title body)))
+
+(defun agent-shell-notify--title (shell-buffer)
+  "Return a project and session title for SHELL-BUFFER."
+  (with-current-buffer shell-buffer
+    (format "%s · %s"
+            (file-name-nondirectory
+             (directory-file-name (agent-shell-cwd)))
+            (buffer-name shell-buffer))))
+
+(defun agent-shell-notify--cancel-pending (shell-buffer)
+  "Cancel a pending ready alert for SHELL-BUFFER."
+  (when-let* ((timer (plist-get (gethash shell-buffer agent-shell-notify--states)
+                                :timer)))
+    (cancel-timer timer)))
+
 (defun agent-shell-notify--classify (event)
   "Return alert data for agent-shell EVENT, or nil."
   (let ((name (map-elt event :event))
@@ -38,16 +99,54 @@
 
 (defun agent-shell-notify--handle (shell-buffer event)
   "Process EVENT from SHELL-BUFFER."
-  (if (eq (map-elt event :event) 'clean-up)
-      (agent-shell-notify--detach shell-buffer)
-    (when-let* ((alert (agent-shell-notify--classify event)))
-      (agent-shell-notify-send
-       (buffer-name shell-buffer) (plist-get alert :body)
-       (list shell-buffer)))))
+  (let ((event-name (map-elt event :event)))
+    (cond
+     ((eq event-name 'clean-up)
+      (agent-shell-notify--detach shell-buffer))
+     ((eq event-name 'input-submitted)
+      (agent-shell-notify--cancel-pending shell-buffer)
+      (remhash shell-buffer agent-shell-notify--states))
+     ((funcall agent-shell-notify-suppress-event-function shell-buffer event))
+     (t
+      (when-let* ((alert (agent-shell-notify--classify event))
+                  (kind (plist-get alert :kind)))
+        (let ((old (gethash shell-buffer agent-shell-notify--states)))
+          (unless (eq kind (plist-get old :kind))
+            (agent-shell-notify--cancel-pending shell-buffer)
+            (let* ((generation (1+ (or (plist-get old :generation) 0)))
+                   (state (list :kind kind :generation generation))
+                   (send (lambda ()
+                           (agent-shell-notify-send
+                            (agent-shell-notify--title shell-buffer)
+                            (plist-get alert :body)
+                            (funcall agent-shell-notify-related-buffers-function
+                                     shell-buffer)))))
+              (puthash shell-buffer state agent-shell-notify--states)
+              (if (eq kind 'ready)
+                  (plist-put
+                   state :timer
+                   (run-at-time
+                    0.25 nil
+                    (lambda ()
+                      (when (and (buffer-live-p shell-buffer)
+                                 (eq kind
+                                     (plist-get
+                                      (gethash shell-buffer
+                                               agent-shell-notify--states)
+                                      :kind))
+                                 (eql generation
+                                      (plist-get
+                                       (gethash shell-buffer
+                                                agent-shell-notify--states)
+                                       :generation)))
+                        (funcall send)))))
+                (funcall send))))))))))
 
 (defun agent-shell-notify--detach (shell-buffer)
   "Remove the event subscription from SHELL-BUFFER."
   (when-let* ((token (gethash shell-buffer agent-shell-notify--subscriptions)))
+    (agent-shell-notify--cancel-pending shell-buffer)
+    (remhash shell-buffer agent-shell-notify--states)
     (remhash shell-buffer agent-shell-notify--subscriptions)
     (when (buffer-live-p shell-buffer)
       (with-current-buffer shell-buffer
