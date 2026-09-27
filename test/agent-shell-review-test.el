@@ -46,7 +46,8 @@
                    (lambda (&rest _args)
                      (list :root root :base "main" :diff "change")))
                   ((symbol-function 'agent-shell-review-acp-create)
-                   (lambda (&rest _args) 'transport))
+                   (lambda (&rest _args)
+                     (make-agent-shell-review-acp--transport :closed t)))
                   ((symbol-function 'agent-shell-review-acp-start)
                    (lambda (_transport) nil))
                   ((symbol-function 'agent-shell-review-acp-close)
@@ -102,17 +103,22 @@
          (old-result '(:kind findings :items ((:priority "P1" :title "Old"))))
          (old (make-agent-shell-review--run
                :project temporary-file-directory
+               :origin '(:context "Old request") :transport 'old-transport
                :requirements '(:kind file :source "/tmp/spec.md" :text "Spec")
                :clarifications answers :result old-result :status 'findings))
          (new-run nil)
+         (closed nil)
          (buffer (generate-new-buffer " *review-rerun*")))
     (unwind-protect
         (cl-letf (((symbol-function 'agent-shell-review--begin)
-                   (lambda (_root _shell _spec clarifications stale)
+                   (lambda (_root origin _spec clarifications stale)
                      (setq new-run
                            (make-agent-shell-review--run
+                            :origin origin
                             :clarifications clarifications
-                            :stale-result stale)))))
+                            :stale-result stale))))
+                  ((symbol-function 'agent-shell-review-acp-close)
+                   (lambda (transport) (push transport closed))))
           (with-current-buffer buffer
             (agent-shell-review-mode)
             (setq-local agent-shell-review--current-run old)
@@ -120,55 +126,100 @@
           (should (equal (agent-shell-review--run-clarifications new-run)
                          answers))
           (should (equal (agent-shell-review--run-stale-result new-run)
-                         old-result)))
+                         old-result))
+          (should (equal (agent-shell-review--run-origin new-run)
+                         '(:context "Old request")))
+          (should (equal closed '(old-transport))))
       (kill-buffer buffer))))
 
-(ert-deftest agent-shell-review-test-replacement-fixer ()
-  "Marked fixes and clarified criteria reach a new shell if the old one died."
-  (let* ((old-shell (generate-new-buffer " *closed-implementation*"))
-         (new-shell (generate-new-buffer " *replacement*"))
-         (sent nil)
+(ert-deftest agent-shell-review-test-handoff-callback-and-copy ()
+  "Send marked fixes through the captured callback or expose them for copy."
+  (let* ((sent nil)
          (result '(:kind findings
                          :items ((:priority "P1" :file "src/a.el" :line 4
                                             :title "Wrong" :evidence "nil"
-                                            :requirement "must return path"
+                                            :requirement "return path"
                                             :suggestion "return path"))))
          (run (make-agent-shell-review--run
                :project temporary-file-directory
-               :implementation-shell old-shell
                :requirements '(:kind file :source "spec.md"
                                      :text "Original criteria")
-               :clarifications '(("Which API?" . "clarified criterion"))
-               :result result :status 'findings))
+               :clarifications '(("Which API?" . "Use v2"))
+               :result result :status 'findings
+               :send-fixes (lambda (prompt) (push prompt sent) t)))
          (buffer (generate-new-buffer " *review-fixes*")))
     (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell-review--start-implementation-shell)
-                   (lambda (_root) new-shell))
-                  ((symbol-function 'agent-shell-insert)
-                   (lambda (&rest args) (push args sent))))
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run run)
+          (setf (agent-shell-review--run-sidebar-buffer run) buffer)
+          (agent-shell-review-ui-render run)
+          (search-forward "Wrong")
+          (agent-shell-review-mark)
+          (should-not sent)
+          (agent-shell-review-send-marked)
+          (should (= (length sent) 1))
+          (should (string-match-p "Original criteria" (car sent)))
+          (should (string-match-p "Use v2" (car sent)))
+          (should (string-match-p "Wrong" (car sent)))
+          (setf (agent-shell-review--run-send-fixes run)
+                (lambda (_prompt) (user-error "Busy")))
+          (should-error (agent-shell-review-send-marked) :type 'user-error)
+          (should (equal (agent-shell-review--run-marks run) '(0)))
+          (should (string-match-p "Wrong"
+                                  (agent-shell-review--run-fix-prompt run)))
+          (setf (agent-shell-review--run-send-fixes run) nil)
+          (agent-shell-review-send-marked)
+          (let ((copy (get-buffer
+                       (format "*Agent Review Fixes: %s*"
+                               (file-name-nondirectory
+                                (directory-file-name temporary-file-directory))))))
+            (should (buffer-live-p copy))
+            (with-current-buffer copy
+              (should (string-match-p "Wrong" (buffer-string))))
+            (kill-buffer copy)))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-diagnostic-view ()
+  "Show retained ACP evidence in a non-shell buffer."
+  (let* ((run (make-agent-shell-review--run
+               :project temporary-file-directory :transport 'transport
+               :text "raw answer" :error-message "parser error"))
+         (buffer (generate-new-buffer " *review-diagnostics*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review-acp-diagnostics)
+                   (lambda (_transport) "Request: session/prompt\nError: timeout")))
           (with-current-buffer buffer
             (agent-shell-review-mode)
             (setq-local agent-shell-review--current-run run)
-            (setf (agent-shell-review--run-sidebar-buffer run) buffer)
-            (agent-shell-review-ui-render run)
-            (goto-char (point-min))
-            (search-forward "Wrong")
-            (agent-shell-review-mark)
-            (should (null sent))
-            (kill-buffer old-shell)
-            (agent-shell-review-send-marked))
-          (should (eq (agent-shell-review--run-implementation-shell run)
-                      new-shell))
-          (should (= (length sent) 1))
-          (let ((replacement-prompt (plist-get (car sent) :text)))
-            (should (string-match-p "clarified criterion"
-                                    replacement-prompt))
-            (should (string-match-p "Original criteria"
-                                    replacement-prompt))
-            (should (string-match-p "Wrong" replacement-prompt))))
-      (when (buffer-live-p old-shell) (kill-buffer old-shell))
-      (kill-buffer new-shell)
+            (agent-shell-review-open-reviewer))
+          (let ((diagnostics
+                 (get-buffer
+                  (format "*Agent Review Diagnostics: %s*"
+                          (file-name-nondirectory
+                           (directory-file-name temporary-file-directory))))))
+            (should (buffer-live-p diagnostics))
+            (with-current-buffer diagnostics
+              (should (string-match-p "raw answer" (buffer-string)))
+              (should (string-match-p "timeout" (buffer-string)))
+              (should-not (derived-mode-p 'agent-shell-mode)))
+            (kill-buffer diagnostics)))
       (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-kill-cancels-hide-keeps-running ()
+  "Hiding preserves the review; killing its sidebar cancels it."
+  (let* ((run (make-agent-shell-review--run
+               :project temporary-file-directory :transport 'transport
+               :status 'reviewing))
+         (closed nil))
+    (cl-letf (((symbol-function 'agent-shell-review-acp-close)
+               (lambda (transport) (push transport closed))))
+      (let* ((window (agent-shell-review-ui-show run))
+             (buffer (agent-shell-review--run-sidebar-buffer run)))
+        (quit-window nil window)
+        (should-not closed)
+        (kill-buffer buffer)
+        (should (equal closed '(transport)))))))
 
 (ert-deftest agent-shell-review-test-status-rendering ()
   "Render progress, stale findings, and a brief parser error."

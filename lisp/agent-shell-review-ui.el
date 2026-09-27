@@ -20,7 +20,12 @@
   "Stop this sidebar's staleness timer before it is killed."
   (when (timerp agent-shell-review-ui--refresh-timer)
     (cancel-timer agent-shell-review-ui--refresh-timer)
-    (setq agent-shell-review-ui--refresh-timer nil)))
+    (setq agent-shell-review-ui--refresh-timer nil))
+  (when (and agent-shell-review--current-run
+             (eq (agent-shell-review--run-sidebar-buffer
+                  agent-shell-review--current-run)
+                 (current-buffer)))
+    (agent-shell-review--cancel agent-shell-review--current-run)))
 
 (defvar agent-shell-review-mode-map
   (let ((map (make-sparse-keymap)))
@@ -44,23 +49,7 @@
   "Major mode for review questions and prioritized findings."
   (setq-local truncate-lines nil
               word-wrap t)
-  (add-hook 'kill-buffer-hook #'agent-shell-review-ui--stop-refresh nil t)
-  (setq-local header-line-format
-              '(:eval (format " Review · %s"
-                              (if (agent-shell-review--run-p
-                                   agent-shell-review--current-run)
-                                  (agent-shell-review--run-status
-                                   agent-shell-review--current-run)
-                                'collecting))))
-  (setq-local mode-line-format
-              '(" Agent Review · "
-                (:eval (format "%s"
-                               (if (agent-shell-review--run-p
-                                    agent-shell-review--current-run)
-                                   (agent-shell-review--run-status
-                                    agent-shell-review--current-run)
-                                 'collecting)))
-                "  n/p item · TAB detail · g rerun · q hide")))
+  (add-hook 'kill-buffer-hook #'agent-shell-review-ui--stop-refresh nil t))
 
 (defun agent-shell-review-ui--buffer (run)
   "Create or return RUN's sidebar buffer."
@@ -177,7 +166,13 @@ Return the sidebar window."
       (let ((inhibit-read-only t)
             (status (agent-shell-review--run-status run))
             (kind (agent-shell-review-ui--kind run))
-            (stale (agent-shell-review-ui--stale-p run)))
+            (stale (agent-shell-review-ui--stale-p run))
+            (old-point (point))
+            (old-column (current-column))
+            (item-index (or (get-text-property (point)
+                                               'agent-shell-review-item)
+                            (get-text-property (max (point-min) (1- (point)))
+                                               'agent-shell-review-item))))
         (setq-local agent-shell-review--current-run run)
         (setq-local agent-shell-review-ui--observed-stale stale)
         (erase-buffer)
@@ -189,26 +184,26 @@ Return the sidebar window."
           ('discovering (insert "Finding requirements…\n"))
           ('starting (insert "Starting a fresh reviewer…\n"))
           ('reviewing (insert "Reviewer is working…\n"))
-          ('questions (insert "Answer each question, then press C-c C-c.\n"))
-          ('findings (insert "Mark fixes with m; send them together with S.\n"))
+          ('questions (insert "Answer each question before submitting.\n"))
+          ('findings nil)
           ('clear (insert "No actionable correctness findings.\n"))
           ('error
            (insert (format "%s\n"
                            (or (agent-shell-review--run-error-message run)
                                "Review failed")))))
-        (when (and (eq status 'error)
-                   (string-match-p "requirements"
-                                   (downcase
-                                    (or (agent-shell-review--run-error-message run)
-                                        ""))))
-          (insert "f: select a requirements file\n"))
         (when (memq kind '(questions findings))
           (insert "\n")
           (cl-loop for item in (agent-shell-review-ui--items run)
                    for index from 0
                    do (agent-shell-review-ui--row run item index)))
-        (insert "\ng: fresh review · v: open reviewer · q: hide\n")
-        (goto-char (point-min))
+        (if-let* ((row (and item-index
+                            (text-property-any
+                             (point-min) (point-max)
+                             'agent-shell-review-item item-index))))
+            (progn
+              (goto-char row)
+              (move-to-column old-column))
+          (goto-char (min old-point (point-max))))
         (force-mode-line-update t)))))
 
 (defun agent-shell-review-ui--run ()
@@ -373,18 +368,27 @@ Return the sidebar window."
     (unless (eq (agent-shell-review--run-status run) 'findings)
       (user-error "No current findings to send"))
     (unless marks (user-error "Mark findings with m first"))
-    (let ((shell (agent-shell-review--run-implementation-shell run)))
-      (unless (buffer-live-p shell)
-        (setq shell (agent-shell-review--start-implementation-shell
-                     (agent-shell-review--run-project run)))
-        (setf (agent-shell-review--run-implementation-shell run) shell))
-      (agent-shell-insert
-       :text (agent-shell-review-ui--fix-prompt
-              run (mapcar (lambda (index) (nth index items)) marks))
-       :submit t :no-focus t :shell-buffer shell)
-      (message "Sent %d review finding%s to %s"
-               (length marks) (if (= (length marks) 1) "" "s")
-               (buffer-name shell)))))
+    (let ((prompt (agent-shell-review-ui--fix-prompt
+                   run (mapcar (lambda (index) (nth index items)) marks))))
+      (setf (agent-shell-review--run-fix-prompt run) prompt)
+      (if-let* ((send (agent-shell-review--run-send-fixes run)))
+          (progn
+            (unless (funcall send prompt)
+              (user-error "Implementation session did not accept the prompt"))
+            (message "Sent %d review finding%s"
+                     (length marks) (if (= (length marks) 1) "" "s")))
+        (let ((buffer
+               (get-buffer-create
+                (format "*Agent Review Fixes: %s*"
+                        (file-name-nondirectory
+                         (directory-file-name
+                          (agent-shell-review--run-project run)))))))
+          (with-current-buffer buffer
+            (let ((inhibit-read-only t))
+              (erase-buffer)
+              (insert prompt)
+              (special-mode)))
+          (pop-to-buffer buffer))))))
 
 (defun agent-shell-review-rerun ()
   "Capture a new snapshot and start a fresh reviewer session."
@@ -393,10 +397,10 @@ Return the sidebar window."
          (requirements (agent-shell-review--run-requirements run))
          (spec (and (eq (plist-get requirements :kind) 'file)
                     (plist-get requirements :source))))
+    (agent-shell-review--cancel run)
     (agent-shell-review--begin
      (agent-shell-review--run-project run)
-     (and (buffer-live-p (agent-shell-review--run-implementation-shell run))
-          (agent-shell-review--run-implementation-shell run))
+     (agent-shell-review--run-origin run)
      spec
      (agent-shell-review--run-clarifications run)
      (and (eq (plist-get (agent-shell-review--run-result run) :kind)
@@ -409,13 +413,28 @@ Return the sidebar window."
   (agent-shell-review '(4)))
 
 (defun agent-shell-review-open-reviewer ()
-  "Show the raw reviewer shell for diagnosis."
+  "Show the reviewer's raw response and ACP diagnostics."
   (interactive)
-  (let ((shell (agent-shell-review--run-reviewer-shell
-                (agent-shell-review-ui--run))))
-    (unless (buffer-live-p shell)
-      (user-error "Reviewer shell is no longer available"))
-    (pop-to-buffer shell)))
+  (let* ((run (agent-shell-review-ui--run))
+         (buffer
+          (get-buffer-create
+           (format "*Agent Review Diagnostics: %s*"
+                   (file-name-nondirectory
+                    (directory-file-name
+                     (agent-shell-review--run-project run)))))))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert "Raw reviewer answer:\n"
+                (or (agent-shell-review--run-text run) "")
+                "\n\nACP diagnostics:\n"
+                (if-let* ((transport (agent-shell-review--run-transport run)))
+                    (agent-shell-review-acp-diagnostics transport)
+                  "No reviewer transport")
+                "\n\nError:\n"
+                (or (agent-shell-review--run-error-message run) "None"))
+        (special-mode)))
+    (pop-to-buffer buffer)))
 
 (provide 'agent-shell-review-ui)
 ;;; agent-shell-review-ui.el ends here
