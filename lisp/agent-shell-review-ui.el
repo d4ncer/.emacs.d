@@ -9,7 +9,6 @@
 
 (require 'cl-lib)
 (require 'subr-x)
-(eval-when-compile (require 'agent-shell-review))
 
 (defvar-local agent-shell-review-ui--refresh-timer nil
   "Timer that refreshes visible staleness for this sidebar.")

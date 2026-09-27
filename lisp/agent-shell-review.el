@@ -267,6 +267,7 @@ CLARIFICATIONS are carried into a fresh pass; STALE-RESULT remains visible."
        (setf (agent-shell-review--run-error-message run)
              (error-message-string err))
        (agent-shell-review--set-status run 'error)))
+    (agent-shell-review--present run)
     run))
 
 (defun agent-shell-review--start-implementation-shell (root)

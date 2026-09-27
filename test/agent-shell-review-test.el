@@ -100,6 +100,52 @@
           (should (plist-get (car insertions) :no-focus)))
       (kill-buffer fresh-shell))))
 
+(ert-deftest agent-shell-review-test-spec-picker-restores-sidebar ()
+  "Keep review progress visible after a spec picker changes windows."
+  (let* ((root (make-temp-file "review-picker-" t))
+         (specs (expand-file-name "docs/specs" root))
+         (chosen (expand-file-name "selected-spec.md" specs))
+         (other (expand-file-name "other-spec.md" specs))
+         (reviewer (generate-new-buffer " *picker-reviewer*"))
+         (agent-shell-review-spec-search-roots nil)
+         run)
+    (make-directory specs t)
+    (with-temp-file chosen (insert "Selected criteria"))
+    (with-temp-file other (insert "Other criteria"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review--project-root)
+                   (lambda () root))
+                  ((symbol-function 'agent-shell-review-git-snapshot)
+                   (lambda (&rest _args)
+                     (list :root root :base "main" :diff "change")))
+                  ((symbol-function 'agent-shell-review--start-shell)
+                   (lambda (_root) reviewer))
+                  ((symbol-function 'agent-shell-subscribe-to)
+                   (lambda (&rest _args) 1))
+                  ((symbol-function 'completing-read)
+                   (lambda (prompt _choices &rest _args)
+                     (should (equal prompt "Review requirements: "))
+                     (when-let* ((window (get-buffer-window
+                                          (format "*Agent Review: %s*"
+                                                  (file-name-nondirectory
+                                                   (directory-file-name root)))
+                                          t)))
+                       (delete-window window))
+                     chosen)))
+          (with-temp-buffer
+            (setq default-directory root
+                  run (agent-shell-review))
+            (should (eq (agent-shell-review--run-status run) 'starting))
+            (should (equal (plist-get (agent-shell-review--run-requirements run)
+                                      :source)
+                           chosen))
+            (should (get-buffer-window
+                     (agent-shell-review--run-sidebar-buffer run) t))))
+      (when (and run (buffer-live-p (agent-shell-review--run-sidebar-buffer run)))
+        (kill-buffer (agent-shell-review--run-sidebar-buffer run)))
+      (kill-buffer reviewer)
+      (delete-directory root t))))
+
 (ert-deftest agent-shell-review-test-source-ambiguity ()
   "A source buffer prompts when two implementation shells match."
   (let* ((root (make-temp-file "review-shell-choice-" t))
