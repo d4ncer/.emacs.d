@@ -188,5 +188,188 @@
           (should (eq (agent-shell-review--run-status run) 'error)))
       (kill-buffer fresh-shell))))
 
+(ert-deftest agent-shell-review-test-sidebar-width ()
+  "The review sidebar stays right, at most a third wide, without focus."
+  (let* ((frame (selected-frame))
+         (old-width (frame-width frame))
+         (source-window (selected-window))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'reviewing)))
+    (unwind-protect
+        (progn
+          (set-frame-width frame 120)
+          (let ((sidebar (agent-shell-review-ui-show run)))
+            (should (window-live-p sidebar))
+            (should (<= (window-width sidebar) (/ (frame-width) 3)))
+            (should (eq (selected-window) source-window))
+            (should (eq (window-parameter sidebar 'window-side) 'right))))
+      (when-let* ((window (get-buffer-window
+                           (agent-shell-review--run-sidebar-buffer run))))
+        (delete-window window))
+      (when (buffer-live-p (agent-shell-review--run-sidebar-buffer run))
+        (kill-buffer (agent-shell-review--run-sidebar-buffer run)))
+      (set-frame-width frame old-width))))
+
+(ert-deftest agent-shell-review-test-clarifications-rerun ()
+  "A fresh pass carries prior answers and retains old findings as stale."
+  (let* ((answers '(("Which API?" . "Use v2")))
+         (old-result '(:kind findings :items ((:priority "P1" :title "Old"))))
+         (old (make-agent-shell-review--run
+               :project temporary-file-directory
+               :requirements '(:kind file :source "/tmp/spec.md" :text "Spec")
+               :clarifications answers :result old-result :status 'findings))
+         (new-run nil)
+         (buffer (generate-new-buffer " *review-rerun*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review--begin)
+                   (lambda (_root _shell _spec clarifications stale)
+                     (setq new-run
+                           (make-agent-shell-review--run
+                            :clarifications clarifications
+                            :stale-result stale)))))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run old)
+            (agent-shell-review-rerun))
+          (should (equal (agent-shell-review--run-clarifications new-run)
+                         answers))
+          (should (equal (agent-shell-review--run-stale-result new-run)
+                         old-result)))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-replacement-fixer ()
+  "Marked fixes and clarified criteria reach a new shell if the old one died."
+  (let* ((old-shell (generate-new-buffer " *closed-implementation*"))
+         (new-shell (generate-new-buffer " *replacement*"))
+         (sent nil)
+         (result '(:kind findings
+                         :items ((:priority "P1" :file "src/a.el" :line 4
+                                            :title "Wrong" :evidence "nil"
+                                            :requirement "must return path"
+                                            :suggestion "return path"))))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory
+               :implementation-shell old-shell
+               :requirements '(:kind file :source "spec.md"
+                                     :text "Original criteria")
+               :clarifications '(("Which API?" . "clarified criterion"))
+               :result result :status 'findings))
+         (buffer (generate-new-buffer " *review-fixes*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review--start-implementation-shell)
+                   (lambda (_root) new-shell))
+                  ((symbol-function 'agent-shell-insert)
+                   (lambda (&rest args) (push args sent))))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run run)
+            (setf (agent-shell-review--run-sidebar-buffer run) buffer)
+            (agent-shell-review-ui-render run)
+            (goto-char (point-min))
+            (search-forward "Wrong")
+            (agent-shell-review-mark)
+            (should (null sent))
+            (kill-buffer old-shell)
+            (agent-shell-review-send-marked))
+          (should (eq (agent-shell-review--run-implementation-shell run)
+                      new-shell))
+          (should (= (length sent) 1))
+          (let ((replacement-prompt (plist-get (car sent) :text)))
+            (should (string-match-p "clarified criterion"
+                                    replacement-prompt))
+            (should (string-match-p "Original criteria"
+                                    replacement-prompt))
+            (should (string-match-p "Wrong" replacement-prompt))))
+      (when (buffer-live-p old-shell) (kill-buffer old-shell))
+      (kill-buffer new-shell)
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-status-rendering ()
+  "Render progress, stale findings, and a brief parser error."
+  (let* ((buffer (generate-new-buffer " *review-status*"))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'reviewing
+               :snapshot '(:root "/tmp" :base "main"
+                                 :fingerprint "before")
+               :result '(:kind findings
+                               :items ((:priority "P2" :file "a.el"
+                                                  :line 2 :title "Old issue"
+                                                  :evidence "old evidence"
+                                                  :requirement "spec"
+                                                  :suggestion "fix"))))))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review-git-current-fingerprint)
+                   (lambda (_snapshot) "after")))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run run)
+            (setf (agent-shell-review--run-sidebar-buffer run) buffer)
+            (agent-shell-review-ui-render run)
+            (should (string-match-p "stale" (buffer-string)))
+            (should (string-match-p "reviewing"
+                                    (format-mode-line header-line-format
+                                                      nil nil buffer)))
+            (setf (agent-shell-review--run-status run) 'error
+                  (agent-shell-review--run-error-message run)
+                  "Reviewer result could not be parsed"
+                  (agent-shell-review--run-text run)
+                  "RAW_SECRET_RESPONSE")
+            (agent-shell-review-ui-render run)
+            (should (string-match-p "could not be parsed"
+                                    (buffer-string)))
+            (should (string-match-p "v: open reviewer"
+                                    (buffer-string)))
+            (should-not (string-match-p "RAW_SECRET_RESPONSE"
+                                        (buffer-string)))))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-rerun-owns-sidebar ()
+  "A late event from an older pass cannot replace the new pass's sidebar."
+  (let* ((buffer (generate-new-buffer " *review-current*"))
+         (old (make-agent-shell-review--run
+               :project temporary-file-directory :status 'clear
+               :sidebar-buffer buffer))
+         (new (make-agent-shell-review--run
+               :project temporary-file-directory :status 'reviewing
+               :sidebar-buffer buffer)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run new)
+          (agent-shell-review-ui-render new)
+          (let ((before (buffer-string)))
+            (agent-shell-review-ui-render old)
+            (should (eq agent-shell-review--current-run new))
+            (should (equal (buffer-string) before))))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-new-result-replaces-stale ()
+  "A finished fresh pass removes the previous findings from the sidebar."
+  (let ((run (make-agent-shell-review--run
+              :project temporary-file-directory :status 'reviewing
+              :stale-result '(:kind findings
+                                    :items ((:title "Old issue")))
+              :text "{\"kind\":\"clear\",\"items\":[]}")))
+    (agent-shell-review--parse-result run)
+    (should (eq (agent-shell-review--run-status run) 'clear))
+    (should-not (agent-shell-review--run-stale-result run))))
+
+(ert-deftest agent-shell-review-test-unanswered-blocks-submission ()
+  "No question round is submitted until every answer is supplied."
+  (let* ((buffer (generate-new-buffer " *review-questions*"))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'questions
+               :result '(:kind questions
+                               :items ((:question "Which API?"
+                                                  :criterion "Compatibility"
+                                                  :why "Two callers")))
+               :sidebar-buffer buffer)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run run)
+          (should-error (agent-shell-review-submit-answers) :type 'user-error))
+      (kill-buffer buffer))))
+
 (provide 'agent-shell-review-test)
 ;;; agent-shell-review-test.el ends here

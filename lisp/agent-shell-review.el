@@ -150,7 +150,8 @@
       (let ((result (agent-shell-review-protocol-parse
                      (agent-shell-review--run-text run)
                      (agent-shell-review--run-project run))))
-        (setf (agent-shell-review--run-result run) result)
+        (setf (agent-shell-review--run-result run) result
+              (agent-shell-review--run-stale-result run) nil)
         (agent-shell-review--set-status run (plist-get result :kind)))
     (error
      (if (agent-shell-review--run-repair-attempt run)
@@ -226,13 +227,13 @@
   (agent-shell-review--set-status run 'reviewing))
 
 (defun agent-shell-review--begin (root implementation-shell &optional spec-file
-                                       clarifications)
+                                       clarifications stale-result)
   "Start a review in ROOT using IMPLEMENTATION-SHELL and optional SPEC-FILE.
-CLARIFICATIONS are carried into a fresh pass."
+CLARIFICATIONS are carried into a fresh pass; STALE-RESULT remains visible."
   (let ((run (make-agent-shell-review--run
               :project root :implementation-shell implementation-shell
               :clarifications clarifications :status 'collecting
-              :text "")))
+              :stale-result stale-result :text "")))
     (agent-shell-review--present run)
     (condition-case err
         (progn
@@ -263,6 +264,16 @@ CLARIFICATIONS are carried into a fresh pass."
        (agent-shell-review--set-status run 'error)))
     run))
 
+(defun agent-shell-review--start-implementation-shell (root)
+  "Start a replacement implementation shell in ROOT."
+  (let ((config (or agent-shell-preferred-agent-config
+                    (agent-shell--auto-preferred-config))))
+    (unless config
+      (user-error "No implementation agent config is available"))
+    (let ((default-directory root))
+      (agent-shell--start :config config :no-focus t :new-session t
+                          :session-strategy 'new))))
+
 ;;;###autoload
 (defun agent-shell-review (&optional arg)
   "Review the active changeset with a fresh agent.
@@ -282,6 +293,8 @@ With prefix ARG, select a requirements file explicitly."
                                (and prior
                                     (agent-shell-review--run-clarifications
                                      prior)))))
+
+(require 'agent-shell-review-ui)
 
 (provide 'agent-shell-review)
 ;;; agent-shell-review.el ends here
