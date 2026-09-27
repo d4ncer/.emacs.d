@@ -28,85 +28,12 @@
   "{\"kind\":\"questions\",\"items\":[{\"question\":\"Which API?\",\"criterion\":\"Compatibility\",\"why\":\"Two callers\"}]}"
   "Reviewer questions fixture.")
 
-(ert-deftest agent-shell-review-test-origin-shell ()
-  "A shell invocation keeps that exact implementation shell."
-  (let ((origin-shell (generate-new-buffer " *implementation*"))
-        (fresh-shell (generate-new-buffer " *reviewer*"))
-        (root temporary-file-directory)
-        (captured-spec nil))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell-review--project-root)
-                   (lambda () root))
-                  ((symbol-function 'agent-shell-review-git-snapshot)
-                   (lambda (&rest _args)
-                     (list :root root :base "main" :diff "change")))
-                  ((symbol-function 'agent-shell-review-spec-resolve)
-                   (lambda (_root _shell &optional explicit)
-                     (setq captured-spec explicit)
-                     '(:kind conversation :source "session" :text "Do it")))
-                  ((symbol-function 'agent-shell-review--start-shell)
-                   (lambda (_root) fresh-shell))
-                  ((symbol-function 'agent-shell-subscribe-to)
-                   (lambda (&rest _args) 1)))
-          (with-current-buffer origin-shell
-            (setq major-mode 'agent-shell-mode)
-            (let ((run (agent-shell-review)))
-              (should (eq (agent-shell-review--run-implementation-shell run)
-                          origin-shell))
-              (should (eq (agent-shell-review--run-reviewer-shell run)
-                          fresh-shell))
-              (should (null captured-spec)))
-            (cl-letf (((symbol-function 'read-file-name)
-                       (lambda (&rest _args) "/tmp/selected-spec.md")))
-              (agent-shell-review '(4))
-              (should (equal captured-spec "/tmp/selected-spec.md")))))
-      (kill-buffer origin-shell)
-      (kill-buffer fresh-shell))))
-
-(ert-deftest agent-shell-review-test-fresh-session ()
-  "Start a new background session and submit only after prompt readiness."
-  (let* ((fresh-shell (generate-new-buffer " *reviewer*"))
-         (agent-shell-preferred-agent-config '((:buffer-name . "Codex")))
-         (start-args nil)
-         (insertions nil)
-         (run nil))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell--start)
-                   (lambda (&rest args)
-                     (setq start-args args)
-                     fresh-shell))
-                  ((symbol-function 'agent-shell-insert)
-                   (lambda (&rest args) (push args insertions)))
-                  ((symbol-function 'agent-shell-review--configure-read-only)
-                   (lambda (_run continuation) (funcall continuation))))
-          (should (eq (agent-shell-review--start-shell
-                       temporary-file-directory) fresh-shell))
-          (should (plist-get start-args :no-focus))
-          (should (plist-get start-args :new-session))
-          (setq run (make-agent-shell-review--run
-                     :project temporary-file-directory
-                     :reviewer-shell fresh-shell
-                     :snapshot '(:diff "diff" :base "main")
-                     :requirements '(:kind file :source "spec.md"
-                                           :text "Criteria")
-                     :status 'starting :pending-prompt "Review now"))
-          (should (null insertions))
-          (agent-shell-review--handle-event run '((:event . prompt-ready)))
-          (should (null insertions))
-          (agent-shell-review--handle-event run '((:event . init-finished)))
-          (should (= (length insertions) 1))
-          (should (equal (plist-get (car insertions) :text) "Review now"))
-          (should (plist-get (car insertions) :submit))
-          (should (plist-get (car insertions) :no-focus)))
-      (kill-buffer fresh-shell))))
-
 (ert-deftest agent-shell-review-test-spec-picker-restores-sidebar ()
   "Keep review progress visible after a spec picker changes windows."
   (let* ((root (make-temp-file "review-picker-" t))
          (specs (expand-file-name "docs/specs" root))
          (chosen (expand-file-name "selected-spec.md" specs))
          (other (expand-file-name "other-spec.md" specs))
-         (reviewer (generate-new-buffer " *picker-reviewer*"))
          (agent-shell-review-spec-search-roots nil)
          run)
     (make-directory specs t)
@@ -118,10 +45,12 @@
                   ((symbol-function 'agent-shell-review-git-snapshot)
                    (lambda (&rest _args)
                      (list :root root :base "main" :diff "change")))
-                  ((symbol-function 'agent-shell-review--start-shell)
-                   (lambda (_root) reviewer))
-                  ((symbol-function 'agent-shell-subscribe-to)
-                   (lambda (&rest _args) 1))
+                  ((symbol-function 'agent-shell-review-acp-create)
+                   (lambda (&rest _args) 'transport))
+                  ((symbol-function 'agent-shell-review-acp-start)
+                   (lambda (_transport) nil))
+                  ((symbol-function 'agent-shell-review-acp-close)
+                   (lambda (_transport) nil))
                   ((symbol-function 'completing-read)
                    (lambda (prompt _choices &rest _args)
                      (should (equal prompt "Review requirements: "))
@@ -143,113 +72,7 @@
                      (agent-shell-review--run-sidebar-buffer run) t))))
       (when (and run (buffer-live-p (agent-shell-review--run-sidebar-buffer run)))
         (kill-buffer (agent-shell-review--run-sidebar-buffer run)))
-      (kill-buffer reviewer)
       (delete-directory root t))))
-
-(ert-deftest agent-shell-review-test-source-ambiguity ()
-  "A source buffer prompts when two implementation shells match."
-  (let* ((root (make-temp-file "review-shell-choice-" t))
-         (first (generate-new-buffer " *first-implementation*"))
-         (second (generate-new-buffer " *second-implementation*"))
-         (selection-count 0))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell-buffers)
-                   (lambda () (list first second)))
-                  ((symbol-function 'agent-shell-cwd)
-                   (lambda () root))
-                  ((symbol-function 'completing-read)
-                   (lambda (_prompt _choices &rest _args)
-                     (cl-incf selection-count)
-                     (buffer-name second))))
-          (should (eq (agent-shell-review--choose-shell root) second))
-          (should (= selection-count 1)))
-      (kill-buffer first)
-      (kill-buffer second)
-      (delete-directory root t))))
-
-(ert-deftest agent-shell-review-test-read-only-mode ()
-  "Select an advertised read-only mode before continuing the prompt."
-  (let ((shell (generate-new-buffer " *read-only-reviewer*"))
-        (selected nil)
-        (continued nil))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell--state)
-                   (lambda () 'fake-state))
-                  ((symbol-function 'agent-shell--get-available-modes)
-                   (lambda (_state)
-                     '(((:id . "edit") (:name . "Edit"))
-                       ((:id . "read-only") (:name . "Read Only")))))
-                  ((symbol-function 'agent-shell--config-option-set-mode-id)
-                   (lambda (&rest args)
-                     (setq selected (plist-get args :mode-id))
-                     (funcall (plist-get args :on-success)))))
-          (let ((run (make-agent-shell-review--run :reviewer-shell shell)))
-            (agent-shell-review--configure-read-only
-             run (lambda () (setq continued t)))
-            (should (equal selected "read-only"))
-            (should continued)))
-      (kill-buffer shell))))
-
-(ert-deftest agent-shell-review-test-questions-continue ()
-  "Questions continue in the same session and statuses fire once."
-  (let* ((fresh-shell (generate-new-buffer " *reviewer*"))
-         (insertions nil)
-         (statuses nil)
-         (agent-shell-review-status-change-hook
-          (list (lambda (_run status) (push status statuses))))
-         (run (make-agent-shell-review--run
-               :project temporary-file-directory :reviewer-shell fresh-shell
-               :status 'reviewing :text agent-shell-review-test--questions)))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell-insert)
-                   (lambda (&rest args) (push args insertions))))
-          (agent-shell-review--handle-event
-           run '((:event . turn-complete)
-                 (:data . ((:stop-reason . "end_turn")))))
-          (should (eq (agent-shell-review--run-status run) 'questions))
-          (should (equal statuses '(questions)))
-          (agent-shell-review--set-status run 'questions)
-          (should (equal statuses '(questions)))
-          (agent-shell-review--submit-answers
-           run '(("Which API?" . "Use v2")))
-          (should (eq (agent-shell-review--run-reviewer-shell run)
-                      fresh-shell))
-          (should (equal (agent-shell-review--run-clarifications run)
-                         '(("Which API?" . "Use v2"))))
-          (should (string-match-p "Use v2"
-                                  (plist-get (car insertions) :text)))
-          (should (eq (agent-shell-review--run-status run) 'reviewing)))
-      (kill-buffer fresh-shell))))
-
-(ert-deftest agent-shell-review-test-parse-repair ()
-  "Try one reformat request, then show failure without a false clear."
-  (let* ((fresh-shell (generate-new-buffer " *reviewer*"))
-         (repair-requests 0)
-         (run (make-agent-shell-review--run
-               :project temporary-file-directory :reviewer-shell fresh-shell
-               :status 'reviewing :text "not json")))
-    (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell-insert)
-                   (lambda (&rest _args) (cl-incf repair-requests))))
-          (agent-shell-review--handle-event
-           run '((:event . turn-complete)
-                 (:data . ((:stop-reason . "end_turn")))))
-          (should (= repair-requests 1))
-          (should (agent-shell-review--run-repair-attempt run))
-          (should (eq (agent-shell-review--run-status run) 'reviewing))
-          (setf (agent-shell-review--run-text run) "still not json")
-          (agent-shell-review--handle-event
-           run '((:event . turn-complete)
-                 (:data . ((:stop-reason . "end_turn")))))
-          (should (= repair-requests 1))
-          (should (eq (agent-shell-review--run-status run) 'error))
-          (should-not (agent-shell-review--run-result run))
-          (setf (agent-shell-review--run-status run) 'reviewing)
-          (agent-shell-review--handle-event
-           run '((:event . turn-complete)
-                 (:data . ((:stop-reason . "max_tokens")))))
-          (should (eq (agent-shell-review--run-status run) 'error)))
-      (kill-buffer fresh-shell))))
 
 (ert-deftest agent-shell-review-test-sidebar-width ()
   "The review sidebar stays right, at most a third wide, without focus."
@@ -369,9 +192,8 @@
             (setf (agent-shell-review--run-sidebar-buffer run) buffer)
             (agent-shell-review-ui-render run)
             (should (string-match-p "stale" (buffer-string)))
-            (should (string-match-p "reviewing"
-                                    (format-mode-line header-line-format
-                                                      nil nil buffer)))
+            (should (string-match-p "Review: reviewing"
+                                    (buffer-string)))
             (setf (agent-shell-review--run-status run) 'error
                   (agent-shell-review--run-error-message run)
                   "Reviewer result could not be parsed"
@@ -380,8 +202,8 @@
             (agent-shell-review-ui-render run)
             (should (string-match-p "could not be parsed"
                                     (buffer-string)))
-            (should (string-match-p "v: open reviewer"
-                                    (buffer-string)))
+            (should-not (string-match-p "v: open reviewer"
+                                        (buffer-string)))
             (should-not (string-match-p "RAW_SECRET_RESPONSE"
                                         (buffer-string)))))
       (kill-buffer buffer))))
@@ -412,10 +234,12 @@
               :project temporary-file-directory :status 'reviewing
               :stale-result '(:kind findings
                                     :items ((:title "Old issue")))
+              :transport 'transport
               :text "{\"kind\":\"clear\",\"items\":[]}")))
-    (agent-shell-review--parse-result run)
-    (should (eq (agent-shell-review--run-status run) 'clear))
-    (should-not (agent-shell-review--run-stale-result run))))
+    (cl-letf (((symbol-function 'agent-shell-review-acp-close) #'ignore))
+      (agent-shell-review--parse-result run)
+      (should (eq (agent-shell-review--run-status run) 'clear))
+      (should-not (agent-shell-review--run-stale-result run)))))
 
 (ert-deftest agent-shell-review-test-unanswered-blocks-submission ()
   "No question round is submitted until every answer is supplied."
@@ -435,18 +259,63 @@
       (kill-buffer buffer))))
 
 (ert-deftest agent-shell-review-test-evil-sidebar-keys ()
-  "The local config makes review keys effective under Evil."
+  "Review actions remain available in Evil normal state."
   (require 'evil)
   (agent-shell-review-test--load-local-review-config)
+  (evil-mode 1)
   (let ((buffer (generate-new-buffer " *review-evil*")))
     (unwind-protect
         (with-current-buffer buffer
           (agent-shell-review-mode)
-          (should (eq evil-state 'emacs))
+          (should (eq evil-state 'normal))
           (should (eq (key-binding (kbd "m"))
                       #'agent-shell-review-mark))
           (should (eq (key-binding (kbd "g"))
-                      #'agent-shell-review-rerun)))
+                      #'agent-shell-review-rerun))
+          (should (eq (key-binding (kbd "TAB"))
+                      #'agent-shell-review-toggle-details)))
+      (kill-buffer buffer)
+      (evil-mode -1))))
+
+(ert-deftest agent-shell-review-test-render-preserves-selected-item ()
+  "Redrawing details and marks keeps point on the selected finding."
+  (let* ((buffer (generate-new-buffer " *review-point*"))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'findings
+               :result '(:kind findings
+                               :items ((:priority "P1" :title "First")
+                                       (:priority "P2" :title "Second")))
+               :sidebar-buffer buffer)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run run)
+          (agent-shell-review-ui-render run)
+          (search-forward "Second")
+          (let ((column (current-column)))
+            (agent-shell-review-toggle-details)
+            (should (= (agent-shell-review-ui--index) 1))
+            (should (= (current-column) column))
+            (agent-shell-review-mark)
+            (should (= (agent-shell-review-ui--index) 1))
+            (should (= (current-column) column))))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-no-inline-key-hints-or-custom-modeline ()
+  "The review buffer leaves key discovery to its map and uses the modeline."
+  (let* ((buffer (generate-new-buffer " *review-display*"))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'findings
+               :result '(:kind findings :items nil)
+               :sidebar-buffer buffer)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run run)
+          (agent-shell-review-ui-render run)
+          (should-not (local-variable-p 'mode-line-format))
+          (should-not (string-match-p "Mark fixes with\|fresh review\|select a requirements file"
+                                      (buffer-string))))
       (kill-buffer buffer))))
 
 (ert-deftest agent-shell-review-test-navigation-boundaries ()
@@ -523,34 +392,117 @@
           (set-frame-width frame 90)
           (let ((sidebar (agent-shell-review-ui-show run)))
             (with-selected-window sidebar
+              (should-not truncate-lines)
+              (should word-wrap)
               (goto-char (point-min))
               (search-forward "Evidence:")
               (beginning-of-line)
               (let ((logical-end (line-end-position)))
-                (vertical-motion 1)
-                (should (< (point) logical-end))))))
+                (should (> (- logical-end (point)) (window-body-width)))
+                (when (display-graphic-p)
+                  (vertical-motion 1)
+                  (should (< (point) logical-end)))))))
       (when (buffer-live-p (agent-shell-review--run-sidebar-buffer run))
         (kill-buffer (agent-shell-review--run-sidebar-buffer run)))
       (set-frame-width frame old-width))))
 
-(ert-deftest agent-shell-review-test-preferred-config-designator ()
-  "Resolve identifier preferences before starting review and fixer shells."
-  (let* ((config '((:identifier . codex) (:buffer-name . "Codex")))
-         (agent-shell-agent-configs (list config))
-         (agent-shell-preferred-agent-config 'codex)
-         (agent-shell-review-agent-config nil)
-         (seen nil)
-         (shell (generate-new-buffer " *review-config*")))
+(ert-deftest agent-shell-review-test-acp-entry-order ()
+  "Resolve criteria and store the transport before a synchronous ready event."
+  (let* ((root temporary-file-directory)
+         (origin '(:context "Implement the feature" :send ignore))
+         (agent-shell-review-origin-provider (lambda (_root) origin))
+         (steps nil)
+         (sent nil)
+         (callback nil))
+    (cl-letf (((symbol-function 'agent-shell-review--project-root)
+               (lambda () root))
+              ((symbol-function 'agent-shell-review-ui-show) #'ignore)
+              ((symbol-function 'agent-shell-review-ui-render) #'ignore)
+              ((symbol-function 'agent-shell-review-git-snapshot)
+               (lambda (&rest _args)
+                 '(:root "/tmp" :base "main" :diff "change")))
+              ((symbol-function 'agent-shell-review-spec-resolve)
+               (lambda (_root context &optional _file)
+                 (push 'requirements steps)
+                 (should (equal context "Implement the feature"))
+                 '(:kind conversation :source "implementation conversation"
+                         :text "Implement the feature")))
+              ((symbol-function 'agent-shell-review-acp-create)
+               (lambda (_root _file on-event)
+                 (push 'create steps)
+                 (setq callback on-event)
+                 'transport))
+              ((symbol-function 'agent-shell-review-acp-start)
+               (lambda (_transport)
+                 (push 'start steps)
+                 (funcall callback '(:type ready))))
+              ((symbol-function 'agent-shell-review-acp-send)
+               (lambda (_transport prompt)
+                 (push 'send steps)
+                 (setq sent prompt)
+                 t)))
+      (let ((run (agent-shell-review)))
+        (should (equal (reverse steps)
+                       '(requirements create start send)))
+        (should (eq (agent-shell-review--run-transport run) 'transport))
+        (should (eq (agent-shell-review--run-status run) 'reviewing))
+        (should (string-match-p "Implement the feature" sent))))))
+
+(ert-deftest agent-shell-review-test-acp-questions-and-repair ()
+  "Continue questions and one format repair on the same transport."
+  (let* ((sent nil)
+         (closed nil)
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :transport 'transport
+               :status 'reviewing :text agent-shell-review-test--questions)))
+    (cl-letf (((symbol-function 'agent-shell-review-acp-send)
+               (lambda (transport prompt)
+                 (should (eq transport 'transport))
+                 (push prompt sent) t))
+              ((symbol-function 'agent-shell-review-acp-close)
+               (lambda (transport) (push transport closed))))
+      (agent-shell-review--handle-event
+       run '(:type complete :stop-reason "end_turn"))
+      (should (eq (agent-shell-review--run-status run) 'questions))
+      (should-not closed)
+      (agent-shell-review--submit-answers run '(("Which API?" . "Use v2")))
+      (should (string-match-p "Use v2" (car sent)))
+      (should (eq (agent-shell-review--run-status run) 'reviewing))
+      (setf (agent-shell-review--run-text run) "invalid json")
+      (agent-shell-review--handle-event
+       run '(:type complete :stop-reason "end_turn"))
+      (should (= (length sent) 2))
+      (setf (agent-shell-review--run-text run) "still invalid")
+      (agent-shell-review--handle-event
+       run '(:type complete :stop-reason "end_turn"))
+      (should (eq (agent-shell-review--run-status run) 'error))
+      (should (equal closed '(transport))))))
+
+(ert-deftest agent-shell-review-test-acp-stale-callback-and-cancel ()
+  "An old or cancelled run cannot replace a newer review."
+  (let* ((buffer (generate-new-buffer " *review-acp-current*"))
+         (closed nil)
+         (old (make-agent-shell-review--run
+               :project temporary-file-directory :transport 'old
+               :sidebar-buffer buffer :status 'reviewing :text ""))
+         (new (make-agent-shell-review--run
+               :project temporary-file-directory :transport 'new
+               :sidebar-buffer buffer :status 'reviewing)))
     (unwind-protect
-        (cl-letf (((symbol-function 'agent-shell--start)
-                   (lambda (&rest args)
-                     (push (plist-get args :config) seen)
-                     shell)))
-          (agent-shell-review--start-shell temporary-file-directory)
-          (agent-shell-review--start-implementation-shell
-           temporary-file-directory)
-          (should (equal seen (list config config))))
-      (kill-buffer shell))))
+        (cl-letf (((symbol-function 'agent-shell-review-acp-close)
+                   (lambda (transport) (push transport closed))))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run new))
+          (agent-shell-review--handle-event old '(:type chunk :text "stale"))
+          (should (equal (agent-shell-review--run-text old) ""))
+          (agent-shell-review--cancel old)
+          (agent-shell-review--handle-event old '(:type error :message "late"))
+          (should (eq (agent-shell-review--run-status old) 'reviewing))
+          (should (equal closed '(old)))
+          (agent-shell-review--cancel new)
+          (should (equal closed '(new old))))
+      (kill-buffer buffer))))
 
 (provide 'agent-shell-review-test)
 ;;; agent-shell-review-test.el ends here
