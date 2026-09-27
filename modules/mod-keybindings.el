@@ -266,6 +266,7 @@
    "ls" '(gptel-send :wk "send")
    "l?" '(gptel-menu :wk "menu")
    "lb" '(agent-shell-switch-buffer :wk "switch agent shell")
+   "lr" '(agent-shell-review :wk "review changes")
    "ll" '(gptel :wk "open chat")
    "lw" '(gptel :wk "rewrite")
 

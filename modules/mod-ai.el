@@ -253,6 +253,45 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (agent-shell-notify-mode 1))
 
+(use-package agent-shell-review
+  :ensure nil
+  :after agent-shell
+  :commands agent-shell-review
+  :config
+  (defun +agent-shell-review-notify-status (run status)
+    "Send a specialized alert for a completed review RUN at STATUS."
+    (when (and (bound-and-true-p agent-shell-notify-mode)
+               (memq status '(questions findings clear error)))
+      (let* ((result (agent-shell-review--run-result run))
+             (count (length (plist-get result :items)))
+             (body (pcase status
+                     ('questions (format "Review needs answers to %d question%s"
+                                         count (if (= count 1) "" "s")))
+                     ('findings (format "Review has %d finding%s to inspect"
+                                        count (if (= count 1) "" "s")))
+                     ('clear "Review found no correctness issues")
+                     ('error "Review failed; inspect its sidebar")))
+             (shell (agent-shell-review--run-reviewer-shell run))
+             (sidebar (agent-shell-review--run-sidebar-buffer run)))
+        (agent-shell-notify-send
+         (format "Review · %s"
+                 (file-name-nondirectory
+                  (directory-file-name
+                   (agent-shell-review--run-project run))))
+         body (delq nil (list shell sidebar))))))
+
+  (with-eval-after-load 'agent-shell-notify
+    (setq agent-shell-notify-suppress-event-function
+          (lambda (shell event)
+            (and (agent-shell-review-reviewer-shell-p shell)
+                 (memq (map-elt event :event) '(turn-complete error))))
+          agent-shell-notify-related-buffers-function
+          (lambda (shell)
+            (delq nil (list shell
+                            (agent-shell-review-sidebar-for-shell shell)))))
+    (add-hook 'agent-shell-review-status-change-hook
+              #'+agent-shell-review-notify-status)))
+
 (elpaca (latex-to-svg-backend
          :host github :repo "alberti42/latex-to-svg-backend"))
 
