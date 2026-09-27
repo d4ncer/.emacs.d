@@ -110,29 +110,33 @@
           (condition-case err
               (json-parse-string
                (agent-shell-review-protocol--json-text text)
-               :object-type 'alist :array-type 'list :null-object :null
+               :object-type 'alist :array-type 'array :null-object :null
                :false-object :false)
             (json-parse-error
              (user-error "Invalid reviewer JSON: %s"
                          (error-message-string err)))))
          (kind (alist-get 'kind data))
          (items (alist-get 'items data)))
-    (unless (and (listp data) (listp items)
+    (unless (and (listp data) (vectorp items)
                  (assoc 'items data))
       (user-error "Reviewer result needs an items array"))
     (pcase kind
       ("questions"
-       (unless items (user-error "Question result has no questions"))
+       (when (zerop (length items))
+         (user-error "Question result has no questions"))
        (list :kind 'questions
-             :items (mapcar #'agent-shell-review-protocol--question items)))
+             :items (mapcar #'agent-shell-review-protocol--question
+                            (append items nil))))
       ("findings"
-       (unless items (user-error "Finding result has no findings"))
+       (when (zerop (length items))
+         (user-error "Finding result has no findings"))
        (list :kind 'findings
              :items (mapcar (lambda (item)
                               (agent-shell-review-protocol--finding item root))
-                            items)))
+                            (append items nil))))
       ("clear"
-       (when items (user-error "Clear result contains items"))
+       (unless (zerop (length items))
+         (user-error "Clear result contains items"))
        (list :kind 'clear :items nil))
       (_ (user-error "Unknown reviewer result kind: %s" kind)))))
 

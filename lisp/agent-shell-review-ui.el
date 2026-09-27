@@ -11,6 +11,18 @@
 (require 'subr-x)
 (eval-when-compile (require 'agent-shell-review))
 
+(defvar-local agent-shell-review-ui--refresh-timer nil
+  "Timer that refreshes visible staleness for this sidebar.")
+
+(defvar-local agent-shell-review-ui--observed-stale nil
+  "Staleness state last rendered in this sidebar.")
+
+(defun agent-shell-review-ui--stop-refresh ()
+  "Stop this sidebar's staleness timer before it is killed."
+  (when (timerp agent-shell-review-ui--refresh-timer)
+    (cancel-timer agent-shell-review-ui--refresh-timer)
+    (setq agent-shell-review-ui--refresh-timer nil)))
+
 (defvar agent-shell-review-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "n") #'agent-shell-review-next-item)
@@ -31,7 +43,9 @@
 
 (define-derived-mode agent-shell-review-mode special-mode "Agent Review"
   "Major mode for review questions and prioritized findings."
-  (setq-local truncate-lines t)
+  (setq-local truncate-lines nil
+              word-wrap t)
+  (add-hook 'kill-buffer-hook #'agent-shell-review-ui--stop-refresh nil t)
   (setq-local header-line-format
               '(:eval (format " Review · %s"
                               (if (agent-shell-review--run-p
@@ -74,7 +88,10 @@ Return the sidebar window."
            buffer `((side . right) (slot . 0)
                     (window-width . ,(max 12 (/ (frame-width) 3)))))))
     (with-current-buffer buffer
-      (setq-local agent-shell-review--current-run run))
+      (setq-local agent-shell-review--current-run run)
+      (unless (timerp agent-shell-review-ui--refresh-timer)
+        (setq-local agent-shell-review-ui--refresh-timer
+                    (run-at-time 5 5 #'agent-shell-review-ui--refresh buffer))))
     (agent-shell-review-ui-render run)
     (when (window-live-p selected)
       (select-window selected))
@@ -94,12 +111,24 @@ Return the sidebar window."
 
 (defun agent-shell-review-ui--stale-p (run)
   "Return non-nil if RUN shows findings for an older changeset."
-  (or (agent-shell-review--run-stale-result run)
-      (let ((snapshot (agent-shell-review--run-snapshot run)))
-        (and snapshot (agent-shell-review--run-result run)
-             (not (equal (plist-get snapshot :fingerprint)
-                         (agent-shell-review-git-current-fingerprint
-                          snapshot)))))))
+  (and (or (agent-shell-review--run-stale-result run)
+           (let ((snapshot (agent-shell-review--run-snapshot run)))
+             (and snapshot (agent-shell-review--run-result run)
+                  (not (equal (plist-get snapshot :fingerprint)
+                              (agent-shell-review-git-current-fingerprint
+                               snapshot))))))
+       t))
+
+(defun agent-shell-review-ui--refresh (buffer)
+  "Refresh visible staleness in sidebar BUFFER when it changes."
+  (when (and (buffer-live-p buffer) (get-buffer-window buffer t))
+    (with-current-buffer buffer
+      (when-let* ((run agent-shell-review--current-run)
+                  ((memq (agent-shell-review--run-status run)
+                         '(questions findings clear))))
+        (unless (eq (agent-shell-review-ui--stale-p run)
+                    agent-shell-review-ui--observed-stale)
+          (agent-shell-review-ui-render run))))))
 
 (defun agent-shell-review-ui--row (run item index)
   "Insert compact ITEM row INDEX for RUN."
@@ -148,11 +177,13 @@ Return the sidebar window."
     (with-current-buffer buffer
       (let ((inhibit-read-only t)
             (status (agent-shell-review--run-status run))
-            (kind (agent-shell-review-ui--kind run)))
+            (kind (agent-shell-review-ui--kind run))
+            (stale (agent-shell-review-ui--stale-p run)))
         (setq-local agent-shell-review--current-run run)
+        (setq-local agent-shell-review-ui--observed-stale stale)
         (erase-buffer)
         (insert (format "Review: %s\n\n" status))
-        (when (agent-shell-review-ui--stale-p run)
+        (when stale
           (insert "Previous findings are stale; review the new result.\n\n"))
         (pcase status
           ('collecting (insert "Collecting changes…\n"))
@@ -202,22 +233,22 @@ Return the sidebar window."
   "Move to the next review item."
   (interactive)
   (let ((next (next-single-property-change
-               (point) 'agent-shell-review-item nil (point-max))))
+               (point) 'agent-shell-review-item)))
     (while (and next
                 (not (get-text-property next 'agent-shell-review-item)))
       (setq next (next-single-property-change
-                  next 'agent-shell-review-item nil (point-max))))
+                  next 'agent-shell-review-item)))
     (if next (goto-char next) (user-error "No next item"))))
 
 (defun agent-shell-review-previous-item ()
   "Move to the previous review item."
   (interactive)
   (let ((previous (previous-single-property-change
-                   (point) 'agent-shell-review-item nil (point-min))))
+                   (point) 'agent-shell-review-item)))
     (while (and previous
                 (not (get-text-property previous 'agent-shell-review-item)))
       (setq previous (previous-single-property-change
-                      previous 'agent-shell-review-item nil (point-min))))
+                      previous 'agent-shell-review-item)))
     (if previous (goto-char previous) (user-error "No previous item"))))
 
 (defun agent-shell-review-toggle-details ()

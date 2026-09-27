@@ -258,6 +258,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :after agent-shell
   :commands agent-shell-review
   :config
+  (evil-set-initial-state 'agent-shell-review-mode 'emacs)
   (defun +agent-shell-review-notify-status (run status)
     "Send a specialized alert for a completed review RUN at STATUS."
     (when (and (bound-and-true-p agent-shell-notify-mode)

@@ -94,7 +94,13 @@
       (should (string-match-p "binary file.bin"
                               (plist-get snapshot :diff)))
       (should (string-match-p "Binary"
-                              (plist-get snapshot :diff))))
+                              (plist-get snapshot :diff)))
+      (let ((coding-system-for-write 'no-conversion))
+        (with-temp-file (expand-file-name "binary file.bin" root)
+          (insert (unibyte-string 0 4 5 6 255))))
+      (should-not (equal (plist-get snapshot :fingerprint)
+                         (agent-shell-review-git-current-fingerprint
+                          snapshot))))
     (let ((agent-shell-review-git-max-bytes 8))
       (should-error (agent-shell-review-git-snapshot root) :type 'user-error)))
   (let ((empty-root (make-temp-file "review-no-git-" t)))

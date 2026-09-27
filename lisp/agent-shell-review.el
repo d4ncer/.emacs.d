@@ -93,9 +93,14 @@
 
 (defun agent-shell-review--start-shell (root)
   "Start a fresh review agent rooted at ROOT without taking focus."
-  (let ((config (or agent-shell-review-agent-config
-                    agent-shell-preferred-agent-config
-                    (agent-shell--auto-preferred-config))))
+  (let ((config (if agent-shell-review-agent-config
+                    (or (agent-shell--resolve-config-designator
+                         agent-shell-review-agent-config)
+                        (user-error "Unknown review agent config: %s"
+                                    agent-shell-review-agent-config))
+                  (or (agent-shell--resolve-preferred-config)
+                      (agent-shell-select-config
+                       :prompt "Review with agent: ")))))
     (unless config
       (user-error "No agent-shell reviewer config is available"))
     (let ((default-directory root))
@@ -172,7 +177,7 @@
   (let ((name (map-elt event :event))
         (data (map-elt event :data)))
     (pcase name
-      ('prompt-ready
+      ('init-finished
        (when (agent-shell-review--run-pending-prompt run)
          (if (agent-shell-review--run-read-only-configured run)
              (agent-shell-review--submit-pending run)
@@ -266,8 +271,9 @@ CLARIFICATIONS are carried into a fresh pass; STALE-RESULT remains visible."
 
 (defun agent-shell-review--start-implementation-shell (root)
   "Start a replacement implementation shell in ROOT."
-  (let ((config (or agent-shell-preferred-agent-config
-                    (agent-shell--auto-preferred-config))))
+  (let ((config (or (agent-shell--resolve-preferred-config)
+                    (agent-shell-select-config
+                     :prompt "Fix with agent: "))))
     (unless config
       (user-error "No implementation agent config is available"))
     (let ((default-directory root))

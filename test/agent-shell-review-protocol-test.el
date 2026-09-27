@@ -81,6 +81,8 @@
                          root))
           (should-error (agent-shell-review-protocol-parse
                          "{\"kind\":\"clear\",\"items\":null}" root))
+          (should-error (agent-shell-review-protocol-parse
+                         "{\"kind\":\"clear\",\"items\":{}}" root))
           (should-error (agent-shell-review-protocol-parse "not json" root)))
       (delete-directory root t))))
 

@@ -9,6 +9,21 @@
 (require 'cl-lib)
 (require 'agent-shell-review nil t)
 
+(defconst agent-shell-review-test--root
+  (file-name-directory (directory-file-name
+                        (file-name-directory load-file-name)))
+  "Root of the checkout containing these tests.")
+
+(defun agent-shell-review-test--load-local-review-config ()
+  "Evaluate this checkout's local review use-package form."
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "modules/mod-ai.el"
+                                           agent-shell-review-test--root))
+    (goto-char (point-min))
+    (search-forward "(use-package agent-shell-review")
+    (goto-char (match-beginning 0))
+    (eval (read (current-buffer)))))
+
 (defconst agent-shell-review-test--questions
   "{\"kind\":\"questions\",\"items\":[{\"question\":\"Which API?\",\"criterion\":\"Compatibility\",\"why\":\"Two callers\"}]}"
   "Reviewer questions fixture.")
@@ -77,6 +92,8 @@
                      :status 'starting :pending-prompt "Review now"))
           (should (null insertions))
           (agent-shell-review--handle-event run '((:event . prompt-ready)))
+          (should (null insertions))
+          (agent-shell-review--handle-event run '((:event . init-finished)))
           (should (= (length insertions) 1))
           (should (equal (plist-get (car insertions) :text) "Review now"))
           (should (plist-get (car insertions) :submit))
@@ -370,6 +387,124 @@
           (setq-local agent-shell-review--current-run run)
           (should-error (agent-shell-review-submit-answers) :type 'user-error))
       (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-evil-sidebar-keys ()
+  "The local config makes review keys effective under Evil."
+  (require 'evil)
+  (agent-shell-review-test--load-local-review-config)
+  (let ((buffer (generate-new-buffer " *review-evil*")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (should (eq evil-state 'emacs))
+          (should (eq (key-binding (kbd "m"))
+                      #'agent-shell-review-mark))
+          (should (eq (key-binding (kbd "g"))
+                      #'agent-shell-review-rerun)))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-navigation-boundaries ()
+  "Item navigation terminates before and after the item list."
+  (let ((buffer (generate-new-buffer " *review-nav*"))
+        (next-original (symbol-function 'next-single-property-change))
+        (previous-original (symbol-function 'previous-single-property-change))
+        (calls 0))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (let ((inhibit-read-only t))
+            (insert "Header\n")
+            (insert (propertize "1. Item" 'agent-shell-review-item 0))
+            (insert "\nFooter"))
+          (cl-letf (((symbol-function 'next-single-property-change)
+                     (lambda (&rest args)
+                       (when (> (cl-incf calls) 8)
+                         (error "Navigation did not terminate"))
+                       (apply next-original args)))
+                    ((symbol-function 'previous-single-property-change)
+                     (lambda (&rest args)
+                       (when (> (cl-incf calls) 8)
+                         (error "Navigation did not terminate"))
+                       (apply previous-original args))))
+            (goto-char (point-min))
+            (should-error (agent-shell-review-previous-item)
+                          :type 'user-error)
+            (setq calls 0)
+            (goto-char (point-max))
+            (should-error (agent-shell-review-next-item)
+                          :type 'user-error)))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-visible-staleness-refresh ()
+  "A visible completed review updates its stale marker after file changes."
+  (let* ((fingerprint "before")
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'findings
+               :snapshot '(:root "/tmp" :base "main"
+                                 :fingerprint "before")
+               :result '(:kind findings :items ((:priority "P2"
+                                                            :title "Issue"))))))
+    (unwind-protect
+        (save-window-excursion
+          (cl-letf (((symbol-function 'agent-shell-review-git-current-fingerprint)
+                     (lambda (_snapshot) fingerprint)))
+            (agent-shell-review-ui-show run)
+            (with-current-buffer (agent-shell-review--run-sidebar-buffer run)
+              (should-not (string-match-p "stale" (buffer-string))))
+            (setq fingerprint "after")
+            (agent-shell-review-ui--refresh
+             (agent-shell-review--run-sidebar-buffer run))
+            (with-current-buffer (agent-shell-review--run-sidebar-buffer run)
+              (should (string-match-p "stale" (buffer-string))))))
+      (when (buffer-live-p (agent-shell-review--run-sidebar-buffer run))
+        (kill-buffer (agent-shell-review--run-sidebar-buffer run))))))
+
+(ert-deftest agent-shell-review-test-expanded-details-wrap ()
+  "Expanded evidence remains readable within the narrow sidebar."
+  (let* ((frame (selected-frame))
+         (old-width (frame-width frame))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'findings
+               :expanded '(0)
+               :result '(:kind findings
+                               :items ((:priority "P1" :file "app.el"
+                                                  :line 4 :title "Issue"
+                                                  :evidence "This long evidence sentence explains a concrete correctness failure that needs several visual lines at sidebar width."
+                                                  :requirement "Must work"
+                                                  :suggestion "Fix it"))))))
+    (unwind-protect
+        (save-window-excursion
+          (set-frame-width frame 90)
+          (let ((sidebar (agent-shell-review-ui-show run)))
+            (with-selected-window sidebar
+              (goto-char (point-min))
+              (search-forward "Evidence:")
+              (beginning-of-line)
+              (let ((logical-end (line-end-position)))
+                (vertical-motion 1)
+                (should (< (point) logical-end))))))
+      (when (buffer-live-p (agent-shell-review--run-sidebar-buffer run))
+        (kill-buffer (agent-shell-review--run-sidebar-buffer run)))
+      (set-frame-width frame old-width))))
+
+(ert-deftest agent-shell-review-test-preferred-config-designator ()
+  "Resolve identifier preferences before starting review and fixer shells."
+  (let* ((config '((:identifier . codex) (:buffer-name . "Codex")))
+         (agent-shell-agent-configs (list config))
+         (agent-shell-preferred-agent-config 'codex)
+         (agent-shell-review-agent-config nil)
+         (seen nil)
+         (shell (generate-new-buffer " *review-config*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell--start)
+                   (lambda (&rest args)
+                     (push (plist-get args :config) seen)
+                     shell)))
+          (agent-shell-review--start-shell temporary-file-directory)
+          (agent-shell-review--start-implementation-shell
+           temporary-file-directory)
+          (should (equal seen (list config config))))
+      (kill-buffer shell))))
 
 (provide 'agent-shell-review-test)
 ;;; agent-shell-review-test.el ends here

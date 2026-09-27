@@ -145,5 +145,33 @@
       (agent-shell-notify--macos-send "Agent" "ready")
       (should (string-match-p "osascript" log-message)))))
 
+(ert-deftest agent-shell-notify-test-consecutive-permissions ()
+  "A later approval request alerts even after the first was handled."
+  (let* ((shell (generate-new-buffer " *notify-approvals*"))
+         (agent-shell-notify--states (make-hash-table :test #'eq))
+         (sent nil)
+         (agent-shell-notify-send-function
+          (lambda (_title body) (push body sent))))
+    (unwind-protect
+        (cl-letf (((symbol-function 'frame-focus-state)
+                   (lambda (&optional _frame) nil))
+                  ((symbol-function 'agent-shell-notify--title)
+                   (lambda (_shell) "Test")))
+          (agent-shell-notify--handle
+           shell '((:event . permission-request)
+                   (:data . ((:request-id . 1)))))
+          (agent-shell-notify--handle
+           shell '((:event . permission-request)
+                   (:data . ((:request-id . 1)))))
+          (should (= (length sent) 1))
+          (agent-shell-notify--handle
+           shell '((:event . permission-response)
+                   (:data . ((:request-id . 1)))))
+          (agent-shell-notify--handle
+           shell '((:event . permission-request)
+                   (:data . ((:request-id . 2)))))
+          (should (= (length sent) 2)))
+      (kill-buffer shell))))
+
 (provide 'agent-shell-notify-test)
 ;;; agent-shell-notify-test.el ends here

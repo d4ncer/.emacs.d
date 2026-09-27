@@ -91,6 +91,41 @@ This is the only function that knows agent-shell's transcript variable."
             (push path found)))))
       found)))
 
+(defun agent-shell-review-spec--referenced-file (root transcript)
+  "Choose a credible requirements file referenced in TRANSCRIPT for ROOT."
+  (let* ((paths
+          (delete-dups
+           (cl-loop for reference in
+                    (agent-shell-review-spec--referenced-paths transcript)
+                    for path = (expand-file-name reference root)
+                    when (and (file-regular-p path)
+                              (file-readable-p path))
+                    collect path)))
+         (specs
+          (cl-remove-if-not
+           (lambda (path)
+             (let ((name (downcase (file-name-nondirectory path))))
+               (and (not (equal name "readme.md"))
+                    (or (string-match-p
+                         "\\(spec\\|design\\|plan\\|requirement\\|proposal\\)"
+                         name)
+                        (string-match-p
+                         "/\\(specs?\\|plans?\\|designs?\\|requirements?\\)/"
+                         (downcase (file-name-directory path)))))))
+           paths))
+         (choices
+          (or specs
+              (cl-remove-if
+               (lambda (path)
+                 (string-match-p "\\`readme\\.md\\'"
+                                 (downcase (file-name-nondirectory path))))
+               paths))))
+    (pcase (length choices)
+      (0 nil)
+      (1 (car choices))
+      (_ (completing-read "Referenced review spec: "
+                          (sort choices #'string<) nil t)))))
+
 (defun agent-shell-review-spec--select-candidate (root)
   "Return a discovered spec path for ROOT, prompting on ambiguity."
   (let* ((project-files
@@ -151,13 +186,8 @@ EXPLICIT-FILE, when non-nil, always takes precedence."
                            implementation-shell)))
          (file
           (or (and explicit-file (expand-file-name explicit-file))
-              (cl-loop for candidate in
-                       (agent-shell-review-spec--referenced-paths
-                        (or transcript ""))
-                       for path = (expand-file-name candidate root)
-                       when (and (file-regular-p path)
-                                 (file-readable-p path))
-                       return path)
+              (agent-shell-review-spec--referenced-file
+               root (or transcript ""))
               (agent-shell-review-spec--select-candidate root))))
     (cond
      (file

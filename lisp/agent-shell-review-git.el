@@ -88,30 +88,38 @@
     (search-forward "\0" nil t)))
 
 (defun agent-shell-review-git--untracked (root)
-  "Return review diff text for nonignored untracked files in ROOT."
+  "Return (DIFF . BINARY-HASHES) for untracked files in ROOT."
   (pcase-let ((`(,status . ,paths)
                (agent-shell-review-git--call
                 root "ls-files" "--others" "--exclude-standard" "-z")))
     (unless (zerop status)
       (user-error "Cannot list untracked files: %s" (string-trim paths)))
-    (mapconcat
-     (lambda (relative)
-       (let ((path (expand-file-name relative root)))
-         (when (> (file-attribute-size (file-attributes path))
-                  agent-shell-review-git-max-bytes)
-           (user-error "Untracked file is too large for review: %s" relative))
-         (if (agent-shell-review-git--binary-p path)
-             (format "diff --git a/%s b/%s\nnew file: %s\nBinary file added: %s\n"
-                     relative relative relative relative)
-           (pcase-let ((`(,diff-status . ,diff)
-                        (agent-shell-review-git--call
-                         root "diff" "--no-index" "--no-ext-diff"
-                         "--no-color" "--" "/dev/null" relative)))
-             (unless (= diff-status 1)
-               (user-error "Cannot diff untracked file %s: %s"
-                           relative (string-trim diff)))
-             diff))))
-     (split-string paths "\0" t) "\n")))
+    (let (diffs hashes)
+      (dolist (relative (split-string paths "\0" t))
+        (let ((path (expand-file-name relative root)))
+          (when (> (file-attribute-size (file-attributes path))
+                   agent-shell-review-git-max-bytes)
+            (user-error "Untracked file is too large for review: %s"
+                        relative))
+          (if (agent-shell-review-git--binary-p path)
+              (progn
+                (push (format "diff --git a/%s b/%s\nnew file: %s\nBinary file added: %s\n"
+                              relative relative relative relative)
+                      diffs)
+                (with-temp-buffer
+                  (insert-file-contents-literally path)
+                  (push (format "%s:%s" relative
+                                (secure-hash 'sha256 (current-buffer)))
+                        hashes)))
+            (pcase-let ((`(,diff-status . ,diff)
+                         (agent-shell-review-git--call
+                          root "diff" "--no-index" "--no-ext-diff"
+                          "--no-color" "--" "/dev/null" relative)))
+              (unless (= diff-status 1)
+                (user-error "Cannot diff untracked file %s: %s"
+                            relative (string-trim diff)))
+              (push diff diffs)))))
+      (cons (string-join (nreverse diffs) "\n") (nreverse hashes)))))
 
 (defun agent-shell-review-git-snapshot (root &optional base-ref)
   "Capture ROOT changes against BASE-REF or a discovered integration base.
@@ -135,14 +143,18 @@ Return a plist with :root, :base, :diff, and :fingerprint."
                     start "--")))
         (unless (zerop status)
           (user-error "Cannot capture Git diff: %s" (string-trim tracked)))
-        (let ((diff (concat tracked (agent-shell-review-git--untracked root))))
+        (let* ((untracked (agent-shell-review-git--untracked root))
+               (diff (concat tracked (car untracked))))
           (when (string-empty-p diff)
             (user-error "There are no changes to review"))
           (when (> (string-bytes diff) agent-shell-review-git-max-bytes)
             (user-error "Review diff exceeds %d bytes"
                         agent-shell-review-git-max-bytes))
           (list :root root :base base :diff diff
-                :fingerprint (secure-hash 'sha1 diff)))))))
+                :fingerprint
+                (secure-hash 'sha1
+                             (concat diff "\0"
+                                     (string-join (cdr untracked) "\0")))))))))
 
 (defun agent-shell-review-git-current-fingerprint (snapshot)
   "Recompute SNAPSHOT's fingerprint for stale-result detection."

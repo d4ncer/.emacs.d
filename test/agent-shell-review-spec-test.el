@@ -78,5 +78,41 @@
                           :type 'user-error)))
       (delete-directory root t))))
 
+(ert-deftest agent-shell-review-spec-test-reference-quality ()
+  "Ignore README references when a spec is named; prompt for two specs."
+  (let* ((root (make-temp-file "review-spec-project-" t))
+         (external (make-temp-file "review-source-" t))
+         (readme (expand-file-name "README.md" root))
+         (first (expand-file-name "first-spec.md" external))
+         (second (expand-file-name "second-spec.md" external))
+         (agent-shell-review-spec-search-roots nil)
+         (transcript nil)
+         (selection-count 0))
+    (unwind-protect
+        (progn
+          (with-temp-file readme (insert "Project overview"))
+          (with-temp-file first (insert "First criteria"))
+          (with-temp-file second (insert "Second criteria"))
+          (cl-letf (((symbol-function 'agent-shell-review-spec-transcript-text)
+                     (lambda (_shell) transcript))
+                    ((symbol-function 'completing-read)
+                     (lambda (_prompt choices &rest _args)
+                       (cl-incf selection-count)
+                       (car choices))))
+            (setq transcript
+                  (format "Follow `README.md` and implement `%s`." first))
+            (should (equal (plist-get
+                            (agent-shell-review-spec-resolve root 'shell)
+                            :source)
+                           first))
+            (setq transcript (format "Compare `%s` and `%s`." first second))
+            (should (eq (plist-get
+                         (agent-shell-review-spec-resolve root 'shell)
+                         :kind)
+                        'file))
+            (should (= selection-count 1))))
+      (delete-directory root t)
+      (delete-directory external t))))
+
 (provide 'agent-shell-review-spec-test)
 ;;; agent-shell-review-spec-test.el ends here
