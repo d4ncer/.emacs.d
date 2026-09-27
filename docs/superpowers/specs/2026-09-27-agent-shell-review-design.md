@@ -1,16 +1,16 @@
-# Agent-shell review and notifications
+# Agent-shell code review
 
 ## Purpose
 
-Make agent-shell sessions easy to leave running and easy to review. Emacs should
-alert the user when an agent finishes acting or needs input. A separate review
-command should assess the active changeset against its original requirements,
-ask about unclear success criteria, and present actionable findings in Emacs.
+Review the active changeset against its original requirements from Emacs. The
+reviewer should ask about unclear success criteria and present actionable
+findings when the criteria are clear.
 
 Success means the common path needs no manual diff or spec selection: start a
 review from the implementation shell, inspect questions or prioritized findings
 in a sidebar, send selected fixes to that shell, and run a fresh review after
-the fixes. Both features must be extractable as standalone Emacs packages.
+the fixes. The review feature must be extractable as a standalone Emacs
+package.
 
 ## Package boundaries
 
@@ -18,12 +18,13 @@ the fixes. Both features must be extractable as standalone Emacs packages.
   review sessions, response parsing, and a dedicated review mode. Public symbols
   use the `agent-shell-review-` prefix. It depends on agent-shell and built-in
   Emacs libraries, but not on personal `+` helpers or agent-review.
-- `lisp/agent-shell-notify.el` owns agent-shell event subscriptions and macOS
-  alerts. Public symbols use the `agent-shell-notify-` prefix. It can be enabled
-  without the review package.
-- `modules/mod-ai.el` loads and configures both packages, adds discoverable
-  bindings, and connects their optional notification hooks. Neither package
-  requires the other. No new `init.el` module is needed.
+- `modules/mod-ai.el` loads and configures the package and adds discoverable
+  bindings. No new `init.el` module is needed.
+
+The review package exposes a status-change hook and a way to identify its
+reviewer shell and sidebar. Optional integrations can announce questions,
+findings, clear results, or failures. It does not require the separate
+[notification package](2026-09-27-agent-shell-notifications-design.md).
 
 The [agent-review package](https://github.com/nineluj/agent-review) informs the
 interaction design: asynchronous review, navigable findings, marking, batch
@@ -127,43 +128,15 @@ runs. The sidebar offers a way to open the reviewer shell for diagnosis. A
 failed review retains its error and can be rerun. The first version need not
 persist review history after Emacs exits.
 
-## Notifications
-
-Enabling `agent-shell-notify-mode` subscribes to existing and future agent-shell
-buffers. A macOS system alert is sent for a permission request, a completed
-turn, or an agent error. Permission requests say approval is needed. A normal
-`end_turn` says the agent is ready for input; this also covers an ordinary
-question, which agent-shell does not expose as a separate event. Other stop
-reasons say the agent stopped and name the reason rather than implying success.
-Errors say the agent failed. The title identifies the project/session. Alerts
-are suppressed only when Emacs is focused and the relevant shell or review
-buffer is selected.
-Repeated events for one state are coalesced. An error supersedes a completion
-alert for the same turn.
-
-Alerts use the system's `osascript` executable asynchronously. Notification
-text is passed as process arguments to a fixed script, without shell or
-AppleScript source interpolation. The sender is replaceable for testing or
-other platforms. Alerts are informational; clicking them does not navigate to
-Emacs. A notification failure is logged and does not interrupt the agent
-session.
-
-Review sessions emit specialized alerts for questions ready, findings ready,
-clear review, and review failure. The integration suppresses the generic
-turn-complete alert for those sessions so the user gets one alert. The two
-packages communicate through optional public hooks or predicates wired in
-`mod-ai.el`, preserving independent use.
-
 ## Verification and limits
 
 Focused automated checks cover Git snapshot selection in temporary
 repositories, including a pushed feature branch; spec path resolution and
 conversation fallback; valid and malformed responses; clarification carryover;
-stale-result detection; notification stop reasons; and duplicate suppression.
-Notification delivery is tested with a mock sender. Manual checks cover a
-fresh review, a question round, sending marked fixes, rerun, sidebar layout at
-different frame widths, and a macOS alert. Changed Elisp is syntax-checked and
-byte-compiled through `emacsclient`.
+and stale-result detection. Manual checks cover a fresh review, a question
+round, sending marked fixes, rerun, and sidebar layout at different frame
+widths. Changed Elisp is syntax-checked and byte-compiled through
+`emacsclient`.
 
 ACP agents can disregard output instructions. The single reformat attempt and
 visible failure state make this explicit. An agent without a read-only mode
