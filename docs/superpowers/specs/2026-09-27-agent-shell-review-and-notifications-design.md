@@ -40,12 +40,17 @@ shell exists, review proceeds when it finds a spec or the user selects one. A
 later fix request starts a new implementation shell with the requirements and
 selected findings.
 
-The command captures a review snapshot from the merge base of the current
-branch and its upstream when available, otherwise the repository's default
-branch. The snapshot includes branch commits, staged and unstaged edits, and
-nonignored untracked files. If no usable base exists, it captures working-tree
-changes against `HEAD`. It reports an empty changeset, a missing Git repository,
-or an input too large to send instead of silently reviewing an incomplete diff.
+The command captures a review snapshot against an integration branch. A
+feature branch's same-named tracking upstream is never treated as its base.
+A configurable base ref takes precedence. On a local `main` or `master` branch,
+its same-named tracking remote is the base for unpushed commits. Otherwise the
+command uses the remote default branch, then a sole conventional `main` or
+`master` branch, and prompts if the base is ambiguous. The snapshot starts at
+the merge base and includes branch commits, staged and unstaged edits, and
+nonignored untracked files. If no usable base exists, it captures
+working-tree changes against `HEAD`. It reports an empty changeset, a missing
+Git repository, or an input too large to send instead of silently reviewing an
+incomplete diff.
 Binary changes are listed by path and status. Each review records a fingerprint
 of its snapshot so the sidebar can flag findings as stale after files change.
 
@@ -93,8 +98,9 @@ The agent must return one structured result:
 The parser validates the result and accepts a plain or fenced JSON payload.
 If parsing fails, the package asks the same reviewer once to reformat its
 answer without redoing the analysis. If it still fails, the review enters a
-failed state and links to the reviewer shell. It never reports an unparsed
-answer as a clear review or silently drops findings.
+failed state. The sidebar shows a brief error and a link to the reviewer shell;
+the raw answer stays there. It never reports an unparsed answer as a clear
+review or silently drops findings.
 
 ## Review sidebar and actions
 
@@ -107,10 +113,13 @@ sidebar width, with expandable details.
 Question rows allow answers to be entered and edited in Emacs. Each question
 needs an answer or an explicit "unknown" before submission. Submitting the
 answers continues the same reviewer session; another question round is allowed.
-Finding rows allow navigation to a source location, marking and unmarking,
-and sending the marked set as one request to the original
-implementation shell. If that shell has closed, the command starts a new shell
-and includes the requirements source. Marking alone never sends a request.
+The review stores these answers as clarified requirements and includes them in
+fresh reruns and fix requests, including requests to a replacement
+implementation shell. Finding rows allow navigation to a source location,
+marking and unmarking, and sending the marked set as one request to the
+original implementation shell. If that shell has closed, the command starts a
+new shell and includes the requirements source. Marking alone never sends a
+request.
 
 Rerun (`g`) rebuilds the changeset and requirements context and starts a fresh
 reviewer session. Existing findings remain visible but stale while the new pass
@@ -122,9 +131,13 @@ persist review history after Emacs exits.
 
 Enabling `agent-shell-notify-mode` subscribes to existing and future agent-shell
 buffers. A macOS system alert is sent for a permission request, a completed
-turn, or an agent error. The title identifies the project/session and the body
-states whether the agent finished or needs input. Alerts are suppressed only
-when Emacs is focused and the relevant shell or review buffer is selected.
+turn, or an agent error. Permission requests say approval is needed. A normal
+`end_turn` says the agent is ready for input; this also covers an ordinary
+question, which agent-shell does not expose as a separate event. Other stop
+reasons say the agent stopped and name the reason rather than implying success.
+Errors say the agent failed. The title identifies the project/session. Alerts
+are suppressed only when Emacs is focused and the relevant shell or review
+buffer is selected.
 Repeated events for one state are coalesced. An error supersedes a completion
 alert for the same turn.
 
@@ -143,13 +156,14 @@ packages communicate through optional public hooks or predicates wired in
 
 ## Verification and limits
 
-Focused automated checks cover Git snapshot selection in temporary repositories,
-spec path resolution and conversation fallback, valid and malformed responses,
-question/answer state transitions, stale-result detection, notification event
-filtering, and duplicate suppression. Notification delivery is tested with a
-mock sender. Manual checks cover a fresh review, a question round, sending
-marked fixes, rerun, sidebar layout at different frame widths, and a macOS
-alert. Changed Elisp is syntax-checked and byte-compiled through `emacsclient`.
+Focused automated checks cover Git snapshot selection in temporary
+repositories, including a pushed feature branch; spec path resolution and
+conversation fallback; valid and malformed responses; clarification carryover;
+stale-result detection; notification stop reasons; and duplicate suppression.
+Notification delivery is tested with a mock sender. Manual checks cover a
+fresh review, a question round, sending marked fixes, rerun, sidebar layout at
+different frame widths, and a macOS alert. Changed Elisp is syntax-checked and
+byte-compiled through `emacsclient`.
 
 ACP agents can disregard output instructions. The single reformat attempt and
 visible failure state make this explicit. An agent without a read-only mode
