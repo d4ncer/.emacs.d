@@ -111,7 +111,7 @@
          (buffer (generate-new-buffer " *review-rerun*")))
     (unwind-protect
         (cl-letf (((symbol-function 'agent-shell-review--begin)
-                   (lambda (_root origin _spec clarifications stale)
+                   (lambda (_root origin _spec clarifications stale &optional _requirements)
                      (setq new-run
                            (make-agent-shell-review--run
                             :origin origin
@@ -135,6 +135,7 @@
 (ert-deftest agent-shell-review-test-handoff-callback-and-copy ()
   "Send marked fixes through the captured callback or expose them for copy."
   (let* ((sent nil)
+         (kill-ring nil)
          (result '(:kind findings
                          :items ((:priority "P1" :file "src/a.el" :line 4
                                             :title "Wrong" :evidence "nil"
@@ -168,6 +169,9 @@
           (should (equal (agent-shell-review--run-marks run) '(0)))
           (should (string-match-p "Wrong"
                                   (agent-shell-review--run-fix-prompt run)))
+          (should (equal (current-kill 0)
+                         (agent-shell-review--run-fix-prompt run)))
+          (should (eq (current-buffer) buffer))
           (setf (agent-shell-review--run-send-fixes run) nil)
           (agent-shell-review-send-marked)
           (let ((copy (get-buffer
@@ -179,6 +183,52 @@
               (should (string-match-p "Wrong" (buffer-string))))
             (kill-buffer copy)))
       (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-rerun-entered-requirements ()
+  "A fresh pass reuses manually entered criteria without prompting."
+  (let* ((requirements '(:kind entered :source "entered" :text "Keep this"))
+         (old (make-agent-shell-review--run
+               :project temporary-file-directory :status 'clear
+               :requirements requirements))
+         (buffer (generate-new-buffer " *review-entered*"))
+         seen)
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review--begin)
+                   (lambda (_root _origin _spec _answers _stale &optional saved)
+                     (setq seen saved)))
+                  ((symbol-function 'agent-shell-review-acp-close) #'ignore))
+          (with-current-buffer buffer
+            (agent-shell-review-mode)
+            (setq-local agent-shell-review--current-run old)
+            (agent-shell-review-rerun))
+          (should (equal seen requirements)))
+      (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-replacing-sidebar-cancels-old-run ()
+  "Starting again from another buffer ends the prior process and timer."
+  (let* ((root (make-temp-file "review-replace-" t))
+         (old (make-agent-shell-review--run
+               :project root :status 'reviewing :transport 'old-transport))
+         (new (make-agent-shell-review--run
+               :project root :status 'reviewing))
+         old-timer closed)
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-review-acp-close)
+                   (lambda (transport) (push transport closed))))
+          (agent-shell-review-ui-show old)
+          (setq old-timer
+                (buffer-local-value 'agent-shell-review-ui--refresh-timer
+                                    (agent-shell-review--run-sidebar-buffer old)))
+          (agent-shell-review-ui-show new)
+          (should (equal closed '(old-transport)))
+          (should (agent-shell-review--run-cancelled old))
+          (should-not (memq old-timer timer-list))
+          (should (eq (buffer-local-value 'agent-shell-review--current-run
+                                          (agent-shell-review--run-sidebar-buffer new))
+                      new)))
+      (when (buffer-live-p (agent-shell-review--run-sidebar-buffer new))
+        (kill-buffer (agent-shell-review--run-sidebar-buffer new)))
+      (delete-directory root t))))
 
 (ert-deftest agent-shell-review-test-diagnostic-view ()
   "Show retained ACP evidence in a non-shell buffer."

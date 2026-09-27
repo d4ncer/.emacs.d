@@ -156,9 +156,11 @@ It runs in the invoking buffer and returns a plist with :context and :send."
                           answers "\n\n"))))
 
 (defun agent-shell-review--begin (root origin &optional spec-file
-                                       clarifications stale-result)
+                                       clarifications stale-result
+                                       requirements-override)
   "Start a review in ROOT using ORIGIN and optional SPEC-FILE.
-CLARIFICATIONS carry into a fresh pass; STALE-RESULT remains visible."
+CLARIFICATIONS carry into a fresh pass; STALE-RESULT remains visible.
+REQUIREMENTS-OVERRIDE reuses manually entered criteria on a rerun."
   (let ((run (make-agent-shell-review--run
               :project root :origin origin
               :send-fixes (plist-get origin :send)
@@ -172,8 +174,9 @@ CLARIFICATIONS carry into a fresh pass; STALE-RESULT remains visible."
                  root agent-shell-review-base-ref))
           (agent-shell-review--set-status run 'discovering)
           (setf (agent-shell-review--run-requirements run)
-                (agent-shell-review-spec-resolve
-                 root (plist-get origin :context) spec-file))
+                (or requirements-override
+                    (agent-shell-review-spec-resolve
+                     root (plist-get origin :context) spec-file)))
           (agent-shell-review--set-status run 'starting)
           (setf (agent-shell-review--run-pending-prompt run)
                 (agent-shell-review-protocol-prompt

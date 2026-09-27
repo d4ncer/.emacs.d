@@ -263,6 +263,22 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
       (agent-shell-review-acp--record transport "Incoming" method)
       (acp-send-response :client client :response response))))
 
+(defun agent-shell-review-acp--watch-process (transport)
+  "Report termination of TRANSPORT's process between ACP requests."
+  (when-let* ((process (map-elt
+                        (agent-shell-review-acp--transport-client transport)
+                        :process))
+              ((processp process)))
+    (let ((original (process-sentinel process)))
+      (set-process-sentinel
+       process
+       (lambda (ended event)
+         (when original (funcall original ended event))
+         (when (memq (process-status ended) '(exit signal))
+           (agent-shell-review-acp--fail
+            transport (format "Reviewer process exited: %s"
+                              (string-trim event)))))))))
+
 (defun agent-shell-review-acp-start (transport)
   "Start TRANSPORT's ACP client and initialize its review session."
   (unless (or (agent-shell-review-acp--transport-active transport)
@@ -309,7 +325,8 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
                         session-id)
                   (agent-shell-review-acp--select-model transport response))
               (agent-shell-review-acp--fail
-               transport "Reviewer did not return a session ID"))))))))
+               transport "Reviewer did not return a session ID"))))))
+      (agent-shell-review-acp--watch-process transport)))
   transport)
 
 (defun agent-shell-review-acp-send (transport prompt)

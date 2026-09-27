@@ -62,6 +62,8 @@
                                (agent-shell-review--run-project run)))))))
         (setf (agent-shell-review--run-sidebar-buffer run) buffer)
         (with-current-buffer buffer
+          (unless (eq agent-shell-review--current-run run)
+            (agent-shell-review-ui--stop-refresh))
           (agent-shell-review-mode)
           (setq-local agent-shell-review--current-run run))
         buffer)))
@@ -372,11 +374,16 @@ Return the sidebar window."
                    run (mapcar (lambda (index) (nth index items)) marks))))
       (setf (agent-shell-review--run-fix-prompt run) prompt)
       (if-let* ((send (agent-shell-review--run-send-fixes run)))
-          (progn
-            (unless (funcall send prompt)
-              (user-error "Implementation session did not accept the prompt"))
-            (message "Sent %d review finding%s"
-                     (length marks) (if (= (length marks) 1) "" "s")))
+          (condition-case err
+              (progn
+                (unless (funcall send prompt)
+                  (user-error "Implementation session did not accept the prompt"))
+                (message "Sent %d review finding%s"
+                         (length marks) (if (= (length marks) 1) "" "s")))
+            (error
+             (kill-new prompt)
+             (user-error "%s; fix prompt copied"
+                         (error-message-string err))))
         (let ((buffer
                (get-buffer-create
                 (format "*Agent Review Fixes: %s*"
@@ -405,7 +412,9 @@ Return the sidebar window."
      (agent-shell-review--run-clarifications run)
      (and (eq (plist-get (agent-shell-review--run-result run) :kind)
               'findings)
-          (agent-shell-review--run-result run)))))
+          (agent-shell-review--run-result run))
+     (and (eq (plist-get requirements :kind) 'entered)
+          requirements))))
 
 (defun agent-shell-review-select-spec ()
   "Select a requirements file and retry the review."

@@ -26,7 +26,7 @@
                                          ((id . "read-only") (name . "Read Only"))])))))
          (mode-error nil))
      (cl-letf (((symbol-function 'acp-make-client)
-                (lambda (&rest _args) 'fake-client))
+                (lambda (&rest _args) '((:process . nil))))
                ((symbol-function 'acp-subscribe-to-notifications)
                 (lambda (&rest args)
                   (setq notifications (plist-get args :on-notification))))
@@ -209,6 +209,33 @@
       (should (string-match-p "answer" (agent-shell-review-acp-diagnostics transport)))
       (should (string-match-p "peer exited"
                               (agent-shell-review-acp-diagnostics transport))))))
+
+(ert-deftest agent-shell-review-acp-test-idle-process-exit ()
+  "An exit between question rounds ends the review session."
+  (agent-shell-review-acp-test--fake
+    (let* ((events nil)
+           (fake-process 'review-process)
+           (sentinel nil)
+           (client `((:process . ,fake-process)))
+           (transport (agent-shell-review-acp-create
+                       temporary-file-directory nil
+                       (lambda (event) (push event events)))))
+      (cl-letf (((symbol-function 'acp-make-client)
+                 (lambda (&rest _args) client))
+                ((symbol-function 'processp)
+                 (lambda (object) (eq object fake-process)))
+                ((symbol-function 'process-sentinel)
+                 (lambda (_process) (lambda (_process _event) nil)))
+                ((symbol-function 'set-process-sentinel)
+                 (lambda (_process callback) (setq sentinel callback)))
+                ((symbol-function 'process-status)
+                 (lambda (_process) 'exit)))
+        (agent-shell-review-acp-start transport)
+        (should (functionp sentinel))
+        (setq events nil)
+        (funcall sentinel fake-process "finished\n")
+        (should (eq (plist-get (car events) :type) 'error))
+        (should (string-match-p "exited" (plist-get (car events) :message)))))))
 
 (provide 'agent-shell-review-acp-test)
 ;;; agent-shell-review-acp-test.el ends here
