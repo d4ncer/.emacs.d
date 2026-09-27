@@ -39,21 +39,6 @@
     (insert-file-contents file)
     (buffer-string)))
 
-(defun agent-shell-review-spec-transcript-text (shell)
-  "Return SHELL's transcript, with shell buffer text as fallback.
-This is the only function that knows agent-shell's transcript variable."
-  (when (buffer-live-p shell)
-    (with-current-buffer shell
-      (let ((file (and (boundp 'agent-shell--transcript-file)
-                       agent-shell--transcript-file)))
-        (cond
-         ((and file (file-readable-p file))
-          (with-temp-buffer
-            (insert-file-contents file)
-            (buffer-string)))
-         ((not (string-empty-p (string-trim (buffer-string))))
-          (buffer-string)))))))
-
 (defun agent-shell-review-spec--referenced-paths (text)
   "Return Markdown paths referenced in TEXT, in occurrence order."
   (let (paths)
@@ -176,33 +161,50 @@ This is the only function that knows agent-shell's transcript variable."
         (string-join (nreverse sections) "\n\n")
       (string-trim transcript))))
 
-(defun agent-shell-review-spec-resolve (root implementation-shell
+(defun agent-shell-review-spec--prompt-source ()
+  "Prompt for a requirements file or entered text."
+  (let ((choice (completing-read "Requirements source: "
+                                 '("File" "Text") nil t)))
+    (pcase choice
+      ("File" (let ((file (read-file-name "Requirements file: " nil nil t)))
+                (unless (and file (not (string-empty-p file)))
+                  (user-error "Requirements file was not selected"))
+                (list :kind 'file :source file
+                      :text (agent-shell-review-spec--read file))))
+      ("Text" (let ((text (read-from-minibuffer "Requirements text: ")))
+                (when (string-empty-p (string-trim (or text "")))
+                  (user-error "Requirements text is empty"))
+                (when (> (string-bytes text) agent-shell-review-spec-max-bytes)
+                  (user-error "Entered requirements exceed %d bytes"
+                              agent-shell-review-spec-max-bytes))
+                (list :kind 'entered :source "entered requirements"
+                      :text text)))
+      (_ (user-error "Requirements source was not selected")))))
+
+(defun agent-shell-review-spec-resolve (root origin-text
                                              &optional explicit-file)
-  "Find requirements for ROOT and IMPLEMENTATION-SHELL.
+  "Find requirements for ROOT using ORIGIN-TEXT.
 EXPLICIT-FILE, when non-nil, always takes precedence."
   (let* ((root (file-name-as-directory (expand-file-name root)))
-         (transcript (and implementation-shell
-                          (agent-shell-review-spec-transcript-text
-                           implementation-shell)))
          (file
           (or (and explicit-file (expand-file-name explicit-file))
               (agent-shell-review-spec--referenced-file
-               root (or transcript ""))
+               root (or origin-text ""))
               (agent-shell-review-spec--select-candidate root))))
     (cond
      (file
       (list :kind 'file :source file
             :text (agent-shell-review-spec--read file)))
-     ((and transcript
+     ((and origin-text
            (not (string-empty-p
-                 (agent-shell-review-spec--user-context transcript))))
-      (let ((text (agent-shell-review-spec--user-context transcript)))
+                 (agent-shell-review-spec--user-context origin-text))))
+      (let ((text (agent-shell-review-spec--user-context origin-text)))
         (when (> (string-bytes text) agent-shell-review-spec-max-bytes)
           (user-error "Conversation requirements exceed %d bytes"
                       agent-shell-review-spec-max-bytes))
-        (list :kind 'conversation :source implementation-shell
+        (list :kind 'conversation :source "implementation conversation"
               :text text)))
-     (t (user-error "No requirements source found; select a spec with C-u")))))
+     (t (agent-shell-review-spec--prompt-source)))))
 
 (provide 'agent-shell-review-spec)
 ;;; agent-shell-review-spec.el ends here
