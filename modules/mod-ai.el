@@ -256,10 +256,28 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
 
 (use-package agent-shell-review
   :ensure nil
-  :after agent-shell
   :commands agent-shell-review
   :config
-  (evil-set-initial-state 'agent-shell-review-mode 'emacs)
+  (require 'agent-shell-review-agent-shell)
+  (setq agent-shell-review-origin-provider
+        #'agent-shell-review-agent-shell-origin)
+  (evil-set-initial-state 'agent-shell-review-mode 'normal)
+  (add-hook 'agent-shell-review-mode-hook #'evil-normal-state)
+  (evil-define-key 'normal agent-shell-review-mode-map
+    (kbd "n") #'agent-shell-review-next-item
+    (kbd "p") #'agent-shell-review-previous-item
+    (kbd "RET") #'agent-shell-review-visit-source
+    (kbd "TAB") #'agent-shell-review-toggle-details
+    (kbd "<tab>") #'agent-shell-review-toggle-details
+    (kbd "a") #'agent-shell-review-answer
+    (kbd "C-c C-c") #'agent-shell-review-submit-answers
+    (kbd "m") #'agent-shell-review-mark
+    (kbd "u") #'agent-shell-review-unmark
+    (kbd "S") #'agent-shell-review-send-marked
+    (kbd "g") #'agent-shell-review-rerun
+    (kbd "v") #'agent-shell-review-open-reviewer
+    (kbd "f") #'agent-shell-review-select-spec
+    (kbd "q") #'quit-window)
   (defun +agent-shell-review-notify-status (run status)
     "Send a specialized alert for a completed review RUN at STATUS."
     (when (and (bound-and-true-p agent-shell-notify-mode)
@@ -273,26 +291,17 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
                                         count (if (= count 1) "" "s")))
                      ('clear "Review found no correctness issues")
                      ('error "Review failed; inspect its sidebar")))
-             (shell (agent-shell-review--run-reviewer-shell run))
              (sidebar (agent-shell-review--run-sidebar-buffer run)))
-        (agent-shell-notify-send
-         (format "Review · %s"
-                 (file-name-nondirectory
-                  (directory-file-name
-                   (agent-shell-review--run-project run))))
-         body (delq nil (list shell sidebar))))))
-
-  (with-eval-after-load 'agent-shell-notify
-    (setq agent-shell-notify-suppress-event-function
-          (lambda (shell event)
-            (and (agent-shell-review-reviewer-shell-p shell)
-                 (memq (map-elt event :event) '(turn-complete error))))
-          agent-shell-notify-related-buffers-function
-          (lambda (shell)
-            (delq nil (list shell
-                            (agent-shell-review-sidebar-for-shell shell)))))
-    (add-hook 'agent-shell-review-status-change-hook
-              #'+agent-shell-review-notify-status)))
+        (unless (and (buffer-live-p sidebar)
+                     (eq (window-buffer (selected-window)) sidebar))
+          (agent-shell-notify-send
+           (format "Review · %s"
+                   (file-name-nondirectory
+                    (directory-file-name
+                     (agent-shell-review--run-project run))))
+           body (delq nil (list sidebar)))))))
+  (add-hook 'agent-shell-review-status-change-hook
+            #'+agent-shell-review-notify-status))
 
 (elpaca (latex-to-svg-backend
          :host github :repo "alberti42/latex-to-svg-backend"))

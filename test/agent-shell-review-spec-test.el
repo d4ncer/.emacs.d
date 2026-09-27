@@ -135,6 +135,10 @@
             (cl-letf (((symbol-function 'read-from-minibuffer)
                        (lambda (&rest _args) "  ")))
               (should-error (agent-shell-review-spec-resolve root nil)
+                            :type 'user-error))
+            (cl-letf (((symbol-function 'completing-read)
+                       (lambda (&rest _args) (signal 'quit nil))))
+              (should-error (agent-shell-review-spec-resolve root nil)
                             :type 'user-error))))
       (delete-directory root t))))
 

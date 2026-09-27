@@ -163,23 +163,28 @@
 
 (defun agent-shell-review-spec--prompt-source ()
   "Prompt for a requirements file or entered text."
-  (let ((choice (completing-read "Requirements source: "
-                                 '("File" "Text") nil t)))
-    (pcase choice
-      ("File" (let ((file (read-file-name "Requirements file: " nil nil t)))
-                (unless (and file (not (string-empty-p file)))
-                  (user-error "Requirements file was not selected"))
-                (list :kind 'file :source file
-                      :text (agent-shell-review-spec--read file))))
-      ("Text" (let ((text (read-from-minibuffer "Requirements text: ")))
-                (when (string-empty-p (string-trim (or text "")))
-                  (user-error "Requirements text is empty"))
-                (when (> (string-bytes text) agent-shell-review-spec-max-bytes)
-                  (user-error "Entered requirements exceed %d bytes"
-                              agent-shell-review-spec-max-bytes))
-                (list :kind 'entered :source "entered requirements"
-                      :text text)))
-      (_ (user-error "Requirements source was not selected")))))
+  (condition-case nil
+      (let ((choice (completing-read "Requirements source: "
+                                     '("File" "Text") nil t)))
+        (pcase choice
+          ("File" (let ((file (read-file-name "Requirements file: "
+                                             nil nil t)))
+                    (unless (and file (not (string-empty-p file)))
+                      (user-error "Requirements file was not selected"))
+                    (list :kind 'file :source file
+                          :text (agent-shell-review-spec--read file))))
+          ("Text" (let ((text (read-from-minibuffer
+                                "Requirements text: ")))
+                    (when (string-empty-p (string-trim (or text "")))
+                      (user-error "Requirements text is empty"))
+                    (when (> (string-bytes text)
+                             agent-shell-review-spec-max-bytes)
+                      (user-error "Entered requirements exceed %d bytes"
+                                  agent-shell-review-spec-max-bytes))
+                    (list :kind 'entered :source "entered requirements"
+                          :text text)))
+          (_ (user-error "Requirements source was not selected"))))
+    (quit (user-error "Requirements source was cancelled"))))
 
 (defun agent-shell-review-spec-resolve (root origin-text
                                              &optional explicit-file)

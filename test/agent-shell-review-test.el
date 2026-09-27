@@ -364,7 +364,12 @@
           (agent-shell-review-mode)
           (setq-local agent-shell-review--current-run run)
           (agent-shell-review-ui-render run)
-          (should-not (local-variable-p 'mode-line-format))
+          (should
+           (equal mode-line-format
+                  (with-temp-buffer
+                    (special-mode)
+                    (when (featurep 'evil) (evil-normal-state))
+                    mode-line-format)))
           (should-not (string-match-p "Mark fixes with\|fresh review\|select a requirements file"
                                       (buffer-string))))
       (kill-buffer buffer))))

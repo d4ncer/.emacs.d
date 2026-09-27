@@ -229,7 +229,11 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
     (let* ((method (map-elt request 'method))
            (id (map-elt request 'id))
            (client (agent-shell-review-acp--transport-client transport))
-           (path (map-nested-elt request '(params path)))
+           (raw-path (map-nested-elt request '(params path)))
+           (path (and (stringp raw-path)
+                      (expand-file-name
+                       raw-path
+                       (agent-shell-review-acp--transport-root transport))))
            (response
             (cond
              ((equal method "session/request_permission")
@@ -237,11 +241,18 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
                :request-id id :cancelled t))
              ((and (equal method "fs/read_text_file")
                    (agent-shell-review-acp--allowed-read-p transport path))
-              (acp-make-fs-read-text-file-response
-               :request-id id
-               :content (agent-shell-review-acp--read
-                         path (map-nested-elt request '(params line))
-                         (map-nested-elt request '(params limit)))))
+              (condition-case err
+                  (acp-make-fs-read-text-file-response
+                   :request-id id
+                   :content (agent-shell-review-acp--read
+                             path (map-nested-elt request '(params line))
+                             (map-nested-elt request '(params limit))))
+                (error
+                 (acp-make-fs-read-text-file-response
+                  :request-id id
+                  :error (acp-make-error
+                          :code -32603
+                          :message (error-message-string err))))))
              (t
               (list (cons :request-id id)
                     (cons :error
