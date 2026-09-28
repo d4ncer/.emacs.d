@@ -334,32 +334,34 @@ Return the sidebar window."
 
 (defun agent-shell-review-ui--fix-prompt (run findings)
   "Build one fix request for RUN's selected FINDINGS."
-  (concat
-   "Please fix these marked review findings, then tell me what changed.\n\n"
-   "Original requirements ("
-   (format "%s" (plist-get (agent-shell-review--run-requirements run)
-                           :source))
-   "):\n"
-   (plist-get (agent-shell-review--run-requirements run) :text)
-   "\n\nClarified criteria:\n"
-   (if-let* ((answers (agent-shell-review--run-clarifications run)))
-       (mapconcat (lambda (answer)
-                    (format "Q: %s\nA: %s" (car answer) (cdr answer)))
-                  answers "\n")
-     "None")
-   "\n\nMarked findings:\n"
-   (mapconcat
-    (lambda (item)
-      (format "%s %s%s — %s\nEvidence: %s\nRequirement: %s\nSuggested fix: %s"
-              (plist-get item :priority)
-              (or (plist-get item :file) "General")
-              (if-let* ((line (plist-get item :line)))
-                  (format ":%d" line) "")
-              (plist-get item :title)
-              (plist-get item :evidence)
-              (plist-get item :requirement)
-              (plist-get item :suggestion)))
-    findings "\n\n")))
+  (let* ((requirements (agent-shell-review--run-requirements run))
+         (source (plist-get requirements :source)))
+    (concat
+     "Please fix these marked review findings, then tell me what changed.\n\n"
+     (if (eq (plist-get requirements :kind) 'file)
+         (format "Original requirements file: [%s](<%s>)\nRead this file before fixing."
+                 (file-name-nondirectory source) source)
+       (format "Original requirements (%s):\n%s"
+               source (plist-get requirements :text)))
+     "\n\nClarified criteria:\n"
+     (if-let* ((answers (agent-shell-review--run-clarifications run)))
+         (mapconcat (lambda (answer)
+                      (format "Q: %s\nA: %s" (car answer) (cdr answer)))
+                    answers "\n")
+       "None")
+     "\n\nMarked findings:\n"
+     (mapconcat
+      (lambda (item)
+        (format "%s %s%s — %s\nEvidence: %s\nRequirement: %s\nSuggested fix: %s"
+                (plist-get item :priority)
+                (or (plist-get item :file) "General")
+                (if-let* ((line (plist-get item :line)))
+                    (format ":%d" line) "")
+                (plist-get item :title)
+                (plist-get item :evidence)
+                (plist-get item :requirement)
+                (plist-get item :suggestion)))
+      findings "\n\n"))))
 
 (defun agent-shell-review-send-marked ()
   "Send marked findings as one request to the implementation agent."

@@ -180,7 +180,9 @@
           (should-not sent)
           (agent-shell-review-send-marked)
           (should (= (length sent) 1))
-          (should (string-match-p "Original criteria" (car sent)))
+          (should (string-match-p "spec.md" (car sent)))
+          (should (string-match-p "\\[spec.md\\](<spec.md>)" (car sent)))
+          (should-not (string-match-p "Original criteria" (car sent)))
           (should (string-match-p "Use v2" (car sent)))
           (should (string-match-p "Wrong" (car sent)))
           (setf (agent-shell-review--run-send-fixes run)
@@ -203,6 +205,19 @@
               (should (string-match-p "Wrong" (buffer-string))))
             (kill-buffer copy)))
       (kill-buffer buffer))))
+
+(ert-deftest agent-shell-review-test-handoff-keeps-entered-criteria ()
+  "A fix request still includes criteria that have no file to reference."
+  (let* ((run (make-agent-shell-review--run
+               :requirements '(:kind entered :source "entered requirements"
+                                     :text "Keep error compatibility")))
+         (finding '(:priority "P2" :title "Wrong error"
+                               :evidence "Different message"
+                               :requirement "Keep error compatibility"
+                               :suggestion "Restore message"))
+         (prompt (agent-shell-review-ui--fix-prompt run (list finding))))
+    (should (string-match-p "Keep error compatibility" prompt))
+    (should (string-match-p "Wrong error" prompt))))
 
 (ert-deftest agent-shell-review-test-rerun-entered-requirements ()
   "A fresh pass reuses manually entered criteria without prompting."

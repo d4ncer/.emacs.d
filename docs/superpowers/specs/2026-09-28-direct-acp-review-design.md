@@ -110,6 +110,8 @@ agent-shell buffer.
 The sidebar's `S` action builds one prompt from the marked findings, original
 requirements, and all clarified answers. The run retains a function supplied
 at entry that sends this prompt to the exact origin implementation session.
+For file-backed requirements, the prompt references the spec path and asks the
+implementation agent to read it; entered or conversation criteria remain inline.
 The agent-shell adapter implements that function with `agent-shell-insert`
 using the captured buffer, `:submit t`, and `:no-focus t`. The core sees only
 the callback; it neither locates agent-shell buffers nor starts a replacement
