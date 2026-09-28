@@ -147,6 +147,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
 
   (defun +agent-shell--project-buffer (project)
     "Return the most recently used agent shell for PROJECT."
+    (autoload 'agent-shell-buffers "agent-shell")
     (let ((project-root
            (file-name-as-directory (expand-file-name project))))
       (seq-find
