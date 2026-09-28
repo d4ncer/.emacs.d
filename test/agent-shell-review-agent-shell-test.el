@@ -97,6 +97,27 @@
                         :type 'user-error))
       (when (buffer-live-p buffer) (kill-buffer buffer)))))
 
+(ert-deftest agent-shell-review-agent-shell-test-send-with-viewport-preference ()
+  "Send through the captured shell even when viewport interaction is on."
+  (let ((shell (generate-new-buffer " *review-viewport-origin*"))
+        (agent-shell-prefer-viewport-interaction t)
+        inserted-from target)
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-session-id)
+                   (lambda (&rest _args) "ready-session"))
+                  ((symbol-function 'shell-maker-busy) (lambda () nil))
+                  ((symbol-function 'agent-shell--insert-to-shell-buffer)
+                   (lambda (&rest args)
+                     (setq inserted-from (current-buffer)
+                           target (plist-get args :shell-buffer))
+                     '((:buffer . inserted)))))
+          (with-current-buffer shell (setq major-mode 'agent-shell-mode))
+          (with-temp-buffer
+            (should (agent-shell-review-agent-shell-send shell "Fix")))
+          (should (eq inserted-from shell))
+          (should (eq target shell)))
+      (kill-buffer shell))))
+
 (ert-deftest agent-shell-review-agent-shell-test-no-reviewer-shell-buffer ()
   "The review keeps only the existing implementation shell in shell lists."
   (let* ((origin (generate-new-buffer " *review-main-agent*"))

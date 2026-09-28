@@ -67,8 +67,9 @@
       (user-error "Original implementation session is not ready"))
     (when (shell-maker-busy)
       (user-error "Original implementation session is busy")))
-  (or (agent-shell-insert :text prompt :submit t :no-focus t
-                          :shell-buffer buffer)
+  (or (with-current-buffer buffer
+        (agent-shell-insert :text prompt :submit t :no-focus t
+                            :shell-buffer buffer))
       (user-error "Original implementation session did not accept the prompt")))
 
 (provide 'agent-shell-review-agent-shell)

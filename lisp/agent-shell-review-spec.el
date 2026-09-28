@@ -192,10 +192,12 @@
 EXPLICIT-FILE, when non-nil, always takes precedence."
   (let* ((root (file-name-as-directory (expand-file-name root)))
          (file
-          (or (and explicit-file (expand-file-name explicit-file))
-              (agent-shell-review-spec--referenced-file
-               root (or origin-text ""))
-              (agent-shell-review-spec--select-candidate root))))
+          (condition-case nil
+              (or (and explicit-file (expand-file-name explicit-file))
+                  (agent-shell-review-spec--referenced-file
+                   root (or origin-text ""))
+                  (agent-shell-review-spec--select-candidate root))
+            (quit (user-error "Requirements selection was cancelled")))))
     (cond
      (file
       (list :kind 'file :source file

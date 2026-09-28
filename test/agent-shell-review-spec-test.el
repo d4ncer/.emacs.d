@@ -54,6 +54,34 @@
               (should (= selection-count 1)))))
       (delete-directory root t))))
 
+(ert-deftest agent-shell-review-spec-test-cancel-ambiguous-selection ()
+  "Cancelling either spec chooser signals a catchable user error."
+  (let* ((root (make-temp-file "review-cancel-project-" t))
+         (external (make-temp-file "review-cancel-external-" t))
+         (spec-dir (expand-file-name "docs/specs" root))
+         (first (expand-file-name "first-spec.md" external))
+         (second (expand-file-name "second-spec.md" external))
+         (agent-shell-review-spec-search-roots nil))
+    (unwind-protect
+        (progn
+          (make-directory spec-dir t)
+          (with-temp-file (expand-file-name "one-spec.md" spec-dir)
+            (insert "One"))
+          (with-temp-file (expand-file-name "two-spec.md" spec-dir)
+            (insert "Two"))
+          (with-temp-file first (insert "First"))
+          (with-temp-file second (insert "Second"))
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (&rest _args) (signal 'quit nil))))
+            (should-error (agent-shell-review-spec-resolve root nil)
+                          :type 'user-error)
+            (should-error
+             (agent-shell-review-spec-resolve
+              root (format "Compare `%s` and `%s`." first second))
+             :type 'user-error)))
+      (delete-directory root t)
+      (delete-directory external t))))
+
 (ert-deftest agent-shell-review-spec-test-conversation-fallback ()
   "Use user instructions when no spec exists; reject missing or large input."
   (let* ((root (make-temp-file "review-project-" t))
