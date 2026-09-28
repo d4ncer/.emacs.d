@@ -30,7 +30,7 @@
 
 (cl-defstruct agent-shell-review-acp--transport
   root requirements-file on-event client session-id active closed
-  diagnostics)
+  diagnostics ready)
 
 (defun agent-shell-review-acp-create (root requirements-file on-event)
   "Create an inert review transport in ROOT with ON-EVENT callback.
@@ -45,7 +45,9 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
   "Record LABEL and VALUE in TRANSPORT diagnostics."
   (setf (agent-shell-review-acp--transport-diagnostics transport)
         (concat (agent-shell-review-acp--transport-diagnostics transport)
-                (format "%s: %s\n" label value))))
+                (format "%s: %s\n" label
+                        (if (stringp value) value
+                          (prin1-to-string value))))))
 
 (defun agent-shell-review-acp--emit (transport event)
   "Send EVENT while TRANSPORT is active."
@@ -55,6 +57,7 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
 (defun agent-shell-review-acp--fail (transport reason)
   "Report terminal REASON from TRANSPORT."
   (when (agent-shell-review-acp--transport-active transport)
+    (setf (agent-shell-review-acp--transport-ready transport) nil)
     (agent-shell-review-acp--record transport "Error" reason)
     (agent-shell-review-acp--emit
      transport (list :type 'error :message (format "%s" reason)))))
@@ -62,16 +65,20 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
 (defun agent-shell-review-acp--request (transport request on-success)
   "Send REQUEST on TRANSPORT and invoke ON-SUCCESS while active."
   (agent-shell-review-acp--record
-   transport "Request" (map-elt request :method))
+   transport "Request" request)
   (condition-case err
       (progn
         (acp-send-request
          :client (agent-shell-review-acp--transport-client transport)
          :request request
          :on-success (lambda (response)
+                       (agent-shell-review-acp--record
+                        transport "Response" response)
                        (when (agent-shell-review-acp--transport-active transport)
                          (funcall on-success response)))
          :on-failure (lambda (failure)
+                       (agent-shell-review-acp--record
+                        transport "Response error" failure)
                        (agent-shell-review-acp--fail transport failure)))
         t)
     (error (agent-shell-review-acp--fail transport (error-message-string err))
@@ -129,6 +136,7 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
         :session-id session-id :config-id (map-elt option 'id)
         :value config-mode)
        (lambda (_result)
+         (setf (agent-shell-review-acp--transport-ready transport) t)
          (agent-shell-review-acp--emit transport '(:type ready)))))
      (legacy-mode
       (agent-shell-review-acp--request
@@ -136,6 +144,7 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
        (acp-make-session-set-mode-request
         :session-id session-id :mode-id legacy-mode)
        (lambda (_result)
+         (setf (agent-shell-review-acp--transport-ready transport) t)
          (agent-shell-review-acp--emit transport '(:type ready)))))
      (t (agent-shell-review-acp--fail
          transport "Reviewer did not advertise a read-only mode")))))
@@ -182,6 +191,8 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
 
 (defun agent-shell-review-acp--notification (transport notification)
   "Handle ACP NOTIFICATION from TRANSPORT."
+  (when (agent-shell-review-acp--transport-active transport)
+    (agent-shell-review-acp--record transport "Notification" notification))
   (when (and (agent-shell-review-acp--transport-active transport)
              (equal (map-elt notification 'method) "session/update")
              (equal (map-nested-elt notification '(params sessionId))
@@ -260,7 +271,8 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
                            :code -32601
                            :message (format "Review request denied: %s"
                                             method))))))))
-      (agent-shell-review-acp--record transport "Incoming" method)
+      (agent-shell-review-acp--record transport "Incoming" request)
+      (agent-shell-review-acp--record transport "Outgoing response" response)
       (acp-send-response :client client :response response))))
 
 (defun agent-shell-review-acp--watch-process (transport)
@@ -304,6 +316,7 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
        :client client
        :on-error
        (lambda (error)
+         (agent-shell-review-acp--record transport "ACP error" error)
          (agent-shell-review-acp--fail transport error)))
       (agent-shell-review-acp--request
        transport
@@ -332,7 +345,8 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
 (defun agent-shell-review-acp-send (transport prompt)
   "Send text PROMPT to TRANSPORT's initialized session."
   (unless (and (agent-shell-review-acp--transport-active transport)
-               (agent-shell-review-acp--transport-session-id transport))
+               (agent-shell-review-acp--transport-session-id transport)
+               (agent-shell-review-acp--transport-ready transport))
     (user-error "Reviewer session is unavailable"))
   (agent-shell-review-acp--request
    transport
@@ -348,6 +362,7 @@ REQUIREMENTS-FILE may name one explicitly allowed external file."
   "Shut down TRANSPORT once, preserving its diagnostics."
   (unless (agent-shell-review-acp--transport-closed transport)
     (setf (agent-shell-review-acp--transport-active transport) nil
+          (agent-shell-review-acp--transport-ready transport) nil
           (agent-shell-review-acp--transport-closed transport) t)
     (when-let* ((client (agent-shell-review-acp--transport-client transport)))
       (acp-shutdown :client client))))

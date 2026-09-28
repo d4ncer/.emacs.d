@@ -437,6 +437,32 @@
             (should (= (current-column) column))))
       (kill-buffer buffer))))
 
+(ert-deftest agent-shell-review-test-render-preserves-item-from-detail ()
+  "Redraw keeps the selected finding when point is in expanded details."
+  (let* ((buffer (generate-new-buffer " *review-detail-point*"))
+         (result '(:kind findings
+                         :items ((:priority "P1" :title "First")
+                                 (:priority "P2" :title "Second"
+                                  :evidence "second evidence"))))
+         (run (make-agent-shell-review--run
+               :project temporary-file-directory :status 'findings
+               :result result :expanded '(1) :sidebar-buffer buffer)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (agent-shell-review-mode)
+          (setq-local agent-shell-review--current-run run)
+          (agent-shell-review-ui-render run)
+          (goto-char (point-min))
+          (search-forward "second evidence")
+          (setf (agent-shell-review--run-result run) nil
+                (agent-shell-review--run-stale-result run) result
+                (agent-shell-review--run-status run) 'reviewing)
+          (agent-shell-review-ui-render run)
+          (should (= (agent-shell-review-ui--index) 1))
+          (beginning-of-line)
+          (should (looking-at "\\[ \\] P2 Second")))
+      (kill-buffer buffer))))
+
 (ert-deftest agent-shell-review-test-no-inline-key-hints-or-custom-modeline ()
   "The review buffer leaves key discovery to its map and uses the modeline."
   (let* ((buffer (generate-new-buffer " *review-display*"))

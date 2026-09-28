@@ -24,7 +24,9 @@
             (modes . ((currentModeId . "default")
                       (availableModes . [((id . "default") (name . "Default"))
                                          ((id . "read-only") (name . "Read Only"))])))))
-         (mode-error nil))
+         (mode-error nil)
+         (defer-mode nil)
+         (mode-success nil))
      (cl-letf (((symbol-function 'acp-make-client)
                 (lambda (&rest _args) '((:process . nil))))
                ((symbol-function 'acp-subscribe-to-notifications)
@@ -41,13 +43,17 @@
                   (let* ((request (plist-get args :request))
                          (method (map-elt request :method)))
                     (push request requests)
-                    (if (and mode-error (equal method "session/set_mode"))
-                        (funcall (plist-get args :on-failure) "mode refused")
+                    (cond
+                     ((and mode-error (equal method "session/set_mode"))
+                      (funcall (plist-get args :on-failure) "mode refused"))
+                     ((and defer-mode (equal method "session/set_mode"))
+                      (setq mode-success (plist-get args :on-success)))
+                     (t
                       (funcall (plist-get args :on-success)
                                (pcase method
                                  ("session/new" session-response)
                                  ("session/prompt" '((stopReason . "end_turn")))
-                                 (_ nil))))
+                                 (_ nil)))))
                     nil)))
                ((symbol-function 'acp-send-response)
                 (lambda (&rest args)
@@ -103,6 +109,27 @@
       (should (eq (plist-get (car events) :type) 'error))
       (should-not (member "session/prompt"
                           (mapcar (lambda (r) (map-elt r :method)) requests))))))
+
+(ert-deftest agent-shell-review-acp-test-send-waits-for-read-only ()
+  "A session ID alone does not permit prompt submission."
+  (agent-shell-review-acp-test--fake
+    (let* ((events nil)
+           (transport (agent-shell-review-acp-create
+                       temporary-file-directory nil
+                       (lambda (event) (push event events)))))
+      (setq defer-mode t)
+      (agent-shell-review-acp-start transport)
+      (should (agent-shell-review-acp--transport-session-id transport))
+      (should (functionp mode-success))
+      (should-not events)
+      (should-error (agent-shell-review-acp-send transport "too early")
+                    :type 'user-error)
+      (should-not (member "session/prompt"
+                          (mapcar (lambda (r) (map-elt r :method)) requests)))
+      (funcall mode-success nil)
+      (should (eq (plist-get (car events) :type) 'ready))
+      (should (agent-shell-review-acp-send transport "after mode"))
+      (should (equal (map-elt (car requests) :method) "session/prompt")))))
 
 (ert-deftest agent-shell-review-acp-test-config-options ()
   "Use advertised config options for model and read-only mode."
@@ -209,6 +236,23 @@
       (should (string-match-p "answer" (agent-shell-review-acp-diagnostics transport)))
       (should (string-match-p "peer exited"
                               (agent-shell-review-acp-diagnostics transport))))))
+
+(ert-deftest agent-shell-review-acp-test-retains-payloads-after-close ()
+  "Diagnostics retain ACP payloads after the client destroys its buffers."
+  (agent-shell-review-acp-test--fake
+    (let ((transport (agent-shell-review-acp-create
+                      temporary-file-directory nil #'ignore)))
+      (agent-shell-review-acp-start transport)
+      (agent-shell-review-acp-send transport "distinctive review prompt")
+      (funcall incoming '((id . 42) (method . "fs/write_text_file")
+                          (params . ((path . "denied.el")
+                                     (content . "blocked write")))))
+      (agent-shell-review-acp-close transport)
+      (let ((diagnostics (agent-shell-review-acp-diagnostics transport)))
+        (should (string-match-p "distinctive review prompt" diagnostics))
+        (should (string-match-p "end_turn" diagnostics))
+        (should (string-match-p "denied.el" diagnostics))
+        (should (string-match-p "Review request denied" diagnostics))))))
 
 (ert-deftest agent-shell-review-acp-test-idle-process-exit ()
   "An exit between question rounds ends the review session."

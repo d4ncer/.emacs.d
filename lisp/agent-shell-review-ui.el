@@ -142,21 +142,24 @@ Return the sidebar window."
                         'mouse-face 'highlight)
             "\n")
     (when (member index (agent-shell-review--run-expanded run))
-      (pcase kind
-        ('questions
-         (insert (format "  Criterion: %s\n  Why: %s\n"
-                         (plist-get item :criterion)
-                         (plist-get item :why)))
-         (when answered
-           (insert (format "  Answer: %s\n" (cdr answered)))))
-        ('findings
-         (insert (format "  %s%s\n  Evidence: %s\n  Requirement: %s\n  Fix: %s\n"
-                         (or (plist-get item :file) "General")
-                         (if-let* ((line (plist-get item :line)))
-                             (format ":%d" line) "")
-                         (plist-get item :evidence)
-                         (plist-get item :requirement)
-                         (plist-get item :suggestion))))))))
+      (let ((detail-start (point)))
+        (pcase kind
+          ('questions
+           (insert (format "  Criterion: %s\n  Why: %s\n"
+                           (plist-get item :criterion)
+                           (plist-get item :why)))
+           (when answered
+             (insert (format "  Answer: %s\n" (cdr answered)))))
+          ('findings
+           (insert (format "  %s%s\n  Evidence: %s\n  Requirement: %s\n  Fix: %s\n"
+                           (or (plist-get item :file) "General")
+                           (if-let* ((line (plist-get item :line)))
+                               (format ":%d" line) "")
+                           (plist-get item :evidence)
+                           (plist-get item :requirement)
+                           (plist-get item :suggestion)))))
+        (add-text-properties detail-start (point)
+                             (list 'agent-shell-review-item index))))))
 
 (defun agent-shell-review-ui-render (run)
   "Render RUN's current status and review items."
