@@ -128,10 +128,11 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
     "," '(vulpea-ui-sidebar-toggle :wk "toggle sidebar")
     "c" '(org-cite-insert :wk "cite")
     "d" '(org-deadline :wk "deadline")
+    "s" '(org-schedule :wk "schedule")
     "i" '(vulpea-insert :wk "insert link (note)")
     "l" '(+org/link-dwim :wk "link dwim")
     "r" '(+life/refile :wk "refile to initiative")
-    "s" '(+org/insert-screenshot :wk "screenshot")
+    "S" '(+org/insert-screenshot :wk "screenshot")
 
     "n"  '(nil :wk "navigate")
     "np" '(+life/go-to-parent :wk "go to parent")
@@ -245,6 +246,7 @@ If no link at point, prompt to insert a vulpea note link [v] or org link [o]."
   (+local-leader-set-key 'org-agenda-mode-map
     "d" '(org-agenda-deadline :wk "deadline")
     "," '(org-agenda-priority :wk "priority")
+    "s" '(org-agenda-schedule :wk "schedule")
     "t" '(org-agenda-todo :wk "todo status")
     "r" '(+life/agenda-refile :wk "refile"))
   (defun +org--update-agenda-files (&rest _)
