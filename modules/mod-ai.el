@@ -229,14 +229,14 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
             "RET" #'newline
             "TAB" #'self-insert-command
             "<tab>" #'self-insert-command
-            "C-RET" #'shell-maker-submit
-            "C-<return>" #'shell-maker-submit)
+            "C-RET" #'agent-shell-submit
+            "C-<return>" #'agent-shell-submit)
   (:keymaps 'agent-shell-mode-map :states 'normal
             "TAB" #'agent-shell-next-item
             "<tab>" #'agent-shell-next-item
             "<backtab>" #'agent-shell-previous-item
-            "C-RET" #'shell-maker-submit
-            "C-<return>" #'shell-maker-submit)
+            "C-RET" #'agent-shell-submit
+            "C-<return>" #'agent-shell-submit)
   :config
   (add-hook 'agent-shell-artist-mode-hook #'evil-emacs-state)
   (with-eval-after-load 'agent-shell-ui
