@@ -25,16 +25,6 @@
   "Function called with an alert title and body."
   :type 'function)
 
-(defcustom agent-shell-notify-suppress-event-function
-  (lambda (_shell-buffer _event) nil)
-  "Return non-nil to suppress a generic alert for a shell event."
-  :type 'function)
-
-(defcustom agent-shell-notify-related-buffers-function
-  (lambda (shell-buffer) (list shell-buffer))
-  "Return buffers whose focused selection suppresses a shell alert."
-  :type 'function)
-
 (defconst agent-shell-notify--script
   "on run argv\n  display notification (item 2 of argv) with title (item 1 of argv)\nend run"
   "Fixed AppleScript for sending a notification.")
@@ -112,7 +102,6 @@
                    (equal (plist-get state :request-id)
                           (map-elt (map-elt event :data) :request-id)))
           (remhash shell-buffer agent-shell-notify--states))))
-     ((funcall agent-shell-notify-suppress-event-function shell-buffer event))
      (t
       (when-let* ((alert (agent-shell-notify--classify event))
                   (kind (plist-get alert :kind)))
@@ -131,8 +120,7 @@
                            (agent-shell-notify-send
                             (agent-shell-notify--title shell-buffer)
                             (plist-get alert :body)
-                            (funcall agent-shell-notify-related-buffers-function
-                                     shell-buffer)))))
+                            (list shell-buffer)))))
               (puthash shell-buffer state agent-shell-notify--states)
               (if (eq kind 'ready)
                   (plist-put

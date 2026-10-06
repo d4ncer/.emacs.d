@@ -4,7 +4,7 @@
 
 **Goal:** Show a macOS alert when an agent-shell agent finishes, needs approval, or fails.
 
-**Architecture:** A global minor mode subscribes to each agent-shell buffer and maps ACP events to alert messages. Delivery, focus suppression, and review-specific overrides are public extension points, so the package remains usable on its own.
+**Architecture:** A global minor mode subscribes to each agent-shell buffer and maps ACP events to alert messages. Delivery and focus suppression keep alerts useful without interrupting the shell.
 
 **Tech Stack:** Emacs Lisp, agent-shell event API, ERT, macOS `osascript`.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Create `lisp/agent-shell-notify.el` as a standalone package; prefix public symbols `agent-shell-notify-` and internal symbols `agent-shell-notify--`.
-- Depend only on agent-shell and built-in Emacs libraries; do not use personal `+` helpers or require the review package.
+- Depend only on agent-shell and built-in Emacs libraries; do not use personal `+` helpers.
 - Give new `.el` files a lexical-binding header, package metadata,
   `Commentary`, `Code`, `provide`, and footer sections.
 - Keep `modules/mod-ai.el` to activation and preferences; no new `init.el` module.
@@ -77,15 +77,12 @@ emacsclient --eval '(progn (load-file (expand-file-name "lisp/agent-shell-notify
 **Interfaces:**
 - `agent-shell-notify-send (title body &optional relevant-buffers)` applies the focus rule and calls `agent-shell-notify-send-function`.
 - `agent-shell-notify-send-function` defaults to `agent-shell-notify--macos-send (title body)`; tests bind a fake sender.
-- `agent-shell-notify-suppress-event-function (shell-buffer event)` defaults to nil and lets an optional integration suppress generic events.
-- `agent-shell-notify-related-buffers-function (shell-buffer)` returns buffers whose selection suppresses the alert; by default it returns the shell.
 
 - [ ] **Step 1: Write failing ERT tests** named
   `agent-shell-notify-test-focus-and-dedupe` and
   `agent-shell-notify-test-osascript-arguments`. Bind a fake sender and
   stub frame focus; include these assertions and cases for an error replacing
-  pending completion, a review-shell event suppressed by the optional
-  predicate, a selected related sidebar, and missing `osascript`:
+  pending completion and missing `osascript`:
 
 ```elisp
 (should (null sent))              ; focused, selected shell
@@ -94,8 +91,8 @@ emacsclient --eval '(progn (load-file (expand-file-name "lisp/agent-shell-notify
 (should-not (string-match-p "say hi" fixed-script))
 ```
 - [ ] **Step 2: Run the ERT command above**; expect the new tests to fail.
-- [ ] **Step 3: Implement** the four interfaces and the nonblocking `osascript` sender. Use a fixed AppleScript source with `on run argv`; pass title/body as separate process arguments. Delay a completion alert briefly (250 ms) so an error from the same turn can cancel and replace it.
-- [ ] **Step 4: Add deferred activation** in `modules/mod-ai.el` with `use-package agent-shell-notify :ensure nil :after agent-shell`. Do not require the review package.
+- [ ] **Step 3: Implement** the delivery interface and the nonblocking `osascript` sender. Use a fixed AppleScript source with `on run argv`; pass title/body as separate process arguments. Delay a completion alert briefly (250 ms) so an error from the same turn can cancel and replace it.
+- [ ] **Step 4: Add deferred activation** in `modules/mod-ai.el` with `use-package agent-shell-notify :ensure nil :after agent-shell`.
 - [ ] **Step 5: Run the ERT command**; expect `"PASS"`.
 - [ ] **Step 6: Check syntax and byte-compile** with `emacsclient`
   (`check-parens` on the source and `byte-compile-file` on changed Elisp);

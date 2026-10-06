@@ -70,19 +70,13 @@
 (ert-deftest agent-shell-notify-test-focus-and-dedupe ()
   "Only alert away from the relevant buffer, and replace pending completion."
   (let* ((shell (generate-new-buffer " *notify-shell*"))
-        (sidebar (generate-new-buffer " *notify-sidebar*"))
         (agent-shell-notify--states (make-hash-table :test #'eq))
         (focused t)
         (sent nil)
         (pending nil)
         (cancelled nil)
         (agent-shell-notify-send-function
-         (lambda (title body) (push (list title body) sent)))
-        (agent-shell-notify-suppress-event-function
-         (lambda (_buffer event)
-           (eq (alist-get :event event) 'review-result)))
-        (agent-shell-notify-related-buffers-function
-         (lambda (_buffer) (list shell sidebar))))
+         (lambda (title body) (push (list title body) sent))))
     (unwind-protect
         (save-window-excursion
           (cl-letf (((symbol-function 'frame-focus-state)
@@ -99,14 +93,8 @@
             (setq focused nil)
             (agent-shell-notify-send "Agent" "ready" (list shell))
             (should (= (length sent) 1))
-            (setq sent nil focused t)
-            (switch-to-buffer sidebar)
-            (agent-shell-notify-send "Agent" "ready" (list shell sidebar))
-            (should (null sent))
+            (setq sent nil)
             (setq focused nil)
-            (agent-shell-notify--handle
-             shell '((:event . review-result)))
-            (should (null sent))
             (agent-shell-notify--handle
              shell '((:event . turn-complete)
                      (:data . ((:stop-reason . "end_turn")))))
@@ -122,8 +110,7 @@
             (agent-shell-notify--handle
              shell '((:event . error) (:data . ((:message . "broken")))))
             (should (= (length sent) 1))))
-      (kill-buffer shell)
-      (kill-buffer sidebar))))
+      (kill-buffer shell))))
 
 (ert-deftest agent-shell-notify-test-osascript-arguments ()
   "Pass alert text as argv to fixed AppleScript and log a missing sender."
