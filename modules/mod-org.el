@@ -301,6 +301,7 @@ not git status, visual pulsing, treesit grammars, or direnv."
                          +life/refresh-agenda-files +life/invalidate-agenda-cache
                          +life/refile +life/agenda-refile +life/agenda-person
                          +life/process-note +life/request-briefing +life/oracle
+                         +life/workflows
                          +life/review-done +life/archive-done)
   :custom
   (vulpea-default-notes-directory (file-name-concat org-directory "roam"))
