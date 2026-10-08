@@ -133,7 +133,7 @@ BODY is executed to prepare the response buffer."
 (use-package agent-shell
   :ensure t
   :custom
-  (agent-shell-openai-default-model-id "gpt-6-sol")
+  (agent-shell-openai-default-model-id "gpt-6.1-sol")
   (agent-shell-preferred-agent-config (agent-shell-openai-make-codex-config))
   :init
   (defun +agent-shell-project (&optional arg)
