@@ -29,6 +29,7 @@
   :config
   (require '+window)
   (require '+edit-cmds)
+  (autoload 'agent-shell-switch-buffer "agent-shell")
 
   (general-define-key
    :states '(normal motion insert)
