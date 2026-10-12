@@ -254,6 +254,13 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (agent-shell-notify-mode 1))
 
+(use-package +agent-shell-mermaid
+  :ensure nil
+  :after agent-shell
+  :custom (+agent-shell-mermaid-cache-directory (file-name-concat user-emacs-directory "var" "mermaid-cache"))
+  :config
+  (+agent-shell-mermaid-mode 1))
+
 (elpaca (latex-to-svg-backend
          :host github :repo "alberti42/latex-to-svg-backend"))
 
