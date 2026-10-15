@@ -246,6 +246,17 @@ Modules are loaded in the following order from `init.el`:
 - Autoinsert (file template insertion)
 - Custom file templates (`+file-templates`)
 - PDF-tools (PDF viewer with evil bindings)
+- Excali (Excalidraw editor on Emacs 32 with Canvas and module support)
+  - Elpaca builds the Cairo/Pango native module before linking the package.
+  - `SPC a x n` creates a drawing; `SPC a x o` opens one.
+  - `.excalidsl` sources use Excali DSL mode: `C-c C-c` previews and
+    `C-c C-e` exports a drawing. Open `.excalidraw` scenes with `excali-open`.
+  - Drawing buffers use Evil's Emacs state for Excali's native tool keys.
+  - Build requirements: a C compiler, make, pkg-config, Cairo, Pango, zlib,
+    and the Emacs 32 `emacs-module.h` header. On Homebrew, install dependencies
+    with `brew install pkg-config cairo pango librsvg gdk-pixbuf webp`.
+  - Optional Excalidraw fonts: run `make fonts` in the package's Elpaca source
+    directory, then reopen Emacs to register them.
 
 ### mod-core-extras.el
 **Purpose:** Additional core utilities and system integration
