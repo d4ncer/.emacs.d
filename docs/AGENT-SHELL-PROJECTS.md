@@ -14,6 +14,9 @@ checkpoints independently of Git commits.
    author. A prefix argument to `+agent-shell-projects-choose-author` starts
    fresh directly.
 4. Press `RET` on an artefact to open its current saved contents and sidebar.
+   Git enrolment returns immediately; its first capture runs in a child Emacs
+   process. The sidebar shows progress and a **Cancel** action. When the first
+   capture finishes, a visible waiting view is filled without selecting it.
 
 Home shows the project name, linked author buffers with live status, and
 artefact names. The coloured dot means there is new material to review.
@@ -47,7 +50,8 @@ remains a separate choice that only you can make.
 
 Use transient `s` to send all new comments and replies to the author. The agent
 can revise source immediately and respond through the shared annotation API.
-Your viewed revision stays stable until you refresh it. Review the responses
+Your viewed revision stays stable until you refresh it. Opening code and
+cycling its views use saved captures and do not run Git. Review the responses
 and changes, add further feedback, and submit another batch. Unresolved
 annotations from earlier versions remain available throughout this loop.
 
@@ -71,6 +75,10 @@ shows version position; home deliberately omits it. History navigation never
 replaces the source file. Saving a source buffer captures a new version.
 
 Save your source edits before submitting feedback or annotating live code.
+Code saves queue a capture without delaying the save. Wait for that capture
+before attaching a live-source selection; saved diff passages remain available
+while capture is running. `C-c C-g` requests a fresh capture and updates the
+view when it finishes, provided you are still viewing the same revision.
 If an agent changes disk contents while a document buffer has unsaved edits,
 both copies are preserved: your buffer stays intact and the disk copy is saved
 in the local store. The sidebar offers a native diff against disk so you can
@@ -115,6 +123,20 @@ The three views share one immutable capture:
 | `C-c C-d` | Compare whole solution / changes since last reviewed capture |
 | `C-c C-a` | Restore the whole diff after following a focused link |
 
+Files and hunks start collapsed. Expanding a file prepares its diff in a child
+process; expanding a hunk loads its first 200 lines. **Load more lines** adds
+the next block. Large file and hunk lists also have continuation buttons.
+Visiting an annotation loads the necessary passage incrementally. Searches
+operate on the diff content currently loaded into the buffer.
+
+Capture requests are debounced and combined per workspace, including requests
+for different bases. Immutable base objects are read in batches and cached.
+Git's configured filesystem monitor is respected. The worker rechecks source
+consistency before publishing a capture; expensive scans remain outside the
+interactive editor. Superseded results cannot replace newer requested work.
+Cancel through the sidebar or transient `C`; the previous capture remains usable
+after cancellation, timeout, or failure. Refresh retries a failed capture.
+
 Summary and walkthrough explain outcomes, constraints and priorities or actual
 weights, alternatives and tradeoffs, relationships among changes, and
 validation evidence or gaps. Walkthrough entries distinguish recorded
@@ -152,6 +174,14 @@ document text and actual saved before/after file contents for code captures.
 `+agent-shell-projects-send-function` is the delivery adapter, called with
 `(SHELL TEXT)`; return non-nil only after acceptance. Busy shells, disconnected
 shells, and shells containing unsent input retain queued requests for retry.
+
+`+agent-shell-projects-capture-delay` defaults to 0.3 seconds.
+`+agent-shell-projects-worker-limit` defaults to two concurrent workers, with
+capture requests taking priority over queued diff preparation.
+`+agent-shell-projects-worker-timeout` defaults to 300 seconds per running job.
+Workers use this Emacs executable in batch mode; no additional runtime is needed.
+Streamed text and tool chunks cause no project writes or review refreshes.
+Other UI updates are coalesced and never reopen hidden sidebars.
 
 `+agent-shell-projects-directory` defaults to
 `var/agent-shell-projects/` beneath this Emacs directory. It contains atomic
@@ -216,7 +246,11 @@ emacs -Q --batch -l test/run-agent-shell-projects.el
 emacs -Q --batch -l test/agent-shell-projects-startup-test.el
 ```
 
-The suite uses disposable documents, repositories and worktrees. Its local
+The suite uses disposable documents, repositories and worktrees. It includes
+real workers behind deliberately slow Git commands, an editor heartbeat and
+editing checks during capture, cancellation and timeout, job coalescing and
+stale-result rejection, batched base caching, bounded diff expansion, and hidden
+window behavior with normal UI hooks. Its local
 ACP fixture exercises real agent-shell process delivery and structured results
 without contacting a model provider. It also checks strict byte compilation.
 The startup check verifies deferred activation and native General/Evil keys.

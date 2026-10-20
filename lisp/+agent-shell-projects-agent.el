@@ -137,27 +137,37 @@
     (remhash id +agent-shell-projects--subscriptions))
   (remhash id +agent-shell-projects--shells))
 
+(defvar +agent-shell-projects--event-timers (make-hash-table :test #'equal))
+
 (defun +agent-shell-projects--agent-event (project-id agent-id event)
-  "Handle EVENT from AGENT-ID in PROJECT-ID."
-  (let* ((project (+agent-shell-projects-load project-id))
-         (agent (+agent-shell-projects-agent project agent-id))
-         (kind (map-elt event :event)))
-    (pcase kind
-      ('clean-up (+agent-shell-projects--detach agent-id))
-      ((or 'init-finished 'turn-complete 'session-restored)
-       (when-let* ((shell (+agent-shell-projects-shell agent)))
-         (+agent-shell-projects--set
-          agent :session (agent-shell-session-id :shell-buffer shell)))
-       (dolist (artefact (plist-get project :artefacts))
-         (condition-case err
-             (+agent-shell-projects-capture project artefact agent-id)
-           (error (+agent-shell-projects--set artefact :capture-error
-                                              (error-message-string err)))))))
-    (+agent-shell-projects-save project)
-    (run-hook-with-args '+agent-shell-projects-change-hook project nil)
-    ;; Completion events may precede the underlying shell's final busy reset.
-    (when (memq kind '(turn-complete prompt-ready init-finished))
-      (run-at-time 0 nil #'+agent-shell-projects-flush project))))
+  "Handle meaningful agent EVENTs with bounded work and coalesced capture."
+  (let ((kind (map-elt event :event)))
+    (unless (memq kind '(agent-message-chunk tool-call-update))
+      (let* ((project (+agent-shell-projects-load project-id))
+             (agent (+agent-shell-projects-agent project agent-id)))
+        (when (eq kind 'clean-up) (+agent-shell-projects--detach agent-id))
+        (when (memq kind '(init-finished turn-complete session-restored))
+          (when-let* ((shell (+agent-shell-projects-shell agent)))
+            (let ((session (agent-shell-session-id :shell-buffer shell)))
+              (unless (equal session (plist-get agent :session))
+                (+agent-shell-projects--set agent :session session)
+                (+agent-shell-projects-save project))))
+          (when (equal (plist-get agent :role) "author")
+            (unless (gethash project-id +agent-shell-projects--event-timers)
+              (puthash project-id
+                       (run-at-time
+                        0.3 nil
+                        (lambda ()
+                          (remhash project-id +agent-shell-projects--event-timers)
+                          (dolist (artefact (plist-get project :artefacts))
+                            (condition-case err
+                                (+agent-shell-projects-capture project artefact agent-id)
+                              (error (+agent-shell-projects--set artefact :capture-error
+                                                                 (error-message-string err)))))))
+                       +agent-shell-projects--event-timers))))
+        (+agent-shell-projects--refresh-ui project nil t)
+        (when (memq kind '(turn-complete prompt-ready init-finished))
+          (run-at-time 0 nil #'+agent-shell-projects-flush project))))))
 
 (defun +agent-shell-projects--select-config ()
   "Resolve the configurable default agent, or prompt when requested."
@@ -269,14 +279,16 @@
   (let* ((manifest (json-parse-string (+agent-shell-projects-content version)
                                      :object-type 'plist :array-type 'list
                                      :null-object nil :false-object :false))
-         (bases (plist-get manifest :base-files)))
+         (bases (make-hash-table :test #'equal)))
+    (dolist (base (plist-get manifest :base-files))
+      (puthash (plist-get base :path) base bases))
     (list :base (plist-get manifest :base)
           :changes (plist-get manifest :changes)
           :files
           (mapcar
            (lambda (file)
              (let* ((path (plist-get file :path))
-                    (base (seq-find (lambda (f) (equal (plist-get f :path) path)) bases)))
+                    (base (gethash path bases)))
                (list :path path :binary (plist-get file :binary)
                      :before (+agent-shell-projects--context-file-text base)
                      :after (+agent-shell-projects--context-file-text file)
@@ -443,7 +455,7 @@
     (when (equal (plist-get request :status) "queued")
       (let* ((agent (+agent-shell-projects-agent project (plist-get request :agent)))
              (shell (+agent-shell-projects-shell agent)))
-        (when shell
+        (when (and shell (eq (agent-shell-status :shell-buffer shell) 'ready))
           (condition-case err
               (when (funcall +agent-shell-projects-send-function shell
                              (+agent-shell-projects-content
@@ -634,6 +646,8 @@
         (require 'agent-shell)
         (setq +agent-shell-projects--timer
               (run-with-timer 1 1 #'+agent-shell-projects-poll)))
+    (maphash (lambda (_id timer) (cancel-timer timer)) +agent-shell-projects--event-timers)
+    (clrhash +agent-shell-projects--event-timers)
     (let (ids)
       (maphash (lambda (id _value) (push id ids))
                +agent-shell-projects--subscriptions)

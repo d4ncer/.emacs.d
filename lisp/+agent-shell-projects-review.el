@@ -93,7 +93,10 @@
   (interactive)
   (let* ((project (or project (+agent-shell-projects--project)))
          (artefact (or artefact (+agent-shell-projects--code-artefact project)))
-         (version (or version (+agent-shell-projects-capture-code project artefact)))
+         (version (or version
+                      (and (plist-get artefact :current)
+                           (+agent-shell-projects-version artefact (plist-get artefact :current)))
+                      (user-error "Wait for the first capture before generating explanations")))
          (agent (+agent-shell-projects-agent project (plist-get project :author)))
          (existing (seq-find
                     (lambda (r)
@@ -126,7 +129,8 @@
   (interactive)
   (let* ((project (+agent-shell-projects--project))
          (artefact (+agent-shell-projects--code-artefact project))
-         (version (+agent-shell-projects-capture-code project artefact)))
+         (version (and (plist-get artefact :current)
+                       (+agent-shell-projects-version artefact (plist-get artefact :current)))))
     (+agent-shell-projects-render-code project artefact version "summary")))
 
 (defun +agent-shell-projects--navigation-state ()

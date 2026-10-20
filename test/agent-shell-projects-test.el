@@ -13,6 +13,57 @@
 (require '+agent-shell-projects-code)
 (require '+agent-shell-projects-review)
 
+(defun +agent-shell-projects-test--await (predicate)
+  "Let the actual event loop run until PREDICATE succeeds."
+  (let ((deadline (+ (float-time) 20)))
+    (while (and (not (funcall predicate)) (< (float-time) deadline))
+      (accept-process-output nil 0.02))
+    (should (funcall predicate))))
+
+(defun +agent-shell-projects-test--captured (artefact)
+  "Wait for ARTEFACT's asynchronous capture, surfacing worker errors."
+  (+agent-shell-projects-test--await
+   (lambda () (not (gethash (file-name-as-directory (file-truename (plist-get artefact :path)))
+                            +agent-shell-projects--jobs))))
+  (when (plist-get artefact :capture-error) (error "%s" (plist-get artefact :capture-error)))
+  (+agent-shell-projects-version artefact (plist-get artefact :current)))
+
+(defun +agent-shell-projects-test--enrol-code (&rest args)
+  "Enrol then await a real worker for legacy functional assertions."
+  (let ((artefact (apply #'+agent-shell-projects-enrol-code args)))
+    (+agent-shell-projects-test--captured artefact)
+    artefact))
+
+(defun +agent-shell-projects-test--capture-code (project artefact &optional actor)
+  "Capture through the production asynchronous path and await completion."
+  (+agent-shell-projects-capture-code project artefact actor)
+  (+agent-shell-projects-test--captured artefact))
+
+(defun +agent-shell-projects-test--expand ()
+  "Expand the small functional fixture, including prepared diff blocks."
+  (let ((again t) (deadline (+ (float-time) 20)))
+    (save-excursion
+      (while (and again (< (float-time) deadline))
+        (setq again nil)
+        (magit-map-sections
+         (lambda (section)
+           (when (oref section washer)
+             (setq again t) (magit-section-show section))))
+        (goto-char (point-min))
+        (when (search-forward "Load more " nil t)
+          (when-let* ((button (button-at (1- (point)))))
+            (button-activate button) (setq again t)))
+        (when (or (> +agent-shell-projects--render-pending 0)
+                  +agent-shell-projects--worker-queue
+                  (> (hash-table-count +agent-shell-projects--workers) 0))
+          (accept-process-output nil 0.02) (setq again t))))))
+
+(defun +agent-shell-projects-test--render-code (&rest args)
+  "Render a fixture and expand it after its real diff workers finish."
+  (let ((buffer (apply #'+agent-shell-projects-render-code args)))
+    (+agent-shell-projects-test--expand)
+    buffer))
+
 (defmacro +agent-shell-projects-test--isolated (&rest body)
   "Run BODY with a disposable store and source directory."
   (declare (indent 0))
@@ -20,6 +71,15 @@
           (+agent-shell-projects-directory (expand-file-name "store/" directory))
           (+agent-shell-projects-inbox-directory (expand-file-name "inbox/" directory))
           (+agent-shell-projects--projects (make-hash-table :test #'equal))
+          (+agent-shell-projects--jobs (make-hash-table :test #'equal))
+          (+agent-shell-projects--workers (make-hash-table :test #'eq))
+          (+agent-shell-projects--worker-queue nil)
+          (+agent-shell-projects--worker-pump nil)
+          (+agent-shell-projects--event-timers (make-hash-table :test #'equal))
+          (+agent-shell-projects--ui-pending (make-hash-table :test #'equal))
+          (+agent-shell-projects--ui-timer nil)
+          (+agent-shell-projects-job-hook nil)
+          (+agent-shell-projects-capture-delay 0.01)
           (+agent-shell-projects-change-hook nil)
           (+agent-shell-projects--shells (make-hash-table :test #'equal))
           (+agent-shell-projects--subscriptions (make-hash-table :test #'equal))
@@ -27,6 +87,14 @@
           (org-id-track-globally nil)
           (project (+agent-shell-projects-create "Example" directory)))
      (unwind-protect (progn ,@body)
+       (dolist (state (hash-table-values +agent-shell-projects--jobs))
+         (+agent-shell-projects-cancel-capture (plist-get state :root)))
+       (dolist (handle (copy-sequence +agent-shell-projects--worker-queue))
+         (+agent-shell-projects--stop-worker handle))
+       (dolist (process (hash-table-keys +agent-shell-projects--workers))
+         (+agent-shell-projects--stop-worker process))
+       (when (timerp +agent-shell-projects--ui-timer) (cancel-timer +agent-shell-projects--ui-timer))
+       (maphash (lambda (_id timer) (cancel-timer timer)) +agent-shell-projects--event-timers)
        (dolist (buffer (buffer-list))
          (when (and (buffer-live-p buffer)
                     (or (with-current-buffer buffer
@@ -455,7 +523,7 @@
           (make-symbolic-link "tracked.txt" (expand-file-name "alias.txt" root))
           (+agent-shell-projects-test--file root "ignored/output.txt" "generated\n")
           (let* ((before (+agent-shell-projects-git root "status" "--porcelain=v1" "-z"))
-                 (artefact (+agent-shell-projects-enrol-code project root base))
+                 (artefact (+agent-shell-projects-test--enrol-code project root base))
                  (manifest (+agent-shell-projects-code-manifest
                             (+agent-shell-projects-version
                              artefact (plist-get artefact :current))))
@@ -475,7 +543,7 @@
             (should (seq-find (lambda (f) (plist-get f :old-path))
                               (plist-get manifest :changes)))
             (save-window-excursion
-              (+agent-shell-projects-render-code
+              (+agent-shell-projects-test--render-code
                project artefact (+agent-shell-projects-version artefact (plist-get artefact :current)))
               (should (string-match-p "mode 100644 → 100755" (buffer-string)))
               (should (string-match-p "Binary contents changed" (buffer-string)))
@@ -485,13 +553,13 @@
   (+agent-shell-projects-test--isolated
     (let* ((root (+agent-shell-projects-test--repository directory))
            (_ (+agent-shell-projects-test--file root "tracked.txt" "first change\n"))
-           (artefact (+agent-shell-projects-enrol-code project root))
+           (artefact (+agent-shell-projects-test--enrol-code project root))
            (old (plist-get artefact :current)))
       (+agent-shell-projects-acknowledge project (list (list (plist-get artefact :id) old 0)))
       (+agent-shell-projects-test--file root "tracked.txt" "second change\n")
-      (let ((version (+agent-shell-projects-capture-code project artefact)))
+      (let ((version (+agent-shell-projects-test--capture-code project artefact)))
         (save-window-excursion
-          (+agent-shell-projects-render-code project artefact version "diff" "reviewed")
+          (+agent-shell-projects-test--render-code project artefact version "diff" "reviewed")
           (should (string-match-p "-first change" (buffer-string)))
           (should (string-match-p "+second change" (buffer-string)))
           (goto-char (point-min)) (search-forward "+second change")
@@ -530,13 +598,13 @@
     (+agent-shell-projects-test--agent
       (let* ((root (+agent-shell-projects-test--repository directory))
              (_ (+agent-shell-projects-test--file root "tracked.txt" "changed\n"))
-             (artefact (+agent-shell-projects-enrol-code project root))
+             (artefact (+agent-shell-projects-test--enrol-code project root))
              (version (+agent-shell-projects-version artefact (plist-get artefact :current)))
              (agent (+agent-shell-projects-associate project shell))
              (+agent-shell-projects-send-function (lambda (&rest _) t)))
         (+agent-shell-projects-test--explanation project artefact agent version)
         (save-window-excursion
-          (+agent-shell-projects-render-code project artefact version "summary")
+          (+agent-shell-projects-test--render-code project artefact version "summary")
           (search-forward "compatibility")
           (let ((position (point)))
             (+agent-shell-projects-cycle-view)
@@ -558,16 +626,16 @@
     (+agent-shell-projects-test--agent
       (let* ((root (+agent-shell-projects-test--repository directory))
              (_ (+agent-shell-projects-test--file root "tracked.txt" "first\n"))
-             (artefact (+agent-shell-projects-enrol-code project root))
+             (artefact (+agent-shell-projects-test--enrol-code project root))
              (old (+agent-shell-projects-version artefact (plist-get artefact :current)))
              (agent (+agent-shell-projects-associate project shell))
              (+agent-shell-projects-send-function (lambda (&rest _) t)))
         (+agent-shell-projects-test--explanation project artefact agent old)
         (+agent-shell-projects-test--file root "tracked.txt" "second\n")
-        (let ((new (+agent-shell-projects-capture-code project artefact)))
+        (let ((new (+agent-shell-projects-test--capture-code project artefact)))
           (should-not (+agent-shell-projects-explanation artefact new))
           (save-window-excursion
-            (+agent-shell-projects-render-code project artefact new "summary")
+            (+agent-shell-projects-test--render-code project artefact new "summary")
             (should (string-match-p "No explanation" (buffer-string)))
             (should-not (string-match-p "Preserve compatibility" (buffer-string))))
           (should (+agent-shell-projects-explanation artefact old)))))))
@@ -577,13 +645,13 @@
     (+agent-shell-projects-test--agent
       (let* ((root (+agent-shell-projects-test--repository directory))
              (_ (+agent-shell-projects-test--file root "tracked.txt" "changed\n"))
-             (artefact (+agent-shell-projects-enrol-code project root))
+             (artefact (+agent-shell-projects-test--enrol-code project root))
              (version (+agent-shell-projects-version artefact (plist-get artefact :current)))
              (agent (+agent-shell-projects-associate project shell))
              (+agent-shell-projects-send-function (lambda (&rest _) t)))
         (+agent-shell-projects-test--explanation project artefact agent version)
         (save-window-excursion
-          (+agent-shell-projects-render-code project artefact version "summary")
+          (+agent-shell-projects-test--render-code project artefact version "summary")
           (search-forward "Preserve compatibility")
           (let ((end (point)))
             (set-mark (- end (length "compatibility")))
@@ -784,16 +852,17 @@
   (+agent-shell-projects-test--isolated
     (let* ((root (+agent-shell-projects-test--repository directory))
            (_ (+agent-shell-projects-test--file root "tracked.txt" "Changed\n"))
-           (artefact (+agent-shell-projects-enrol-code project root))
+           (artefact (+agent-shell-projects-test--enrol-code project root))
            (old (plist-get artefact :current)))
       (save-window-excursion
-        (+agent-shell-projects-render-code
+        (+agent-shell-projects-test--render-code
          project artefact (+agent-shell-projects-version artefact old))
         (goto-char (point-min)) (search-forward "+Changed")
         (beginning-of-line)
         (+agent-shell-projects-code-edit)
         (should (file-equal-p (expand-file-name "tracked.txt" root) buffer-file-name))
         (goto-char (point-max)) (insert "Direct edit\n") (save-buffer)
+        (+agent-shell-projects-test--captured artefact)
         (should-not (equal old (plist-get artefact :current)))
         (goto-char (point-min)) (set-mark (point)) (forward-char 7)
         (let* ((transient-mark-mode t) (mark-active t)

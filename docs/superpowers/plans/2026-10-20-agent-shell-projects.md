@@ -229,6 +229,32 @@ configuration and operation API.
 
 ## First usable slice
 
+### Responsiveness correction
+
+The initial implementation blocked the editor during Git capture and diff
+rendering, and refreshed hidden sidebars on streamed agent events. The follow-up
+on `fix/agent-shell-projects-responsiveness` moves capture and diff preparation
+into isolated child Emacs processes. It batches and caches base-object reads,
+coalesces captures per workspace, bounds worker concurrency, supports progress,
+cancellation and timeout, and rejects superseded results. Viewing uses saved
+captures; file and hunk expansion loads bounded content on demand. UI updates
+are coalesced, ignore streamed chunks and never display hidden windows.
+
+Acceptance adds slow-Git heartbeat and editing tests, a 100-file batched-read
+fixture, shared discovery across bases, cancellation and timeout, stale results,
+worker limits, lazy diff offsets, cached navigation and annotation reveal, and
+normal UI hooks while unrelated buffers are selected. The combined suite has
+36 tests, with strict compilation and the separate cold-start gate.
+Live emacsclient verification also passed for the waiting view, first-capture
+completion, lazy diff expansion and keeping a closed sidebar hidden.
+
+An isolated measurement against the existing Canva workspace returned from
+enrolment in 0.7 ms and refresh in 0.09 ms. Capture took 27.4 seconds initially
+and 19.5 seconds on repeat in the child process; the largest 20 ms heartbeat
+gap was 37.3 ms. Git process counts were 7 and 5, respectively, versus 18 and
+16 before this correction. These are individual local runs, not fixed latency
+guarantees. Snapshot contents were unchanged on the repeat capture.
+
 Milestones 1 and 2 form the smallest useful document workflow: a named project,
 Markdown or Org artefacts, a minimal home, saved versions, native editing,
 anchored annotations, a sidebar, and Embark actions. Milestone 3 closes the

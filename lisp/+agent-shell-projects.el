@@ -14,6 +14,7 @@
 (declare-function +agent-shell-projects-shell "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-mode "+agent-shell-projects-agent")
 (autoload '+agent-shell-projects-code-edit "+agent-shell-projects-code")
+(autoload '+agent-shell-projects-capture-current "+agent-shell-projects-code")
 (autoload '+agent-shell-projects-add-code "+agent-shell-projects-code")
 (autoload '+agent-shell-projects-review-code "+agent-shell-projects-review")
 (declare-function +agent-shell-projects-render-code "+agent-shell-projects-code")
@@ -165,7 +166,7 @@
 (define-derived-mode +agent-shell-projects-sidebar-mode magit-section-mode
   "Project Comments" "Comments and agent activity for an artefact.")
 
-(defun +agent-shell-projects-sidebar (&optional view)
+(defun +agent-shell-projects-sidebar (&optional view no-display)
   "Show the annotation sidebar for VIEW, defaulting to this buffer."
   (let* ((view (or view (current-buffer)))
          (project (with-current-buffer view (+agent-shell-projects--project)))
@@ -182,6 +183,11 @@
       (setq +agent-shell-projects--view-buffer view)
       (let ((inhibit-read-only t) (position (point)))
         (erase-buffer)
+        (when (fboundp '+agent-shell-projects-insert-job-status)
+          (+agent-shell-projects-insert-job-status project artefact))
+        (when (plist-get artefact :capture-error)
+          (insert (format "Capture failed: %s\nRefresh to retry.\n\n"
+                          (plist-get artefact :capture-error))))
         (when (plist-get artefact :missing)
           (insert "Source file is missing. Earlier contents remain in history.\n\n"))
         (when (plist-get artefact :conflict)
@@ -194,18 +200,23 @@
           (insert "\n\n"))
         (run-hook-with-args '+agent-shell-projects-sidebar-functions
                             project artefact view)
-        (with-current-buffer view
-          (setq +agent-shell-projects--observed-event (plist-get artefact :event)))
+        (when (get-buffer-window view t)
+          (with-current-buffer view
+            (setq +agent-shell-projects--observed-event (plist-get artefact :event))))
         (goto-char (min position (point-max)))))
-    (display-buffer-in-side-window
-     buffer '((side . right) (slot . 1) (window-width . 0.33)))))
+    (unless no-display
+      (display-buffer-in-side-window
+       buffer '((side . right) (slot . 1) (window-width . 0.33))))))
 
 (defun +agent-shell-projects-open (project artefact-id &optional version-id)
   "Open ARTEFACT-ID in PROJECT at VERSION-ID, defaulting to current."
   (let* ((artefact (+agent-shell-projects-artefact project artefact-id))
          (version (if version-id
                       (+agent-shell-projects-version artefact version-id)
-                    (+agent-shell-projects-capture project artefact)))
+                    (if (equal (plist-get artefact :kind) "code")
+                        (when (plist-get artefact :current)
+                          (+agent-shell-projects-version artefact (plist-get artefact :current)))
+                      (+agent-shell-projects-capture project artefact))))
          (buffer (get-buffer-create
                   (format "*Artefact: %s [%s]*" (plist-get artefact :name)
                           (substring artefact-id 0 6)))))
@@ -265,9 +276,7 @@
   (let* ((project (+agent-shell-projects--project))
          (artefact (+agent-shell-projects--artefact)))
     (if (equal (plist-get artefact :kind) "code")
-        (+agent-shell-projects-render-code
-         project artefact (+agent-shell-projects-capture project artefact)
-         +agent-shell-projects--code-view +agent-shell-projects--comparison)
+        (+agent-shell-projects-capture-current)
       (+agent-shell-projects-open project +agent-shell-projects--artefact-id))))
 
 (defun +agent-shell-projects-home ()
@@ -313,25 +322,55 @@
         (+agent-shell-projects--render-home)
       (+agent-shell-projects-current))))
 
-(defun +agent-shell-projects--refresh-ui (project _artefact)
-  "Update PROJECT's visible home and modelines without replacing content."
-  (dolist (buffer (buffer-list))
-    (with-current-buffer buffer
-      (when (equal +agent-shell-projects--project-id (plist-get project :id))
-        (when (derived-mode-p '+agent-shell-projects-home-mode)
-          (+agent-shell-projects--render-home))
-        (when (and (derived-mode-p '+agent-shell-projects-sidebar-mode)
+(defvar +agent-shell-projects--ui-pending (make-hash-table :test #'equal))
+(defvar +agent-shell-projects--ui-timer nil)
+(defvar-local +agent-shell-projects--ui-dirty nil)
+
+(defun +agent-shell-projects--refresh-ui (project _artefact &optional light)
+  "Coalesce PROJECT's UI changes without displaying windows."
+  (let* ((id (plist-get project :id))
+         (old (gethash id +agent-shell-projects--ui-pending)))
+    (puthash id (list :project project :decorate (or (plist-get old :decorate) (not light)))
+             +agent-shell-projects--ui-pending))
+  (unless (timerp +agent-shell-projects--ui-timer)
+    (setq +agent-shell-projects--ui-timer
+          (run-at-time 0.1 nil #'+agent-shell-projects--refresh-visible))))
+
+(defun +agent-shell-projects--refresh-visible ()
+  "Refresh visible project buffers and leave hidden buffers marked dirty."
+  (setq +agent-shell-projects--ui-timer nil)
+  (let ((pending +agent-shell-projects--ui-pending))
+    (setq +agent-shell-projects--ui-pending (make-hash-table :test #'equal))
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (when-let* ((update (and +agent-shell-projects--project-id
+                                (gethash +agent-shell-projects--project-id pending)))
+                    (project (plist-get update :project)))
+          (setq +agent-shell-projects--ui-dirty t)
+          (when (get-buffer-window buffer t)
+            (cond
+             ((derived-mode-p '+agent-shell-projects-home-mode)
+              (+agent-shell-projects--render-home))
+             ((and (derived-mode-p '+agent-shell-projects-sidebar-mode)
                    (buffer-live-p +agent-shell-projects--view-buffer))
-          (+agent-shell-projects-sidebar +agent-shell-projects--view-buffer))
-        (when (and +agent-shell-projects-artefact-mode
-                   +agent-shell-projects--artefact-id
-                   +agent-shell-projects--version-id)
-          (run-hook-with-args
-           '+agent-shell-projects-view-functions project
-           (+agent-shell-projects--artefact)
-           (+agent-shell-projects-version (+agent-shell-projects--artefact)
-                                         +agent-shell-projects--version-id)))
-        (force-mode-line-update)))))
+              (+agent-shell-projects-sidebar +agent-shell-projects--view-buffer t))
+             ((and (plist-get update :decorate)
+                   +agent-shell-projects-artefact-mode +agent-shell-projects--version-id)
+              (run-hook-with-args '+agent-shell-projects-view-functions project
+                                  (+agent-shell-projects--artefact)
+                                  (+agent-shell-projects-version
+                                   (+agent-shell-projects--artefact) +agent-shell-projects--version-id))))
+            (setq +agent-shell-projects--ui-dirty nil)
+            (force-mode-line-update)))))))
+
+(defun +agent-shell-projects--window-changed (frame)
+  "Schedule dirty project views displayed in FRAME."
+  (dolist (window (window-list frame 'no-minibuffer))
+    (with-current-buffer (window-buffer window)
+      (when (and +agent-shell-projects--ui-dirty +agent-shell-projects--project-id)
+        (+agent-shell-projects--refresh-ui (+agent-shell-projects--project) nil)))))
+
+(add-hook 'window-buffer-change-functions #'+agent-shell-projects--window-changed)
 
 (add-hook '+agent-shell-projects-change-hook #'+agent-shell-projects--refresh-ui)
 

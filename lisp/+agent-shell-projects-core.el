@@ -175,8 +175,14 @@ ARTEFACT can be nil for a project-wide change.")
 
 (defun +agent-shell-projects-snapshot (project artefact text &optional actor)
   "Save TEXT as ARTEFACT's current version in PROJECT, attributed to ACTOR."
-  (let* ((blob (+agent-shell-projects-store-content text))
-         (current (and (plist-get artefact :current)
+  (+agent-shell-projects-snapshot-blob
+   project artefact (+agent-shell-projects-store-content text) actor))
+
+(defun +agent-shell-projects-snapshot-blob (project artefact blob &optional actor)
+  "Adopt immutable BLOB as ARTEFACT's current version in PROJECT."
+  (unless (file-exists-p (+agent-shell-projects--blob-file blob))
+    (error "Missing snapshot blob"))
+  (let* ((current (and (plist-get artefact :current)
                        (+agent-shell-projects-version
                         artefact (plist-get artefact :current)))))
     (if (equal blob (plist-get current :blob)) current

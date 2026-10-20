@@ -192,10 +192,11 @@ Return a plist with :state and, for a usable attachment, :start and :end."
 
 (defun +agent-shell-projects--render-comments (project artefact view)
   "Insert annotation threads for PROJECT, ARTEFACT, and VIEW."
-  (let* ((version (+agent-shell-projects-version
+  (let* ((version (and (buffer-local-value '+agent-shell-projects--version-id view)
+                   (+agent-shell-projects-version
                    artefact (buffer-local-value
-                             '+agent-shell-projects--version-id view)))
-         (text (+agent-shell-projects-content version))
+                             '+agent-shell-projects--version-id view))))
+         (text (if version (+agent-shell-projects-content version) ""))
          (attachments (make-hash-table :test #'equal)))
     (dolist (annotation (plist-get project :annotations))
       (when (equal (plist-get annotation :artefact) (plist-get artefact :id))

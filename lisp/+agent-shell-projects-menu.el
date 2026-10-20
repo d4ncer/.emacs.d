@@ -27,6 +27,7 @@
 (autoload '+agent-shell-projects-request-explanation "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-request-proposal "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-set-proposal "+agent-shell-projects-review")
+(autoload '+agent-shell-projects-cancel-capture "+agent-shell-projects-jobs")
 
 (transient-define-prefix +agent-shell-projects-menu ()
   "Actions for the current authoring project."
@@ -47,6 +48,7 @@
     ("m" "Mark reviewed" +agent-shell-projects-mark-reviewed)
     ("c" "Review code" +agent-shell-projects-review-code)
     ("G" "Generate explanations" +agent-shell-projects-request-explanation)
+    ("C" "Cancel capture" +agent-shell-projects-cancel-capture)
     ("r" "Capture outcome" +agent-shell-projects-capture-outcome)
     ("k" "Cancel pending request" +agent-shell-projects-cancel-request)]]
   (interactive)
