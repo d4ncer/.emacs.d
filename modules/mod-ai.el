@@ -261,6 +261,37 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-mermaid-mode 1))
 
+(use-package +agent-shell-projects
+  :ensure nil
+  :commands (+agent-shell-projects +agent-shell-projects-menu)
+  :general
+  (:states '(normal motion insert)
+   :prefix "SPC" :non-normal-prefix "C-SPC"
+   "aP" '(+agent-shell-projects :wk "agent projects"))
+  :config
+  (general-define-key
+   :states '(normal motion)
+   :keymaps '(+agent-shell-projects-home-mode-map
+               +agent-shell-projects-sidebar-mode-map)
+   "?" #'+agent-shell-projects-menu
+   "RET" #'+agent-shell-projects-visit-at-point
+   "<return>" #'+agent-shell-projects-visit-at-point
+   "TAB" #'magit-section-toggle
+   "q" #'quit-window)
+  (general-define-key
+   :states '(normal motion) :keymaps '+agent-shell-projects-artefact-mode-map
+   "C-p" #'+agent-shell-projects-previous
+   "C-n" #'+agent-shell-projects-next)
+  (with-eval-after-load '+agent-shell-projects-code
+    (general-define-key
+     :states '(normal motion) :keymaps '+agent-shell-projects-code-mode-map
+     "RET" #'+agent-shell-projects-code-edit
+     "<return>" #'+agent-shell-projects-code-edit
+     "TAB" #'magit-section-toggle))
+  (with-eval-after-load 'agent-shell
+    (general-define-key :keymaps 'agent-shell-mode-map
+                        "C-c C-o" #'+agent-shell-projects-capture-outcome)))
+
 (elpaca (latex-to-svg-backend
          :host github :repo "alberti42/latex-to-svg-backend"))
 

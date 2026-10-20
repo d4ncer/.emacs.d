@@ -191,6 +191,9 @@ Modules are loaded in the following order from `init.el`:
   - `+gptel-request-with-buffer` macro
 - Visual-line mode and markdown integration
 - Pulsar feedback for LLM requests
+- Agent-shell project authoring and review (`SPC aP`), with document history,
+  anchored comments, explicit side-question capture and connected code review.
+  See [the usage guide](AGENT-SHELL-PROJECTS.md).
 
 ### mod-languages.el
 **Purpose:** Programming language configurations (consolidated)
