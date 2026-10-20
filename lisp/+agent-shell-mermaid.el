@@ -111,7 +111,7 @@
                        :connection-type 'pipe
                        :command (list program "-i" input "-o" output
                                       "-t" (+agent-shell-mermaid--theme)
-                                      "-b" "transparent" "-w" "1200"
+                                      "-b" "transparent"
                                       "-s" "2" "--quiet")
                        :sentinel
                        (lambda (process _event)
