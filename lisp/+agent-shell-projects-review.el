@@ -9,6 +9,7 @@
 
 (defvar +agent-shell-projects--positions (make-hash-table :test #'equal))
 (defvar-local +agent-shell-projects--navigation nil)
+(defvar-local +agent-shell-projects--rendered-explanation nil)
 (defvar +agent-shell-projects--proposal-drafts (make-hash-table :test #'equal))
 
 (defun +agent-shell-projects-explanation (artefact version)
@@ -98,16 +99,28 @@
                            (+agent-shell-projects-version artefact (plist-get artefact :current)))
                       (user-error "Wait for the first capture before generating explanations")))
          (agent (+agent-shell-projects-agent project (plist-get project :author)))
-         (existing (seq-find
-                    (lambda (r)
-                      (and (equal (plist-get r :kind) "explanation")
-                           (equal (plist-get r :version) (plist-get version :id))
-                           (member (plist-get r :status) '("queued" "sent"))))
-                    (plist-get project :requests)))
-         (versions (mapcar
-                    (lambda (a) (list :artefact (plist-get a :id)
-                                      :version (plist-get a :current)))
-                    (plist-get project :artefacts)))
+         (explanation (+agent-shell-projects-explanation artefact version))
+         (existing (or (and explanation
+                            (+agent-shell-projects--request
+                             project (plist-get explanation :request)))
+                       (seq-find
+                        (lambda (r)
+                          (and (equal (plist-get r :kind) "explanation")
+                               (equal (plist-get r :artefact) (plist-get artefact :id))
+                               (equal (plist-get r :version) (plist-get version :id))
+                               (member (plist-get r :status) '("queued" "sent"))))
+                        (plist-get project :requests))))
+         (proposal
+          (or (plist-get (+agent-shell-projects-code-manifest version) :proposal)
+              (when (and (equal (plist-get version :id) (plist-get artefact :current))
+                         (plist-get project :proposal))
+                (let ((document (+agent-shell-projects-artefact
+                                 project (plist-get project :proposal))))
+                  (list :artefact (plist-get document :id)
+                        :version (plist-get document :current))))))
+         (versions (cons (list :artefact (plist-get artefact :id)
+                               :version (plist-get version :id))
+                         (when proposal (list proposal))))
          (request
           (or existing
               (+agent-shell-projects-request
@@ -183,6 +196,8 @@
   "Render PROJECT ARTEFACT's explanation at VERSION in VIEW."
   (when (member view '("summary" "walkthrough"))
     (let ((explanation (+agent-shell-projects-explanation artefact version)))
+      (setq +agent-shell-projects--rendered-explanation
+            (plist-get explanation :request))
       (magit-insert-section (explanation view)
         (magit-insert-heading (if (equal view "summary") "Summary" "Walkthrough"))
         (if (not explanation)
@@ -232,6 +247,17 @@
                 (add-text-properties start (point)
                                      (list 'project-walkthrough-id (plist-get entry :id)))))))))
     t))
+
+(defun +agent-shell-projects--refresh-explanation (project artefact version)
+  "Refresh newly available explanation text without changing windows."
+  (when (and (derived-mode-p '+agent-shell-projects-code-mode)
+             (member +agent-shell-projects--code-view '("summary" "walkthrough"))
+             (not (equal +agent-shell-projects--rendered-explanation
+                         (plist-get (+agent-shell-projects-explanation artefact version)
+                                    :request))))
+    (+agent-shell-projects-render-code
+     project artefact version +agent-shell-projects--code-view
+     +agent-shell-projects--comparison +agent-shell-projects--focus-files t)))
 
 (defun +agent-shell-projects--explanation-selection ()
   "Return an annotation context for selected explanation text."
@@ -306,6 +332,7 @@
       #'+agent-shell-projects--explanation-operation)
 (add-hook '+agent-shell-projects-code-render-functions #'+agent-shell-projects--render-explanation)
 (add-hook '+agent-shell-projects-code-selection-functions #'+agent-shell-projects--explanation-selection)
+(add-hook '+agent-shell-projects-view-functions #'+agent-shell-projects--refresh-explanation t)
 (add-hook '+agent-shell-projects-change-hook #'+agent-shell-projects--updated-code)
 (add-hook '+agent-shell-projects-request-ready-hook #'+agent-shell-projects--proposal-ready)
 (define-key +agent-shell-projects-code-mode-map (kbd "C-c C-v") #'+agent-shell-projects-cycle-view)

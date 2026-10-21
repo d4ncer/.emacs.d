@@ -144,11 +144,14 @@ Return a plist with :state and, for a usable attachment, :start and :end."
 (defun +agent-shell-projects--decorate (project artefact version)
   "Display PROJECT's annotation anchors on ARTEFACT at VERSION."
   (remove-overlays (point-min) (point-max) 'project-annotation t)
-  (let* ((source (and buffer-file-name
-                      (not (equal (plist-get artefact :kind) "code"))
-                      (+agent-shell-projects-source artefact)))
+  (let* ((live-document (and buffer-file-name
+                             (not (equal (plist-get artefact :kind) "code"))))
+         (source (and live-document
+                      (condition-case nil (+agent-shell-projects-source artefact)
+                        (+agent-shell-projects-source-missing nil))))
          (origin (if source (cadr source) (point-min)))
-         (text (if source (buffer-substring-no-properties origin (caddr source))
+         (text (if live-document
+                   (if source (buffer-substring-no-properties origin (caddr source)) "")
                  (+agent-shell-projects-content version))))
     (dolist (annotation (plist-get project :annotations))
       (when (and (equal (plist-get annotation :artefact) (plist-get artefact :id))

@@ -28,6 +28,9 @@ ARTEFACT can be nil for a project-wide change.")
 (defvar-local +agent-shell-projects--source-project nil)
 (defvar-local +agent-shell-projects--source-artefacts nil)
 
+(define-error '+agent-shell-projects-source-missing
+  "Cannot locate enrolled Org heading" 'user-error)
+
 (declare-function org-id-get-create "org-id")
 (declare-function org-id-find "org-id")
 (declare-function org-id-add-location "org-id")
@@ -232,7 +235,8 @@ ARTEFACT can be nil for a project-wide change.")
                                  "[ \t]*$") nil t)
                     (org-back-to-heading t)
                     (setq marker (point-marker)))))))))
-      (unless marker (user-error "Cannot locate Org subtree %s" id))
+      (unless marker
+        (signal '+agent-shell-projects-source-missing (list id)))
       (setq buffer (marker-buffer marker)))
     (with-current-buffer buffer
       (when (and buffer-file-name (file-exists-p buffer-file-name)
@@ -255,7 +259,11 @@ ARTEFACT can be nil for a project-wide change.")
             (+agent-shell-projects--set artefact :path buffer-file-name))
           (if marker
               (progn
-                (goto-char marker)
+                (goto-char (point-min))
+                (unless (re-search-forward
+                         (concat "^[ \t]*:ID:[ \t]+" (regexp-quote id)
+                                 "[ \t]*$") nil t)
+                  (signal '+agent-shell-projects-source-missing (list id)))
                 (org-back-to-heading t)
                 (let ((start (point)))
                   (org-end-of-subtree t t)
@@ -272,8 +280,19 @@ ARTEFACT can be nil for a project-wide change.")
         (funcall +agent-shell-projects-code-capture-function
                  project artefact actor))
     (let ((previous-conflict (plist-get artefact :disk-copy))
-          (previous-missing (plist-get artefact :missing)))
-      (pcase-let ((`(,buffer ,start ,end) (+agent-shell-projects-source artefact)))
+          (previous-missing (plist-get artefact :missing))
+          (source (condition-case nil (+agent-shell-projects-source artefact)
+                    (+agent-shell-projects-source-missing nil))))
+      (if (not source)
+          (progn
+            (+agent-shell-projects--set artefact :missing t)
+            (unless previous-missing
+              (+agent-shell-projects--changed project artefact actor))
+            (if (plist-get artefact :current)
+                (+agent-shell-projects-version artefact (plist-get artefact :current))
+              (signal '+agent-shell-projects-source-missing
+                      (list (plist-get artefact :org-id)))))
+      (pcase-let ((`(,buffer ,start ,end) source))
         (let* ((missing (and (not (file-exists-p (plist-get artefact :path)))
                              (not (buffer-modified-p buffer))))
                (_ (+agent-shell-projects--set artefact :missing missing))
@@ -284,7 +303,7 @@ ARTEFACT can be nil for a project-wide change.")
           (when (or (not (equal previous-conflict (plist-get artefact :disk-copy)))
                     (not (eq previous-missing missing)))
             (+agent-shell-projects--changed project artefact actor))
-          version)))))
+          version))))))
 
 (defun +agent-shell-projects--source-saved ()
   "Capture enrolled artefacts after this source buffer is saved."

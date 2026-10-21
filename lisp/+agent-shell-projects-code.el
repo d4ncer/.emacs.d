@@ -66,7 +66,11 @@
                (with-selected-window window
                  (+agent-shell-projects-render-code project artefact version
                                                     +agent-shell-projects--code-view
-                                                    +agent-shell-projects--comparison))))))))))
+                                                    (if (string-prefix-p
+                                                         "version:"
+                                                         +agent-shell-projects--comparison)
+                                                        "reviewed"
+                                                      +agent-shell-projects--comparison)))))))))))
 
 (defun +agent-shell-projects-capture-code (project artefact &optional actor callback)
   "Schedule PROJECT ARTEFACT capture, optionally calling CALLBACK with a version.
@@ -344,13 +348,19 @@ Return the last completed version, or nil while the first capture is pending."
         (if blob (decode-coding-string (+agent-shell-projects--file-bytes (list :content blob)) 'utf-8-unix)
           ""))))
 
-(defun +agent-shell-projects-render-code (project artefact version &optional view comparison focus)
-  "Render PROJECT's code ARTEFACT VERSION in VIEW using COMPARISON and FOCUS."
+(defun +agent-shell-projects-render-code
+    (project artefact version &optional view comparison focus no-display)
+  "Render PROJECT's code ARTEFACT VERSION in VIEW using COMPARISON and FOCUS.
+With NO-DISPLAY, update the buffer without displaying or selecting windows."
   (let* ((buffer (get-buffer-create (format "*Code: %s [%s]*"
                                            (plist-get artefact :name)
                                            (substring (plist-get artefact :id) 0 6))))
          (view (or view "diff"))
-         (comparison (or comparison "base")))
+         (comparison (if (equal comparison "reviewed")
+                         (if (plist-get artefact :ack)
+                             (concat "version:" (plist-get artefact :ack))
+                           "base")
+                       (or comparison "base"))))
     (with-current-buffer buffer
       (unless (derived-mode-p '+agent-shell-projects-code-mode)
         (+agent-shell-projects-code-mode))
@@ -377,7 +387,8 @@ Return the last completed version, or nil while the first capture is pending."
                  '+agent-shell-projects-code-render-functions project artefact version view)
           (magit-insert-section (code)
             (magit-insert-heading (format "%s · %s" (plist-get artefact :name)
-                                         (if (equal comparison "reviewed") "since review" "whole solution")))
+                                         (if (equal comparison "base")
+                                             "whole solution" "since review")))
             (if version
                 (+agent-shell-projects--insert-file-list artefact version comparison focus)
               (insert "Waiting for the first capture. Progress is shown in the sidebar.\n"))))
@@ -387,10 +398,11 @@ Return the last completed version, or nil while the first capture is pending."
                                  view comparison focus) +agent-shell-projects--positions)
                   (point-min))))
         (set-buffer-modified-p nil)))
-    (pop-to-buffer buffer)
-    (when version
-      (run-hook-with-args '+agent-shell-projects-view-functions project artefact version))
-    (+agent-shell-projects-sidebar buffer)
+    (unless no-display (pop-to-buffer buffer))
+    (with-current-buffer buffer
+      (when version
+        (run-hook-with-args '+agent-shell-projects-view-functions project artefact version)))
+    (unless no-display (+agent-shell-projects-sidebar buffer))
     buffer))
 
 (defun +agent-shell-projects--visit-code (project artefact version)

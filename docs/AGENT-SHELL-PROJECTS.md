@@ -84,6 +84,8 @@ both copies are preserved: your buffer stays intact and the disk copy is saved
 in the local store. The sidebar offers a native diff against disk so you can
 reconcile and save. Unmodified stale buffers are refreshed automatically.
 Deleting a source file leaves its previous snapshots available.
+If an enrolled Org heading disappears, its last saved contents remain openable
+and the sidebar identifies the missing source.
 
 Org subtree enrolment adds an `ID` property and saves the file. That ID tracks
 the heading across renames and moves; it is independent of its heading text.
@@ -123,6 +125,12 @@ The three views share one immutable capture:
 | `C-c C-d` | Compare whole solution / changes since last reviewed capture |
 | `C-c C-a` | Restore the whole diff after following a focused link |
 
+An open comparison retains its baseline when feedback delivery or **Mark
+reviewed** advances the checkpoint. Refresh explicitly to compare against the
+new checkpoint. Newly returned explanations update visible summary and
+walkthrough views without selecting windows. Repeating **Generate explanations**
+reuses an existing result or pending request for that version.
+
 Files and hunks start collapsed. Expanding a file prepares its diff in a child
 process; expanding a hunk loads its first 200 lines. **Load more lines** adds
 the next block. Large file and hunk lists also have continuation buttons.
@@ -144,6 +152,8 @@ decisions from inferred intent and link to the captured proposal and related
 file hunks. View positions are retained while navigating. Explanations are tied
 to exact code and proposal captures; an older explanation is not relabelled as
 current after source changes.
+These are agent-authored explanations. Unrecorded priorities or weights cannot
+be recovered with certainty; inferred intent must be identified as such.
 
 Diff capture includes committed, staged, unstaged, and non-ignored new files
 since the chosen base, regardless of who authored them. It records renames,
@@ -155,6 +165,8 @@ For existing work without a proposal, transient `P` asks the author to
 reconstruct one. Review and edit the draft before saving; inferred intent and
 questions should remain explicit. Proposal and implementation can then evolve
 together through the ordinary feedback loop.
+Wait for enrolled artefacts to complete their first capture before requesting
+reconstruction. A failed context provider leaves no incomplete queued request.
 
 ## Configuration and extension points
 
@@ -254,3 +266,6 @@ window behavior with normal UI hooks. Its local
 ACP fixture exercises real agent-shell process delivery and structured results
 without contacting a model provider. It also checks strict byte compilation.
 The startup check verifies deferred activation and native General/Evil keys.
+Workflow regressions also check explanation arrival, historical code and
+proposal context, repeat generation, missing Org headings, request failures,
+and comparison stability while review checkpoints advance.

@@ -223,6 +223,7 @@
                         (+agent-shell-projects-artefact
                          project (plist-get project :proposal))))
          (versions (if (and proposal
+                            (not (equal (plist-get request :kind) "explanation"))
                             (not (seq-find
                                   (lambda (v) (equal (plist-get v :artefact)
                                                      (plist-get proposal :id)))
@@ -241,7 +242,11 @@
                    (let* ((artefact (+agent-shell-projects-artefact
                                      project (plist-get reference :artefact)))
                           (version (+agent-shell-projects-version
-                                    artefact (plist-get reference :version))))
+                                    artefact
+                                    (or (plist-get reference :version)
+                                        (user-error
+                                         "Wait for the first capture of %s"
+                                         (plist-get artefact :name))))))
                      (list :id (plist-get artefact :id)
                            :name (plist-get artefact :name)
                            :kind (plist-get artefact :kind)
@@ -308,15 +313,19 @@
   (let ((request (append (list :id (+agent-shell-projects--id) :kind kind
                                :agent (plist-get agent :id) :status "queued"
                                :time (float-time)) properties)))
-    (+agent-shell-projects--set
-     project :requests (append (plist-get project :requests) (list request)))
     (make-directory (+agent-shell-projects--inbox) t)
     (set-file-modes (+agent-shell-projects--inbox) #o700)
     (+agent-shell-projects--set
      request :prompt (+agent-shell-projects-store-content
                        (funcall +agent-shell-projects-context-function
                                 project request)))
-    (+agent-shell-projects-save project)
+    (let ((previous (plist-get project :requests)))
+      (+agent-shell-projects--set
+       project :requests (append previous (list request)))
+      (condition-case err
+          (+agent-shell-projects-save project)
+        (error (+agent-shell-projects--set project :requests previous)
+               (signal (car err) (cdr err)))))
     request))
 
 (defun +agent-shell-projects--request (project id)

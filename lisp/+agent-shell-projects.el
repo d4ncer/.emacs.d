@@ -189,7 +189,7 @@
           (insert (format "Capture failed: %s\nRefresh to retry.\n\n"
                           (plist-get artefact :capture-error))))
         (when (plist-get artefact :missing)
-          (insert "Source file is missing. Earlier contents remain in history.\n\n"))
+          (insert "Source file or Org heading is missing. Saved contents remain available.\n\n"))
         (when (plist-get artefact :conflict)
           (insert-text-button
            "Source conflict · inspect differences" 'follow-link t
