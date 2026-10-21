@@ -49,5 +49,13 @@
         (dired project-root))))
   (projectile-mode +1))
 
+(use-package +project-files
+  :ensure nil
+  :after projectile
+  :commands (+project-find-file +project-find-file-fast +project-files-refresh)
+  :demand t
+  :config
+  (+project-files-setup))
+
 (provide 'mod-project)
 ;;; mod-project.el ends here

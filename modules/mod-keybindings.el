@@ -107,7 +107,7 @@
    "pt" '(projectile-test-project :wk "test (project)")
    "pu" '(projectile-run-project :wk "run (project)")
    "pp" '(projectile-switch-project :wk "switch project")
-   "pf" '(projectile-find-file :wk "find file (project)")
+   "pf" '(+project-find-file :wk "find file (project)")
    "pF" '(projectile-recentf :wk "find recent file (project)")
    "pd" '(projectile-find-dir :wk "find dir (project)")
    "pb" '(projectile-switch-to-buffer :wk "switch buffer (project)")
