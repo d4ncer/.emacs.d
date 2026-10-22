@@ -8,10 +8,9 @@
 
 ;;; Code:
 
-(when (< emacs-major-version 30)
-  (user-error "Emacs 30 required"))
-
-(require 'use-package)
+(unless (featurep '+bootstrap)
+  (load (expand-file-name "lisp/+bootstrap.el" user-emacs-directory) nil t)
+  (+bootstrap-setup))
 
 ;; Bootstrap elpaca package manager
 (load-file (file-name-concat user-emacs-directory "elpaca-bootstrap.el"))
@@ -19,11 +18,9 @@
 ;; Setup elpaca use-package integration
 (elpaca elpaca-use-package
   (elpaca-use-package-mode))
-
-;; Add modules directory to load-path
-(eval-and-compile
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/")))
+(elpaca-wait)
+(unless (bound-and-true-p elpaca-use-package-mode)
+  (error "Elpaca use-package integration failed to initialize"))
 
 ;;; Leader key bindings
 ;; Loaded from mod-keybindings.el
@@ -32,6 +29,8 @@
 
 ;; Load keybindings first (sets up general and leader key)
 (require 'mod-keybindings)
+(unless (featurep 'general)
+  (error "General failed to initialize before feature declarations"))
 
 ;; Load core infrastructure
 (require 'mod-core)
@@ -96,26 +95,18 @@
 ;; Load additional core utilities
 (require 'mod-core-extras)
 
-;;; Post init setup.
-
-;; Load keychain after everything else to ensure env is setup
-
-(use-package keychain-environment
-  :ensure t
-  :config
-  (keychain-refresh-environment))
-
 ;;; Print overall startup time.
 
 (unless noninteractive
-  (let ((elapsed (float-time (time-subtract (current-time) emacs-start-time))))
-    (message "Loading %s...done (%.3fs)" load-file-name elapsed)))
+  (message "Configuration declarations loaded in %.3fs"
+           (float-time (time-subtract (current-time) before-init-time))))
 
 (use-package private-config
   :ensure nil
   :demand t
-  :when (file-directory-p "~/private")
-  :load-path "~/private")
+  :when (and +private-config-directory
+             (file-directory-p +private-config-directory))
+  :load-path +private-config-directory)
 
 (provide 'init)
 

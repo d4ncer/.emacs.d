@@ -56,7 +56,7 @@
 (use-package elec-pair
   ;; Automatically insert matching pairs.
   :after-call +first-file-hook +first-buffer-hook
-  :init
+  :config
   (electric-pair-mode +1))
 
 (use-package lisp
@@ -82,7 +82,7 @@
 (use-package recentf
   ;; Maintain a list of visited files.
   :after-call recentf consult-buffer
-  :defer-incrementally t
+  :defer 2
   :custom
   (recentf-max-saved-items 100)
   :config
@@ -90,7 +90,8 @@
 
 (use-package saveplace
   ;; Save buffer position when re-visiting files, even across Emacs sessions.
-  :init (save-place-mode +1)
+  :demand t
+  :config (save-place-mode +1)
 
   :config
   (define-advice save-place-find-file-hook (:after-while (&rest _) recenter)
@@ -110,7 +111,7 @@
                             "M-<" #'winner-undo
                             "M->" #'winner-redo)
   :after-call +first-file-hook +first-buffer-hook
-  :init
+  :config
   (winner-mode +1)
   :custom
   (winner-boring-buffers '("*Completions*" "*Compile-Log*" "*inferior-lisp*"
@@ -314,14 +315,6 @@
   (highlight-thing-limit-to-defun nil)
   (highlight-thing-case-sensitive-p t)
   :config
-  (defun +face-ancestors (face)
-    "List all faces that FACE transitively inherits from."
-    (let (result)
-      (while (and face (not (equal face 'unspecified)))
-        (setq result (cons face result))
-        (setq face (face-attribute face :inherit)))
-      (nreverse result)))
-
   (defun +should-highlight-p (res)
     (unless (or (bound-and-true-p lsp-ui-mode)
                 (bound-and-true-p tide-mode))

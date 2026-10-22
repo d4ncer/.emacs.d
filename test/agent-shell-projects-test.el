@@ -12,6 +12,7 @@
 (require 'agent-shell)
 (require '+agent-shell-projects-code)
 (require '+agent-shell-projects-review)
+(+agent-shell-projects-setup)
 
 (defun +agent-shell-projects-test--await (predicate)
   "Let the actual event loop run until PREDICATE succeeds."

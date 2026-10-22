@@ -16,6 +16,8 @@
 
 ;;; Code:
 
+(eval-and-compile (require '+corelib))
+
 (use-package evil :ensure t
   ;; Evil is a better vim emulation implementation than the one that
   ;; ships with Emacs.

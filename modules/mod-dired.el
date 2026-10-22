@@ -88,26 +88,6 @@
 ;;; Dired modeline
 
 (with-eval-after-load 'doom-modeline
-  (defun +modeline-dired-directory ()
-    "Return abbreviated directory path for dired buffers."
-    (abbreviate-file-name default-directory))
-
-  (defun +modeline-dired-file-count ()
-    "Return the number of files in the current dired buffer."
-    (let ((count 0))
-      (save-excursion
-        (goto-char (point-min))
-        (while (dired-next-line 1)
-          (cl-incf count)))
-      (format "%d items" count)))
-
-  (defun +modeline-dired-free-space ()
-    "Return free disk space for the current directory."
-    (when-let* ((attr (file-system-info default-directory))
-                (free (nth 2 attr))
-                (gb (/ free 1073741824.0)))
-      (format "%.1f GB free" gb)))
-
   (doom-modeline-def-segment +dired-info
     "Dired directory, file count, and free space."
     (concat

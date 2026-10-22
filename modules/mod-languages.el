@@ -16,9 +16,9 @@
 
 ;;; Code:
 
+(eval-and-compile (require '+keybindings))
+
 (eval-and-compile
-  (defvar +lisp-dir (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path +lisp-dir)
   (require '+corelib))
 
 ;;; Lisp and Emacs Lisp
@@ -164,8 +164,8 @@
                      eglot-server-programs
                      nil nil #'equal)
           (eglot-alternatives
-           '(("expert" "--stdio")                        ; Project-local via PATH/Nix
-             ("/Users/rk/.local/bin/expert-ls" "--stdio")   ; Global fallback
+           `(("expert" "--stdio")                        ; Project-local via PATH/Nix
+             (,(expand-file-name "~/.local/bin/expert-ls") "--stdio")   ; Global fallback
              "start_lexical.sh"))))
 
   ;; Switching between files & tests
@@ -179,75 +179,12 @@
             (list (rx (group-n 1 (+? nonl)) "/test/" (group-n 2 (+? any)) "_test.exs" eos)
                   (rx (backref 1) "/lib/" (backref 2) ".ex"))))
 
-;; Expert (as of 0.1.6) mishandles incremental `textDocument/didChange' edits at
-;; the end of a document: it drops the leading indent of the final line, then
-;; clamps the now out-of-range character offsets to 0, so typing "def" lands in
-;; its copy as "fed". It then resolves `{:variable, :fed}' and returns zero
-;; completions until the document is resynced.
-;;
-;; Eglot's payloads are correct -- verified against the wire log -- so work
-;; around it by sending the whole buffer instead of ranges. `:emacs-messup' is
-;; the sentinel `eglot--signal-textDocument/didChange' already checks to decide
-;; on a full sync.
-;;
-;; Scoped to Expert alone: remove once upstream fixes the incremental path.
-
-(defun +eglot-expert-p (server)
-  "Return non-nil if SERVER is an Expert language server."
-  (equal "Expert" (plist-get (eglot--server-info server) :name)))
-
-;; Expert 0.1.5 strictly validates the parameterless LSP `exit'
-;; notification and rejects Eglot's empty object (`params: {}').  Omit the
-;; field for Expert so an intentional shutdown does not look like a crash.
-(defun +expert-omit-exit-params (args)
-  "Omit PARAMS from an Expert `exit' notification in ARGS."
-  (pcase-let ((`(,server ,method ,_params) args))
-    (if (and (eq method :exit)
-             (object-of-class-p server 'eglot-lsp-server)
-             (+eglot-expert-p server))
-        (list server method :jsonrpc-omit)
-      args)))
-
-(advice-add 'jsonrpc-notify :filter-args #'+expert-omit-exit-params)
-
-(define-advice eglot--signal-textDocument/didChange
-    (:before (&rest _) +expert-force-full-sync)
-  "Force full-document sync on Expert servers."
-  (when-let* (((not (eq eglot--recent-changes :emacs-messup)))
-              (eglot--recent-changes)
-              (server (eglot-current-server))
-              ((+eglot-expert-p server)))
-    (setq eglot--recent-changes :emacs-messup)))
-
-;; Expert re-derives its own PATH by spawning a login shell (`/bin/zsh`) and so
-;; never sees the per-project Elixir/Erlang that direnv + Nix put on this
-;; buffer's `exec-path'. When the probe fails it silently falls back to its
-;; bundled Elixir. Expert added an escape hatch in
-;; https://github.com/expert-lsp/expert/pull/682: the `elixirExecutablePath' /
-;; `erlangExecutablePath' settings, which it consults *before* the login-shell
-;; probe (Expert.Port.project_executable/2). Changing either makes Expert
-;; restart its engine node with that binary. It only reads these from a pushed
-;; `workspace/didChangeConfiguration' (no pull, no initializationOptions), and
-;; expects them at the top level of `settings' -- exactly the shape Eglot sends
-;; `eglot-workspace-configuration' in. Resolve via `executable-find' rather than
-;; hardcoding a /nix/store path so it survives `nix flake update'.
-
-(defun +expert-pin-toolchain ()
-  "Point Expert at the Elixir/Erlang on this buffer's (direnv/Nix) PATH."
-  ;; `eglot-managed-mode-hook' runs both when Eglot starts and when it stops
-  ;; managing a buffer.  During teardown `eglot-current-server' can still
-  ;; return the cached (already dead) server, so do not try to notify it.
-  (when (eglot-managed-p)
-    (when-let* ((server (eglot-current-server))
-                ((+eglot-expert-p server))
-                (elixir (executable-find "elixir")))
-      (setq-local eglot-workspace-configuration
-                  (append (list :elixirExecutablePath elixir)
-                          (when-let* ((erl (executable-find "erl")))
-                            (list :erlangExecutablePath erl))))
-      (eglot-signal-didChangeConfiguration server))))
-
-(add-hook 'eglot-managed-mode-hook #'+expert-pin-toolchain)
+(use-package +expert-compat
+  :ensure nil
+  :after eglot
+  :demand t
+  :config
+  (+expert-compat-mode 1))
 
 (use-package inf-elixir :ensure t)
 
@@ -264,7 +201,15 @@
 
 (use-package nix-ts-mode
   :ensure (:files ("nix-ts-mode.el"))
-  :mode "\\.nix\\'")
+  :commands nix-ts-mode
+  :mode ("\\.nix\\'" . +nix-mode)
+  :preface
+  (defun +nix-mode ()
+    "Select Nix tree-sitter mode after ensuring its grammar is installed."
+    (interactive)
+    (if (treesit-ensure-installed 'nix)
+        (nix-ts-mode)
+      (conf-unix-mode))))
 
 ;;; Bazel
 
@@ -322,22 +267,12 @@ unless a workspace marker file exists above DIRECTORY."
     "gm" '(bazel-find-module-file :wk "MODULE file")
     "gc" '(bazel-show-consuming-target :wk "consuming target")))
 
-;;; Tree-sitter mode remapping
+;;; Third-party tree-sitter modes
 
-;; Remap old modes to tree-sitter equivalents
-(dolist (pair '((yaml-mode . yaml-ts-mode)
-                (c-mode . c-ts-mode)
-                (bash-mode . bash-ts-mode)
-                (java-mode . java-ts-mode)
-                (js2-mode . js-ts-mode)
-                (javascript-mode . js-ts-mode)
-                (typescript-mode . typescript-ts-mode)
-                (js-json-mode . json-ts-mode)
-                (css-mode . css-ts-mode)
-                (rust-mode . rust-ts-mode)
-                (python-mode . python-ts-mode)
-                (nix-mode . nix-ts-mode)))
-  (alist-set! major-mode-remap-alist (car pair) (cdr pair)))
+(with-eval-after-load 'treesit
+  (add-to-list 'major-mode-remap-alist '(nix-mode . +nix-mode))
+  ;; js2-mode is a third-party entry absent from the native mapping table.
+  (add-to-list 'major-mode-remap-alist '(js2-mode . js-ts-mode)))
 
 ;; Make shell-scripts etc executable on save.
 (add-hook 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)

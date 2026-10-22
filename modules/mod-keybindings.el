@@ -10,6 +10,8 @@
 
 ;;; Code:
 
+(eval-and-compile (require '+keybindings))
+
 (defun +dotfiles-switch ()
   "Run `make switch' in the dotfiles repository."
   (interactive)
@@ -181,13 +183,7 @@
    "fw" '(write-file :wk "write copy")
    "fo" '(find-sibling-file :wk "other file")
 
-   "fD" (list (defun +delete-file-and-buffer ()
-                (interactive)
-                (let ((file (buffer-file-name)))
-                  (kill-buffer (current-buffer))
-                  (when file
-                    (delete-file file))))
-              :wk "delete file & buf")
+   "fD" '(+delete-file-and-buffer :wk "delete file & buf")
 
    "fy" (list (defun +copy-file-path ()
                 (interactive)
@@ -402,10 +398,6 @@
   ;; Support multiple SPC-u calls in sequence to chain universal-argument calls.
 
   (keymap-set universal-argument-map "SPC u" #'universal-argument-more))
-
-(defmacro +local-leader-set-key (keymaps &rest general-args)
-  (declare (indent 1))
-  `(general-define-key :prefix "," :states '(normal motion) :keymaps ,keymaps ,@general-args))
 
 (provide 'mod-keybindings)
 ;;; mod-keybindings.el ends here

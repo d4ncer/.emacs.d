@@ -8,11 +8,8 @@
 
 ;;; Code:
 
-
-(eval-and-compile
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path (file-name-concat user-emacs-directory "modules/"))
-  (add-to-list 'load-path (expand-file-name "~/life/elisp/")))
+(load (expand-file-name "lisp/+bootstrap.el" user-emacs-directory) nil t)
+(+bootstrap-setup)
 
 (setq package-enable-at-startup nil)
 
@@ -23,12 +20,6 @@
 
 ;;; Configure use-package
 
-(setq use-package-verbose init-file-debug)
-(setq use-package-always-defer t)
-(setq use-package-enable-imenu-support t)
-(setq use-package-minimum-reported-time 0.01)
-(setq use-package-hook-name-suffix nil)
-
 (unless init-file-debug
   (add-hook 'after-init-hook
             (lambda ()
@@ -36,9 +27,6 @@
               ;; will make it much easier to read the macro-expanded output of
               ;; use-package calls.
               (setq use-package-expand-minimally t))))
-
-(require '+load-incrementally)
-(+load-incrementally-setup-use-package-keywords)
 
 ;;; Customise as much UI as possible early in init sequence.
 

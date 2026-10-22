@@ -7,6 +7,13 @@
 (autoload 'thing-at-point-looking-at "thingatpt")
 (autoload 'puni-kill-line "puni")
 
+(defun +delete-file-and-buffer ()
+  "Delete the visited file after successfully closing its buffer."
+  (interactive)
+  (let ((file buffer-file-name))
+    (when (and (kill-buffer (current-buffer)) file)
+      (delete-file file))))
+
 (defun +format-after-kill ()
   (cond
    ((thing-at-point-looking-at (rx bol (* space) eol))

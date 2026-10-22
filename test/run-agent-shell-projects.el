@@ -9,6 +9,7 @@
 (let ((root (file-name-directory
              (directory-file-name (file-name-directory load-file-name)))))
   (add-to-list 'load-path (expand-file-name "lisp/" root))
+  (add-to-list 'load-path (expand-file-name "lisp/agent-shell-projects/" root))
   (dolist (directory (directory-files (expand-file-name "elpaca/builds/" root)
                                      t "^[^. ]"))
     (when (file-directory-p directory) (add-to-list 'load-path directory)))
@@ -23,7 +24,7 @@
          (stats (ert-run-tests-batch "^+agent-shell-projects-test-")))
     (unwind-protect
         (progn
-          (dolist (file (directory-files (expand-file-name "lisp/" root)
+          (dolist (file (directory-files (expand-file-name "lisp/agent-shell-projects/" root)
                                          t "^+agent-shell-projects.*\\.el$"))
             (with-temp-buffer
               (insert-file-contents file) (emacs-lisp-mode) (check-parens))

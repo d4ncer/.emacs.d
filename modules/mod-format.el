@@ -9,6 +9,8 @@
 
 ;;; Code:
 
+(eval-and-compile (require '+corelib))
+
 ;;; Apheleia - Code formatting
 
 (use-package apheleia :ensure t

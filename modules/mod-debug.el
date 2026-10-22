@@ -12,6 +12,11 @@
 (eval-and-compile
   (require '+corelib))
 
+(use-package +profile
+  :ensure nil
+  :commands (+profiler-stop-and-report +profile-find-file
+             +profile-next-command +profile-cancel +benchmark-find-file))
+
 ;;; Debug - Emacs Lisp debugger
 
 (use-package debug

@@ -17,7 +17,7 @@
                 (expand-file-name "elpaca/builds/dash" emacs-dir)
                 (expand-file-name "elpaca/builds/s" emacs-dir)
                 (expand-file-name "elpaca/builds/org" emacs-dir)
-                (expand-file-name "elpaca/repos/vulpea" emacs-dir)
+                (expand-file-name "elpaca/builds/vulpea" emacs-dir)
                 (expand-file-name "lisp" emacs-dir)
                 (expand-file-name "test" emacs-dir)))
     (add-to-list 'load-path dir)))

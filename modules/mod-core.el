@@ -19,23 +19,42 @@
 ;; Increase GC threshold to reduce collections during file operations
 ;; 16MB is a reasonable balance between memory and performance
 (setq gc-cons-threshold (* 16 1024 1024))
-(defconst emacs-start-time (current-time))
 
 ;;; Load path and core utilities
 
 (eval-and-compile
-  (defvar +lisp-dir (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path +lisp-dir)
   (require '+corelib)
-  (require '+load-incrementally))
+  (require '+use-package))
+
+(use-package exec-path-from-shell :ensure (:wait t)
+  ;; Use the shell to get some environment vars; necessary when the window
+  ;; system runs Emacs under a very different process environment.
+  ;;
+  ;; Also, turns out we need this for direnv to work right in compilation buffers.
+  :if (memq system-type '(darwin x))
+  :demand t
+  :config
+  (pushnew! exec-path-from-shell-variables
+            "SSH_AUTH_SOCK"
+            "SSH_AGENT_PID")
+
+  ;; Speed up by using a non-interactive shell.
+  (delq! "-i" exec-path-from-shell-arguments)
+
+  (exec-path-from-shell-initialize))
+
+(use-package keychain-environment :ensure t
+  :after exec-path-from-shell
+  :demand t
+  :if (executable-find "keychain")
+  :config
+  (keychain-refresh-environment))
 
 ;;; Global directory variables
 
 (defvar +cloud-dir (format "/Users/%s/Library/Mobile Documents/com~apple~CloudDocs/rkdev" user-login-name))
 (defvar org-directory (expand-file-name "~/life/org"))
 (defvar org-default-notes-file (file-name-concat org-directory "roam/20220128063937-inbox.org"))
-(defvar +ligatures-dir (file-name-concat user-emacs-directory "ligatures/"))
-(defvar +templates-dir (file-name-concat user-emacs-directory "templates/"))
 
 ;;; Expensive package check
 

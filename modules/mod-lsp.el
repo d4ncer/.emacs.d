@@ -5,7 +5,7 @@
 
 ;;; Commentary:
 ;; This module contains LSP and tree-sitter configuration including:
-;; - treesit-auto for automatic tree-sitter grammar installation
+;; - Native tree-sitter mode selection and grammar installation
 ;; - flymake for error checking
 ;; - +flymake-posframe for visual error display
 ;; - eglot for LSP integration
@@ -15,57 +15,22 @@
 
 ;;; Tree-sitter
 
-;; Performance optimizations for tree-sitter
-(setq treesit-font-lock-level 3)  ; Use level 3 (good balance of features/performance)
-
-;; Enable tree-sitter query caching to avoid recompiling queries
-;; This prevents the 93MB memory allocation on every file open
-(defvar +treesit-query-cache (make-hash-table :test 'equal)
-  "Cache for compiled tree-sitter queries to avoid recompilation.")
-
-;; Advice treesit-query-compile to use caching
-(define-advice treesit-query-compile (:around (orig-fn language query &optional eager) cache)
-  "Cache compiled tree-sitter queries to avoid expensive recompilation."
-  (if eager
-      ;; Don't cache eager queries
-      (funcall orig-fn language query eager)
-    ;; Check cache for non-eager queries
-    (let* ((cache-key (cons language query))
-           (cached (gethash cache-key +treesit-query-cache)))
-      (or cached
-          (let ((compiled (funcall orig-fn language query eager)))
-            (puthash cache-key compiled +treesit-query-cache)
-            compiled)))))
-
-(defvar +treesit-auto-remap-alist-cache nil
-  "Cached result of `treesit-auto--build-major-mode-remap-alist'.")
-
-(defun +treesit-auto-invalidate-remap-cache (&rest _)
-  "Invalidate the cached treesit-auto remap alist."
-  (interactive)
-  (setq +treesit-auto-remap-alist-cache nil))
-
-(with-eval-after-load 'treesit-auto
-  (define-advice treesit-auto--build-major-mode-remap-alist
-      (:around (orig-fn) cache-remap-alist)
-    "Cache the remap alist to avoid redundant grammar readiness checks."
-    (or +treesit-auto-remap-alist-cache
-        (setq +treesit-auto-remap-alist-cache (funcall orig-fn))))
-
-  (define-advice treesit-install-language-grammar
-      (:after (&rest _) invalidate-remap-cache)
-    "Invalidate remap cache after installing a new grammar."
-    (+treesit-auto-invalidate-remap-cache)))
-
-(use-package treesit-auto :ensure t
-  ;; Automatic installation of treesitter grammars.
-  :after-call +first-buffer-hook +first-file-hook
-  :commands global-treesit-auto-mode
+(use-package treesit
+  :demand t
   :custom
-  (treesit-auto-install 'prompt)
+  (treesit-font-lock-level 3)
+  (treesit-auto-install-grammar 'ask)
+  (treesit-enabled-modes
+   '(bash-ts-mode c-ts-mode c++-ts-mode c-or-c++-ts-mode css-ts-mode
+     elixir-ts-mode heex-ts-mode java-ts-mode js-ts-mode json-ts-mode
+     markdown-ts-mode mhtml-ts-mode python-ts-mode rust-ts-mode
+     tsx-ts-mode typescript-ts-mode yaml-ts-mode))
   :config
-  (treesit-auto-add-to-auto-mode-alist 'all)
-  (global-treesit-auto-mode +1))
+  (dolist (entry (with-temp-buffer
+                  (insert-file-contents
+                   (expand-file-name "treesit-grammars.eld" +config-root))
+                  (read (current-buffer))))
+    (setf (alist-get (car entry) treesit-language-source-alist) (cdr entry))))
 
 ;;; Flymake - Error checking
 
@@ -149,30 +114,9 @@ for the symbol at point in a dedicated buffer."
   ;; `eglot-tempel-mode' must also be on before a server connects, since eglot
   ;; sends `snippetSupport' at initialize time.
   :demand t
-  :preface
-  (defun +eglot-tempel-reindent (template)
-    "Make eglot-tempel TEMPLATE reindent multi-line LSP snippets.
-LSP snippets embed their own literal newlines and leading whitespace,
-which tempel inserts verbatim (see `tempel--element').  The baked-in
-indentation does not adapt to the column where the snippet is expanded,
-so every line after the first lands at the wrong indent.  For each line
-after the first, emit a newline, the whitespace-stripped text, then a
-`>' element so `indent-according-to-mode' reindents once the line's real
-content is present — the same behaviour yasnippet provides via
-`yas-indent-line'.  Indenting after the text (rather than via `n>',
-which indents the still-empty line) is what lets tree-sitter modes align
-closing delimiters such as Elixir's `end'."
-    (mapcan
-     (lambda (elt)
-       (if (and (stringp elt) (string-search "\n" elt))
-           (let ((lines (split-string elt "\n")))
-             (cons (car lines)
-                   (mapcan (lambda (line) (list 'n (string-trim-left line) '>))
-                           (cdr lines))))
-         (list elt)))
-     template))
   :config
-  (advice-add 'eglot-tempel--convert :filter-return #'+eglot-tempel-reindent)
+  (require '+eglot-tempel-compat)
+  (+eglot-tempel-compat-mode 1)
   (eglot-tempel-mode t))
 
 (provide 'mod-lsp)

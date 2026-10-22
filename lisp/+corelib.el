@@ -3,6 +3,20 @@
 (require 'cl-lib)
 (require 'subr-x)
 
+(defun +face-ancestors (face)
+  "Return FACE and its inherited faces, visiting each face once."
+  (let ((pending (ensure-list face)) seen result)
+    (while pending
+      (let ((current (pop pending)))
+        (when (and (symbolp current) (facep current)
+                   (not (memq current seen)))
+          (push current seen)
+          (push current result)
+          (setq pending
+                (append (ensure-list (face-attribute current :inherit))
+                        pending)))))
+    (nreverse result)))
+
 
 ;;; Logging
 
@@ -166,41 +180,33 @@ Is used as advice to replace `run-hooks'."
        (signal '+corelib-hook-error (cons hook (cdr e)))))))
 
 (defun +run-hook-once (hook-var trigger-hooks)
-  "Configure HOOK-VAR to be invoked exactly once when any of the TRIGGER-HOOKS
-are invoked *after* Emacs has initialized (to reduce false positives). Once
-HOOK-VAR is triggered, it is reset to nil.
-
-HOOK-VAR is a quoted hook.
-TRIGGER-HOOK is a list of quoted hooks and/or sharp-quoted functions."
-  (dolist (hook trigger-hooks)
-    (let ((fn (make-symbol (format "chain-%s-to-%s-h" hook-var hook)))
-          running?)
-      (fset
-       fn (lambda (&rest _)
-            ;; Only trigger this after Emacs has initialized.
-            (when (and (not running?)
-                       (or (daemonp)
-                           ;; In some cases, hooks may be lexically unset to
-                           ;; inhibit them during expensive batch operations on
-                           ;; buffers (such as when processing buffers
-                           ;; internally). In that case assume this hook was
-                           ;; invoked non-interactively.
-                           (and (boundp hook)
-                                (symbol-value hook))))
-              (setq running? t)  ; prevent infinite recursion
-              (+run-hooks hook-var)
-              (set hook-var nil))))
-      (when (daemonp)
-        ;; In a daemon session we don't need all these lazy loading shenanigans.
-        ;; Just load everything immediately.
-        (add-hook 'server-after-make-frame-hook fn 'append))
-      (if (eq hook 'find-file-hook)
-          ;; Advise `after-find-file' instead of using `find-file-hook' because
-          ;; the latter is triggered too late (after the file has opened and
-          ;; modes are all set up).
-          (advice-add 'after-find-file :before fn '((depth . -101)))
-        (add-hook hook fn -101))
-      fn)))
+  "Run HOOK-VAR once after initialization through any TRIGGER-HOOKS.
+Remove all dispatchers after success. Errors release the recursion guard
+and retain the dispatchers so the operation can be retried."
+  (let (running done dispatchers)
+    (dolist (hook trigger-hooks)
+      (let ((fn
+             (lambda (&rest _)
+               (when (and after-init-time (not done) (not running))
+                 (setq running t)
+                 (unwind-protect
+                     (progn
+                       (+run-hooks hook-var)
+                       (setq done t)
+                       (set hook-var nil)
+                       (dolist (entry dispatchers)
+                         (if (eq (car entry) 'find-file-hook)
+                             (advice-remove 'after-find-file (cdr entry))
+                           (remove-hook (car entry) (cdr entry)))
+                         (remove-hook 'server-after-make-frame-hook (cdr entry))))
+                   (setq running nil))))))
+        (push (cons hook fn) dispatchers)
+        (if (eq hook 'find-file-hook)
+            (advice-add 'after-find-file :before fn '((depth . -101)))
+          (add-hook hook fn -101))
+        (when (daemonp)
+          (add-hook 'server-after-make-frame-hook fn 90))))
+    dispatchers))
 
 (defmacro add-hook! (hooks &rest rest)
   "A convenience macro for adding N functions to M hooks.

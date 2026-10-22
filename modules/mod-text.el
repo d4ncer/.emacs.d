@@ -111,8 +111,7 @@
       (lambda (process event)
         (elpaca--process-sentinel "Excali module built" process event)))))
 
-(when (and (>= emacs-major-version 32)
-           module-file-suffix
+(when (and module-file-suffix
            (fboundp 'canvas-refresh)
            (image-type-available-p 'canvas))
   (use-package excali

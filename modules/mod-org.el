@@ -15,15 +15,18 @@
 ;; - org-modern (modern styling for org-mode)
 ;;
 ;; IMPORTANT: This module is designed to be deferred and must NOT be loaded eagerly.
-;; The org package uses :after-call to ensure it only loads when needed.
+;; Org files and commands activate the package.
 
 ;;; Code:
+
+(eval-and-compile (require '+keybindings))
 
 ;;; Org mode
 
 (use-package org
   :ensure t
-  :after-call +first-file-hook
+  :mode ("\\.org\\'" . org-mode)
+  :commands (org-mode org-store-link org-save-all-org-buffers)
   :hook ((org-mode-hook . visual-line-mode)
          (org-mode-hook . auto-fill-mode)
          (org-mode-hook . (lambda () (setq-local fill-column 80))))
@@ -263,7 +266,6 @@ Agenda buffer preparation only needs org data (TODOs, tags, schedules),
 not git status, visual pulsing, treesit grammars, or direnv."
     (let ((vc-handled-backends nil)
           (pulsar-global-mode nil)
-          (global-treesit-auto-mode nil)
           (envrc-global-mode nil))
       (funcall orig-fn files)))
   (add-hook 'org-agenda-finalize-hook #'+life/agenda-delete-empty-blocks)
@@ -353,20 +355,17 @@ not git status, visual pulsing, treesit grammars, or direnv."
   (with-eval-after-load 'doom-modeline
     (doom-modeline-def-segment +vulpea-sidebar-info
       "Vulpea sidebar: note title, tags, backlinks."
-      (if-let* ((note vulpea-ui--current-note))
+      (if-let* ((data +modeline-vulpea-data))
           (concat
-           (propertize (or (vulpea-note-title note) "No note")
+           (propertize (plist-get data :title)
                        'face (doom-modeline-face 'doom-modeline-buffer-file))
-           (when-let* ((tags (vulpea-note-tags note)))
+           (when-let* ((tags (plist-get data :tags)))
              (concat (doom-modeline-spc)
                      (propertize (mapconcat (lambda (tag) (concat "#" tag)) tags " ")
                                  'face (doom-modeline-face 'doom-modeline-info))))
-           (when-let* ((id (vulpea-note-id note))
-                       (backlinks (vulpea-db-query-by-links-some
-                                   (list (cons "id" id)))))
-             (concat (doom-modeline-spc)
-                     (propertize (format "%d backlinks" (length backlinks))
-                                 'face (doom-modeline-face 'doom-modeline-buffer-minor-mode)))))
+           (doom-modeline-spc)
+           (propertize (format "%d backlinks" (plist-get data :backlinks))
+                       'face (doom-modeline-face 'doom-modeline-buffer-minor-mode)))
         (propertize "No note" 'face (doom-modeline-face 'doom-modeline-info))))
 
     (doom-modeline-def-modeline '+vulpea-sidebar

@@ -14,8 +14,6 @@
 ;;; Code:
 
 (eval-and-compile
-  (defvar +lisp-dir (file-name-concat user-emacs-directory "lisp/"))
-  (add-to-list 'load-path +lisp-dir)
   (require '+corelib))
 
 ;;; Theme
@@ -194,6 +192,13 @@
   (add-to-list 'doom-modeline-mode-alist '(org-mode . +org))
 
   )
+
+(use-package +modeline-data
+  :ensure nil
+  :after doom-modeline
+  :demand t
+  :config
+  (+modeline-data-mode 1))
 
 (provide 'mod-ui)
 ;;; mod-ui.el ends here

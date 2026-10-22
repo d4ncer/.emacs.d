@@ -9,10 +9,12 @@
 ;; - Performance (bidi, scrolling, profiler)
 ;; - System integration (server, envrc, exec-path-from-shell)
 ;; - Utilities (goto-addr, better-jumper, string-inflection, so-long)
-;; - Search tools (grep, wgrep, xref)
+;; - Search tools (native editable grep, xref)
 ;; - Other built-ins (paragraphs, indent, replace, proced)
 
 ;;; Code:
+
+(eval-and-compile (require '+corelib))
 
 (use-package paragraphs
   ;; Emacs' core paragraph parser.
@@ -91,76 +93,6 @@
   :general-config
   (:states 'normal :keymaps 'elpaca-manager-mode-map "/" #'elpaca-ui-search)
   (:keymaps 'elpaca-info-mode-map "q" #'quit-window))
-
-(use-package profiler
-  :config
-  (defun +profiler-stop-and-report (&optional continue-p)
-    "Stop the profiler and show results.
-
-With optional prefix arg CONTINUE-P, keep profiling."
-    (interactive "P")
-    (let ((ran-p (profiler-running-p)))
-
-      (unless continue-p
-        (profiler-stop))
-      (profiler-report)
-      (when ran-p
-        (if continue-p
-            (message "Profiler still recording")
-          (message "Profiler stopped")))))
-
-  (defun +profile-find-file ()
-    "Profile opening a file. Prompts for file to open."
-    (interactive)
-    (profiler-start 'cpu+mem)
-    (message "Profiler started. Opening file...")
-    (call-interactively #'find-file)
-    (run-with-idle-timer 2.0 nil
-                         (lambda ()
-                           (profiler-stop)
-                           (profiler-report)
-                           (message "Profiling complete. Check *Profiler-Report* buffer."))))
-
-  (defun +profile-next-command ()
-    "Profile the next command you execute."
-    (interactive)
-    (profiler-start 'cpu+mem)
-    (message "Profiler started. Execute your command, then run M-x +profiler-stop-and-report")
-    (add-hook 'post-command-hook
-              (lambda ()
-                (message "Command executed. Run M-x +profiler-stop-and-report to see results.")
-                (remove-hook 'post-command-hook '+profile-cleanup))
-              nil t))
-
-  (defun +benchmark-find-file (file-path &optional iterations)
-    "Benchmark opening FILE-PATH multiple times.
-ITERATIONS defaults to 5."
-    (interactive "fFile to benchmark: \nP")
-    (let* ((iterations (or iterations 5))
-           (times '())
-           (gc-times '()))
-      (dotimes (i iterations)
-        ;; Close buffer if already open
-        (when-let* ((buf (get-file-buffer file-path)))
-          (kill-buffer buf))
-        ;; Force GC and measure
-        (garbage-collect)
-        (let* ((start-time (current-time))
-               (start-gc-time (float-time)))
-          ;; Open file
-          (find-file file-path)
-          (let* ((end-time (current-time))
-                 (elapsed (float-time (time-subtract end-time start-time)))
-                 (gc-stats (garbage-collect))
-                 (gc-elapsed (float-time (time-subtract end-time start-time))))
-            (push elapsed times)
-            (message "Iteration %d/%d: %.3fs"
-                     (1+ i) iterations elapsed))))
-      (let ((avg (/ (apply #'+ times) (float iterations)))
-            (min-time (apply #'min times))
-            (max-time (apply #'max times)))
-        (message "\n=== Benchmark Results ===\nFile: %s\nIterations: %d\nAverage: %.3fs\nMin: %.3fs\nMax: %.3fs"
-                 file-path iterations avg min-time max-time)))))
 
 (use-package goto-addr
   ;; Turns URLs in the buffer into clickable buttons.
@@ -256,24 +188,6 @@ ITERATIONS defaults to 5."
   (envrc-show-summary-in-minibuffer nil) ; very noisy.
   )
 
-(use-package exec-path-from-shell :ensure t
-  ;; Use the shell to get some environment vars; necessary when the window
-  ;; system runs Emacs under a very different process environment.
-  ;;
-  ;; Also, turns out we need this for direnv to work right in compilation buffers.
-  :after-call +first-buffer-hook +first-file-hook
-  :if (memq system-type '(darwin x))
-  :demand t
-  :config
-  (pushnew! exec-path-from-shell-variables
-            "SSH_AUTH_SOCK"
-            "SSH_AGENT_PID")
-
-  ;; Speed up by using a non-interactive shell.
-  (delq! "-i" exec-path-from-shell-arguments)
-
-  (exec-path-from-shell-initialize))
-
 (use-package proced
   ;; User-process management UI.
   :custom
@@ -289,16 +203,14 @@ ITERATIONS defaults to 5."
   ;; change it to ripgrep.
   :custom
   (grep-use-headings t)
-  (grep-template "rg --line-number --with-filename --null --regexp <R> <F>"))
-
-(use-package wgrep :ensure t
-  ;; Adds a mode for grep-like results buffers that allows you to edit the
-  ;; underlying files directly.
-  ;;
-  ;; TODO: Replace with built-in `grep-edit-mode' once I'm on Emacs 31.
-  :commands wgrep-change-to-wgrep-mode
-  :custom
-  (wgrep-auto-save-buffer t))
+  (grep-template "rg --line-number --with-filename --null --regexp <R> <F>")
+  :general-config
+  (:keymaps 'grep-mode-map :states 'normal
+            "i" #'grep-change-to-grep-edit-mode
+            "e" #'grep-change-to-grep-edit-mode)
+  :config
+  (require '+grep-edit)
+  (+grep-edit-mode 1))
 
 (use-package xref
   ;; Provides the interface for navigating symbol definitions & references, etc.

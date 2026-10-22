@@ -18,6 +18,8 @@
 
 ;;; Code:
 
+(eval-and-compile (require '+corelib))
+
 (use-package vertico :ensure t
   ;; Vertico provides a better completion UI than the built-in default.
   :hook +first-input-hook
@@ -36,7 +38,7 @@
                             "M-h" #'vertico-directory-delete-word
                             "M-P" #'vertico-repeat-previous
                             "M-N" #'vertico-repeat-next)
-  :init
+  :config
   (vertico-mode +1)
 
   (use-package vertico-directory
@@ -109,7 +111,8 @@
 
 (use-package savehist
   ;; Persists Emacs completion history. Used by vertico.
-  :init (savehist-mode +1)
+  :demand t
+  :config (savehist-mode +1)
   :custom
   (savehist-autosave-interval nil) ; on exit
   (history-delete-duplicates t)
@@ -205,8 +208,6 @@
 (use-package which-key
   ;; which-key displays a UI popup of available key commands as you type.
   :demand t
-  :init
-  (which-key-mode +1)
   :custom
   (which-key-prefix-prefix "…")
   (which-key-idle-delay 0.4)
@@ -216,6 +217,7 @@
   (which-key-min-display-lines 6)
   (which-key-side-window-slot -10)
   :config
+  (which-key-mode +1)
   (which-key-setup-side-window-bottom)
   (setq-hook! 'which-key-init-buffer-hook line-spacing 3))
 
@@ -304,7 +306,7 @@
 
 (use-package minibuf-eldef
   ;; Set how the default option for empty input is displayed in the minibuffer.
-  :hook (after-init . minibuffer-electric-default-mode)
+  :hook (after-init-hook . minibuffer-electric-default-mode)
   :custom
   (minibuffer-default-prompt-format " [%s]"))
 

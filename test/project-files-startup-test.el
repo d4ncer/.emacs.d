@@ -9,6 +9,7 @@
               (directory-file-name (file-name-directory load-file-name))))
        (user-emacs-directory (make-temp-file "project-files-startup-" t)))
   (add-to-list 'load-path (expand-file-name "lisp/" root))
+  (add-to-list 'load-path (expand-file-name "lisp/project-files/" root))
   (dolist (package '("projectile" "compat"))
     (add-to-list 'load-path
                  (expand-file-name (concat "elpaca/builds/" package) root)))

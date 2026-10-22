@@ -4,10 +4,12 @@ Guidance for changing this Emacs configuration.
 
 ## Repository map
 
-- `early-init.el` handles early startup. `init.el` requires Emacs 30 or newer,
+- `early-init.el` handles early startup. `init.el` requires Emacs 32 or newer,
   bootstraps Elpaca with `use-package`, and loads modules in order.
 - `modules/` contains feature configuration. Check `init.el` for the active
-  modules and their load order. `lisp/` contains local helper libraries.
+  modules and their load order. `lisp/` contains local helper libraries and the
+  `agent-shell-projects/`, `project-files/`, and `compat/` library directories.
+  `+bootstrap.el` owns their load paths and declaration conventions.
 - `modules/mod-keybindings.el` defines the main `SPC` leader (`C-SPC` in insert
   state). Feature-specific bindings may live in their module.
 - `templates/` contains file templates. `docs/MODULES.md` is a longer
@@ -28,6 +30,8 @@ Guidance for changing this Emacs configuration.
 - Verify the smallest relevant behavior after editing. Check syntax for changed
   Elisp, then run focused byte compilation or ERT tests when they add value.
   Use `emacsclient` for live Emacs inspection when a server is running.
+  Run `emacs -Q --batch -l test/run-config.el` for the complete local gate.
+  See `docs/DEPENDENCIES.md` for package locking and isolated restore checks.
 
 ## Elisp style
 

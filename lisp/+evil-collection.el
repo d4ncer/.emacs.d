@@ -82,7 +82,7 @@
     elisp-slime-nav
     embark
     emms
-    ,@(when (>= emacs-major-version 29) '(emoji))
+    emoji
     epa
     ert
     eshell
@@ -122,7 +122,7 @@
     info
     ivy
     js2-mode
-    ,@(when (>= emacs-major-version 30) '(kmacro))
+    kmacro
     leetcode
     lispy
     lms
@@ -183,7 +183,7 @@
     scroll-lock
     selectrum
     sh-script
-    ,@(when (>= emacs-major-version 28) '(shortdoc))
+    shortdoc
     simple
     simple-mpc
     slime
@@ -192,14 +192,14 @@
     snake
     so-long
     speedbar
-    ,@(when (>= emacs-major-version 27) '(tab-bar))
+    tab-bar
     tablist
     tabulated-list
     tar-mode
     telega
     (term term ansi-term multi-term)
     tetris
-    ,@(when (>= emacs-major-version 27) '(thread))
+    thread
     tide
     timer-list
     transmission
@@ -218,7 +218,6 @@
     vundo
     w3m
     wdired
-    wgrep
     which-key
     with-editor
     woman

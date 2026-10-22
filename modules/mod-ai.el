@@ -251,12 +251,14 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
 (use-package agent-shell-notify
   :ensure nil
   :after agent-shell
+  :demand t
   :config
   (agent-shell-notify-mode 1))
 
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell
+  :demand t
   :custom (+agent-shell-mermaid-cache-directory (file-name-concat user-emacs-directory "var" "mermaid-cache"))
   :config
   (+agent-shell-mermaid-mode 1))
@@ -269,6 +271,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
    :prefix "SPC" :non-normal-prefix "C-SPC"
    "aP" '(+agent-shell-projects :wk "agent projects"))
   :config
+  (+agent-shell-projects-setup)
   (general-define-key
    :states '(normal motion)
    :keymaps '(+agent-shell-projects-home-mode-map
@@ -300,7 +303,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
            :host github
            :repo "alberti42/agent-shell-math-renderer")
   :after (agent-shell latex-to-svg-backend)
-  :hook (agent-shell-mode . agent-shell-math-renderer-mode)
+  :hook (agent-shell-mode-hook . agent-shell-math-renderer-mode)
   :config
   (add-hook 'enable-theme-functions
             #'agent-shell-math-renderer-on-appearance-change)
