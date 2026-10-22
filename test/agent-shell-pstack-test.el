@@ -183,5 +183,22 @@
     (+agent-shell-pstack-guard-mode -1)
     (should (eq agent-shell-permission-responder-function previous))))
 
+(ert-deftest +agent-shell-pstack-test-guard-keeps-local-responders ()
+  "Toggle the guard from a buffer without touching its local responder."
+  (let ((agent-shell-permission-responder-function #'ignore)
+        (+agent-shell-pstack--next-responder nil)
+        (+agent-shell-pstack-guard-mode nil))
+    (with-temp-buffer
+      (setq-local agent-shell-permission-responder-function #'identity)
+      (+agent-shell-pstack-guard-mode 1)
+      (should (eq agent-shell-permission-responder-function #'identity))
+      (should (eq (default-value 'agent-shell-permission-responder-function)
+                  #'+agent-shell-pstack--respond))
+      (should (eq +agent-shell-pstack--next-responder #'ignore))
+      (+agent-shell-pstack-guard-mode -1)
+      (should (eq agent-shell-permission-responder-function #'identity))
+      (should (eq (default-value 'agent-shell-permission-responder-function)
+                  #'ignore)))))
+
 (provide 'agent-shell-pstack-test)
 ;;; agent-shell-pstack-test.el ends here

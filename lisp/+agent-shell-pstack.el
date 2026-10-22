@@ -238,17 +238,17 @@ mode requires it; see `+agent-shell-pstack-unguarded-modes'."
   :global t
   :group '+agent-shell-pstack
   (if +agent-shell-pstack-guard-mode
-      (unless (eq agent-shell-permission-responder-function
+      (unless (eq (default-value 'agent-shell-permission-responder-function)
                   #'+agent-shell-pstack--respond)
         (setq +agent-shell-pstack--next-responder
-              agent-shell-permission-responder-function
-              agent-shell-permission-responder-function
-              #'+agent-shell-pstack--respond))
-    (when (eq agent-shell-permission-responder-function
+              (default-value 'agent-shell-permission-responder-function))
+        (setq-default agent-shell-permission-responder-function
+                      #'+agent-shell-pstack--respond))
+    (when (eq (default-value 'agent-shell-permission-responder-function)
               #'+agent-shell-pstack--respond)
-      (setq agent-shell-permission-responder-function
-            +agent-shell-pstack--next-responder
-            +agent-shell-pstack--next-responder nil))))
+      (setq-default agent-shell-permission-responder-function
+                    +agent-shell-pstack--next-responder)
+      (setq +agent-shell-pstack--next-responder nil))))
 
 (provide '+agent-shell-pstack)
 ;;; +agent-shell-pstack.el ends here

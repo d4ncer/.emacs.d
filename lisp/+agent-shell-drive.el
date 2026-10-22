@@ -10,6 +10,13 @@
 ;; `error' adds :message.  `agent-message-chunk' and `tool-call-update' only
 ;; feed the turn text: chunks append, a tool call ends the final part, and
 ;; `input-submitted' starts a new turn.
+;;
+;; A read-only shell runs in its agent's mode from
+;; `+agent-shell-drive-read-only-modes' and answers permission requests itself:
+;; it approves reads once and rejects everything else.  Its `turn-complete'
+;; adds :plan when it rejected a request carrying a plan.  If the session is
+;; not in that mode once initialized, the shell is killed and its watchers get
+;; `clean-up' with :reason instead of `init-finished'.
 
 ;;; Code:
 
@@ -29,41 +36,130 @@
 (defvar agent-shell-session-strategy)
 (defvar agent-shell-cwd-function)
 (defvar agent-shell-mode-hook)
+(defvar agent-shell-permission-responder-function)
+(defvar agent-shell--state)
+
+(defgroup +agent-shell-drive nil
+  "Drive agent shells from Lisp."
+  :group 'agent-shell)
+
+(defcustom +agent-shell-drive-read-only-modes
+  '((claude-code . "plan") (codex . "read-only"))
+  "Session mode that keeps each agent read-only, by config identifier."
+  :type '(alist :key-type symbol :value-type string))
+
+(defconst +agent-shell-drive--read-kinds '("read" "search" "fetch" "think")
+  "Tool call kinds a read-only shell approves.")
 
 (defvar +agent-shell-drive--watchers (make-hash-table :test #'equal)
   "Map (OWNER . ID) to (SHELL . FUNCTION).")
 (defvar +agent-shell-drive--shells (make-hash-table :test #'eq)
   "Map a watched shell to (:subscription TOKEN :turn TEXT :final TEXT).")
 
+(defvar-local +agent-shell-drive--mode nil
+  "Read-only session mode this shell must run in.")
+(defvar-local +agent-shell-drive--plan nil
+  "Plan from the last request this shell rejected during the turn.")
+(defvar-local +agent-shell-drive--reason nil
+  "Why Lisp killed this shell.")
+
+(defun +agent-shell-drive--configs ()
+  "Return `agent-shell-agent-configs' with function entries resolved."
+  (require 'agent-shell)
+  (mapcar (lambda (entry) (if (functionp entry) (funcall entry) entry))
+          (if (functionp agent-shell-agent-configs)
+              (funcall agent-shell-agent-configs)
+            agent-shell-agent-configs)))
+
 (defun +agent-shell-drive-config (spec)
   "Return the agent config for SPEC, an identifier symbol or config alist."
-  (require 'agent-shell)
   (if (and (listp spec) (assq :identifier spec)) spec
-    (or (seq-find
-         (lambda (config) (eq (map-elt config :identifier) spec))
-         (mapcar (lambda (entry) (if (functionp entry) (funcall entry) entry))
-                 (if (functionp agent-shell-agent-configs)
-                     (funcall agent-shell-agent-configs)
-                   agent-shell-agent-configs)))
+    (or (seq-find (lambda (config) (eq (map-elt config :identifier) spec))
+                  (+agent-shell-drive--configs))
         (user-error "Unknown agent configuration %s" spec))))
 
-(cl-defun +agent-shell-drive-start (&key config directory)
-  "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it."
+(defun +agent-shell-drive-read-only-agents ()
+  "Return configured agent identifiers that have a read-only mode."
+  (seq-filter (lambda (id) (alist-get id +agent-shell-drive-read-only-modes))
+              (mapcar (lambda (config) (map-elt config :identifier))
+                      (+agent-shell-drive--configs))))
+
+(defun +agent-shell-drive--respond (permission)
+  "Approve PERMISSION once if it only reads, otherwise reject it.
+Return nil, leaving the dialog to the user, only when no option rejects."
+  (let* ((tool-call (map-elt permission :tool-call))
+         (options (map-elt permission :options))
+         (pick (lambda (&rest kinds)
+                 (seq-some (lambda (kind)
+                             (seq-find (lambda (option)
+                                         (equal (map-elt option :kind) kind))
+                                       options))
+                           kinds)))
+         (choice (if (member (map-elt tool-call :kind)
+                             +agent-shell-drive--read-kinds)
+                     (funcall pick "allow_once" "reject_once" "reject_always")
+                   (funcall pick "reject_once" "reject_always"))))
+    (when choice
+      (when-let* (((string-prefix-p "reject" (map-elt choice :kind)))
+                  (plan (map-elt (map-elt tool-call :raw-input) 'plan)))
+        (setq +agent-shell-drive--plan plan))
+      (funcall (map-elt permission :respond) (map-elt choice :option-id))
+      t)))
+
+(defun +agent-shell-drive--refusal (shell)
+  "Return why read-only SHELL is not in its read-only mode, or nil."
+  (with-current-buffer shell
+    (when-let* ((mode +agent-shell-drive--mode))
+      (let ((actual (map-nested-elt agent-shell--state '(:session :mode-id))))
+        (unless (equal actual mode)
+          (format "Session mode is %s, not the read-only mode %s"
+                  (or actual "unset") mode))))))
+
+(defun +agent-shell-drive-kill (shell &optional reason)
+  "Kill SHELL without prompting; its watchers get `clean-up' with REASON."
+  (when (buffer-live-p shell)
+    (with-current-buffer shell (setq +agent-shell-drive--reason reason))
+    (let ((kill-buffer-query-functions nil))
+      (kill-buffer shell))))
+
+(cl-defun +agent-shell-drive-start (&key config directory read-only)
+  "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
+With READ-ONLY, start it in its agent's read-only mode with a responder that
+rejects everything but reads; see `+agent-shell-drive-read-only-modes'."
   (require 'agent-shell)
-  (let* ((directory (file-name-as-directory (file-truename directory)))
+  (let* ((config (+agent-shell-drive-config config))
+         (mode (and read-only
+                    (or (alist-get (map-elt config :identifier)
+                                   +agent-shell-drive-read-only-modes)
+                        (user-error "No read-only mode for agent %s"
+                                    (map-elt config :identifier)))))
+         (config (if mode
+                     (cons (cons :default-session-mode-id (lambda () mode))
+                           (assq-delete-all :default-session-mode-id
+                                            (copy-alist config)))
+                   config))
+         (directory (file-name-as-directory (file-truename directory)))
          (default-directory directory)
          (cwd-function (lambda () directory))
+         (pin (lambda ()
+                (setq-local agent-shell-cwd-function cwd-function
+                            default-directory directory)
+                (when mode
+                  (setq-local +agent-shell-drive--mode mode
+                              agent-shell-permission-responder-function
+                              #'+agent-shell-drive--respond))))
          (agent-shell-cwd-function cwd-function)
-         (agent-shell-mode-hook
-          (append agent-shell-mode-hook
-                  (list (lambda ()
-                          (setq-local agent-shell-cwd-function cwd-function
-                                      default-directory directory)))))
+         (agent-shell-mode-hook (append agent-shell-mode-hook (list pin)))
          (agent-shell-session-strategy 'new)
          (shell (save-window-excursion (agent-shell-start :config config))))
-    (with-current-buffer shell
-      (setq-local agent-shell-cwd-function cwd-function
-                  default-directory directory))
+    (with-current-buffer shell (funcall pin))
+    (when mode
+      (agent-shell-subscribe-to
+       :shell-buffer shell :event 'init-finished
+       :on-event (lambda (_event)
+                   (when-let* ((reason (+agent-shell-drive--refusal shell)))
+                     (run-at-time 0 nil #'+agent-shell-drive-kill
+                                  shell reason)))))
     shell))
 
 (defun +agent-shell-drive-pinned-p (shell directory)
@@ -132,17 +228,29 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
        (when (eq kind 'input-submitted)
          (plist-put state :turn "")
          (plist-put state :final ""))
-       (append
-        (list :kind kind :shell shell
-              :session (ignore-errors
-                         (agent-shell-session-id :shell-buffer shell)))
-        (pcase kind
-          ('turn-complete
-           (list :stop-reason (map-elt data :stop-reason)
-                 :text (let ((final (plist-get state :final)))
-                         (if (string-blank-p final) (plist-get state :turn)
-                           final))))
-          ('error (list :message (map-elt data :message)))))))))
+       (unless (and (eq kind 'init-finished)
+                    (+agent-shell-drive--refusal shell))
+         (append
+          (list :kind kind :shell shell
+                :session (ignore-errors
+                           (agent-shell-session-id :shell-buffer shell)))
+          (pcase kind
+            ('turn-complete
+             (append
+              (list :stop-reason (map-elt data :stop-reason)
+                    :text (let ((final (plist-get state :final)))
+                            (if (string-blank-p final) (plist-get state :turn)
+                              final)))
+              (when-let* ((plan (buffer-local-value
+                                 '+agent-shell-drive--plan shell)))
+                (with-current-buffer shell
+                  (setq +agent-shell-drive--plan nil))
+                (list :plan plan))))
+            ('clean-up
+             (when-let* ((reason (buffer-local-value
+                                  '+agent-shell-drive--reason shell)))
+               (list :reason reason)))
+            ('error (list :message (map-elt data :message))))))))))
 
 (defun +agent-shell-drive--dispatch (shell event)
   "Deliver upstream EVENT from SHELL to its watchers."
