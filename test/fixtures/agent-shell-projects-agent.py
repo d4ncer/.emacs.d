@@ -37,6 +37,7 @@ def handle_prompt(text, state):
     inbox_match = re.search(r"atomically rename it into (.*?) with a unique", text)
     inbox = Path(inbox_match[1])
     request = bundle["request"]
+    assert Path(state["cwd"]).resolve() == Path(bundle["project"]["root"]).resolve()
     if request["kind"] == "exploration":
         state["intent"] = request["intent"]
         return "What would success look like for this project?"
@@ -92,7 +93,7 @@ for line in sys.stdin:
         }
     elif method == "session/new":
         result = {"sessionId": uuid.uuid4().hex}
-        sessions[result["sessionId"]] = {}
+        sessions[result["sessionId"]] = {"cwd": params["cwd"]}
     elif method == "session/prompt":
         text = "\n".join(item.get("text", "") for item in params["prompt"])
         reply = handle_prompt(text, sessions[params["sessionId"]])

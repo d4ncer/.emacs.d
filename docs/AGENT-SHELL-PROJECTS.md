@@ -8,16 +8,21 @@ checkpoints independently of Git commits.
 
 1. Use `SPC aP` (`C-SPC aP` in insert state), or
    `M-x +agent-shell-projects`. Enter a new project name.
-2. Describe what you want to achieve in the intent composer. Press `C-c C-c`
+2. Choose **Existing folder** or **Create new folder**, then select its path.
+   This is the workspace for the author conversation and later implementation.
+3. Describe what you want to achieve in the intent composer. Its header shows
+   the selected workspace. Press `C-c C-c`
    to start the conversation with an author using your configured agent policy.
    Discuss the problem, success criteria, scope, constraints and alternatives.
-3. In the author shell, use `C-c C-m` for project actions, then `P` to request
+4. In the author shell, use `C-c C-m` for project actions, then `P` to request
    a proposal draft from the discussion. Edit it and press `C-c C-c` to choose
    a Markdown file, Org file, or existing/new Org heading. Saving enrols the
    document and designates it as the proposal. Closing the composer leaves the
    draft ready; `P` reopens it.
-4. Review and refine the proposal. When ready, choose `i` to start
-   implementation. Select a Git workspace and base if none is enrolled. Its
+5. Review and refine the proposal. When ready, choose `i` to start
+   implementation in the selected workspace. Git is initialised in a worker
+   when needed; new repositories can be captured before their first commit.
+   Existing repositories let you select the base when first enrolled. The
    initial capture runs in the background before the author receives the
    proposal and workspace context. Then use `c` to review the implementation.
 
@@ -26,6 +31,18 @@ intent composer again, including after cancelling the initial composer. Use
 `a` to select an existing author shell before `e` when you want to continue in
 an existing conversation. Drafting and implementation begin through explicit
 project actions; saving a proposal alone does not start implementation.
+
+Agent-shell sessions have a working directory. Its usual default uses
+Projectile/project.el root detection, falling back to the current folder.
+Project shells pin the selected workspace instead, including for ACP session
+creation; a surrounding repository or custom CWD function cannot redirect them.
+Git is only required for code review, so intent and document authoring also work
+in ordinary folders. Existing Git checkouts and worktree folders are supported.
+
+Use `W` (**Choose workspace**) to correct a project's workspace. Then choose a
+matching existing author with `a`, or select **New shell**. Existing sessions
+keep their original working directory; requests to a mismatched shell stay
+queued. Cancel and resubmit queued requests when replacing their author.
 
 ## Open a project or import existing work
 
@@ -296,3 +313,6 @@ Onboarding checks cover new-project entry, queued intent delivery, editable
 proposal capture into Org, cancelled capture and retry, and a real local ACP
 session from intent through clarification, proposal, implementation, code
 explanation and feedback-driven revision. No model provider is contacted.
+The fixture checks the actual ACP session CWD with conflicting project detection,
+and starts a new workspace nested inside an existing repository. It also checks
+Git initialisation without a commit and rejection of mismatched author shells.

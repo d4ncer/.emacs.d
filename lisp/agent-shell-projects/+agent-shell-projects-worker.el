@@ -178,6 +178,35 @@
                     (lambda (a b) (string< (plist-get a :path) (plist-get b :path)))))))
     (mapcar (lambda (path) (gethash path records)) paths)))
 
+(defun +agent-shell-projects--worker-init (root)
+  "Initialise a Git workspace at ROOT, excluding agent-shell session files."
+  (+agent-shell-projects--git-text root "init" "-q")
+  (let ((exclude (expand-file-name ".git/info/exclude" root)))
+    (with-temp-buffer
+      (when (file-exists-p exclude) (insert-file-contents exclude))
+      (unless (string-match-p "^/\\.agent-shell/$" (buffer-string))
+        (goto-char (point-max))
+        (unless (bolp) (insert "\n"))
+        (insert "/.agent-shell/\n")
+        (write-region (point-min) (point-max) exclude nil 'silent))))
+  root)
+
+(defun +agent-shell-projects--resolve-base (root revision)
+  "Resolve REVISION in ROOT, using the empty tree for an unborn HEAD."
+  (condition-case err
+      (string-trim (+agent-shell-projects--git-text
+                    root "rev-parse" "--verify" (concat revision "^{commit}")))
+    (error
+     (if (and (equal revision "HEAD")
+              (when-let* ((branch (ignore-errors
+                                   (string-trim (+agent-shell-projects--git-text
+                                                 root "symbolic-ref" "--quiet" "HEAD")))))
+                (string-empty-p (+agent-shell-projects--git-text
+                                 root "for-each-ref" "--format=%(refname)" branch))))
+         (string-trim (+agent-shell-projects--git-text
+                       root "hash-object" "-t" "tree" "--stdin"))
+       (signal (car err) (cdr err))))))
+
 (defun +agent-shell-projects--worker-capture (request)
   "Capture all workspace targets in REQUEST, sharing discovery and file reads."
   (let* ((root (string-trim (+agent-shell-projects--git-text
@@ -190,8 +219,7 @@
              (base (or (gethash input bases)
                        (puthash input
                                 (if (string-match-p "\\`[[:xdigit:]]\\{40,64\\}\\'" input) input
-                                  (string-trim (+agent-shell-projects--git-text
-                                                root "rev-parse" "--verify" (concat input "^{commit}"))))
+                                  (+agent-shell-projects--resolve-base root input))
                                 bases))))
         (+agent-shell-projects--set target :base base)))
     (while (and (not result) (< attempt 3))
@@ -331,6 +359,7 @@
           (let ((result (pcase (plist-get request :kind)
                   ("capture" (+agent-shell-projects--worker-capture request))
                   ("diff" (+agent-shell-projects--worker-diff request))
+                  ("init" (+agent-shell-projects--worker-init (plist-get request :root)))
                   (_ (error "Unknown worker request")))))
             (list :ok t :result result :git-calls +agent-shell-projects--worker-git-count
                   :seconds (- (float-time) started)))

@@ -51,6 +51,31 @@
   (+agent-shell-projects-artefact
    (+agent-shell-projects--project) +agent-shell-projects--artefact-id))
 
+(defun +agent-shell-projects--read-workspace (&optional initial)
+  "Choose an existing workspace or create a folder, starting at INITIAL."
+  (let* ((new (equal (completing-read
+                      "Workspace: " '("Existing folder" "Create new folder") nil t)
+                     "Create new folder"))
+         (directory (read-directory-name
+                     (if new "New workspace folder: " "Workspace folder: ")
+                     initial nil (not new))))
+    (when new
+      (when (file-exists-p directory)
+        (user-error "Folder already exists; choose Existing folder"))
+      (make-directory directory t))
+    (unless (file-directory-p directory) (user-error "Workspace is not a folder"))
+    (list :root (file-name-as-directory (file-truename directory)) :new new)))
+
+(defun +agent-shell-projects-choose-workspace (&optional project)
+  "Select or create the workspace for PROJECT."
+  (interactive)
+  (let* ((project (or project (+agent-shell-projects--project)))
+         (workspace (+agent-shell-projects--read-workspace (plist-get project :root))))
+    (+agent-shell-projects--set project :root (plist-get workspace :root))
+    (+agent-shell-projects--set project :workspace-created (plist-get workspace :new))
+    (+agent-shell-projects--changed project nil "user")
+    (message "Workspace: %s; choose an author in this folder" (plist-get project :root))))
+
 (defun +agent-shell-projects--choose-project (&optional on-create)
   "Choose an existing project or create one, calling ON-CREATE with it."
   (let* ((projects (+agent-shell-projects-list))
@@ -60,7 +85,10 @@
                           projects))
          (choice (completing-read "Project (new name to create): " choices)))
     (or (cdr (assoc choice choices))
-        (let ((project (+agent-shell-projects-create choice default-directory)))
+        (let* ((workspace (+agent-shell-projects--read-workspace default-directory))
+               (project (+agent-shell-projects-create choice (plist-get workspace :root))))
+          (+agent-shell-projects--set project :workspace-created (plist-get workspace :new))
+          (+agent-shell-projects-save project)
           (when on-create (funcall on-create project))
           project))))
 

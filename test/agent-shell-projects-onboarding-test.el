@@ -9,14 +9,20 @@
 
 (ert-deftest +agent-shell-projects-test-onboarding-new-project-entry ()
   (+agent-shell-projects-test--isolated
-    (let ((default-directory directory))
+    (let* ((default-directory directory)
+           (workspace (expand-file-name "chosen-workspace/" directory)))
+      (make-directory workspace)
       (save-window-excursion
         (cl-letf (((symbol-function '+agent-shell-projects-mode) #'ignore)
                   ((symbol-function 'completing-read)
-                   (lambda (&rest _) "A new intent")))
+                   (lambda (prompt &rest _)
+                     (if (equal prompt "Workspace: ") "Existing folder" "A new intent")))
+                  ((symbol-function 'read-directory-name) (lambda (&rest _) workspace)))
           (+agent-shell-projects))
         (setq project (+agent-shell-projects--project))
         (should (equal "A new intent" (plist-get project :name)))
+        (should (file-equal-p workspace (plist-get project :root)))
+        (should (file-equal-p workspace default-directory))
         (should (string-match-p "Project intent" (buffer-name)))
         (should (string-match-p "start conversation" header-line-format))
         (should-not (plist-get project :agents))
@@ -91,6 +97,7 @@
                         project (+agent-shell-projects-test--file
                                  directory "proposal.md" "Agreed plan")))
              (_ (+agent-shell-projects--set project :proposal (plist-get proposal :id)))
+             (_ (+agent-shell-projects--set project :root root))
              (_ (+agent-shell-projects-associate project shell))
              (accepted nil)
              (+agent-shell-projects-send-function (lambda (&rest _) accepted))
@@ -144,10 +151,17 @@
                                 :command-params (list +agent-shell-projects-test--fixture)))))
            (+agent-shell-projects-change-hook
             '(+agent-shell-projects--refresh-ui +agent-shell-projects--updated-code))
-           (root (+agent-shell-projects-test--repository directory))
+           (parent (+agent-shell-projects-test--repository directory))
+           (root (expand-file-name "new-workspace/" parent))
+           (agent-shell-cwd-function (lambda () parent))
            (destination (expand-file-name "proposal.md" directory))
            author proposal code)
-      (+agent-shell-projects--set project :root root)
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (&rest _) "Create new folder"))
+                ((symbol-function 'read-directory-name) (lambda (&rest _) root)))
+        (+agent-shell-projects-choose-workspace project))
+      (should (file-directory-p root))
+      (should-not (file-exists-p (expand-file-name ".git" root)))
       (unwind-protect
           (save-window-excursion
             (cl-letf (((symbol-function '+agent-shell-projects-mode) #'ignore))
@@ -158,6 +172,7 @@
               (+agent-shell-projects-test--wait-for
                (lambda () (and (eq (agent-shell-status :shell-buffer author) 'ready)
                                (equal "sent" (plist-get (car (plist-get project :requests)) :status)))))
+              (should (file-equal-p root (with-current-buffer author (agent-shell-cwd))))
               (agent-shell-insert :text "Success means the change is easy to validate."
                                   :shell-buffer author :submit t :no-focus t)
               (+agent-shell-projects-test--wait-for
@@ -173,9 +188,22 @@
                          (lambda (&rest _) destination)))
                 (call-interactively (key-binding (kbd "C-c C-c"))))
               (should (plist-get project :proposal))
-              (setq code (+agent-shell-projects-start-implementation root "HEAD"))
+              (+agent-shell-projects-test--file root ".agent-shell/session.txt" "Session noise")
+              (+agent-shell-projects-start-implementation root "HEAD")
+              (+agent-shell-projects-test--wait-for
+               (lambda ()
+                 (setq code (seq-find (lambda (a) (equal (plist-get a :kind) "code"))
+                                      (plist-get project :artefacts)))))
               (+agent-shell-projects-test--wait-for
                (lambda () (> (length (plist-get code :history)) 1)))
+              (should (file-equal-p root (plist-get project :root)))
+              (should (file-equal-p root (plist-get code :path)))
+              (should-not
+               (seq-find (lambda (f) (string-prefix-p ".agent-shell/" (plist-get f :path)))
+                         (plist-get (+agent-shell-projects-code-manifest
+                                     (+agent-shell-projects-version code (plist-get code :current)))
+                                    :files)))
+              (should-error (+agent-shell-projects--git-text root "rev-parse" "--verify" "HEAD"))
               (+agent-shell-projects-review-code)
               (let ((request (+agent-shell-projects-request-explanation)))
                 (+agent-shell-projects-test--wait-for
@@ -206,6 +234,28 @@
                                  (insert-file-contents (expand-file-name "implementation.txt" root))
                                  (buffer-string)))))))
         (when (buffer-live-p author) (kill-buffer author))))))
+
+(ert-deftest +agent-shell-projects-test-onboarding-wrong-workspace-rejected ()
+  (+agent-shell-projects-test--isolated
+    (+agent-shell-projects-test--agent
+      (let* ((other (expand-file-name "other/" directory))
+             (sends 0)
+             (+agent-shell-projects-send-function
+              (lambda (&rest _) (cl-incf sends) t)))
+        (make-directory other)
+        (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () other)))
+          (should-error (+agent-shell-projects-associate project shell) :type 'user-error)
+          (should-not (plist-get project :author)))
+        (let* ((agent (+agent-shell-projects-associate project shell))
+               (request (+agent-shell-projects-request
+                         project "exploration" agent :intent "Only work in this workspace")))
+          (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () other)))
+            (should-error (+agent-shell-projects--author project) :type 'user-error)
+            (+agent-shell-projects-flush project))
+          (should (zerop sends))
+          (should (equal "queued" (plist-get request :status)))
+          (+agent-shell-projects-flush project)
+          (should (= sends 1)))))))
 
 (provide 'agent-shell-projects-onboarding-test)
 ;;; agent-shell-projects-onboarding-test.el ends here

@@ -14,6 +14,7 @@
 (declare-function +agent-shell-projects "+agent-shell-projects")
 (declare-function +agent-shell-projects-home "+agent-shell-projects")
 (declare-function +agent-shell-projects-rename "+agent-shell-projects")
+(declare-function +agent-shell-projects-choose-workspace "+agent-shell-projects")
 (declare-function +agent-shell-projects-refresh "+agent-shell-projects")
 (declare-function +agent-shell-projects-enrol-file "+agent-shell-projects")
 (declare-function +agent-shell-projects-submit "+agent-shell-projects-agent")
@@ -37,6 +38,7 @@
     ("h" "Home" +agent-shell-projects-home)
     ("o" "Open project" +agent-shell-projects)
     ("a" "Choose author" +agent-shell-projects-choose-author)
+    ("W" "Choose workspace" +agent-shell-projects-choose-workspace)
     ("e" "Explore intent" +agent-shell-projects-explore)
     ("R" "Rename project" +agent-shell-projects-rename)
     ("g" "Refresh" +agent-shell-projects-refresh)]

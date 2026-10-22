@@ -343,10 +343,39 @@ Choose its destination when saving the draft, unless FILE is supplied."
 
 (defun +agent-shell-projects-start-implementation (&optional root base)
   "Ask the author to implement the proposal in ROOT against BASE.
-Use an enrolled workspace when ROOT is omitted, prompting if none exists."
+Use the selected workspace when ROOT is omitted.  Initialise Git when needed."
   (interactive)
   (let* ((project (+agent-shell-projects--project))
-         (proposal (if (plist-get project :proposal)
+         (workspace (file-name-as-directory
+                     (file-truename (or root (plist-get project :root)
+                                        (user-error "Choose a workspace first")))))
+         (agent (progn
+                  (unless (plist-get project :proposal)
+                    (user-error "Save or choose a proposal first"))
+                  (+agent-shell-projects--author project))))
+    (unless (file-equal-p workspace (plist-get project :root))
+      (user-error "Implementation must use the selected workspace; use Choose workspace first"))
+    (+agent-shell-projects-mode 1)
+    (prog1
+        (if (or (not (locate-dominating-file workspace ".git"))
+                (and (plist-get project :workspace-created)
+                     (not (file-exists-p (expand-file-name ".git" workspace)))))
+            (progn
+              (message "Initialising Git in %s" workspace)
+              (+agent-shell-projects-start-worker
+               (list :kind "init" :root workspace)
+               (lambda (result)
+                 (if (eq (plist-get result :ok) t)
+                     (condition-case err
+                         (+agent-shell-projects--start-implementation project workspace (or base "HEAD"))
+                       (error (message "Implementation: %s" (error-message-string err))))
+                   (message "Workspace initialisation failed: %s" (plist-get result :error))))))
+          (+agent-shell-projects--start-implementation project workspace base))
+      (pop-to-buffer (+agent-shell-projects-shell agent)))))
+
+(defun +agent-shell-projects--start-implementation (project root base)
+  "Capture PROJECT's workspace ROOT against BASE and queue implementation."
+  (let* ((proposal (if (plist-get project :proposal)
                        (+agent-shell-projects-artefact project (plist-get project :proposal))
                      (user-error "Save or choose a proposal first")))
          (source (car (+agent-shell-projects-source proposal)))
@@ -354,15 +383,15 @@ Use an enrolled workspace when ROOT is omitted, prompting if none exists."
               (user-error "Save proposal edits before starting implementation")))
          (proposal-version (+agent-shell-projects-capture project proposal "user"))
          (agent (+agent-shell-projects--author project))
-         (code (if (and (not root)
-                        (seq-some (lambda (a) (equal (plist-get a :kind) "code"))
-                                  (plist-get project :artefacts)))
-                   (+agent-shell-projects--code-artefact project)
-                 (+agent-shell-projects-enrol-code
-                  project
-                  (or root (read-directory-name "Git workspace: " (plist-get project :root)))
-                  (or base (read-string "Base revision: " "HEAD"))))))
-    (+agent-shell-projects-mode 1)
+         (_ (unless (file-equal-p root (plist-get project :root))
+              (user-error "Workspace changed while preparing implementation")))
+         (git-root (locate-dominating-file root ".git"))
+         (code (or (seq-find
+                    (lambda (a) (and (equal (plist-get a :kind) "code")
+                                     (file-equal-p git-root (plist-get a :path))))
+                    (plist-get project :artefacts))
+                   (+agent-shell-projects-enrol-code
+                    project root (or base (read-string "Base revision: " "HEAD"))))))
     (+agent-shell-projects-capture-code
      project code "user"
      (lambda (version)
@@ -381,7 +410,6 @@ Use an enrolled workspace when ROOT is omitted, prompting if none exists."
                                      project "implementation" agent :versions versions))))
          (+agent-shell-projects-flush project)
          (message "Implementation %s" (plist-get request :status)))))
-    (pop-to-buffer (+agent-shell-projects-shell agent))
     (message "Preparing implementation context; capture progress is in the project")
     code))
 

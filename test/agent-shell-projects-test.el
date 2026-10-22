@@ -282,6 +282,8 @@
      (unwind-protect
          (cl-letf (((symbol-function 'agent-shell-session-id)
                     (lambda (&rest _) "test-session"))
+                   ((symbol-function 'agent-shell-cwd)
+                    (lambda () (plist-get project :root)))
                    ((symbol-function 'agent-shell-status)
                     (lambda (&rest _) 'ready))
                    ((symbol-function 'agent-shell-subscribe-to)

@@ -15,6 +15,7 @@
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-get-config "agent-shell")
 (declare-function agent-shell-start "agent-shell")
+(declare-function agent-shell-cwd "agent-shell-project")
 (declare-function agent-shell-select-config "agent-shell")
 (declare-function agent-shell-subscribe-to "agent-shell")
 (declare-function agent-shell-unsubscribe "agent-shell")
@@ -30,6 +31,8 @@
 (defvar agent-shell-agent-configs)
 (defvar agent-shell-preferred-agent-config)
 (defvar agent-shell-session-strategy)
+(defvar agent-shell-cwd-function)
+(defvar agent-shell-mode-hook)
 (defvar +agent-shell-projects-sidebar-functions)
 (defvar +agent-shell-projects-change-hook)
 (defvar-local +agent-shell-projects--project-id nil)
@@ -92,6 +95,9 @@
   (unless (and (buffer-live-p shell)
                (with-current-buffer shell (derived-mode-p 'agent-shell-mode)))
     (user-error "Choose an agent-shell buffer"))
+  (unless (+agent-shell-projects--shell-in-workspace-p project shell)
+    (user-error "Agent shell belongs to another workspace; start or choose one in %s"
+                (plist-get project :root)))
   (let* ((role (or role "author"))
          (agent (or (seq-find
                      (lambda (item)
@@ -191,13 +197,35 @@
                        agent-shell-agent-configs)))
             (user-error "Unknown agent configuration %s" identifier))))))
 
+(defun +agent-shell-projects--shell-in-workspace-p (project shell)
+  "Return whether SHELL's working directory matches PROJECT's workspace."
+  (and (plist-get project :root) (buffer-live-p shell)
+       (condition-case nil
+           (file-equal-p (plist-get project :root)
+                         (with-current-buffer shell (agent-shell-cwd)))
+         (error nil))))
+
 (defun +agent-shell-projects-start-agent (project &optional role)
   "Start a fresh shell for PROJECT with ROLE using configured selection."
-  (let* ((default-directory (file-name-as-directory
-                             (or (plist-get project :root) default-directory)))
+  (require 'agent-shell)
+  (unless (and (plist-get project :root)
+               (file-directory-p (plist-get project :root)))
+    (user-error "Choose a workspace from the project menu first"))
+  (let* ((workspace (file-name-as-directory (file-truename (plist-get project :root))))
+         (default-directory workspace)
+         (cwd-function (lambda () workspace))
+         (agent-shell-cwd-function cwd-function)
+         (agent-shell-mode-hook
+          (append agent-shell-mode-hook
+                  (list (lambda ()
+                          (setq-local agent-shell-cwd-function cwd-function
+                                      default-directory workspace)))))
          (agent-shell-session-strategy 'new)
          (config (+agent-shell-projects--select-config))
          (shell (agent-shell-start :config config)))
+    (with-current-buffer shell
+      (setq-local agent-shell-cwd-function cwd-function
+                  default-directory workspace))
     (+agent-shell-projects-associate project shell role)
     shell))
 
@@ -207,8 +235,12 @@
   (require 'agent-shell)
   (let ((project (+agent-shell-projects--project)))
     (if new (+agent-shell-projects-start-agent project)
-      (let* ((choices (cons "[New shell]" (mapcar #'buffer-name
-                                                 (agent-shell-buffers))))
+      (let* ((choices (cons "[New shell]"
+                            (mapcar #'buffer-name
+                                    (seq-filter
+                                     (lambda (shell)
+                                       (+agent-shell-projects--shell-in-workspace-p project shell))
+                                     (agent-shell-buffers)))))
              (choice (completing-read "Author: " choices nil t)))
         (if (equal choice "[New shell]")
             (+agent-shell-projects-start-agent project)
@@ -222,6 +254,8 @@
          (shell (+agent-shell-projects-shell agent)))
     (unless shell
       (user-error "Author is disconnected; choose an author from the project menu"))
+    (unless (+agent-shell-projects--shell-in-workspace-p project shell)
+      (user-error "Author is in another workspace; choose a matching or new author"))
     (with-current-buffer shell
       (setq +agent-shell-projects--project-id (plist-get project :id)))
     agent))
@@ -245,7 +279,11 @@
          (pop-to-buffer (+agent-shell-projects-shell agent))
          (message "Intent conversation %s; C-c C-m opens project actions"
                   (plist-get request :status))))
-     "Project intent" "start conversation")))
+     "Project intent" "start conversation")
+    (setq-local default-directory (plist-get project :root)
+                header-line-format
+                (format "Workspace: %s · C-c C-c start conversation · C-c C-k cancel"
+                        (plist-get project :root)))))
 
 (defun +agent-shell-projects-default-context (project request)
   "Build automatic context for PROJECT and REQUEST from immutable versions."
@@ -513,7 +551,8 @@
     (when (equal (plist-get request :status) "queued")
       (let* ((agent (+agent-shell-projects-agent project (plist-get request :agent)))
              (shell (+agent-shell-projects-shell agent)))
-        (when (and shell (eq (agent-shell-status :shell-buffer shell) 'ready))
+        (when (and shell (eq (agent-shell-status :shell-buffer shell) 'ready)
+                   (+agent-shell-projects--shell-in-workspace-p project shell))
           (condition-case err
               (when (funcall +agent-shell-projects-send-function shell
                              (+agent-shell-projects-content
