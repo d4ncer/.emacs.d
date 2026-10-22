@@ -78,12 +78,77 @@ def handle_prompt(text, state):
     return "Fixture turn complete."
 
 
+def chunk(session_id, text):
+    emit({"method": "session/update", "params": {
+        "sessionId": session_id,
+        "update": {"sessionUpdate": "agent_message_chunk",
+                   "content": {"type": "text", "text": text}},
+    }})
+
+
+PLAN = "# Plan\nRead the drive library, then report on its watchers."
+
+
+def handle_pstack_prompt(message, text, state):
+    """Answer pstack panel traffic; return the reply, or None if unrelated.
+
+    A reply of False means the turn stays open."""
+    session_id = message["params"]["sessionId"]
+    if "member of a pstack" in text:
+        if "HANG" in text:
+            chunk(session_id, "Partial before hang.")
+            return False
+        if "ASK-PERMISSION" in text:
+            request_id = "permission-" + uuid.uuid4().hex
+            pending[request_id] = (session_id, message["id"])
+            emit({"id": request_id, "method": "session/request_permission",
+                  "params": {"sessionId": session_id,
+                             "toolCall": {"toolCallId": "exit-plan",
+                                          "title": "Ready to code?",
+                                          "kind": "switch_mode",
+                                          "status": "pending",
+                                          "rawInput": {"plan": PLAN}},
+                             "options": [
+                                 {"optionId": "allow", "kind": "allow_once",
+                                  "name": "Allow"},
+                                 {"optionId": "reject", "kind": "reject_once",
+                                  "name": "Reject"}]}})
+            return False
+        chunk(session_id, "Looking around.")
+        emit({"method": "session/update", "params": {
+            "sessionId": session_id,
+            "update": {"sessionUpdate": "tool_call", "toolCallId": "read-1",
+                       "title": "Read file", "kind": "read",
+                       "status": "completed"},
+        }})
+        return f"REPORT cwd={state['cwd']} mode={state['mode']}"
+    if "has finished:" in text and "pstack panel" in text:
+        return f"TRIAGED {text.count(chr(10) + '## ')}"
+    position = text.find("PSTACK-LEAD ")
+    if position >= 0:
+        request, _ = json.JSONDecoder().raw_decode(
+            text[position + len("PSTACK-LEAD "):])
+        return ("Requesting a panel.\n\n```pstack-panel\n"
+                + json.dumps(request) + "\n```\n")
+    return None
+
+
+REFUSE_SET_MODE = "--refuse-set-mode" in sys.argv
+MODES = [{"id": mode, "name": mode} for mode in ("default", "plan", "read-only")]
+
 sessions = {}
+pending = {}
 for line in sys.stdin:
     message = json.loads(line)
     method = message.get("method")
     params = message.get("params", {})
     result = {}
+    if method is None:
+        session_id, prompt_id = pending.pop(message["id"])
+        option = message.get("result", {}).get("outcome", {}).get("optionId")
+        chunk(session_id, f"PERMISSION {option}")
+        emit({"id": prompt_id, "result": {"stopReason": "end_turn"}})
+        continue
     if method == "initialize":
         result = {
             "protocolVersion": params["protocolVersion"],
@@ -92,16 +157,26 @@ for line in sys.stdin:
             "agentInfo": {"name": "project-fixture", "version": "1"},
         }
     elif method == "session/new":
-        result = {"sessionId": uuid.uuid4().hex}
-        sessions[result["sessionId"]] = {"cwd": params["cwd"]}
+        result = {"sessionId": uuid.uuid4().hex,
+                  "modes": {"currentModeId": "default",
+                            "availableModes": MODES}}
+        sessions[result["sessionId"]] = {"cwd": params["cwd"],
+                                         "mode": "default"}
+    elif method == "session/set_mode":
+        if REFUSE_SET_MODE:
+            emit({"id": message["id"],
+                  "error": {"code": -32602, "message": "Mode refused"}})
+            continue
+        sessions[params["sessionId"]]["mode"] = params["modeId"]
     elif method == "session/prompt":
         text = "\n".join(item.get("text", "") for item in params["prompt"])
-        reply = handle_prompt(text, sessions[params["sessionId"]])
-        emit({"method": "session/update", "params": {
-            "sessionId": params["sessionId"],
-            "update": {"sessionUpdate": "agent_message_chunk",
-                       "content": {"type": "text", "text": reply}},
-        }})
+        state = sessions[params["sessionId"]]
+        reply = handle_pstack_prompt(message, text, state)
+        if reply is False:
+            continue
+        if reply is None:
+            reply = handle_prompt(text, state)
+        chunk(params["sessionId"], reply)
         result = {"stopReason": "end_turn"}
     elif method == "session/cancel":
         continue
