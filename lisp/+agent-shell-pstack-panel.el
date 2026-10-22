@@ -302,14 +302,15 @@ started.  To retry, end a message with a corrected pstack-panel block."
              (+agent-shell-drive-send (+agent-shell-pstack-panel-lead panel)
                                       (+agent-shell-pstack-panel-followup
                                        panel)))
-    (setf (+agent-shell-pstack-panel-delivered panel) t)))
+    (setf (+agent-shell-pstack-panel-delivered panel) t)
+    (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--deliver-to (lead)
   "Deliver the oldest pending follow-up for LEAD."
   (seq-find #'+agent-shell-pstack-panel--deliver
             (seq-filter (lambda (panel)
                           (eq lead (+agent-shell-pstack-panel-lead panel)))
-                        (+agent-shell-pstack-panels))))
+                        (+agent-shell-pstack-panel-list))))
 
 (defun +agent-shell-pstack-panel--finish (panel)
   "Compose PANEL's follow-up once every member has settled, then deliver it."
@@ -385,7 +386,8 @@ Prefer a rejected plan when it is longer than the final text."
        (+agent-shell-pstack-panel--settle
         panel member 'error nil
         (or (plist-get event :reason)
-            "The member's shell ended before it reported."))))))
+            "The member's shell ended before it reported."))))
+    (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--expire (id)
   "Settle every unfinished member of panel ID as timed out."
@@ -397,7 +399,8 @@ Prefer a rejected plan when it is longer than the final text."
        (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
          (+agent-shell-drive-partial-text shell))
        (format "No report within the %d-second timeout."
-               (+agent-shell-pstack-panel-timeout panel))))))
+               (+agent-shell-pstack-panel-timeout panel))))
+    (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)
   "Start MEMBER of PANEL in a read-only shell."
@@ -436,15 +439,17 @@ Prefer a rejected plan when it is longer than the final text."
                            #'+agent-shell-pstack-panel--expire id))
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (+agent-shell-pstack-panel--start-member panel member)))
-      (+agent-shell-pstack-panel--finish panel))))
+      (+agent-shell-pstack-panel--finish panel)
+      (+agent-shell-pstack-panels--refresh))))
 
 (defun +agent-shell-pstack-panel--abandon (lead)
   "Stop the unfinished panels of LEAD, whose shell has ended."
-  (dolist (panel (+agent-shell-pstack-panels))
+  (dolist (panel (+agent-shell-pstack-panel-list))
     (when (eq lead (+agent-shell-pstack-panel-lead panel))
       (dolist (member (+agent-shell-pstack-panel-members panel))
         (+agent-shell-pstack-panel--settle panel member 'error nil
-                                           "The lead's shell ended.")))))
+                                           "The lead's shell ended."))))
+  (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--lead-event (event)
   "Read panel requests from a lead's EVENT and deliver its follow-ups."
@@ -457,10 +462,104 @@ Prefer a rejected plan when it is longer than the final text."
       ('prompt-ready (+agent-shell-pstack-panel--deliver-to lead))
       ('clean-up (+agent-shell-pstack-panel--abandon lead)))))
 
-(defun +agent-shell-pstack-panels ()
+(defun +agent-shell-pstack-panel-list ()
   "Return every panel, oldest first."
   (sort (hash-table-values +agent-shell-pstack-panel--panels)
         :key #'+agent-shell-pstack-panel-created))
+
+;;;; View
+
+(defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
+  "Name of the panels buffer.")
+
+(defvar-keymap +agent-shell-pstack-panels-mode-map
+  :doc "Keymap for `+agent-shell-pstack-panels-mode'."
+  "RET" #'+agent-shell-pstack-panels-visit)
+
+(define-derived-mode +agent-shell-pstack-panels-mode special-mode
+  "pstack panels"
+  "List pstack panels, their members and reports.
+\\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line."
+  (setq-local revert-buffer-function
+              (lambda (&rest _) (+agent-shell-pstack-panels--render))
+              truncate-lines t))
+
+(defun +agent-shell-pstack-panels--status (panel)
+  "Return a word describing PANEL's progress."
+  (cond ((+agent-shell-pstack-panel-rejection panel) "rejected")
+        ((+agent-shell-pstack-panel-delivered panel) "delivered")
+        ((+agent-shell-pstack-panel-followup panel) "waiting for the lead")
+        (t "running")))
+
+(defun +agent-shell-pstack-panels--line (target &rest parts)
+  "Insert PARTS as one line that visits TARGET."
+  (insert (propertize (concat (apply #'concat parts) "\n")
+                      '+agent-shell-pstack-panels-target target)))
+
+(defun +agent-shell-pstack-panels--name (buffer)
+  "Return BUFFER's name, or a note that it has ended."
+  (if (buffer-live-p buffer) (buffer-name buffer) "ended"))
+
+(defun +agent-shell-pstack-panels--render ()
+  "Redraw the current panels buffer, keeping point's line."
+  (let ((inhibit-read-only t)
+        (line (line-number-at-pos))
+        (panels (+agent-shell-pstack-panel-list)))
+    (erase-buffer)
+    (unless panels
+      (insert "No panels yet.  A pstack lead requests one by ending its \
+message with a pstack-panel block.\n"))
+    (dolist (panel panels)
+      (let ((lead (+agent-shell-pstack-panel-lead panel)))
+        (+agent-shell-pstack-panels--line
+         lead
+         (propertize (+agent-shell-pstack-panel-id panel) 'face 'bold)
+         (format "  %s  %s"
+                 (or (+agent-shell-pstack-panel-shape panel) "-")
+                 (+agent-shell-pstack-panels--status panel)))
+        (+agent-shell-pstack-panels--line
+         lead "  Lead: " (+agent-shell-pstack-panels--name lead))
+        (when-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
+          (+agent-shell-pstack-panels--line lead "  " rejection))
+        (dolist (member (+agent-shell-pstack-panel-members panel))
+          (let ((report (+agent-shell-pstack-panel-member-report member))
+                (shell (+agent-shell-pstack-panel-member-shell member)))
+            (+agent-shell-pstack-panels--line
+             (or report shell)
+             (format "  %-16s %-12s %-9s "
+                     (+agent-shell-pstack-panel-member-role member)
+                     (+agent-shell-pstack-panel-member-agent member)
+                     (+agent-shell-pstack-panel-member-state member))
+             (cond (report (abbreviate-file-name report))
+                   ((+agent-shell-pstack-panel-member-error member))
+                   (t (+agent-shell-pstack-panels--name shell))))))
+        (insert "\n")))
+    (goto-char (point-min))
+    (forward-line (1- line))))
+
+(defun +agent-shell-pstack-panels--refresh ()
+  "Redraw the panels buffer if it exists."
+  (when-let* ((buffer (get-buffer +agent-shell-pstack-panels--buffer)))
+    (with-current-buffer buffer (+agent-shell-pstack-panels--render))))
+
+;;;###autoload
+(defun +agent-shell-pstack-panels ()
+  "Show pstack panels, their members and reports."
+  (interactive)
+  (let ((buffer (get-buffer-create +agent-shell-pstack-panels--buffer)))
+    (with-current-buffer buffer
+      (unless (derived-mode-p '+agent-shell-pstack-panels-mode)
+        (+agent-shell-pstack-panels-mode))
+      (+agent-shell-pstack-panels--render))
+    (pop-to-buffer buffer)))
+
+(defun +agent-shell-pstack-panels-visit ()
+  "Visit the report, member shell or lead shell on the current line."
+  (interactive)
+  (pcase (get-text-property (point) '+agent-shell-pstack-panels-target)
+    ((and (pred stringp) file) (find-file-other-window file))
+    ((and (pred buffer-live-p) buffer) (pop-to-buffer buffer))
+    (_ (user-error "Nothing to visit on this line"))))
 
 ;;;; Mode
 

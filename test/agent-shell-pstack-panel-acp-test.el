@@ -80,7 +80,7 @@ Agents `fixture-codex' and `fixture-claude' have read-only modes;
            (with-current-buffer lead (+agent-shell-pstack-mode 1))
            ,@body)
        (+agent-shell-pstack-panel-mode -1)
-       (dolist (panel (+agent-shell-pstack-panels))
+       (dolist (panel (+agent-shell-pstack-panel-list))
          (when-let* ((timer (+agent-shell-pstack-panel-timer panel)))
            (cancel-timer timer))
          (dolist (member (+agent-shell-pstack-panel-members panel))
@@ -97,10 +97,10 @@ Assert that no member shell was shown on the way."
     (should (+agent-shell-drive-send lead (concat "PSTACK-LEAD " json)))
     (+agent-shell-pstack-panel-acp-test--wait-for
      (lambda () (seq-some #'+agent-shell-pstack-panel-delivered
-                          (+agent-shell-pstack-panels))))
+                          (+agent-shell-pstack-panel-list))))
     (should (eq shown (window-buffer (selected-window))))
     (should (= 1 (length (window-list)))))
-  (car (+agent-shell-pstack-panels)))
+  (car (+agent-shell-pstack-panel-list)))
 
 (defun +agent-shell-pstack-panel-acp-test--report (member)
   "Return the contents of MEMBER's report file."

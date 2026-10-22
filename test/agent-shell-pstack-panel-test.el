@@ -63,7 +63,7 @@ functions `lead-event' and `member-event'."
                              (append event (list :shell lead))))
                   (member-event (role &rest event)
                     (let ((id (+agent-shell-pstack-panel-id
-                               (car (last (+agent-shell-pstack-panels))))))
+                               (car (last (+agent-shell-pstack-panel-list))))))
                       (funcall (gethash (cons 'pstack-panel (cons id role))
                                         handlers)
                                event))))
@@ -74,7 +74,7 @@ functions `lead-event' and `member-event'."
                (+agent-shell-pstack-panel-mode 1)
                ,@body)
            (+agent-shell-pstack-panel-mode -1)
-           (dolist (panel (+agent-shell-pstack-panels))
+           (dolist (panel (+agent-shell-pstack-panel-list))
              (when-let* ((timer (+agent-shell-pstack-panel-timer panel)))
                (cancel-timer timer)))
            (accept-process-output nil 0.01)
@@ -317,7 +317,7 @@ high signal." followup))))))
       (lead-event :kind 'turn-complete :session "s1" :text text)
       (lead-event :kind 'turn-complete :session "s1" :text text)
       (should (= 2 (length started)))
-      (should (= 1 (length (+agent-shell-pstack-panels)))))))
+      (should (= 1 (length (+agent-shell-pstack-panel-list)))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-plan-fallback ()
   "Use a rejected plan as the report when it says more than the text."
@@ -353,7 +353,7 @@ high signal." followup))))))
              (lambda (member)
                (eq 'error (+agent-shell-pstack-panel-member-state member)))
              (+agent-shell-pstack-panel-members
-              (car (+agent-shell-pstack-panels)))))))
+              (car (+agent-shell-pstack-panel-list)))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-protocol ()
   "Explain the protocol on the priming prompt only, naming usable agents."
@@ -393,6 +393,64 @@ high signal." followup))))))
         (should (= 1 (length (funcall texts (+agent-shell-pstack--decorate
                                              lead (funcall request "go"))))))
         (should-not (gethash (cons 'pstack-lead lead) handlers))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-view ()
+  "List panels with member states, refresh on change, and visit targets."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (+agent-shell-pstack-panels)
+      (let ((view (current-buffer)))
+        (should (equal +agent-shell-pstack-panels--buffer (buffer-name view)))
+        (should buffer-read-only)
+        (should (string-prefix-p "No panels yet." (buffer-string)))
+        (lead-event :kind 'turn-complete :session "s2"
+                    :text (+agent-shell-pstack-panel-test--message "{}"))
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--how))
+        (let* ((id (+agent-shell-pstack-panel-test--id
+                    +agent-shell-pstack-panel-test--how))
+               (codex (nth 1 (nth 0 started)))
+               (claude (nth 1 (nth 1 started)))
+               (rejected (+agent-shell-pstack-panel-id
+                          (car (+agent-shell-pstack-panel-list)))))
+          (should (equal (format "%s  -  rejected
+  Lead:  *lead*
+  The block must hold a JSON object
+
+%s  how  running
+  Lead:  *lead*
+  data-flow        codex        starting  %s
+  risks            claude-code  starting  %s
+
+" rejected id (buffer-name codex) (buffer-name claude))
+                         (with-current-buffer view (buffer-string))))
+          (member-event "data-flow" :kind 'init-finished)
+          (member-event "data-flow" :kind 'turn-complete :text "Report A")
+          (let ((report (expand-file-name (format "%s/data-flow.md" id)
+                                          directory)))
+            (with-current-buffer view
+              (goto-char (point-min))
+              (should (search-forward
+                       (format "data-flow        codex        done      %s"
+                               (abbreviate-file-name report))))
+              (should (search-forward "risks            claude-code  starting"))
+              (goto-char (point-min))
+              (search-forward "data-flow")
+              (+agent-shell-pstack-panels-visit)
+              (should (equal report buffer-file-name))
+              (kill-buffer))
+            (with-current-buffer view
+              (goto-char (point-min))
+              (search-forward "risks")
+              (+agent-shell-pstack-panels-visit)
+              (should (eq claude (current-buffer))))
+            (with-current-buffer view
+              (goto-char (point-min))
+              (search-forward "Lead:")
+              (+agent-shell-pstack-panels-visit)
+              (should (eq lead (current-buffer))))))
+        (kill-buffer view)))))
 
 (provide 'agent-shell-pstack-panel-test)
 ;;; agent-shell-pstack-panel-test.el ends here

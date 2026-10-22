@@ -272,6 +272,14 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :ensure nil
   :after +agent-shell-pstack
   :demand t
+  :general
+  (:keymaps 'agent-shell-mode-map
+   "C-c P" '(+agent-shell-pstack-panels :wk "pstack panels"))
+  (:states '(normal motion) :keymaps '+agent-shell-pstack-panels-mode-map
+   "RET" #'+agent-shell-pstack-panels-visit
+   "<return>" #'+agent-shell-pstack-panels-visit
+   "gr" #'revert-buffer
+   "q" #'quit-window)
   :config
   (+agent-shell-pstack-panel-mode 1))
 
