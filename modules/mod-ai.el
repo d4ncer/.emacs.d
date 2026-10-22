@@ -134,7 +134,10 @@ BODY is executed to prepare the response buffer."
   :ensure t
   :custom
   (agent-shell-openai-default-model-id "gpt-6.1-sol")
-  (agent-shell-preferred-agent-config (agent-shell-openai-make-codex-config))
+  (agent-shell-agent-configs
+   (list #'agent-shell-openai-make-codex-config
+         #'agent-shell-anthropic-make-claude-code-config))
+  (agent-shell-preferred-agent-config '(preselect . codex))
   :init
   (defun +agent-shell-project (&optional arg)
     "Open the current project's agent shell without toggling it.
