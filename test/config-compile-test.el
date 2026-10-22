@@ -17,6 +17,8 @@
                        "lisp/+edit-cmds.el" "lisp/+profile.el"
                        "lisp/+modeline-data.el" "lisp/+grep-edit.el"
                        "lisp/+agent-shell-drive.el"
+                       "lisp/+agent-shell-pstack.el"
+                       "lisp/+agent-shell-pstack-panel.el"
                        "lisp/compat/+expert-compat.el"
                        "lisp/compat/+eglot-tempel-compat.el"))
         (unless (byte-compile-file (expand-file-name file +config-test-root))

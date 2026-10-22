@@ -268,6 +268,13 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-pstack-guard-mode 1))
 
+(use-package +agent-shell-pstack-panel
+  :ensure nil
+  :after +agent-shell-pstack
+  :demand t
+  :config
+  (+agent-shell-pstack-panel-mode 1))
+
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell
