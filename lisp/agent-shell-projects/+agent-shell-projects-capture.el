@@ -17,6 +17,7 @@ Return the last completed version, or nil while the first capture is pending."
 
 (defun +agent-shell-projects-enrol-code (project root &optional base name)
   "Register ROOT in PROJECT and schedule its first capture against BASE."
+  (+agent-shell-projects-assert-active project)
   (let* ((root (or (locate-dominating-file root ".git")
                    (user-error "Not a Git workspace: %s" root)))
          (artefact (list :id (+agent-shell-projects--id)

@@ -19,6 +19,7 @@
 (declare-function +agent-shell-projects-shell "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-explore "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-mode "+agent-shell-projects-agent")
+(autoload '+agent-shell-projects-restore-project "+agent-shell-projects-manage")
 (autoload '+agent-shell-projects-code-edit "+agent-shell-projects-code")
 (autoload '+agent-shell-projects-capture-current "+agent-shell-projects-code")
 (autoload '+agent-shell-projects-add-code "+agent-shell-projects-code")
@@ -83,14 +84,20 @@
                             (cons (format "%s [%s]" (plist-get p :name)
                                           (substring (plist-get p :id) 0 6)) p))
                           projects))
+         (restore "[Restore archived project]")
+         (choices (if (seq-some (lambda (p) (plist-get p :archived))
+                                (+agent-shell-projects-list t))
+                      (append choices (list (cons restore :restore))) choices))
          (choice (completing-read "Project (new name to create): " choices)))
-    (or (cdr (assoc choice choices))
+    (if (equal choice restore)
+        (+agent-shell-projects-restore-project t)
+      (or (cdr (assoc choice choices))
         (let* ((workspace (+agent-shell-projects--read-workspace default-directory))
                (project (+agent-shell-projects-create choice (plist-get workspace :root))))
           (+agent-shell-projects--set project :workspace-created (plist-get workspace :new))
           (+agent-shell-projects-save project)
           (when on-create (funcall on-create project))
-          project))))
+          project)))))
 
 (defun +agent-shell-projects--button (text target action)
   "Insert TEXT with TARGET and button ACTION."
@@ -113,11 +120,13 @@
          (position (point)))
     (erase-buffer)
     (magit-insert-section (project-home)
-      (magit-insert-heading (plist-get project :name))
+      (magit-insert-heading (concat (plist-get project :name)
+                                    (when (plist-get project :archived) " [archived]")))
       (insert "\n")
       (dolist (agent (plist-get project :agents))
         (unless (equal (plist-get agent :role) "side")
-        (let ((buffer (+agent-shell-projects-shell agent)))
+        (let ((buffer (+agent-shell-projects-shell agent))
+              (start (point)))
           (+agent-shell-projects--button
            (or (and buffer (buffer-name buffer))
                (plist-get agent :buffer) "Disconnected agent")
@@ -126,6 +135,8 @@
                               ((buffer-live-p buf)))
                         (pop-to-buffer buf)
                       (user-error "Choose an author to reconnect"))))
+          (add-text-properties start (point)
+                               (list 'project-agent-id (plist-get agent :id)))
           (insert (format " · %s\n"
                           (if (and buffer (fboundp 'agent-shell-status))
                               (condition-case nil
@@ -333,6 +344,7 @@
          (saved (+agent-shell-projects-content
                  (+agent-shell-projects-version
                   artefact +agent-shell-projects--version-id))))
+    (+agent-shell-projects-assert-active project artefact)
     (if (equal (plist-get artefact :kind) "code")
         (+agent-shell-projects-code-edit)
     (pcase-let ((`(,buffer ,start ,end) (+agent-shell-projects-source artefact)))
@@ -396,7 +408,9 @@
                    (buffer-live-p +agent-shell-projects--view-buffer))
               (+agent-shell-projects-sidebar +agent-shell-projects--view-buffer t))
              ((and (plist-get update :decorate)
-                   +agent-shell-projects-artefact-mode +agent-shell-projects--version-id)
+                   +agent-shell-projects-artefact-mode +agent-shell-projects--version-id
+                   (not (plist-get project :archived))
+                   (not (plist-get (+agent-shell-projects--artefact) :unenrolled)))
               (run-hook-with-args '+agent-shell-projects-view-functions project
                                   (+agent-shell-projects--artefact)
                                   (+agent-shell-projects-version

@@ -115,14 +115,21 @@ ARTEFACT can be nil for a project-wide change.")
         (puthash id project +agent-shell-projects--projects)
         project)))
 
-(defun +agent-shell-projects-list ()
-  "Return all persisted projects."
+(defun +agent-shell-projects-list (&optional include-archived)
+  "Return persisted projects, including archived ones with INCLUDE-ARCHIVED."
   (let ((directory (expand-file-name "projects/"
                                      +agent-shell-projects-directory)))
     (when (file-directory-p directory)
-      (mapcar (lambda (file)
-                (+agent-shell-projects-load (file-name-base file)))
-              (directory-files directory t "\\.json\\'")))))
+      (seq-filter
+       (lambda (project) (or include-archived (not (plist-get project :archived))))
+       (mapcar (lambda (file)
+                 (+agent-shell-projects-load (file-name-base file)))
+               (directory-files directory t "\\.json\\'"))))))
+
+(defun +agent-shell-projects-assert-active (project &optional artefact)
+  "Require an active PROJECT and, when supplied, enrolled ARTEFACT."
+  (when (plist-get project :archived) (user-error "Restore this archived project first"))
+  (when (plist-get artefact :unenrolled) (user-error "This artefact is no longer enrolled")))
 
 (defun +agent-shell-projects-create (name &optional root)
   "Create a project called NAME, optionally rooted at ROOT."
@@ -138,7 +145,8 @@ ARTEFACT can be nil for a project-wide change.")
 (defun +agent-shell-projects-artefact (project id)
   "Return PROJECT's artefact ID or signal an error."
   (or (seq-find (lambda (item) (equal (plist-get item :id) id))
-                (plist-get project :artefacts))
+                (append (plist-get project :artefacts)
+                        (plist-get project :unenrolled-artefacts)))
       (error "Unknown artefact %s" id)))
 
 (defun +agent-shell-projects-version (artefact id)
@@ -185,6 +193,7 @@ ARTEFACT can be nil for a project-wide change.")
 
 (defun +agent-shell-projects-snapshot-blob (project artefact blob &optional actor)
   "Adopt immutable BLOB as ARTEFACT's current version in PROJECT."
+  (+agent-shell-projects-assert-active project artefact)
   (unless (file-exists-p (+agent-shell-projects--blob-file blob))
     (error "Missing snapshot blob"))
   (let* ((current (and (plist-get artefact :current)
@@ -275,37 +284,42 @@ ARTEFACT can be nil for a project-wide change.")
 
 (defun +agent-shell-projects-capture (project artefact &optional actor)
   "Capture ARTEFACT's live source in PROJECT, attributed to ACTOR."
-  (if (equal (plist-get artefact :kind) "code")
-      (funcall +agent-shell-projects-code-capture-function project artefact actor)
-    (let ((previous-conflict (plist-get artefact :disk-copy))
-          (previous-missing (plist-get artefact :missing))
-          (source (condition-case nil (+agent-shell-projects-source artefact)
-                    (+agent-shell-projects-source-missing nil))))
-      (if (not source)
-          (progn
-            (+agent-shell-projects--set artefact :missing t)
-            (unless previous-missing
-              (+agent-shell-projects--changed project artefact actor))
-            (if (plist-get artefact :current)
-                (+agent-shell-projects-version artefact (plist-get artefact :current))
-              (signal '+agent-shell-projects-source-missing
-                      (list (plist-get artefact :org-id)))))
-      (pcase-let ((`(,buffer ,start ,end) source))
-        (let* ((missing (and (not (file-exists-p (plist-get artefact :path)))
-                             (not (buffer-modified-p buffer))))
-               (_ (+agent-shell-projects--set artefact :missing missing))
-               (version (+agent-shell-projects-snapshot
-                         project artefact
-                         (if missing "" (with-current-buffer buffer
-                                          (buffer-substring-no-properties start end))) actor)))
-          (when (or (not (equal previous-conflict (plist-get artefact :disk-copy)))
-                    (not (eq previous-missing missing)))
-            (+agent-shell-projects--changed project artefact actor))
-          version))))))
+  (if (or (plist-get project :archived) (plist-get artefact :unenrolled))
+      (when (plist-get artefact :current)
+        (+agent-shell-projects-version artefact (plist-get artefact :current)))
+    (if (equal (plist-get artefact :kind) "code")
+	(funcall +agent-shell-projects-code-capture-function project artefact actor)
+      (let ((previous-conflict (plist-get artefact :disk-copy))
+            (previous-missing (plist-get artefact :missing))
+            (source (condition-case nil (+agent-shell-projects-source artefact)
+                      (+agent-shell-projects-source-missing nil))))
+	(if (not source)
+            (progn
+              (+agent-shell-projects--set artefact :missing t)
+              (unless previous-missing
+		(+agent-shell-projects--changed project artefact actor))
+              (if (plist-get artefact :current)
+                  (+agent-shell-projects-version artefact (plist-get artefact :current))
+		(signal '+agent-shell-projects-source-missing
+			(list (plist-get artefact :org-id)))))
+	  (pcase-let ((`(,buffer ,start ,end) source))
+            (let* ((missing (and (not (file-exists-p (plist-get artefact :path)))
+				 (not (buffer-modified-p buffer))))
+		   (_ (+agent-shell-projects--set artefact :missing missing))
+		   (version (+agent-shell-projects-snapshot
+                             project artefact
+                             (if missing "" (with-current-buffer buffer
+                                              (buffer-substring-no-properties start end))) actor)))
+              (when (or (not (equal previous-conflict (plist-get artefact :disk-copy)))
+			(not (eq previous-missing missing)))
+		(+agent-shell-projects--changed project artefact actor))
+              version)))))))
 
 (defun +agent-shell-projects--source-saved ()
   "Capture enrolled artefacts after this source buffer is saved."
-  (when +agent-shell-projects--source-project
+  (when (and +agent-shell-projects--source-project
+             (not (plist-get (+agent-shell-projects-load
+                             +agent-shell-projects--source-project) :archived)))
     (let ((project (+agent-shell-projects-load
                     +agent-shell-projects--source-project)))
       (dolist (id +agent-shell-projects--source-artefacts)
@@ -330,6 +344,7 @@ ARTEFACT can be nil for a project-wide change.")
 
 (defun +agent-shell-projects-enrol (project file &optional name subtree)
   "Enrol FILE in PROJECT under NAME, or its current SUBTREE heading."
+  (+agent-shell-projects-assert-active project)
   (let* ((file (expand-file-name file))
          (buffer (find-file-noselect file))
          (kind (if subtree "org-heading"

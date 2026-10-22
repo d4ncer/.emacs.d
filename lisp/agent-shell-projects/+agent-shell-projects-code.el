@@ -276,7 +276,8 @@
      (t (setq entry (list :waiters (list ready)))
         (puthash key entry +agent-shell-projects--diff-cache)
         (+agent-shell-projects-start-worker
-         (list :kind "diff" :left left :right right :path path)
+         (list :kind "diff" :left left :right right :path path
+               :project +agent-shell-projects--project-id :artefact (plist-get artefact :id))
          (lambda (result)
            (if (eq (plist-get result :ok) t)
                (+agent-shell-projects--set entry :result result)
@@ -451,6 +452,7 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
          (offset (get-text-property (point) 'project-diff-offset))
          (project (+agent-shell-projects--project))
          (artefact (+agent-shell-projects--artefact)))
+    (+agent-shell-projects-assert-active project artefact)
     (unless path (user-error "Move to a source line in the diff"))
     (let* ((file (expand-file-name path (plist-get artefact :path)))
            (saved (+agent-shell-projects--diff-text-at (point))))
@@ -471,7 +473,8 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
 
 (defun +agent-shell-projects--code-source-saved ()
   "Schedule capture after a source save without delaying normal editing."
-  (when (and +agent-shell-projects--project-id +agent-shell-projects--artefact-id)
+  (when (and +agent-shell-projects--project-id +agent-shell-projects--artefact-id
+             (not (plist-get (+agent-shell-projects--project) :archived)))
     (let ((buffer (current-buffer))
           (project (+agent-shell-projects--project))
           (artefact (+agent-shell-projects--artefact)))

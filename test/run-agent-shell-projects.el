@@ -17,6 +17,7 @@
   (load (expand-file-name "test/agent-shell-projects-async-test.el" root) nil t)
   (load (expand-file-name "test/agent-shell-projects-workflow-test.el" root) nil t)
   (load (expand-file-name "test/agent-shell-projects-onboarding-test.el" root) nil t)
+  (load (expand-file-name "test/agent-shell-projects-manage-test.el" root) nil t)
   (let* ((temporary (make-temp-file "projects-bytecode-" t))
          (byte-compile-error-on-warn t)
          (byte-compile-dest-file-function

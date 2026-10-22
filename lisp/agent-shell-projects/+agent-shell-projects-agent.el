@@ -91,6 +91,7 @@
 
 (defun +agent-shell-projects-associate (project shell &optional role)
   "Associate SHELL with PROJECT as ROLE, defaulting to author."
+  (+agent-shell-projects-assert-active project)
   (require 'agent-shell)
   (unless (and (buffer-live-p shell)
                (with-current-buffer shell (derived-mode-p 'agent-shell-mode)))
@@ -152,30 +153,32 @@
   (let ((kind (map-elt event :event)))
     (unless (memq kind '(agent-message-chunk tool-call-update))
       (let* ((project (+agent-shell-projects-load project-id))
-             (agent (+agent-shell-projects-agent project agent-id)))
-        (when (eq kind 'clean-up) (+agent-shell-projects--detach agent-id))
-        (when (memq kind '(init-finished turn-complete session-restored))
-          (when-let* ((shell (+agent-shell-projects-shell agent)))
-            (let ((session (agent-shell-session-id :shell-buffer shell)))
-              (unless (equal session (plist-get agent :session))
-                (+agent-shell-projects--set agent :session session)
-                (+agent-shell-projects-save project))))
-          (when (equal (plist-get agent :role) "author")
-            (unless (gethash project-id +agent-shell-projects--event-timers)
-              (puthash project-id
-                       (+agent-shell-projects-run-at-time
-                        0.3 nil
-                        (lambda ()
-                          (remhash project-id +agent-shell-projects--event-timers)
-                          (dolist (artefact (plist-get project :artefacts))
-                            (condition-case err
-                                (+agent-shell-projects-capture project artefact agent-id)
-                              (error (+agent-shell-projects--set artefact :capture-error
-                                                                 (error-message-string err)))))))
-                       +agent-shell-projects--event-timers))))
-        (+agent-shell-projects--refresh-ui project nil t)
-        (when (memq kind '(turn-complete prompt-ready init-finished))
-          (+agent-shell-projects-run-at-time 0 nil #'+agent-shell-projects-flush project))))))
+             (agent (seq-find (lambda (a) (equal (plist-get a :id) agent-id))
+                              (plist-get project :agents))))
+        (when (and agent (not (plist-get project :archived)))
+          (when (eq kind 'clean-up) (+agent-shell-projects--detach agent-id))
+          (when (memq kind '(init-finished turn-complete session-restored))
+            (when-let* ((shell (+agent-shell-projects-shell agent)))
+              (let ((session (agent-shell-session-id :shell-buffer shell)))
+		(unless (equal session (plist-get agent :session))
+                  (+agent-shell-projects--set agent :session session)
+                  (+agent-shell-projects-save project))))
+            (when (equal (plist-get agent :role) "author")
+              (unless (gethash project-id +agent-shell-projects--event-timers)
+		(puthash project-id
+			 (+agent-shell-projects-run-at-time
+                          0.3 nil
+                          (lambda ()
+                            (remhash project-id +agent-shell-projects--event-timers)
+                            (dolist (artefact (plist-get project :artefacts))
+                              (condition-case err
+                                  (+agent-shell-projects-capture project artefact agent-id)
+				(error (+agent-shell-projects--set artefact :capture-error
+                                                                   (error-message-string err)))))))
+			 +agent-shell-projects--event-timers))))
+          (+agent-shell-projects--refresh-ui project nil t)
+          (when (memq kind '(turn-complete prompt-ready init-finished))
+            (+agent-shell-projects-run-at-time 0 nil #'+agent-shell-projects-flush project)))))))
 
 (defun +agent-shell-projects--select-config ()
   "Resolve the configurable default agent, or prompt when requested."
@@ -248,6 +251,7 @@
 
 (defun +agent-shell-projects--author (project)
   "Return PROJECT's connected author, starting one when none is associated."
+  (+agent-shell-projects-assert-active project)
   (unless (plist-get project :author)
     (+agent-shell-projects-start-agent project))
   (let* ((agent (+agent-shell-projects-agent project (plist-get project :author)))
@@ -330,7 +334,13 @@
                                       (+agent-shell-projects-content version)))))
                  versions)
                 :annotations (plist-get request :feedback)
-                :project-discussion (plist-get project :annotations))))
+                :project-discussion
+                (seq-filter (lambda (annotation)
+                              (seq-find (lambda (a)
+                                          (equal (plist-get a :id)
+                                                 (plist-get annotation :artefact)))
+                                        (plist-get project :artefacts)))
+                            (plist-get project :annotations)))))
     (concat
      "You are working in an Emacs agent-shell project.\n"
      (pcase (plist-get request :kind)
@@ -397,6 +407,8 @@
 
 (defun +agent-shell-projects-request (project kind agent &rest properties)
   "Create a KIND request to AGENT in PROJECT with PROPERTIES."
+  (+agent-shell-projects-assert-active project)
+  (+agent-shell-projects-agent project (plist-get agent :id))
   (let ((request (append (list :id (+agent-shell-projects--id) :kind kind
                                :agent (plist-get agent :id) :status "queued"
                                :time (float-time)) properties)))
@@ -441,6 +453,9 @@
     (dolist (buffer (buffer-list))
       (with-current-buffer buffer
         (when (and +agent-shell-projects--version-id
+                   (seq-find (lambda (a) (equal (plist-get a :id)
+                                                +agent-shell-projects--artefact-id))
+                             (plist-get project :artefacts))
                    (not (derived-mode-p '+agent-shell-projects-sidebar-mode))
                    (equal +agent-shell-projects--project-id (plist-get project :id))
                    (not (assoc +agent-shell-projects--artefact-id observations)))
@@ -474,18 +489,21 @@
   "Collect unsubmitted user comments and replies in PROJECT."
   (let (items)
     (dolist (annotation (plist-get project :annotations))
-      (when (and (equal (plist-get annotation :author) "user")
-                 (not (plist-get annotation :submitted))
-                 (not (plist-get annotation :queued)))
-        (push (list :id (plist-get annotation :id) :type "annotation"
-                    :annotation (copy-tree annotation)) items))
-      (dolist (reply (plist-get annotation :replies))
-        (when (and (equal (plist-get reply :author) "user")
-                   (not (plist-get reply :submitted))
-                   (not (plist-get reply :queued)))
-          (push (list :id (plist-get reply :id) :type "reply"
-                      :annotation (plist-get annotation :id)
-                      :reply (copy-tree reply)) items))))
+      (when (seq-find (lambda (a) (equal (plist-get a :id)
+                                         (plist-get annotation :artefact)))
+                      (plist-get project :artefacts))
+	(when (and (equal (plist-get annotation :author) "user")
+                   (not (plist-get annotation :submitted))
+                   (not (plist-get annotation :queued)))
+          (push (list :id (plist-get annotation :id) :type "annotation"
+                      :annotation (copy-tree annotation)) items))
+	(dolist (reply (plist-get annotation :replies))
+          (when (and (equal (plist-get reply :author) "user")
+                     (not (plist-get reply :submitted))
+                     (not (plist-get reply :queued)))
+            (push (list :id (plist-get reply :id) :type "reply"
+			:annotation (plist-get annotation :id)
+			:reply (copy-tree reply)) items)))))
     (nreverse items)))
 
 (defun +agent-shell-projects-submit ()
@@ -548,7 +566,8 @@
 (defun +agent-shell-projects-flush (project)
   "Attempt queued deliveries in PROJECT without duplicating accepted requests."
   (dolist (request (plist-get project :requests))
-    (when (equal (plist-get request :status) "queued")
+    (when (and (not (plist-get project :archived))
+               (equal (plist-get request :status) "queued"))
       (let* ((agent (+agent-shell-projects-agent project (plist-get request :agent)))
              (shell (+agent-shell-projects-shell agent)))
         (when (and shell (eq (agent-shell-status :shell-buffer shell) 'ready)
@@ -571,6 +590,7 @@
                              (plist-get project :operations)))
          (op (plist-get operation :op))
          result)
+    (+agent-shell-projects-assert-active project)
     (unless (and (stringp id) (not (string-empty-p id)))
       (error "Missing operation id"))
     (when (member op '("resolve" "reopen"))
@@ -680,6 +700,14 @@
                         (error-message-string err)))))
     result))
 
+(defun +agent-shell-projects--cancel-request-record (project request)
+  "Cancel REQUEST in PROJECT and release queued feedback items."
+  (+agent-shell-projects--set request :status "cancelled")
+  (dolist (annotation (plist-get project :annotations))
+    (dolist (item (cons annotation (plist-get annotation :replies)))
+      (when (equal (plist-get item :queued) (plist-get request :id))
+        (+agent-shell-projects--set item :queued nil)))))
+
 (defun +agent-shell-projects-cancel-request ()
   "Cancel a queued delivery or pending generated result in this project."
   (interactive)
@@ -695,15 +723,8 @@
                                           (plist-get r :kind) (plist-get r :status)
                                           (substring (plist-get r :id) 0 6)) r)) items)))
     (unless choices (user-error "No pending requests"))
-    (let* ((request (cdr (assoc (completing-read "Cancel: " choices nil t) choices)))
-           (id (plist-get request :id)))
-      (+agent-shell-projects--set request :status "cancelled")
-      (dolist (annotation (plist-get project :annotations))
-        (when (equal (plist-get annotation :queued) id)
-          (+agent-shell-projects--set annotation :queued nil))
-        (dolist (reply (plist-get annotation :replies))
-          (when (equal (plist-get reply :queued) id)
-            (+agent-shell-projects--set reply :queued nil))))
+    (let ((request (cdr (assoc (completing-read "Cancel: " choices nil t) choices))))
+      (+agent-shell-projects--cancel-request-record project request)
       (+agent-shell-projects--changed project nil "user"))))
 
 (defun +agent-shell-projects-receive-file (file)
@@ -849,7 +870,12 @@
                       (+agent-shell-projects-load
                        (buffer-local-value '+agent-shell-projects--project-id shell))
                     (+agent-shell-projects--project)))
-         (questions (seq-filter (lambda (r) (equal (plist-get r :kind) "question"))
+         (questions (seq-filter (lambda (r)
+                                  (and (equal (plist-get r :kind) "question")
+                                       (not (equal (plist-get r :status) "cancelled"))
+                                       (seq-find (lambda (a) (equal (plist-get a :id)
+                                                                   (plist-get r :agent)))
+                                                 (plist-get project :agents))))
                                 (plist-get project :requests)))
          (question-id (or (and shell (buffer-local-value
                                       '+agent-shell-projects--side-question shell))

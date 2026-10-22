@@ -34,11 +34,14 @@
     (remhash process +agent-shell-projects--workers)
     (unwind-protect
         (let* ((file (plist-get job :file))
-               (result (if (file-exists-p (concat file ".result"))
+               (result (if (and (not (plist-get job :cancelled))
+                                (file-exists-p (concat file ".result")))
                            (+agent-shell-projects--read-json (concat file ".result"))
                          (list :ok :false :error
-                               (if (plist-get job :timed-out) "Worker timed out"
-                                 (format "Worker exited (%s)" (process-exit-status process)))))))
+                               (cond ((plist-get job :timed-out) "Worker timed out")
+                                     ((plist-get job :cancelled) "Cancelled")
+                                     (t (format "Worker exited (%s)"
+                                                (process-exit-status process))))))))
           (funcall (plist-get job :callback) result))
       (dolist (key '(:timeout :progress-timer))
         (when (timerp (plist-get job key)) (+agent-shell-projects-cancel-timer (plist-get job key))))
@@ -52,9 +55,12 @@
   "Cancel a queued or running worker HANDLE and its subprocess group."
   (let ((process (if (processp handle) handle (plist-get handle :process))))
     (if process
-        (when (process-live-p process)
-          (ignore-errors (interrupt-process process))
-          (delete-process process))
+        (progn
+          (when-let* ((job (gethash process +agent-shell-projects--workers)))
+            (+agent-shell-projects--set job :cancelled t))
+          (when (process-live-p process)
+            (ignore-errors (interrupt-process process))
+            (delete-process process)))
       (setq +agent-shell-projects--worker-queue
             (delq handle +agent-shell-projects--worker-queue))
       (when (file-exists-p (plist-get handle :file))
@@ -78,7 +84,9 @@
   "Run REQUEST outside the editor; deliver CALLBACK and optional PROGRESS."
   (let* ((file (make-temp-file "agent-project-job-"))
          (request (append request (list :store (expand-file-name +agent-shell-projects-directory))))
-         (job (list :file file :callback callback :progress progress :process nil)))
+         (job (list :file file :callback callback :progress progress :process nil
+                    :project (plist-get request :project)
+                    :artefact (plist-get request :artefact))))
     (+agent-shell-projects--atomic-write file (+agent-shell-projects--json request))
     (setq +agent-shell-projects--worker-queue
           (if (equal (plist-get request :kind) "capture")
@@ -139,6 +147,7 @@
 (defun +agent-shell-projects-schedule-capture (project artefact &optional actor callback)
   "Coalesce capture of PROJECT ARTEFACT, attributing edits to ACTOR.
 CALLBACK receives a version after a successful, current capture."
+  (+agent-shell-projects-assert-active project artefact)
   (let* ((root (file-name-as-directory (file-truename (plist-get artefact :path))))
          (state (or (gethash root +agent-shell-projects--jobs)
                     (puthash root (list :root root :pending nil :active nil :phase "Capture queued")
@@ -200,6 +209,7 @@ CALLBACK receives a version after a successful, current capture."
              (newer (seq-find (lambda (r) (equal (plist-get r :artefact) id)) (plist-get state :pending)))
              (entry (seq-find (lambda (r) (equal (plist-get r :artefact) id)) (plist-get result :result))))
         (cond
+         ((or (plist-get project :archived) (plist-get artefact :unenrolled)) nil)
          (newer (+agent-shell-projects--set
                  newer :callbacks (append (plist-get request :callbacks) (plist-get newer :callbacks))))
          ((and (eq (plist-get result :ok) t) entry)
@@ -221,6 +231,27 @@ CALLBACK receives a version after a successful, current capture."
                                                                #'+agent-shell-projects--start-capture state)))
       (remhash (plist-get state :root) +agent-shell-projects--jobs))
     (+agent-shell-projects--job-notify state)))
+
+(defun +agent-shell-projects-stop-project-workers (project &optional artefact-id)
+  "Cancel PROJECT's work, optionally only work for ARTEFACT-ID."
+  (let* ((id (plist-get project :id))
+         (matches (lambda (r)
+                    (and (equal (plist-get r :project) id)
+                         (or (not artefact-id)
+                             (equal (plist-get r :artefact) artefact-id))))))
+    (dolist (state (hash-table-values +agent-shell-projects--jobs))
+      (dolist (key '(:active :pending))
+        (+agent-shell-projects--set state key
+                                   (seq-remove matches (plist-get state key))))
+      (unless (or (plist-get state :active) (plist-get state :pending))
+        (remhash (plist-get state :root) +agent-shell-projects--jobs)
+        (when (timerp (plist-get state :timer))
+          (+agent-shell-projects-cancel-timer (plist-get state :timer))))
+      (when (and (not (plist-get state :active)) (plist-get state :process))
+        (+agent-shell-projects--stop-worker (plist-get state :process))))
+    (dolist (job (append (copy-sequence +agent-shell-projects--worker-queue)
+                         (hash-table-values +agent-shell-projects--workers)))
+      (when (funcall matches job) (+agent-shell-projects--stop-worker job)))))
 
 (defun +agent-shell-projects-cancel-capture (&optional root)
   "Cancel background capture for ROOT or the workspace at point."

@@ -32,6 +32,7 @@
          (summary (plist-get operation :summary))
          (walkthrough (plist-get operation :walkthrough))
          ids)
+    (+agent-shell-projects-assert-active project artefact)
     (when (+agent-shell-projects-explanation artefact version)
       (error "An explanation is already recorded for this version"))
     (unless (and (equal (plist-get request :kind) "explanation")
@@ -363,7 +364,7 @@ Use the selected workspace when ROOT is omitted.  Initialise Git when needed."
             (progn
               (message "Initialising Git in %s" workspace)
               (+agent-shell-projects-start-worker
-               (list :kind "init" :root workspace)
+               (list :kind "init" :root workspace :project (plist-get project :id))
                (lambda (result)
                  (if (eq (plist-get result :ok) t)
                      (condition-case err

@@ -32,6 +32,12 @@
 (autoload '+agent-shell-projects-set-proposal "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-cancel-capture "+agent-shell-projects-jobs")
 
+(autoload '+agent-shell-projects-unenrol-agent "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-unenrol-artefact "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-delete-artefact "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-archive-project "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-restore-project "+agent-shell-projects-manage")
+
 (transient-define-prefix +agent-shell-projects-menu ()
   "Actions for the current authoring project."
   [["Project"
@@ -41,14 +47,19 @@
     ("W" "Choose workspace" +agent-shell-projects-choose-workspace)
     ("e" "Explore intent" +agent-shell-projects-explore)
     ("R" "Rename project" +agent-shell-projects-rename)
-    ("g" "Refresh" +agent-shell-projects-refresh)]
+    ("g" "Refresh" +agent-shell-projects-refresh)
+    ("U" "Unenrol agent" +agent-shell-projects-unenrol-agent)
+    ("A" "Archive project" +agent-shell-projects-archive-project)
+    ("O" "Restore archived project" +agent-shell-projects-restore-project)]
    ["Artefacts"
     ("f" "Enrol document" +agent-shell-projects-enrol-file)
     ("w" "Enrol Git workspace" +agent-shell-projects-add-code)
     ("x" "Extract prose" +agent-shell-projects-extract)
     ("p" "Choose proposal" +agent-shell-projects-set-proposal)
     ("P" "Draft proposal" +agent-shell-projects-request-proposal)
-    ("i" "Start implementation" +agent-shell-projects-start-implementation)]
+    ("i" "Start implementation" +agent-shell-projects-start-implementation)
+    ("u" "Unenrol artefact" +agent-shell-projects-unenrol-artefact)
+    ("D" "Delete artefact source" +agent-shell-projects-delete-artefact)]
    ["Review"
     ("s" "Submit feedback" +agent-shell-projects-submit)
     ("m" "Mark reviewed" +agent-shell-projects-mark-reviewed)

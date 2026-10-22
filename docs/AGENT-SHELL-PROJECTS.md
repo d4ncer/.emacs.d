@@ -44,6 +44,41 @@ matching existing author with `a`, or select **New shell**. Existing sessions
 keep their original working directory; requests to a mismatched shell stay
 queued. Cancel and resubmit queued requests when replacing their author.
 
+## Unenrol, delete, and archive
+
+Press `?` on project home (or `C-c C-m` in an artefact or agent shell):
+
+| Key | Action | What is kept |
+| --- | --- | --- |
+| `U` | Unenrol an agent | Its shell and conversation stay open. |
+| `u` | Unenrol an artefact | Its source, saved versions, and comments remain. |
+| `D` | Delete artefact source and unenrol | Saved versions and comments remain. |
+| `A` | Archive this project | All sources, associations, and review history remain. |
+| `O` | Restore an archived project | Tracking resumes; cancelled requests stay cancelled. |
+
+Embark on a home agent link offers `u` to unenrol it. On an artefact link,
+Embark offers `u` to unenrol or `D` to delete its source. The transient lets you
+select an item, including disconnected or side agents.
+
+Deleting requires confirmation and saved source buffers. For an Org heading,
+it deletes only the enrolled subtree, including its children. For Markdown or
+whole Org files, it deletes the file, respecting `delete-by-moving-to-trash`.
+Git workspace artefacts support unenrolment; this action never deletes a repo.
+
+Unenrolling an agent cancels its pending project requests and clears the author
+selection if necessary. Unenrolling an artefact cancels the project's pending
+requests because their frozen context may refer to it. Neither action sends new
+feedback automatically; select an author and submit a fresh batch when ready.
+Already delivered feedback remains recorded as delivered. Retained history is
+available through existing review buffers and historical links; enrolling the
+same source again creates a fresh enrolment.
+
+Archive hides a project from the normal chooser, detaches agent subscriptions,
+and stops project captures and pending requests. It leaves running agent shells
+open: archiving does not stop work already running in those shells. Restore via
+`O`, `M-x +agent-shell-projects-restore-project`, or **[Restore archived project]**
+in the project chooser. An already open archived home shows `[archived]`.
+
 ## Open a project or import existing work
 
 1. Use `SPC aP` and select an existing project to open its home.

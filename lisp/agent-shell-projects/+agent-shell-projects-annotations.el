@@ -41,6 +41,7 @@
   "Annotate START through END in VERSION of ARTEFACT in PROJECT.
 Offsets are zero-based.  BODY is attributed to ACTOR, defaulting to the user.
 CONTEXT optionally identifies another text space, such as a diff side."
+  (+agent-shell-projects-assert-active project artefact)
   (let* ((text (or (plist-get context :text)
                    (+agent-shell-projects-content version)))
          (length (length text)))
@@ -67,6 +68,8 @@ CONTEXT optionally identifies another text space, such as a diff side."
 
 (defun +agent-shell-projects-reply (project annotation body &optional actor)
   "Append BODY by ACTOR to ANNOTATION in PROJECT."
+  (+agent-shell-projects-assert-active
+   project (+agent-shell-projects-artefact project (plist-get annotation :artefact)))
   (when (string-empty-p (string-trim body)) (error "Reply is empty"))
   (let ((reply (list :id (+agent-shell-projects--id) :body body
                      :author (or actor "user") :time (float-time)
@@ -80,6 +83,8 @@ CONTEXT optionally identifies another text space, such as a diff side."
 
 (defun +agent-shell-projects-set-resolution (project annotation resolved actor)
   "Set ANNOTATION's RESOLVED state in PROJECT, only for ACTOR user."
+  (+agent-shell-projects-assert-active
+   project (+agent-shell-projects-artefact project (plist-get annotation :artefact)))
   (unless (equal actor "user") (error "Only the user can resolve or reopen"))
   (+agent-shell-projects--set annotation :resolved (and resolved t))
   (+agent-shell-projects--changed project nil "user"))
@@ -296,6 +301,11 @@ Return a plist with :state and, for a usable attachment, :start and :end."
              (or (get-text-property (point) 'project-annotation-id)
                  (seq-some (lambda (o) (overlay-get o 'project-annotation-id))
                            (overlays-at (point)))))))
+     ((get-text-property (point) 'project-agent-id)
+      (+agent-shell-projects--register-target
+       '+agent-shell-projects-agent
+       (list :project +agent-shell-projects--project-id
+             :agent (get-text-property (point) 'project-agent-id))))
      ((button-at (point))
       (let ((target (button-get (button-at (point)) 'project-target)))
         (if (bufferp target) (cons 'buffer (buffer-name target))
@@ -487,15 +497,39 @@ TITLE names the buffer; ACTION labels its submit binding."
     (define-key map (kbd "s") #'+agent-shell-projects-target-resolve)
     (define-key map (kbd "a") #'+agent-shell-projects-reattach)
     map))
+(autoload '+agent-shell-projects-unenrol-agent "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-unenrol-artefact "+agent-shell-projects-manage")
+(autoload '+agent-shell-projects-delete-artefact "+agent-shell-projects-manage")
+
+(defun +agent-shell-projects-target-agent (target)
+  "Visit the shell for the associated agent at TARGET."
+  (interactive "sAgent target: ")
+  (let* ((context (+agent-shell-projects--target-context target))
+         (project (+agent-shell-projects-load (plist-get context :project)))
+         (agent (seq-find (lambda (a) (equal (plist-get a :id) (plist-get context :agent)))
+                          (plist-get project :agents)))
+         (shell (and agent (+agent-shell-projects-shell agent))))
+    (unless (buffer-live-p shell) (user-error "Agent is disconnected"))
+    (pop-to-buffer shell)))
+
+(defvar +agent-shell-projects-agent-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'+agent-shell-projects-target-agent)
+    (define-key map (kbd "u") #'+agent-shell-projects-unenrol-agent)
+    map))
+
 (defvar +agent-shell-projects-artefact-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'+agent-shell-projects-target-open)
     (define-key map (kbd "h") #'+agent-shell-projects-target-history)
     (define-key map (kbd "d") #'+agent-shell-projects-target-compare)
+    (define-key map (kbd "u") #'+agent-shell-projects-unenrol-artefact)
+    (define-key map (kbd "D") #'+agent-shell-projects-delete-artefact)
     map))
 
 (setq +agent-shell-projects--embark-maps
-      '((+agent-shell-projects-passage . +agent-shell-projects-passage-map)
+      '((+agent-shell-projects-agent . +agent-shell-projects-agent-map)
+        (+agent-shell-projects-passage . +agent-shell-projects-passage-map)
         (+agent-shell-projects-annotation . +agent-shell-projects-annotation-map)
         (+agent-shell-projects-artefact . +agent-shell-projects-artefact-map)))
 (+agent-shell-projects--install-embark)
