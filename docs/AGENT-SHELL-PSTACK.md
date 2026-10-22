@@ -12,8 +12,8 @@ single-harness port cannot, while upstream text stays untouched.
 |---|---|---|
 | 0. Skills in agents | Done | pstack installed in Claude Code and Codex |
 | 1. Sticky mode and guard | Done | `+agent-shell-pstack-mode`, `+agent-shell-pstack-guard-mode` |
-| 2. Cross-vendor panels | Planned | Emacs runs `interrogate`, `arena` and `how` panels as sibling shells |
-| 3. Views | Planned | Decision trail, plan and panel status in a side buffer |
+| 2. Cross-vendor panels | Partial | `how` and `interrogate` panels run as read-only sibling shells; `arena` is planned |
+| 3. Views | Partial | Panel status buffer; decision trail and plan views are planned |
 
 ## Layer 0: install the skills
 
@@ -52,26 +52,97 @@ the agent sends. Session modes in `+agent-shell-pstack-unguarded-modes` skip
 permission prompts, and agent-side "always allow" rules never reach Emacs, so
 keep agent-side `ask` rules for these commands as well.
 
-## Layer 2: cross-vendor panels (planned)
+## Layer 2: cross-vendor panels
 
 Upstream panels mix model families. Ports to one harness lose that, or shell
-out to other vendors' CLIs. agent-shell can start a shell for any configured
-agent instead:
+out to other vendors' CLIs. Here Emacs starts each panel member as an agent
+shell for a configured agent. `lisp/+agent-shell-pstack-panel.el` holds the
+panels, and `+agent-shell-pstack-panel-mode` is global and enabled with
+agent-shell. It covers the `how` and `interrogate` shapes in
+`+agent-shell-pstack-panel-shapes`. `arena` is still planned, because its
+members write code and need worktrees.
 
-1. The lead writes a `panel` request (brief, roles, shape and report paths)
-   to a file inbox, then ends its turn.
-2. Emacs starts one shell per role from agent configs, read-only through the
-   session mode and a denying permission responder, or in a worktree for
-   `arena`.
-3. Each member writes its report to the given path. Emacs waits for
-   `turn-complete` and falls back to collected message chunks.
-4. Emacs queues a follow-up prompt to the lead with the report paths. The lead
-   still triages and judges.
+### Request a panel
+
+A lead is a shell with `+agent-shell-pstack-mode` on. Its priming prompt
+carries the protocol, which names every agent in `agent-shell-agent-configs`
+that has a read-only mode. The lead ends its final message with a fenced
+block, then ends its turn:
+
+````
+```pstack-panel
+{"version":1,"shape":"how","brief":"...","timeout":900,
+ "members":[{"role":"data-flow","agent":"codex","focus":"..."}]}
+```
+````
+
+- `version` is 1.
+- `shape` names an entry in `+agent-shell-pstack-panel-shapes`.
+- `members` lists 1 to 4 members. Each `role` matches `[a-z0-9-]+` and is
+  unique. Each `agent` is one the protocol named. `focus` is optional.
+- `timeout` is 1 to 3600 seconds. It defaults to
+  `+agent-shell-pstack-panel-default-timeout`, 900.
+
+Emacs reads the block only from a live `turn-complete`, so a restored session
+never starts a panel. The panel id is the first 12 hex digits of the SHA-1 of
+the session id and the block, and Emacs ignores a block it has seen. A
+malformed block gets a prompt back that says why it was rejected.
+
+The request travels over ACP rather than through a file inbox. The lead needs
+no write permission, which plan modes often refuse, and its shell identifies
+it. The file inbox stays in `agent-shell-projects`, its only user.
+
+### Keep members read-only
+
+Each member starts through `+agent-shell-drive-start :read-only t` in the
+lead's directory. Three layers keep it read-only:
+
+1. The session mode comes from `+agent-shell-drive-read-only-modes`: `plan`
+   for Claude Code and `read-only` for Codex.
+2. A buffer-local permission responder approves `read`, `search`, `fetch` and
+   `think` tool calls once and rejects everything else. It leaves the dialog
+   to you only when a request offers no way to reject.
+3. Once the session is initialized, Emacs kills a member whose mode differs
+   from the requested one, before it sees the brief. Upstream treats a
+   refused mode as optional and carries on, so this check is what catches it.
+
+The guard wraps the default responder, so it leaves members' responders
+alone. Members are never displayed.
+
+A member's prompt is the brief, its focus and the shape's contract. Its report
+is the final text of its turn, after its last tool call. When Claude Code asks
+to leave plan mode with a plan longer than that text, the rejected plan is the
+report.
+
+### Reports and the follow-up
+
+Emacs writes each report once to
+`var/pstack-panels/<panel-id>/<role>.md` under
+`+agent-shell-pstack-panel-directory`. A member still working at the timeout
+settles with its partial text. A member whose shell ends early settles with
+the reason. When every member has settled, Emacs prompts the lead with each
+member's agent, state, report path and report text, then the shape's triage
+line. The lead still triages and judges.
+
+Delivery uses `+agent-shell-drive-send`, which never interrupts a busy lead or
+an unsent draft. Emacs retries on the lead's next `turn-complete` or
+`prompt-ready`, and each follow-up is sent once.
+
+Panels live in memory. Restarting Emacs ends the lead and every member, so an
+interrupted panel does not resume. Killing the lead stops its unfinished
+panels.
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
-event watching shared with `agent-shell-projects`. The file inbox stays in
-`agent-shell-projects`.
+event watching shared with `agent-shell-projects`.
+
+## Layer 3: views
+
+`C-c P` in an agent shell runs `+agent-shell-pstack-panels`. It lists every
+panel since Emacs started, with its id, shape, status and lead, and each
+member's role, agent, state and report. `RET` visits the report or the member
+or lead shell. The buffer redraws whenever a panel changes. The decision trail
+and plan views are planned.
 
 ## Non-goals
 

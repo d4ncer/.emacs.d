@@ -68,8 +68,8 @@ The authoritative order is the sequence of requires in `init.el`.
   editor services. Opening a source file does not activate Org or Vulpea.
 - Org files and commands activate Org. Agenda and note commands activate their
   required integrations. The personal `+life` library is loaded with Vulpea.
-- Agent-shell notifications, Mermaid and the pstack guard activate with
-  agent-shell. Math rendering waits for its backend and uses
+- Agent-shell notifications, Mermaid, the pstack guard and pstack panels
+  activate with agent-shell. Math rendering waits for its backend and uses
   `agent-shell-mode-hook`. See `docs/AGENT-SHELL-PSTACK.md` for pstack.
 
 ## Native tree-sitter and search
@@ -96,7 +96,9 @@ revert edits. There is no separate wgrep transaction or wgrep dependency.
 - `capture`, `jobs`, and `worker`: workspace enrolment and background services.
 - Main entry, annotations and menu: document and contextual UI.
 - Agent integration: inbox transport and request delivery. Starting, sending
-  to and watching shells goes through `lisp/+agent-shell-drive.el`.
+  to and watching shells goes through `lisp/+agent-shell-drive.el`, which
+  pstack panels (`lisp/+agent-shell-pstack-panel.el`) also use for their
+  read-only member shells.
 - Code and review: captured diffs, explanations and connected navigation.
 
 Core state and workspace capture load without Magit, Org, agent-shell, or the
