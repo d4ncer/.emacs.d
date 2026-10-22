@@ -17,6 +17,7 @@
 (declare-function markdown-mode "markdown-mode")
 (declare-function diff-buffer-with-file "diff")
 (declare-function +agent-shell-projects-shell "+agent-shell-projects-agent")
+(declare-function +agent-shell-projects-explore "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-mode "+agent-shell-projects-agent")
 (autoload '+agent-shell-projects-code-edit "+agent-shell-projects-code")
 (autoload '+agent-shell-projects-capture-current "+agent-shell-projects-code")
@@ -50,8 +51,8 @@
   (+agent-shell-projects-artefact
    (+agent-shell-projects--project) +agent-shell-projects--artefact-id))
 
-(defun +agent-shell-projects--choose-project ()
-  "Choose an existing project or create one."
+(defun +agent-shell-projects--choose-project (&optional on-create)
+  "Choose an existing project or create one, calling ON-CREATE with it."
   (let* ((projects (+agent-shell-projects-list))
          (choices (mapcar (lambda (p)
                             (cons (format "%s [%s]" (plist-get p :name)
@@ -59,7 +60,9 @@
                           projects))
          (choice (completing-read "Project (new name to create): " choices)))
     (or (cdr (assoc choice choices))
-        (+agent-shell-projects-create choice default-directory))))
+        (let ((project (+agent-shell-projects-create choice default-directory)))
+          (when on-create (funcall on-create project))
+          project))))
 
 (defun +agent-shell-projects--button (text target action)
   "Insert TEXT with TARGET and button ACTION."
@@ -118,7 +121,10 @@
   "Open PROJECT's home, prompting when omitted."
   (interactive)
   (+agent-shell-projects-mode 1)
-  (let* ((project (or project (+agent-shell-projects--choose-project)))
+  (let* (created
+         (project (or project
+                      (+agent-shell-projects--choose-project
+                       (lambda (_project) (setq created t)))))
          (buffer (get-buffer-create
                   (format "*Project: %s [%s]*" (plist-get project :name)
                           (substring (plist-get project :id) 0 6)))))
@@ -126,7 +132,8 @@
       (+agent-shell-projects-home-mode)
       (setq +agent-shell-projects--project-id (plist-get project :id))
       (+agent-shell-projects--render-home))
-    (pop-to-buffer buffer)))
+    (pop-to-buffer buffer)
+    (when created (+agent-shell-projects-explore project))))
 
 (defun +agent-shell-projects-enrol-file (file name &optional subtree)
   "Add FILE named NAME to the current project, optionally its SUBTREE."

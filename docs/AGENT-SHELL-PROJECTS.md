@@ -7,7 +7,29 @@ checkpoints independently of Git commits.
 ## Start a project
 
 1. Use `SPC aP` (`C-SPC aP` in insert state), or
-   `M-x +agent-shell-projects`. Choose an existing project or create a named one.
+   `M-x +agent-shell-projects`. Enter a new project name.
+2. Describe what you want to achieve in the intent composer. Press `C-c C-c`
+   to start the conversation with an author using your configured agent policy.
+   Discuss the problem, success criteria, scope, constraints and alternatives.
+3. In the author shell, use `C-c C-m` for project actions, then `P` to request
+   a proposal draft from the discussion. Edit it and press `C-c C-c` to choose
+   a Markdown file, Org file, or existing/new Org heading. Saving enrols the
+   document and designates it as the proposal. Closing the composer leaves the
+   draft ready; `P` reopens it.
+4. Review and refine the proposal. When ready, choose `i` to start
+   implementation. Select a Git workspace and base if none is enrolled. Its
+   initial capture runs in the background before the author receives the
+   proposal and workspace context. Then use `c` to review the implementation.
+
+The conversation and proposal use the same author session. Use `e` to open an
+intent composer again, including after cancelling the initial composer. Use
+`a` to select an existing author shell before `e` when you want to continue in
+an existing conversation. Drafting and implementation begin through explicit
+project actions; saving a proposal alone does not start implementation.
+
+## Open a project or import existing work
+
+1. Use `SPC aP` and select an existing project to open its home.
 2. Press `?` for the project transient. Choose `f` to enrol a Markdown or Org
    document. With a prefix argument, choose an existing Org heading instead.
 3. Choose `a` to associate an existing agent-shell buffer or start a fresh
@@ -23,7 +45,7 @@ artefact names. The coloured dot means there is new material to review.
 Opening an artefact does not clear that indicator. Use **Submit feedback** or
 **Mark reviewed** when you finish a pass.
 
-A project may contain documents alone. For code, enrol a stable proposal and
+A project may contain documents alone. For existing code, enrol a proposal and
 choose it with transient `p`, then enrol the Git workspace with `w`. Work in
 your existing checkout or worktree; the extension does not create branches or
 worktrees. The requested base defaults to `HEAD`; choose the intended base
@@ -161,8 +183,9 @@ deletions, binary files, modes, and symlinks. It does not stage or commit change
 Binary contents are retained, with a binary-change notice in the diff.
 Select lines on either side, including removed text, to annotate them.
 
-For existing work without a proposal, transient `P` asks the author to
-reconstruct one. Review and edit the draft before saving; inferred intent and
+For existing work without a proposal, transient `P` (**Draft proposal**) asks
+the author to synthesise one from its conversation and the supplied work.
+Review and edit the draft before saving; inferred intent and
 questions should remain explicit. Proposal and implementation can then evolve
 together through the ordinary feedback loop.
 Wait for enrolled artefacts to complete their first capture before requesting
@@ -269,3 +292,7 @@ The startup check verifies deferred activation and native General/Evil keys.
 Workflow regressions also check explanation arrival, historical code and
 proposal context, repeat generation, missing Org headings, request failures,
 and comparison stability while review checkpoints advance.
+Onboarding checks cover new-project entry, queued intent delivery, editable
+proposal capture into Org, cancelled capture and retry, and a real local ACP
+session from intent through clarification, proposal, implementation, code
+explanation and feedback-driven revision. No model provider is contacted.

@@ -293,6 +293,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
      "TAB" #'magit-section-toggle))
   (with-eval-after-load 'agent-shell
     (general-define-key :keymaps 'agent-shell-mode-map
+                        "C-c C-m" #'+agent-shell-projects-menu
                         "C-c C-o" #'+agent-shell-projects-capture-outcome)))
 
 (elpaca (latex-to-svg-backend

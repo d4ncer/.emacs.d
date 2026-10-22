@@ -19,6 +19,7 @@
 (declare-function +agent-shell-projects-submit "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-mark-reviewed "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-choose-author "+agent-shell-projects-agent")
+(declare-function +agent-shell-projects-explore "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-extract "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-capture-outcome "+agent-shell-projects-agent")
 (declare-function +agent-shell-projects-cancel-request "+agent-shell-projects-agent")
@@ -26,6 +27,7 @@
 (autoload '+agent-shell-projects-review-code "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-request-explanation "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-request-proposal "+agent-shell-projects-review")
+(autoload '+agent-shell-projects-start-implementation "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-set-proposal "+agent-shell-projects-review")
 (autoload '+agent-shell-projects-cancel-capture "+agent-shell-projects-jobs")
 
@@ -35,6 +37,7 @@
     ("h" "Home" +agent-shell-projects-home)
     ("o" "Open project" +agent-shell-projects)
     ("a" "Choose author" +agent-shell-projects-choose-author)
+    ("e" "Explore intent" +agent-shell-projects-explore)
     ("R" "Rename project" +agent-shell-projects-rename)
     ("g" "Refresh" +agent-shell-projects-refresh)]
    ["Artefacts"
@@ -42,7 +45,8 @@
     ("w" "Enrol Git workspace" +agent-shell-projects-add-code)
     ("x" "Extract prose" +agent-shell-projects-extract)
     ("p" "Choose proposal" +agent-shell-projects-set-proposal)
-    ("P" "Reconstruct proposal" +agent-shell-projects-request-proposal)]
+    ("P" "Draft proposal" +agent-shell-projects-request-proposal)
+    ("i" "Start implementation" +agent-shell-projects-start-implementation)]
    ["Review"
     ("s" "Submit feedback" +agent-shell-projects-submit)
     ("m" "Mark reviewed" +agent-shell-projects-mark-reviewed)

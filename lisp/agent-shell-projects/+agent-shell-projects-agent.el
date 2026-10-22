@@ -110,7 +110,9 @@
      agent :session (agent-shell-session-id :shell-buffer shell))
     (puthash (plist-get agent :id) shell +agent-shell-projects--shells)
     (when (equal role "author")
-      (+agent-shell-projects--set project :author (plist-get agent :id)))
+      (+agent-shell-projects--set project :author (plist-get agent :id))
+      (with-current-buffer shell
+        (setq +agent-shell-projects--project-id (plist-get project :id))))
     (+agent-shell-projects--attach project agent shell)
     (+agent-shell-projects--changed project nil "user")
     agent))
@@ -212,6 +214,39 @@
             (+agent-shell-projects-start-agent project)
           (+agent-shell-projects-associate project (get-buffer choice)))))))
 
+(defun +agent-shell-projects--author (project)
+  "Return PROJECT's connected author, starting one when none is associated."
+  (unless (plist-get project :author)
+    (+agent-shell-projects-start-agent project))
+  (let* ((agent (+agent-shell-projects-agent project (plist-get project :author)))
+         (shell (+agent-shell-projects-shell agent)))
+    (unless shell
+      (user-error "Author is disconnected; choose an author from the project menu"))
+    (with-current-buffer shell
+      (setq +agent-shell-projects--project-id (plist-get project :id)))
+    agent))
+
+(defun +agent-shell-projects-explore (&optional project)
+  "Compose initial intent and explore it with PROJECT's author."
+  (interactive)
+  (let* ((project (or project (+agent-shell-projects--project)))
+         (previous (seq-find
+                    (lambda (r) (equal (plist-get r :kind) "exploration"))
+                    (reverse (plist-get project :requests)))))
+    (+agent-shell-projects-compose
+     (list :project (plist-get project :id)) (plist-get previous :intent)
+     (lambda (body)
+       (when (string-empty-p body) (user-error "Describe what you want to achieve"))
+       (+agent-shell-projects-mode 1)
+       (let* ((agent (+agent-shell-projects--author project))
+              (request (+agent-shell-projects-request
+                        project "exploration" agent :intent body)))
+         (+agent-shell-projects-flush project)
+         (pop-to-buffer (+agent-shell-projects-shell agent))
+         (message "Intent conversation %s; C-c C-m opens project actions"
+                  (plist-get request :status))))
+     "Project intent" "start conversation")))
+
 (defun +agent-shell-projects-default-context (project request)
   "Build automatic context for PROJECT and REQUEST from immutable versions."
   (let* ((agent (plist-get request :agent))
@@ -261,6 +296,20 @@
     (concat
      "You are working in an Emacs agent-shell project.\n"
      (pcase (plist-get request :kind)
+       ("exploration"
+        (concat "Help the user solidify the intent in this request through conversation. "
+                "Ask focused questions, building on what is already known. Establish the problem, "
+                "success criteria and validation, scope and exclusions, constraints and priorities, "
+                "possible approaches and tradeoffs, and a recommendation. Keep agreed decisions, "
+                "assumptions and open questions distinct; never invent constraint weights or claim "
+                "an alternative was considered without evidence. Suggest Draft proposal when useful. "
+                "The user explicitly requests drafting through the project menu; until then, "
+                "continue the conversation without creating a document or implementing changes.\n"))
+       ("implementation"
+        (concat "Implement the supplied proposal in the project root. Inspect the captured workspace "
+                "and current source before editing; preserve existing work. Keep the proposal current, "
+                "validate against its success criteria, and report changes, decisions, evidence and "
+                "remaining questions. Use annotations and progress operations when useful.\n"))
        ("feedback" "Address this feedback by revising the live artefacts. Reply to each item with changes, evidence, or an explanation. Keep the proposal current. Only the user resolves comments.\n")
        ("question" "Explore the question with the user. Keep your conclusions in this conversation; the user will explicitly capture feedback.\n")
        ("outcome" "Draft a concise annotation capturing the agreed outcome of this discussion. Return it using a draft operation; do not attach it yourself.\n")

@@ -279,43 +279,111 @@
     (+agent-shell-projects-request-explanation
      project artefact (+agent-shell-projects-version artefact (plist-get artefact :current)))))
 
-(defun +agent-shell-projects-request-proposal (file)
-  "Ask the author to reconstruct a proposal, to be saved at FILE after editing."
-  (interactive (list (read-file-name "Proposal destination: " nil nil nil "proposal.md")))
+(defun +agent-shell-projects-request-proposal (&optional file)
+  "Ask the author to draft a proposal from discussion and existing work.
+Choose its destination when saving the draft, unless FILE is supplied."
+  (interactive)
   (let* ((project (+agent-shell-projects--project))
-         (agent (+agent-shell-projects-agent project (plist-get project :author)))
+         (agent (+agent-shell-projects--author project))
          (artefacts (plist-get project :artefacts))
+         (exploration (seq-find
+                       (lambda (r)
+                         (and (equal (plist-get r :kind) "exploration")
+                              (equal (plist-get r :agent) (plist-get agent :id))
+                              (equal (plist-get r :status) "sent")))
+                       (reverse (plist-get project :requests))))
+         (destination (and file (expand-file-name file)))
          (existing (seq-find
                     (lambda (r)
                       (and (equal (plist-get r :kind) "proposal")
-                           (equal (plist-get r :destination) (expand-file-name file))
+                           (equal (plist-get r :agent) (plist-get agent :id))
+                           (equal (plist-get r :parent) (plist-get exploration :id))
+                           (equal (plist-get r :destination) destination)
                            (member (plist-get r :status) '("queued" "sent" "ready"))))
                     (reverse (plist-get project :requests))))
          (request (or existing (+agent-shell-projects-request
-                   project "proposal" agent :destination (expand-file-name file)
+                   project "proposal" agent :destination destination
+                   :parent (plist-get exploration :id)
                    :versions (mapcar (lambda (a) (list :artefact (plist-get a :id)
                                                        :version (plist-get a :current))) artefacts)
                    :instructions
-                   "Reconstruct a proposal from the supplied existing work: problem, success criteria, scope and exclusions, constraints and priorities, possible solutions and tradeoffs, and recommendation. Distinguish recorded intent, inferred intent, and questions. Return a draft operation for this request; the user will edit and save it."))))
+                   (concat
+                    "Draft a proposal from our conversation and the supplied existing work: "
+                    "problem, success criteria and validation, scope and exclusions, constraints "
+                    "and priorities, possible solutions and tradeoffs, and recommendation. "
+                    "Preserve agreed decisions and their rationale. Distinguish recorded intent, "
+                    "inferred intent, assumptions and open questions. Return a draft operation "
+                    "for this request; the user will edit it and choose where to save it.")))))
     (+agent-shell-projects-flush project)
     (when (equal (plist-get request :status) "ready")
       (+agent-shell-projects--proposal-ready project request))
     request))
 
 (defun +agent-shell-projects--proposal-ready (project request)
-  "Let the user edit and save PROJECT's reconstructed proposal REQUEST."
+  "Let the user edit and save PROJECT's proposal REQUEST."
   (when (equal (plist-get request :kind) "proposal")
     (+agent-shell-projects-compose
      (list :project (plist-get project :id)) (plist-get request :result)
      (lambda (body)
        (unless (equal (plist-get request :status) "ready")
          (user-error "Proposal already saved"))
-       (let ((artefact (+agent-shell-projects-extract-prose
-                        project body (plist-get request :destination))))
+       (let* ((default-directory (file-name-as-directory
+                                  (or (plist-get project :root) default-directory)))
+              (file (or (plist-get request :destination)
+                        (read-file-name "Save proposal to: " nil nil nil "proposal.md")))
+              (heading (when (string-match-p "\\.org\\'" file)
+                         (+agent-shell-projects-choose-org-heading file)))
+              (artefact (+agent-shell-projects-extract-prose project body file heading)))
+         (+agent-shell-projects--set request :destination (expand-file-name file))
          (+agent-shell-projects--set project :proposal (plist-get artefact :id))
          (+agent-shell-projects--set request :status "captured")
          (+agent-shell-projects-save project)
-         (+agent-shell-projects-open project (plist-get artefact :id)))))))
+         (+agent-shell-projects-open project (plist-get artefact :id))))
+     "Project proposal" "save proposal")))
+
+(defun +agent-shell-projects-start-implementation (&optional root base)
+  "Ask the author to implement the proposal in ROOT against BASE.
+Use an enrolled workspace when ROOT is omitted, prompting if none exists."
+  (interactive)
+  (let* ((project (+agent-shell-projects--project))
+         (proposal (if (plist-get project :proposal)
+                       (+agent-shell-projects-artefact project (plist-get project :proposal))
+                     (user-error "Save or choose a proposal first")))
+         (source (car (+agent-shell-projects-source proposal)))
+         (_ (when (buffer-modified-p source)
+              (user-error "Save proposal edits before starting implementation")))
+         (proposal-version (+agent-shell-projects-capture project proposal "user"))
+         (agent (+agent-shell-projects--author project))
+         (code (if (and (not root)
+                        (seq-some (lambda (a) (equal (plist-get a :kind) "code"))
+                                  (plist-get project :artefacts)))
+                   (+agent-shell-projects--code-artefact project)
+                 (+agent-shell-projects-enrol-code
+                  project
+                  (or root (read-directory-name "Git workspace: " (plist-get project :root)))
+                  (or base (read-string "Base revision: " "HEAD"))))))
+    (+agent-shell-projects-mode 1)
+    (+agent-shell-projects-capture-code
+     project code "user"
+     (lambda (version)
+       (let* ((versions (list (list :artefact (plist-get proposal :id)
+                                    :version (plist-get proposal-version :id))
+                              (list :artefact (plist-get code :id)
+                                    :version (plist-get version :id))))
+              (existing (seq-find
+                         (lambda (r)
+                           (and (equal (plist-get r :kind) "implementation")
+                                (equal (plist-get r :agent) (plist-get agent :id))
+                                (equal (plist-get r :versions) versions)
+                                (member (plist-get r :status) '("queued" "sent"))))
+                         (plist-get project :requests)))
+              (request (or existing (+agent-shell-projects-request
+                                     project "implementation" agent :versions versions))))
+         (+agent-shell-projects-flush project)
+         (message "Implementation %s" (plist-get request :status)))))
+    (pop-to-buffer (+agent-shell-projects-shell agent))
+    (message "Preparing implementation context; capture progress is in the project")
+    code))
 
 (defun +agent-shell-projects-set-proposal ()
   "Choose an existing document as the current project's proposal."

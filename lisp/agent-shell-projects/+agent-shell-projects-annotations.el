@@ -312,15 +312,18 @@ Return a plist with :state and, for a usable attachment, :start and :end."
    (if target (+agent-shell-projects--target-context target)
      (+agent-shell-projects--selection))))
 
-(defun +agent-shell-projects-compose (context &optional initial callback)
-  "Compose feedback for CONTEXT, starting with INITIAL.
-CALLBACK receives the accepted body when non-nil, instead of adding a comment."
-  (let ((buffer (generate-new-buffer "*Project comment*")))
+(defun +agent-shell-projects-compose
+    (context &optional initial callback title action)
+  "Compose text for CONTEXT, starting with INITIAL.
+CALLBACK receives the accepted body instead of adding a comment when non-nil.
+TITLE names the buffer; ACTION labels its submit binding."
+  (let ((buffer (generate-new-buffer (format "*%s*" (or title "Project comment")))))
     (with-current-buffer buffer
       (text-mode)
       (setq +agent-shell-projects--project-id (plist-get context :project))
       (insert (or initial ""))
-      (setq-local header-line-format "C-c C-c attach · C-c C-k cancel")
+      (setq-local header-line-format
+                  (format "C-c C-c %s · C-c C-k cancel" (or action "attach")))
       (let ((map (make-sparse-keymap)))
         (set-keymap-parent map text-mode-map)
         (define-key map (kbd "C-c C-k") #'kill-current-buffer)
