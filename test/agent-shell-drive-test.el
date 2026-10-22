@@ -12,6 +12,7 @@
 (defvar agent-shell-agent-configs)
 (defvar agent-shell--state)
 (defvar agent-shell-mode-hook)
+(defvar agent-shell-session-strategy)
 
 (defmacro +agent-shell-drive-test--with-upstream (&rest body)
   "Run BODY with fresh drive state and stubbed upstream subscriptions.
@@ -200,6 +201,40 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (should (equal "Only before \n" (plist-get (car events) :text)))
           (emit shell '((:event . error) (:data (:message . "bad"))))
           (should (equal "bad" (plist-get (car events) :message))))))))
+
+(ert-deftest +agent-shell-drive-test-start-ignores-caller-locals ()
+  "Start with the new session strategy even from a shell with its own."
+  (let ((agent-shell-session-strategy 'prompt)
+        (agent-shell-mode-hook nil)
+        (agent-shell-agent-configs (list '((:identifier . codex))))
+        (directory (make-temp-file "drive-start-" t))
+        (seen nil) (shells nil))
+    (cl-letf* ((require (symbol-function 'require))
+               ((symbol-function 'require)
+                (lambda (feature &rest rest)
+                  (unless (eq feature 'agent-shell)
+                    (apply require feature rest))))
+               ((symbol-function 'agent-shell-start)
+                (cl-function
+                 (lambda (&key config)
+                   (ignore config)
+                   (let ((shell (generate-new-buffer " *drive-start*")))
+                     (push shell shells)
+                     (with-current-buffer shell
+                       (push (list agent-shell-session-strategy
+                                   default-directory)
+                             seen))
+                     shell)))))
+      (unwind-protect
+          (with-temp-buffer
+            (setq-local agent-shell-session-strategy 'prompt)
+            (+agent-shell-drive-start :config 'codex :directory directory)
+            (should (equal (list (list 'new (file-name-as-directory
+                                             (file-truename directory))))
+                           seen))
+            (should (eq 'prompt agent-shell-session-strategy)))
+        (mapc #'kill-buffer shells)
+        (delete-directory directory t)))))
 
 ;;;; Read-only shells
 

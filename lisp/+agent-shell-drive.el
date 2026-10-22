@@ -139,7 +139,6 @@ rejects everything but reads; see `+agent-shell-drive-read-only-modes'."
                                             (copy-alist config)))
                    config))
          (directory (file-name-as-directory (file-truename directory)))
-         (default-directory directory)
          (cwd-function (lambda () directory))
          (pin (lambda ()
                 (setq-local agent-shell-cwd-function cwd-function
@@ -148,10 +147,15 @@ rejects everything but reads; see `+agent-shell-drive-read-only-modes'."
                   (setq-local +agent-shell-drive--mode mode
                               agent-shell-permission-responder-function
                               #'+agent-shell-drive--respond))))
-         (agent-shell-cwd-function cwd-function)
-         (agent-shell-mode-hook (append agent-shell-mode-hook (list pin)))
-         (agent-shell-session-strategy 'new)
-         (shell (save-window-excursion (agent-shell-start :config config))))
+         (shell
+          ;; A caller's buffer-local values would shadow these bindings.
+          (with-temp-buffer
+            (let ((default-directory directory)
+                  (agent-shell-cwd-function cwd-function)
+                  (agent-shell-mode-hook
+                   (append agent-shell-mode-hook (list pin)))
+                  (agent-shell-session-strategy 'new))
+              (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
     (when mode
       (agent-shell-subscribe-to
