@@ -8,18 +8,13 @@
 
 (require '+agent-shell-projects-core)
 (require '+agent-shell-projects-annotations)
-(require 'map)
+(require '+agent-shell-drive)
 
 (declare-function agent-shell-buffers "agent-shell")
 (declare-function agent-shell-status "agent-shell")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-get-config "agent-shell")
-(declare-function agent-shell-start "agent-shell")
-(declare-function agent-shell-cwd "agent-shell-project")
 (declare-function agent-shell-select-config "agent-shell")
-(declare-function agent-shell-subscribe-to "agent-shell")
-(declare-function agent-shell-unsubscribe "agent-shell")
-(declare-function agent-shell-insert "agent-shell")
 (declare-function agent-shell-shell-buffer "agent-shell")
 (declare-function agent-shell-markdown-reconstruct "agent-shell-markdown")
 (declare-function +agent-shell-projects--choose-project "+agent-shell-projects")
@@ -28,11 +23,8 @@
 (declare-function org-get-heading "org")
 (declare-function +agent-shell-projects--project "+agent-shell-projects")
 (declare-function +agent-shell-projects--refresh-ui "+agent-shell-projects")
-(defvar agent-shell-agent-configs)
 (defvar agent-shell-preferred-agent-config)
-(defvar agent-shell-session-strategy)
-(defvar agent-shell-cwd-function)
-(defvar agent-shell-mode-hook)
+(defvar agent-shell-display-action)
 (defvar +agent-shell-projects-sidebar-functions)
 (defvar +agent-shell-projects-change-hook)
 (defvar-local +agent-shell-projects--project-id nil)
@@ -51,7 +43,7 @@
   #'+agent-shell-projects-default-context
   "Function called with PROJECT and a structured REQUEST to build context."
   :type 'function :group '+agent-shell-projects)
-(defcustom +agent-shell-projects-send-function #'+agent-shell-projects--send
+(defcustom +agent-shell-projects-send-function #'+agent-shell-drive-send
   "Function of SHELL and TEXT, returning non-nil only after acceptance."
   :type 'function :group '+agent-shell-projects)
 (defcustom +agent-shell-projects-inbox-directory
@@ -60,7 +52,6 @@
   "Writable agent operation inbox, independent of persistent project storage."
   :type 'directory :group '+agent-shell-projects)
 
-(defvar +agent-shell-projects--subscriptions (make-hash-table :test #'equal))
 (defvar +agent-shell-projects--shells (make-hash-table :test #'equal))
 (defvar +agent-shell-projects--timer nil)
 (defvar +agent-shell-projects-operation-handlers nil)
@@ -96,7 +87,7 @@
   (unless (and (buffer-live-p shell)
                (with-current-buffer shell (derived-mode-p 'agent-shell-mode)))
     (user-error "Choose an agent-shell buffer"))
-  (unless (+agent-shell-projects--shell-in-workspace-p project shell)
+  (unless (+agent-shell-drive-pinned-p shell (plist-get project :root))
     (user-error "Agent shell belongs to another workspace; start or choose one in %s"
                 (plist-get project :root)))
   (let* ((role (or role "author"))
@@ -125,60 +116,52 @@
     agent))
 
 (defun +agent-shell-projects--attach (project agent shell)
-  "Subscribe once to SHELL for PROJECT's AGENT association."
-  (let ((key (plist-get agent :id)))
-    (unless (gethash key +agent-shell-projects--subscriptions)
-      (puthash
-       key (cons shell
-                 (agent-shell-subscribe-to
-                  :shell-buffer shell
-                  :on-event (lambda (event)
-                              (+agent-shell-projects--agent-event
-                               (plist-get project :id) key event))))
-       +agent-shell-projects--subscriptions))))
+  "Watch SHELL for PROJECT's AGENT association."
+  (let ((project-id (plist-get project :id))
+        (key (plist-get agent :id)))
+    (+agent-shell-drive-watch
+     shell 'projects key
+     (lambda (event)
+       (+agent-shell-projects--agent-event project-id key event)))))
 
 (defun +agent-shell-projects--detach (id)
-  "Remove the subscription for association ID."
-  (when-let* ((entry (gethash id +agent-shell-projects--subscriptions)))
-    (when (buffer-live-p (car entry))
-      (with-current-buffer (car entry)
-        (agent-shell-unsubscribe :subscription (cdr entry))))
-    (remhash id +agent-shell-projects--subscriptions))
+  "Stop watching association ID's shell."
+  (+agent-shell-drive-unwatch 'projects id)
   (remhash id +agent-shell-projects--shells))
 
 (defvar +agent-shell-projects--event-timers (make-hash-table :test #'equal))
 
 (defun +agent-shell-projects--agent-event (project-id agent-id event)
-  "Handle meaningful agent EVENTs with bounded work and coalesced capture."
-  (let ((kind (map-elt event :event)))
-    (unless (memq kind '(agent-message-chunk tool-call-update))
-      (let* ((project (+agent-shell-projects-load project-id))
-             (agent (seq-find (lambda (a) (equal (plist-get a :id) agent-id))
-                              (plist-get project :agents))))
-        (when (and agent (not (plist-get project :archived)))
-          (when (eq kind 'clean-up) (+agent-shell-projects--detach agent-id))
-          (when (memq kind '(init-finished turn-complete session-restored))
-            (when-let* ((shell (+agent-shell-projects-shell agent)))
-              (let ((session (agent-shell-session-id :shell-buffer shell)))
-		(unless (equal session (plist-get agent :session))
-                  (+agent-shell-projects--set agent :session session)
-                  (+agent-shell-projects-save project))))
-            (when (equal (plist-get agent :role) "author")
-              (unless (gethash project-id +agent-shell-projects--event-timers)
-		(puthash project-id
-			 (+agent-shell-projects-run-at-time
-                          0.3 nil
-                          (lambda ()
-                            (remhash project-id +agent-shell-projects--event-timers)
-                            (dolist (artefact (plist-get project :artefacts))
-                              (condition-case err
-                                  (+agent-shell-projects-capture project artefact agent-id)
-				(error (+agent-shell-projects--set artefact :capture-error
-                                                                   (error-message-string err)))))))
-			 +agent-shell-projects--event-timers))))
-          (+agent-shell-projects--refresh-ui project nil t)
-          (when (memq kind '(turn-complete prompt-ready init-finished))
-            (+agent-shell-projects-run-at-time 0 nil #'+agent-shell-projects-flush project)))))))
+  "Handle parsed agent EVENTs with bounded work and coalesced capture."
+  (let* ((kind (plist-get event :kind))
+         (project (+agent-shell-projects-load project-id))
+         (agent (seq-find (lambda (a) (equal (plist-get a :id) agent-id))
+                          (plist-get project :agents))))
+    (when (and agent (not (plist-get project :archived)))
+      (when (eq kind 'clean-up) (+agent-shell-projects--detach agent-id))
+      (when (memq kind '(init-finished turn-complete session-restored))
+        (let ((session (plist-get event :session)))
+          (unless (equal session (plist-get agent :session))
+            (+agent-shell-projects--set agent :session session)
+            (+agent-shell-projects-save project)))
+        (when (equal (plist-get agent :role) "author")
+          (unless (gethash project-id +agent-shell-projects--event-timers)
+            (puthash project-id
+                     (+agent-shell-projects-run-at-time
+                      0.3 nil
+                      (lambda ()
+                        (remhash project-id +agent-shell-projects--event-timers)
+                        (dolist (artefact (plist-get project :artefacts))
+                          (condition-case err
+                              (+agent-shell-projects-capture project artefact agent-id)
+                            (error (+agent-shell-projects--set
+                                    artefact :capture-error
+                                    (error-message-string err)))))))
+                     +agent-shell-projects--event-timers))))
+      (+agent-shell-projects--refresh-ui project nil t)
+      (when (memq kind '(turn-complete prompt-ready init-finished))
+        (+agent-shell-projects-run-at-time
+         0 nil #'+agent-shell-projects-flush project)))))
 
 (defun +agent-shell-projects--select-config ()
   "Resolve the configurable default agent, or prompt when requested."
@@ -191,22 +174,7 @@
          (identifier (if (eq (car-safe preferred) 'auto)
                          (cdr preferred) preferred)))
     (if prompt (agent-shell-select-config :prompt "Project agent: ")
-      (if (and (listp identifier) (assq :identifier identifier)) identifier
-        (or (seq-find
-             (lambda (config) (eq (map-elt config :identifier) identifier))
-             (mapcar (lambda (entry) (if (functionp entry) (funcall entry) entry))
-                     (if (functionp agent-shell-agent-configs)
-                         (funcall agent-shell-agent-configs)
-                       agent-shell-agent-configs)))
-            (user-error "Unknown agent configuration %s" identifier))))))
-
-(defun +agent-shell-projects--shell-in-workspace-p (project shell)
-  "Return whether SHELL's working directory matches PROJECT's workspace."
-  (and (plist-get project :root) (buffer-live-p shell)
-       (condition-case nil
-           (file-equal-p (plist-get project :root)
-                         (with-current-buffer shell (agent-shell-cwd)))
-         (error nil))))
+      (+agent-shell-drive-config identifier))))
 
 (defun +agent-shell-projects-start-agent (project &optional role)
   "Start a fresh shell for PROJECT with ROLE using configured selection."
@@ -214,21 +182,10 @@
   (unless (and (plist-get project :root)
                (file-directory-p (plist-get project :root)))
     (user-error "Choose a workspace from the project menu first"))
-  (let* ((workspace (file-name-as-directory (file-truename (plist-get project :root))))
-         (default-directory workspace)
-         (cwd-function (lambda () workspace))
-         (agent-shell-cwd-function cwd-function)
-         (agent-shell-mode-hook
-          (append agent-shell-mode-hook
-                  (list (lambda ()
-                          (setq-local agent-shell-cwd-function cwd-function
-                                      default-directory workspace)))))
-         (agent-shell-session-strategy 'new)
-         (config (+agent-shell-projects--select-config))
-         (shell (agent-shell-start :config config)))
-    (with-current-buffer shell
-      (setq-local agent-shell-cwd-function cwd-function
-                  default-directory workspace))
+  (let ((shell (+agent-shell-drive-start
+                :config (+agent-shell-projects--select-config)
+                :directory (plist-get project :root))))
+    (pop-to-buffer shell agent-shell-display-action)
     (+agent-shell-projects-associate project shell role)
     shell))
 
@@ -242,7 +199,8 @@
                             (mapcar #'buffer-name
                                     (seq-filter
                                      (lambda (shell)
-                                       (+agent-shell-projects--shell-in-workspace-p project shell))
+                                       (+agent-shell-drive-pinned-p
+                                        shell (plist-get project :root)))
                                      (agent-shell-buffers)))))
              (choice (completing-read "Author: " choices nil t)))
         (if (equal choice "[New shell]")
@@ -258,7 +216,7 @@
          (shell (+agent-shell-projects-shell agent)))
     (unless shell
       (user-error "Author is disconnected; choose an author from the project menu"))
-    (unless (+agent-shell-projects--shell-in-workspace-p project shell)
+    (unless (+agent-shell-drive-pinned-p shell (plist-get project :root))
       (user-error "Author is in another workspace; choose a matching or new author"))
     (with-current-buffer shell
       (setq +agent-shell-projects--project-id (plist-get project :id)))
@@ -433,20 +391,6 @@
                 (plist-get project :requests))
       (error "Unknown request")))
 
-(defun +agent-shell-projects--send (shell text)
-  "Send TEXT to SHELL when ready and without overwriting an unsent draft."
-  (when (and (buffer-live-p shell)
-             (agent-shell-session-id :shell-buffer shell)
-             (eq (agent-shell-status :shell-buffer shell) 'ready)
-             (with-current-buffer shell
-               (let ((process (get-buffer-process shell)))
-                 (or (not process)
-                     (string-empty-p
-                      (string-trim
-                       (buffer-substring-no-properties
-                        (process-mark process) (point-max))))))))
-    (agent-shell-insert :text text :shell-buffer shell :submit t :no-focus t)))
-
 (defun +agent-shell-projects-observations (project)
   "Return versions and activity actually displayed for PROJECT."
   (let (observations)
@@ -571,7 +515,7 @@
       (let* ((agent (+agent-shell-projects-agent project (plist-get request :agent)))
              (shell (+agent-shell-projects-shell agent)))
         (when (and shell (eq (agent-shell-status :shell-buffer shell) 'ready)
-                   (+agent-shell-projects--shell-in-workspace-p project shell))
+                   (+agent-shell-drive-pinned-p shell (plist-get project :root)))
           (condition-case err
               (when (funcall +agent-shell-projects-send-function shell
                              (+agent-shell-projects-content
@@ -768,8 +712,8 @@
   (maphash (lambda (_id timer) (+agent-shell-projects-cancel-timer timer))
            +agent-shell-projects--event-timers)
   (clrhash +agent-shell-projects--event-timers)
-  (mapc #'+agent-shell-projects--detach
-        (hash-table-keys +agent-shell-projects--subscriptions)))
+  (+agent-shell-drive-unwatch 'projects)
+  (clrhash +agent-shell-projects--shells))
 
 (defun +agent-shell-projects--activity (project _artefact _view)
   "Insert live agent activity for PROJECT in a sidebar."

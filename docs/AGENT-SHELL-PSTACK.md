@@ -69,8 +69,9 @@ agent instead:
    still triages and judges.
 
 Roles map to agent configs rather than model slugs; record that fork with its
-reason. Extract the session start, await and inbox code shared with
-`agent-shell-projects` before building this.
+reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
+event watching shared with `agent-shell-projects`. The file inbox stays in
+`agent-shell-projects`.
 
 ## Non-goals
 

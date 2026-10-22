@@ -95,7 +95,8 @@ revert edits. There is no separate wgrep transaction or wgrep dependency.
 - `lifecycle`: owned registrations, timers, setup and teardown.
 - `capture`, `jobs`, and `worker`: workspace enrolment and background services.
 - Main entry, annotations and menu: document and contextual UI.
-- Agent integration: subscriptions, inbox transport and request delivery.
+- Agent integration: inbox transport and request delivery. Starting, sending
+  to and watching shells goes through `lisp/+agent-shell-drive.el`.
 - Code and review: captured diffs, explanations and connected navigation.
 
 Core state and workspace capture load without Magit, Org, agent-shell, or the

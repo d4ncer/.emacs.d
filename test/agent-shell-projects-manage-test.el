@@ -28,7 +28,7 @@
                      (list :project (plist-get project :id) :agent (plist-get agent :id)
                            :id "late" :op "progress" :body "Still here")))
       (+agent-shell-projects--agent-event (plist-get project :id)
-                                          (plist-get agent :id) '((:event . turn-complete)))
+                                          (plist-get agent :id) '(:kind turn-complete))
       (should (= 0 (hash-table-count +agent-shell-projects--event-timers)))))))
 
 (ert-deftest +agent-shell-projects-test-unenrol-document-preserves-history ()

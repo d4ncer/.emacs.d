@@ -83,7 +83,8 @@
           (+agent-shell-projects-capture-delay 0.01)
           (+agent-shell-projects-change-hook nil)
           (+agent-shell-projects--shells (make-hash-table :test #'equal))
-          (+agent-shell-projects--subscriptions (make-hash-table :test #'equal))
+          (+agent-shell-drive--watchers (make-hash-table :test #'equal))
+          (+agent-shell-drive--shells (make-hash-table :test #'eq))
           (org-id-locations nil)
           (org-id-track-globally nil)
           (project (+agent-shell-projects-create "Example" directory)))
@@ -278,7 +279,7 @@
   "Run BODY with a simulated shell and public agent-shell API."
   (declare (indent 0))
   `(let ((shell (generate-new-buffer " *Project test agent*"))
-         (subscriptions 0) (unsubscriptions 0))
+         (subscriptions 0) (unsubscriptions 0) (handler nil))
      (unwind-protect
          (cl-letf (((symbol-function 'agent-shell-session-id)
                     (lambda (&rest _) "test-session"))
@@ -287,7 +288,10 @@
                    ((symbol-function 'agent-shell-status)
                     (lambda (&rest _) 'ready))
                    ((symbol-function 'agent-shell-subscribe-to)
-                    (lambda (&rest _) (cl-incf subscriptions)))
+                    (cl-function
+                     (lambda (&key on-event &allow-other-keys)
+                       (setq handler on-event)
+                       (cl-incf subscriptions))))
                    ((symbol-function 'agent-shell-unsubscribe)
                     (lambda (&rest _) (cl-incf unsubscriptions))))
            (with-current-buffer shell (setq major-mode 'agent-shell-mode))
@@ -367,13 +371,14 @@
 (ert-deftest +agent-shell-projects-test-agent-subscription-lifecycle ()
   (+agent-shell-projects-test--isolated
     (+agent-shell-projects-test--agent
-      (let ((agent (+agent-shell-projects-associate project shell)))
+      (progn
+        (+agent-shell-projects-associate project shell)
         (+agent-shell-projects-associate project shell)
         (should (= 1 subscriptions))
-        (+agent-shell-projects--agent-event
-         (plist-get project :id) (plist-get agent :id) '((:event . clean-up)))
+        (funcall handler '((:event . clean-up)))
         (should (= 1 unsubscriptions))
-        (should (= 0 (hash-table-count +agent-shell-projects--subscriptions)))))))
+        (+agent-shell-projects-associate project shell)
+        (should (= 2 subscriptions))))))
 
 (ert-deftest +agent-shell-projects-test-context-and-failed-delivery ()
   (+agent-shell-projects-test--isolated
