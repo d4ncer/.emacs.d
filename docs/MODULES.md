@@ -68,8 +68,9 @@ The authoritative order is the sequence of requires in `init.el`.
   editor services. Opening a source file does not activate Org or Vulpea.
 - Org files and commands activate Org. Agenda and note commands activate their
   required integrations. The personal `+life` library is loaded with Vulpea.
-- Agent-shell notifications and Mermaid activate with agent-shell. Math rendering
-  waits for its backend and uses `agent-shell-mode-hook`.
+- Agent-shell notifications, Mermaid and the pstack guard activate with
+  agent-shell. Math rendering waits for its backend and uses
+  `agent-shell-mode-hook`. See `docs/AGENT-SHELL-PSTACK.md` for pstack.
 
 ## Native tree-sitter and search
 

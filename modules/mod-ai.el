@@ -255,6 +255,16 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (agent-shell-notify-mode 1))
 
+(use-package +agent-shell-pstack
+  :ensure nil
+  :after agent-shell
+  :demand t
+  :general
+  (:keymaps 'agent-shell-mode-map
+   "C-c p" '(+agent-shell-pstack-mode :wk "pstack mode"))
+  :config
+  (+agent-shell-pstack-guard-mode 1))
+
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell

@@ -43,6 +43,7 @@
    "-l" "config-grep-test" "-l" "agent-shell-projects-lifecycle-test"
    "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
+   "-l" "agent-shell-pstack-test"
    "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Native syntax configuration" "-l" "config-treesit-test"
                          "-f" "ert-run-tests-batch-and-exit")
