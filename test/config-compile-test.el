@@ -16,6 +16,7 @@
                        "lisp/+keybindings.el" "lisp/+use-package.el"
                        "lisp/+edit-cmds.el" "lisp/+profile.el"
                        "lisp/+modeline-data.el" "lisp/+grep-edit.el"
+                       "lisp/+agent-shell-drive.el"
                        "lisp/compat/+expert-compat.el"
                        "lisp/compat/+eglot-tempel-compat.el"))
         (unless (byte-compile-file (expand-file-name file +config-test-root))
