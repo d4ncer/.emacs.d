@@ -65,6 +65,7 @@ Agents `fixture-codex' and `fixture-claude' have read-only modes;
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
           (+agent-shell-drive--shells (make-hash-table :test #'eq))
           (+agent-shell-pstack-prime-texts nil)
+          (+agent-shell-pstack-reminder-texts nil)
           (+agent-shell-pstack-mode-hook nil)
           (+agent-shell-pstack-panel-mode nil)
           (lead nil))
@@ -237,6 +238,8 @@ watchers."
            (member (car (+agent-shell-pstack-panel-members panel))))
       (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "CANCELLED")
+      (+agent-shell-pstack-panel-acp-test--lead-saw
+       lead "Emacs interrupted your turn because you called Run git show")
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
       (should (= 1 (length (+agent-shell-pstack-panel-list)))))))
 

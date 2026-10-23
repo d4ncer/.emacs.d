@@ -9,7 +9,8 @@
 ;; is the upstream event symbol.  `turn-complete' adds :stop-reason and :text,
 ;; `error' adds :message.  `agent-message-chunk' only feeds the turn text, and
 ;; `input-submitted' starts a new turn.  A tool call ends the final part; the
-;; first `tool-call-update' after agent text reports that part as :text.
+;; first `tool-call-update' after agent text reports that part as :text and
+;; the call's :title.
 ;;
 ;; A read-only shell runs in its agent's mode from
 ;; `+agent-shell-drive-read-only-modes' and answers permission requests itself:
@@ -258,7 +259,8 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
            (list :kind kind :shell shell
                  :session (ignore-errors
                             (agent-shell-session-id :shell-buffer shell))
-                 :text part))))
+                 :text part
+                 :title (map-nested-elt data '(:tool-call :title))))))
       (_
        (when (eq kind 'input-submitted)
          (plist-put state :turn "")

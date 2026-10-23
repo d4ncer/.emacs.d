@@ -66,8 +66,12 @@ members write code and need worktrees.
 
 A lead is a shell with `+agent-shell-pstack-mode` on. Its priming prompt
 carries the protocol, which names every agent in `agent-shell-agent-configs`
-that has a read-only mode. The lead ends its final message with a fenced
-block, then ends its turn:
+that has a read-only mode and tells the lead to use panels in place of the
+`how` and `interrogate` skills' own subagents. Every later prompt adds one
+line that restates the rule and names
+`var/pstack-panels/PROTOCOL.md`, which Emacs rewrites with the current
+protocol, so a lead that compacted its context can reread it. The lead ends
+its final message with a fenced block, then ends its turn:
 
 ````
 ```pstack-panel
@@ -88,6 +92,7 @@ live `turn-complete` or the tool call that ends the message, so a restored
 session never starts a panel. A lead that calls a tool after its block has
 broken the protocol: Emacs starts the panel anyway and interrupts the lead's
 turn, so the lead waits for the reports instead of working around them. The
+follow-up opens by naming the interrupted call, which may not have finished. The
 panel id is the first 12 hex digits of the SHA-1 of the session id and the
 block, and Emacs ignores a block it has seen. A malformed block gets a prompt
 back that says why it was rejected.

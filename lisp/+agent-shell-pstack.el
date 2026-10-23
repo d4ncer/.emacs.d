@@ -88,6 +88,10 @@ See `+agent-shell-pstack-irreversible-p'."
   "Extra text blocks for the prompt that loads poteto-mode.
 Each element is a string or a function returning a string or nil.")
 
+(defvar +agent-shell-pstack-reminder-texts nil
+  "Extra text blocks for prompts that carry `+agent-shell-pstack-reminder'.
+Each element is a string or a function returning a string or nil.")
+
 (defvar-local +agent-shell-pstack--primed nil
   "Session id whose prompt already loaded poteto-mode.")
 
@@ -121,15 +125,17 @@ with a slash or skill command, which is left for the agent."
       (vconcat (list (+agent-shell-pstack--text-block invocation)) blocks))
      (t
       (vconcat blocks (list (+agent-shell-pstack--text-block
-                             +agent-shell-pstack-reminder)))))))
+                             +agent-shell-pstack-reminder))
+               (+agent-shell-pstack--blocks
+                +agent-shell-pstack-reminder-texts))))))
 
-(defun +agent-shell-pstack--prime-blocks ()
-  "Return text blocks for `+agent-shell-pstack-prime-texts'."
+(defun +agent-shell-pstack--blocks (texts)
+  "Return text blocks for TEXTS, strings or functions returning one or nil."
   (vconcat
    (mapcar #'+agent-shell-pstack--text-block
            (delq nil (mapcar (lambda (text)
                                (if (functionp text) (funcall text) text))
-                             +agent-shell-pstack-prime-texts)))))
+                             texts)))))
 
 (defun +agent-shell-pstack--replace (alist key value)
   "Return a copy of ALIST with KEY bound to VALUE."
@@ -159,7 +165,8 @@ with a slash or skill command, which is left for the agent."
             (when prime
               (setq +agent-shell-pstack--primed session
                     prompt (vconcat prompt
-                                    (+agent-shell-pstack--prime-blocks))))
+                                    (+agent-shell-pstack--blocks
+                                     +agent-shell-pstack-prime-texts))))
             (+agent-shell-pstack--replace
              request :params
              (+agent-shell-pstack--replace params 'prompt prompt)))))

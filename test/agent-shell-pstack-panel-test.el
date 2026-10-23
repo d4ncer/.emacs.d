@@ -24,6 +24,7 @@ of shell to partial text), and the functions `lead-event' and
           (+agent-shell-pstack-panel-directory directory)
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-pstack-prime-texts nil)
+          (+agent-shell-pstack-reminder-texts nil)
           (+agent-shell-pstack-mode-hook nil)
           (+agent-shell-pstack-panel-mode nil)
           (handlers (make-hash-table :test #'equal))
@@ -136,21 +137,38 @@ of shell to partial text), and the functions `lead-event' and
       (lead-event :kind 'tool-call-update :session "s1" :text "Reading.")
       (should-not started)
       (should-not interrupted)
-      (lead-event :kind 'tool-call-update :session "s1" :text text)
+      (lead-event :kind 'tool-call-update :session "s1" :text text
+                  :title "Run git show")
       (should (= 2 (length started)))
       (should (equal (list lead) interrupted))
-      (lead-event :kind 'tool-call-update :session "s1" :text text)
+      (lead-event :kind 'tool-call-update :session "s1" :text text
+                  :title "Run git show")
       (lead-event :kind 'turn-complete :session "s1" :text text)
       (should (= 2 (length started)))
       (should (equal (list lead) interrupted))
-      (should (= 1 (length (+agent-shell-pstack-panel-list)))))
+      (should (= 1 (length (+agent-shell-pstack-panel-list))))
+      (member-event "data-flow" :kind 'init-finished)
+      (member-event "risks" :kind 'init-finished)
+      (member-event "data-flow" :kind 'turn-complete :text "A")
+      (member-event "risks" :kind 'turn-complete :text "B")
+      (should (string-prefix-p "Emacs interrupted your turn because you \
+called Run git show after your pstack-panel block, so that call may not have \
+finished.  Rerun it if you still need it.\n\npstack panel "
+                               (cdar sent))))
+    (lead-event :kind 'tool-call-update :session "s1" :title "Edit"
+                :text (+agent-shell-pstack-panel-test--message "{bad"))
+    (should (equal (list lead lead) interrupted))
+    (should (string-prefix-p "Emacs interrupted your turn because you called \
+Edit after your pstack-panel block, so that call may not have finished.  \
+Rerun it if you still need it.\n\nEmacs rejected your pstack-panel request: \
+The block is not valid JSON" (cdar sent)))
     (lead-event :kind 'turn-complete :session "s1"
                 :text (concat (+agent-shell-pstack-panel-test--message
                                "{\"version\":1,\"shape\":\"how\",\
 \"brief\":\"c\",\"members\":[{\"role\":\"a\",\"agent\":\"codex\"}]}")
                               "\nOne more thought."))
     (should (= 3 (length started)))
-    (should (= 1 (length interrupted)))))
+    (should (= 2 (length interrupted)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-validation ()
   "Accept a well-formed request and explain each rejection to the lead."
@@ -414,7 +432,21 @@ high signal." followup))))))
         (should (string-match-p "two or more members, mix agents" (cadr first)))
         (should (string-match-p "end your turn" (cadr first)))
         (should (string-match-p "Emacs sends you a prompt" (cadr first)))
-        (should (equal (list "again" +agent-shell-pstack-reminder) second))
+        (should (equal "again" (car second)))
+        (should (equal +agent-shell-pstack-reminder (cadr second)))
+        (should (string-match-p
+                 (concat "never on your own subagents.*The protocol is in "
+                         (regexp-quote
+                          (+agent-shell-pstack-panel-protocol-file)))
+                 (caddr second)))
+        (should (= 3 (length second)))
+        (should (equal (cadr first)
+                       (with-temp-buffer
+                         (insert-file-contents
+                          (+agent-shell-pstack-panel-protocol-file))
+                         (buffer-string))))
+        (should (string-match-p "never run such a panel on your own subagents"
+                                (cadr first)))
         (should (+agent-shell-pstack-panel--block
                  (concat (cadr first) "\n```pstack-panel\n{}\n```")))
         (let ((example (with-temp-buffer
@@ -427,6 +459,9 @@ high signal." followup))))))
         (setq +agent-shell-pstack--primed nil)
         (should (= 1 (length (funcall texts (+agent-shell-pstack--decorate
                                              lead (funcall request "go"))))))
+        (should (equal (list "again" +agent-shell-pstack-reminder)
+                       (funcall texts (+agent-shell-pstack--decorate
+                                       lead (funcall request "again")))))
         (should-not (gethash (cons 'pstack-lead lead) handlers))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-view ()
