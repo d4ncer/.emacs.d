@@ -7,7 +7,8 @@
 ;; streamed event.  `+agent-shell-perf-mode' installs each entry of
 ;; `+agent-shell-perf--advice'.  Every entry names the upstream function it
 ;; works around; delete an entry once upstream changes that function.
-;; Measurements are in docs/perf/agent-shell-streaming-after.md.
+;; Measurements are in docs/perf/agent-shell-streaming-after.md and
+;; docs/perf/agent-shell-upstream-78a2c94.md.
 
 ;;; Code:
 
@@ -26,10 +27,6 @@
   "Seconds transcript appends collect before one write."
   :type 'number)
 
-(defcustom +agent-shell-perf-cache-dir-recheck 5
-  "Seconds `agent-shell-cache-dir' trusts a directory it created."
-  :type 'number)
-
 (defconst +agent-shell-perf-relabel-boundary-events
   '(input-submitted turn-complete prompt-ready session-restored
                     permission-request permission-response)
@@ -38,16 +35,17 @@
 (defun +agent-shell-perf--throttle-relabel (schedule &rest args)
   "Call SCHEDULE with ARGS at turn boundaries; defer other relabels.
 Works around `agent-shell-chat--schedule-relabel', which relabels the
-whole buffer on the next tick after every event, so the cost grows with
-buffer size times chunk rate.  An event in
-`+agent-shell-perf-relabel-boundary-events', or a call with no event such
-as `shell-maker-finish-output-hook', replaces any pending relabel with
-upstream's immediate one.  Any other event schedules one relabel
+whole buffer on the next tick after every event and every rendered
+section, so the cost grows with buffer size times chunk rate.  An event
+in `+agent-shell-perf-relabel-boundary-events', or a call with no
+arguments such as `shell-maker-finish-output-hook', replaces any pending
+relabel with upstream's immediate one.  Any other event, or a section
+range from `agent-shell-section-functions', schedules one relabel
 `+agent-shell-perf-relabel-delay' seconds later unless one is pending.
 Delete once upstream stops rescanning the buffer per streamed event."
   (let ((event (and (consp (car args)) (alist-get :event (car args)))))
     (cond
-     ((or (null event)
+     ((or (null args)
           (memq event +agent-shell-perf-relabel-boundary-events))
       (when (timerp agent-shell-chat--relabel-timer)
         (cancel-timer agent-shell-chat--relabel-timer)
@@ -126,26 +124,6 @@ ARGS are EMIT's arguments, from `agent-shell--emit-event'."
   (+agent-shell-perf--flush-all-transcripts)
   (apply function args))
 
-(defvar +agent-shell-perf--cache-dirs (make-hash-table :test #'equal)
-  "Map `agent-shell-cache-dir' inputs to (TIME . DIRECTORY).")
-
-(defun +agent-shell-perf--cache-dir (cache-dir &rest components)
-  "Return CACHE-DIR's directory for COMPONENTS, reusing a recent result.
-Works around `agent-shell-cache-dir', which calls `make-directory' on
-every markdown render.  A result is reused for
-`+agent-shell-perf-cache-dir-recheck' seconds, so a deleted directory
-is recreated after that.  Delete once upstream creates it once."
-  (let* ((key (list (getenv "XDG_CACHE_HOME") (getenv "HOME")
-                    user-emacs-directory components))
-         (entry (gethash key +agent-shell-perf--cache-dirs)))
-    (if (and entry (< (- (float-time) (car entry))
-                      +agent-shell-perf-cache-dir-recheck))
-        (cdr entry)
-      (let ((directory (apply cache-dir components)))
-        (puthash key (cons (float-time) directory)
-                 +agent-shell-perf--cache-dirs)
-        directory))))
-
 (defconst +agent-shell-perf--advice
   '((relabel agent-shell-chat--schedule-relabel
              +agent-shell-perf--throttle-relabel)
@@ -154,8 +132,7 @@ is recreated after that.  Delete once upstream creates it once."
     (transcript-turn agent-shell--emit-event
                      +agent-shell-perf--flush-at-turn-end)
     (transcript-open agent-shell-open-transcript
-                     +agent-shell-perf--flush-before)
-    (cache-dir agent-shell-cache-dir +agent-shell-perf--cache-dir))
+                     +agent-shell-perf--flush-before))
   "Workaround name, upstream function and its `:around' advice.")
 
 ;;;###autoload

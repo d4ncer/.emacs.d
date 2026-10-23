@@ -157,6 +157,23 @@ times, read by a 10 ms timer and event subscriptions."
                  (+ +agent-shell-perf-relabel-delay 0.3)))
       (should (< first-label (- (plist-get times :complete) 0.5))))))
 
+(ert-deftest +agent-shell-perf-acp-test-relabel-defers-section-ranges ()
+  "A rendered section range defers its relabel; a bare call does not."
+  (with-temp-buffer
+    (setq-local agent-shell-chat--labeled t)
+    (let (calls)
+      (unwind-protect
+          (cl-flet ((schedule (&rest args) (push args calls)))
+            (+agent-shell-perf--throttle-relabel
+             #'schedule '((:body (:start . 1) (:end . 2))))
+            (should-not calls)
+            (should (timerp agent-shell-chat--relabel-timer))
+            (+agent-shell-perf--throttle-relabel #'schedule)
+            (should (equal calls '(nil)))
+            (should-not agent-shell-chat--relabel-timer))
+        (when (timerp agent-shell-chat--relabel-timer)
+          (cancel-timer agent-shell-chat--relabel-timer))))))
+
 (defun +agent-shell-perf-acp-test--transcript-body (file)
   "Return FILE's text after its header, with timestamps blanked."
   (with-temp-buffer
@@ -188,43 +205,20 @@ times, read by a 10 ms timer and event subscriptions."
   "A transcript deleted between turns comes back with its header."
   (+agent-shell-perf-acp-test--with-env
     (let* ((transcript (expand-file-name "deleted.md" cwd))
-           (agent-shell-transcript-file-path-function (lambda () transcript))
-           (+agent-shell-perf-recheck-interval 0.2))
+           (agent-shell-transcript-file-path-function (lambda () transcript)))
       (+agent-shell-perf-mode 1)
       (let ((shell (car (push (+agent-shell-perf-acp-test--start cwd)
                               shells))))
         (+agent-shell-perf-acp-test--turn shell '(:chunks 10 :tag "first"))
         (delete-file transcript)
-        (accept-process-output nil 0.3)
         (+agent-shell-perf-acp-test--turn shell '(:chunks 10 :tag "second"))
         (with-temp-buffer
           (insert-file-contents transcript)
-          (should (string-prefix-p "# Agent Shell Transcript" (buffer-string)))
+          (should (string-match-p
+                   "\\`\\(?:---\n\\(?:.*\n\\)*?---\n\n\\)?# Agent Shell Transcript"
+                   (buffer-string)))
           (should (string-search "BENCH-END-second" (buffer-string)))
           (should-not (string-search "BENCH-END-first" (buffer-string))))))))
-
-(ert-deftest +agent-shell-perf-acp-test-cache-dir-recreated-after-recheck ()
-  "The cache directory matches upstream's and comes back once deleted."
-  (let* ((cache (make-temp-file "agent-shell-perf-cache-" t))
-         (process-environment (cons (concat "XDG_CACHE_HOME=" cache)
-                                    process-environment))
-         (perf-mode +agent-shell-perf-mode)
-         (+agent-shell-perf-cache-dir-recheck 0.2)
-         upstream)
-    (unwind-protect
-        (progn
-          (+agent-shell-perf-mode -1)
-          (setq upstream (agent-shell-cache-dir "content"))
-          (delete-directory upstream t)
-          (+agent-shell-perf-mode 1)
-          (should (equal (agent-shell-cache-dir "content") upstream))
-          (should (file-directory-p upstream))
-          (delete-directory upstream t)
-          (sleep-for 0.3)
-          (should (equal (agent-shell-cache-dir "content") upstream))
-          (should (file-directory-p upstream)))
-      (+agent-shell-perf-mode (if perf-mode 1 -1))
-      (delete-directory cache t))))
 
 (provide 'agent-shell-perf-acp-test)
 ;;; agent-shell-perf-acp-test.el ends here
