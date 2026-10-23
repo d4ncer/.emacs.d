@@ -3,8 +3,10 @@
 import json
 import os
 from pathlib import Path
+import random
 import re
 import sys
+import time
 import uuid
 
 
@@ -133,6 +135,107 @@ def handle_pstack_prompt(message, text, state):
     return None
 
 
+BENCH_MARKDOWN = """## Findings for section {n}
+
+The drive watcher **parses every chunk** and keeps `:turn` and `:final`
+in step, so a long turn copies its text again on each `concat`.  See
+[the drive library](lisp/+agent-shell-drive.el) for the watcher table.
+
+- Shells keep one upstream subscription each.
+- Watchers are keyed by `(OWNER . ID)` and receive parsed plists.
+- A read-only shell answers its own permission requests.
+
+```elisp
+(defun +bench-sample-{n} (shell state event)
+  "Update SHELL's turn STATE from EVENT."
+  (let ((kind (map-elt event :event)))
+    (pcase kind
+      ('agent-message-chunk
+       (plist-put state :turn (concat (plist-get state :turn) "x")))
+      (_ nil))))
+```
+
+| Scenario | Shells | Buffer | Chunks | Median ms |
+|----------|--------|--------|--------|-----------|
+| fresh    | 1      | 0 MB   | 600    | 0.{n}     |
+| preload  | 1      | 2.4 MB | 600    | 1.{n}     |
+| panel    | 3      | 0 MB   | 1800   | 2.{n}     |
+| mixed    | 3      | 2.4 MB | 1800   | 3.{n}     |
+
+1. Measure before changing anything.
+2. Profile the worst realistic scenario in a run you do not report.
+3. Map each hot spot to `file:line` and *name* the limiter.
+
+```python
+def render(rows):
+    for row in rows:
+        yield "| " + " | ".join(str(cell) for cell in row) + " |"
+```
+
+"""
+
+
+def bench_text(n):
+    parts = []
+    index = 0
+    while sum(map(len, parts)) < n:
+        parts.append(BENCH_MARKDOWN.format(n=index))
+        index += 1
+    return "".join(parts)
+
+
+def bench_update(session_id, update):
+    emit({"method": "session/update",
+          "params": {"sessionId": session_id, "update": update}})
+
+
+def bench_stream(session_id, spec):
+    """Stream a turn shaped by SPEC; return the final chunk text.
+
+    SPEC keys: chunks, delay_ms, tools, tool_bytes, thoughts, seed, tag."""
+    rng = random.Random(spec.get("seed", 1))
+    chunks = spec.get("chunks", 600)
+    tools = spec.get("tools", 0)
+    tool_bytes = spec.get("tool_bytes", 2000)
+    delay = spec.get("delay_ms", 0) / 1000
+    tag = spec.get("tag", "0")
+    text = bench_text(chunks * 80)
+    every = chunks // (tools + 1) if tools else chunks + 1
+    for _ in range(spec.get("thoughts", 0)):
+        bench_update(session_id, {"sessionUpdate": "agent_thought_chunk",
+                                  "content": {"type": "text",
+                                              "text": "Thinking it over. "}})
+    position = 0
+    tool = 0
+    for index in range(chunks):
+        if index and index % every == 0 and tool < tools:
+            call_id = f"bench-{tag}-{tool}"
+            command = f"cd /repo && rg -n 'pattern{tool}' lisp/"
+            bench_update(session_id, {
+                "sessionUpdate": "tool_call", "toolCallId": call_id,
+                "title": command, "kind": "execute", "status": "pending",
+                "rawInput": {"command": command,
+                             "description": "Search the repo"}})
+            output = "".join(
+                f"lisp/+agent-shell-drive.el:{line}: (pattern{tool} {line})\n"
+                for line in range(tool_bytes // 48 + 1))[:tool_bytes]
+            bench_update(session_id, {
+                "sessionUpdate": "tool_call_update", "toolCallId": call_id,
+                "status": "completed",
+                "content": [{"type": "content",
+                             "content": {"type": "text", "text": output}}]})
+            tool += 1
+        size = rng.randint(8, 72)
+        piece = text[position:position + size]
+        position += size
+        bench_update(session_id, {"sessionUpdate": "agent_message_chunk",
+                                  "content": {"type": "text", "text": piece}})
+        if delay:
+            time.sleep(delay)
+    return f"\n\nBENCH-END-{tag}\n"
+
+
+
 REFUSE_SET_MODE = "--refuse-set-mode" in sys.argv
 MODES = [{"id": mode, "name": mode} for mode in ("default", "plan", "read-only")]
 
@@ -171,6 +274,13 @@ for line in sys.stdin:
     elif method == "session/prompt":
         text = "\n".join(item.get("text", "") for item in params["prompt"])
         state = sessions[params["sessionId"]]
+        bench = text.find("BENCH-STREAM ")
+        if bench >= 0:
+            spec, _ = json.JSONDecoder().raw_decode(
+                text[bench + len("BENCH-STREAM "):])
+            chunk(params["sessionId"], bench_stream(params["sessionId"], spec))
+            emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
+            continue
         reply = handle_pstack_prompt(message, text, state)
         if reply is False:
             continue
