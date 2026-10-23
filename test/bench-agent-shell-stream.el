@@ -37,8 +37,10 @@
     (mixed :shells 3 :preload t))
   "Scenario name to shell count and whether the lead is preloaded.")
 
-(defconst +bench-toggles '(chat transcript drive render)
-  "Production features a run can disable through BENCH_OFF.")
+(defconst +bench-toggles '(chat transcript drive render perf)
+  "Production features a run can disable through BENCH_OFF.
+A `perf-NAME' toggle also removes the `+agent-shell-perf--advice' entry
+NAME, leaving the other workarounds on.")
 
 (defun +bench--env (name default)
   "Return environment variable NAME as a number, or DEFAULT."
@@ -76,11 +78,14 @@
 (require '+agent-shell-pstack)
 (require '+agent-shell-pstack-panel)
 (require '+agent-shell-mermaid)
+(require '+agent-shell-perf)
 
 (defvar +bench-off
   (mapcar #'intern (split-string (or (getenv "BENCH_OFF") "") "," t)))
 (dolist (toggle +bench-off)
-  (unless (memq toggle +bench-toggles)
+  (unless (or (memq toggle +bench-toggles)
+              (assq (intern (string-remove-prefix "perf-" (symbol-name toggle)))
+                    +agent-shell-perf--advice))
     (error "Unknown toggle %s" toggle)))
 
 (defvar +bench-notifications 0)
@@ -117,6 +122,11 @@
 (+agent-shell-pstack-panel-mode 1)
 (unless (memq 'render +bench-off)
   (+agent-shell-mermaid-mode 1))
+(unless (memq 'perf +bench-off)
+  (+agent-shell-perf-mode 1)
+  (pcase-dolist (`(,name ,upstream ,advice) +agent-shell-perf--advice)
+    (when (memq (intern (format "perf-%s" name)) +bench-off)
+      (advice-remove upstream advice))))
 
 ;;;; Instrumentation
 
@@ -278,6 +288,41 @@ Return a vector of [BYTES-BEFORE WALL-MS] per turn."
   (let ((time (current-cpu-time)))
     (/ (float (car time)) (cdr time))))
 
+;;;; Label checks
+
+(defun +bench--labels (shell)
+  "Return SHELL's chat label overlays as (START END PROPERTIES) lists."
+  (with-current-buffer shell
+    (sort (seq-keep (lambda (overlay)
+                      (when (overlay-get overlay 'agent-shell-chat--tag)
+                        (list (overlay-start overlay) (overlay-end overlay)
+                              (prin1-to-string
+                               (seq-sort-by #'prin1-to-string #'string<
+                                            (seq-partition
+                                             (overlay-properties overlay)
+                                             2))))))
+                    (overlays-in (point-min) (point-max)))
+          :key #'prin1-to-string)))
+
+(defun +bench--label-checks (shells)
+  "Return label and content digests of SHELLS, and whether labels are settled.
+Settled means one more upstream relabel leaves every label unchanged."
+  (list :label-sha1 (mapcar (lambda (shell)
+                              (sha1 (prin1-to-string (+bench--labels shell))))
+                            shells)
+        :text-sha1 (mapcar (lambda (shell)
+                             (with-current-buffer shell
+                               (sha1 (buffer-substring-no-properties
+                                      (point-min) (point-max)))))
+                           shells)
+        :labels-settled
+        (seq-every-p (lambda (shell)
+                       (let ((before (+bench--labels shell)))
+                         (with-current-buffer shell
+                           (agent-shell-chat--relabel))
+                         (equal before (+bench--labels shell))))
+                     shells)))
+
 ;;;; Entry point
 
 (defun +bench-run ()
@@ -310,6 +355,7 @@ Return a vector of [BYTES-BEFORE WALL-MS] per turn."
     (cancel-timer timer)
     (let* ((elapsed (- (float-time) start))
            (cpu-used (- (+bench--cpu-seconds) cpu))
+           (labels (+bench--label-checks shells))
            (gaps +bench-gaps)
            (chunks (+bench--summary "agent_message_chunk"))
            (result
@@ -359,6 +405,7 @@ Return a vector of [BYTES-BEFORE WALL-MS] per turn."
                            (buffer-local-value 'agent-shell-chat--labeled
                                                shell))
                          shells)
+              :labels labels
               :code-types
               (mapcar (lambda (symbol)
                         (type-of (advice--cd*r (symbol-function symbol))))

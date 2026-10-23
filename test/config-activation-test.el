@@ -23,13 +23,15 @@
 
 (ert-deftest +config-activation-agent-integrations ()
   (require 'agent-shell)
-  (dolist (package '(agent-shell-notify +agent-shell-mermaid))
+  (dolist (package '(agent-shell-notify +agent-shell-mermaid +agent-shell-perf))
     (eval (+config-test-declaration "modules/mod-ai.el" package) t)
     (should (featurep package)))
   (should agent-shell-notify-mode)
   (should +agent-shell-mermaid-mode)
+  (should +agent-shell-perf-mode)
   (agent-shell-notify-mode -1)
-  (+agent-shell-mermaid-mode -1))
+  (+agent-shell-mermaid-mode -1)
+  (+agent-shell-perf-mode -1))
 
 (ert-deftest +config-activation-environment-order ()
   (let (events)

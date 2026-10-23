@@ -258,6 +258,13 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (agent-shell-notify-mode 1))
 
+(use-package +agent-shell-perf
+  :ensure nil
+  :after agent-shell
+  :demand t
+  :config
+  (+agent-shell-perf-mode 1))
+
 (use-package +agent-shell-pstack
   :ensure nil
   :after agent-shell
