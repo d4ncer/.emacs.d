@@ -406,5 +406,29 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
         (should (buffer-live-p member))
         (should (equal '(init-finished) events))))))
 
+(ert-deftest +agent-shell-drive-test-read-only-mode-config-option ()
+  "Accept a read-only mode applied through the agent's mode config option."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (let ((member (+agent-shell-drive-start :config 'codex
+                                              :directory directory
+                                              :read-only t))
+            (events nil))
+        (+agent-shell-drive-watch member 'a 1
+                                  (lambda (e) (push (plist-get e :kind) events)))
+        (with-current-buffer member
+          (setq-local agent-shell--state
+                      (list (list :session
+                                  (cons :mode-id "agent")
+                                  (cons :config-options
+                                        (list (list (cons :id "mode")
+                                                    (cons :category "mode")
+                                                    (cons :current-value
+                                                          "read-only"))))))))
+        (emit member '((:event . init-finished)))
+        (accept-process-output nil 0.05)
+        (should (buffer-live-p member))
+        (should (equal '(init-finished) events))))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here
