@@ -157,5 +157,51 @@ times, read by a 10 ms timer and event subscriptions."
                  (+ +agent-shell-perf-relabel-delay 0.3)))
       (should (< first-label (- (plist-get times :complete) 0.5))))))
 
+(defun +agent-shell-perf-acp-test--transcript-body (file)
+  "Return FILE's text after its header, with timestamps blanked."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (goto-char (point-min))
+    (search-forward "\n---\n")
+    (replace-regexp-in-string "[0-9-]\\{10\\} [0-9:]\\{8\\}" "TIME"
+                              (buffer-substring (point) (point-max)))))
+
+(ert-deftest +agent-shell-perf-acp-test-transcript-matches-upstream ()
+  "The workarounds write the same transcript as upstream."
+  (+agent-shell-perf-acp-test--with-env
+    (let* ((transcript nil)
+           (agent-shell-transcript-file-path-function (lambda () transcript))
+           bodies)
+      (dolist (mode '(-1 1))
+        (+agent-shell-perf-mode mode)
+        (setq transcript (expand-file-name (format "%s.md" mode) cwd))
+        (let ((shell (+agent-shell-perf-acp-test--start cwd)))
+          (push shell shells)
+          (+agent-shell-perf-acp-test--turn
+           shell +agent-shell-perf-acp-test--spec)
+          (push (+agent-shell-perf-acp-test--transcript-body transcript)
+                bodies)))
+      (should (string-search "BENCH-END-perf" (car bodies)))
+      (should (equal (car bodies) (cadr bodies))))))
+
+(ert-deftest +agent-shell-perf-acp-test-transcript-recreated-after-deletion ()
+  "A transcript deleted between turns comes back with its header."
+  (+agent-shell-perf-acp-test--with-env
+    (let* ((transcript (expand-file-name "deleted.md" cwd))
+           (agent-shell-transcript-file-path-function (lambda () transcript))
+           (+agent-shell-perf-recheck-interval 0.2))
+      (+agent-shell-perf-mode 1)
+      (let ((shell (car (push (+agent-shell-perf-acp-test--start cwd)
+                              shells))))
+        (+agent-shell-perf-acp-test--turn shell '(:chunks 10 :tag "first"))
+        (delete-file transcript)
+        (accept-process-output nil 0.3)
+        (+agent-shell-perf-acp-test--turn shell '(:chunks 10 :tag "second"))
+        (with-temp-buffer
+          (insert-file-contents transcript)
+          (should (string-prefix-p "# Agent Shell Transcript" (buffer-string)))
+          (should (string-search "BENCH-END-second" (buffer-string)))
+          (should-not (string-search "BENCH-END-first" (buffer-string))))))))
+
 (provide 'agent-shell-perf-acp-test)
 ;;; agent-shell-perf-acp-test.el ends here
