@@ -83,10 +83,14 @@ block, then ends its turn:
 - `timeout` is 1 to 3600 seconds. It defaults to
   `+agent-shell-pstack-panel-default-timeout`, 900.
 
-Emacs reads the block only from a live `turn-complete`, so a restored session
-never starts a panel. The panel id is the first 12 hex digits of the SHA-1 of
-the session id and the block, and Emacs ignores a block it has seen. A
-malformed block gets a prompt back that says why it was rejected.
+Emacs reads the first complete block in the lead's message, as it reaches a
+live `turn-complete` or the tool call that ends the message, so a restored
+session never starts a panel. A lead that calls a tool after its block has
+broken the protocol: Emacs starts the panel anyway and interrupts the lead's
+turn, so the lead waits for the reports instead of working around them. The
+panel id is the first 12 hex digits of the SHA-1 of the session id and the
+block, and Emacs ignores a block it has seen. A malformed block gets a prompt
+back that says why it was rejected.
 
 The request travels over ACP rather than through a file inbox. The lead needs
 no write permission, which plan modes often refuse, and its shell identifies

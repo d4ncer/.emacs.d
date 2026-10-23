@@ -7,9 +7,9 @@
 ;;
 ;; A watcher receives (:kind KIND :shell BUFFER :session ID ...), where KIND
 ;; is the upstream event symbol.  `turn-complete' adds :stop-reason and :text,
-;; `error' adds :message.  `agent-message-chunk' and `tool-call-update' only
-;; feed the turn text: chunks append, a tool call ends the final part, and
-;; `input-submitted' starts a new turn.
+;; `error' adds :message.  `agent-message-chunk' only feeds the turn text, and
+;; `input-submitted' starts a new turn.  A tool call ends the final part; the
+;; first `tool-call-update' after agent text reports that part as :text.
 ;;
 ;; A read-only shell runs in its agent's mode from
 ;; `+agent-shell-drive-read-only-modes' and answers permission requests itself:
@@ -33,6 +33,7 @@
 (declare-function agent-shell-status "agent-shell")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-insert "agent-shell")
+(declare-function agent-shell-interrupt "agent-shell")
 (declare-function agent-shell-subscribe-to "agent-shell")
 (declare-function agent-shell-unsubscribe "agent-shell")
 (defvar agent-shell-agent-configs)
@@ -206,6 +207,12 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
                         (process-mark process) (point-max))))))))
     (agent-shell-insert :text text :shell-buffer shell :submit t :no-focus t)))
 
+(defun +agent-shell-drive-interrupt (shell)
+  "Cancel SHELL's turn without asking, rejecting its pending permissions."
+  (when (and (buffer-live-p shell)
+             (agent-shell-session-id :shell-buffer shell))
+    (with-current-buffer shell (agent-shell-interrupt t))))
+
 (defun +agent-shell-drive-partial-text (shell)
   "Return the agent text of watched SHELL's current turn."
   (plist-get (gethash shell +agent-shell-drive--shells) :turn))
@@ -244,7 +251,14 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
          (plist-put state :turn (concat (plist-get state :turn) chunk))
          (plist-put state :final (concat (plist-get state :final) chunk)))
        nil)
-      ('tool-call-update (plist-put state :final "") nil)
+      ('tool-call-update
+       (let ((part (plist-get state :final)))
+         (plist-put state :final "")
+         (unless (string-blank-p part)
+           (list :kind kind :shell shell
+                 :session (ignore-errors
+                            (agent-shell-session-id :shell-buffer shell))
+                 :text part))))
       (_
        (when (eq kind 'input-submitted)
          (plist-put state :turn "")

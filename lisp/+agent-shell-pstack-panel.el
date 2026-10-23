@@ -2,7 +2,8 @@
 
 ;;; Commentary:
 ;; A lead agent in `+agent-shell-pstack-mode' requests a panel by ending its
-;; final message with a fenced pstack-panel JSON block.  Emacs starts one
+;; final message with a fenced pstack-panel JSON block.  A lead that calls a
+;; tool after the block is interrupted once the panel starts.  Emacs starts one
 ;; read-only shell per member in the lead's directory, sends each the brief,
 ;; writes each report once under `+agent-shell-pstack-panel-directory', and
 ;; prompts the lead with every report and the shape's triage line.
@@ -106,16 +107,13 @@ brief unsent) to `running' (brief sent), then settles once as `done',
 ;;;; Requests
 
 (defun +agent-shell-pstack-panel--block (text)
-  "Return the pstack-panel block that ends TEXT, or nil."
-  (when text
-    (with-temp-buffer
-      (insert text)
-      (when (and (re-search-backward (rx bol "```pstack-panel" (* blank) "\n")
-                                     nil t)
-                 (looking-at (rx "```pstack-panel" (* blank) "\n"
-                                 (group (*? anychar))
-                                 "\n```" (* space) eos)))
-        (match-string-no-properties 1)))))
+  "Return the first complete pstack-panel block in TEXT, or nil."
+  (when (and text (string-match (rx bol "```pstack-panel" (* blank) "\n")
+                                text))
+    (let ((start (match-end 0)))
+      (when (string-match (rx bol "```" (* blank) eol) text start)
+        (substring-no-properties text start
+                                 (max start (1- (match-beginning 0))))))))
 
 (defun +agent-shell-pstack-panel--id (session block)
   "Return the panel id for BLOCK requested in SESSION."
@@ -218,7 +216,8 @@ vendors.
 Each member starts fresh, read-only, in your working directory, and sees \
 only the brief and its own focus.  Use 1 to %d members with unique roles of \
 lowercase letters, digits and hyphens.  The timeout is in seconds, at most \
-%d.  The block must be the last thing in your message.
+%d.  End your turn right after the block.  Emacs starts the panel as soon as \
+the block is complete, and interrupts your turn if you call a tool after it.
 Do not wait or poll after the block.  When every member has finished or \
 timed out, Emacs sends you a prompt with each report inline, the path it was \
 saved to, and how to triage the reports."
@@ -430,7 +429,8 @@ Prefer a rejected plan when it is longer than the final text."
               panel member 'error nil (error-message-string err))))))
 
 (defun +agent-shell-pstack-panel--request (lead session text)
-  "Start the panel that LEAD requested at the end of TEXT in SESSION."
+  "Start the panel that LEAD requested in TEXT in SESSION.
+Return the panel, or nil when TEXT requests none or one already seen."
   (when-let* ((block (+agent-shell-pstack-panel--block text))
               (id (+agent-shell-pstack-panel--id (or session "") block))
               ((not (+agent-shell-pstack-panel--find id))))
@@ -450,7 +450,8 @@ Prefer a rejected plan when it is longer than the final text."
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (+agent-shell-pstack-panel--start-member panel member)))
       (+agent-shell-pstack-panel--finish panel)
-      (+agent-shell-pstack-panels--refresh))))
+      (+agent-shell-pstack-panels--refresh)
+      panel)))
 
 (defun +agent-shell-pstack-panel--abandon (lead)
   "Stop the unfinished panels of LEAD, whose shell has ended."
@@ -465,6 +466,10 @@ Prefer a rejected plan when it is longer than the final text."
   "Read panel requests from a lead's EVENT and deliver its follow-ups."
   (let ((lead (plist-get event :shell)))
     (pcase (plist-get event :kind)
+      ('tool-call-update
+       (when (+agent-shell-pstack-panel--request
+              lead (plist-get event :session) (plist-get event :text))
+         (+agent-shell-drive-interrupt lead)))
       ('turn-complete
        (+agent-shell-pstack-panel--request lead (plist-get event :session)
                                            (plist-get event :text))
