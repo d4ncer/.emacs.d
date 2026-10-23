@@ -60,7 +60,8 @@ shell for a configured agent. `lisp/+agent-shell-pstack-panel.el` holds the
 panels, and `+agent-shell-pstack-panel-mode` is global and enabled with
 agent-shell. It covers the `how` and `interrogate` shapes in
 `+agent-shell-pstack-panel-shapes`. `arena` is still planned, because its
-members write code and need worktrees.
+members write code and need isolated, sandboxed worktrees. Its design is in
+`docs/AGENT-SHELL-PSTACK-ARENA.md`.
 
 ### Request a panel
 
