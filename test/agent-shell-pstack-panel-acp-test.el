@@ -90,14 +90,17 @@ Agents `fixture-codex' and `fixture-claude' have read-only modes;
        (delete-directory cwd t)
        (delete-directory reports t))))
 
-(defun +agent-shell-pstack-panel-acp-test--request (lead json)
+(defun +agent-shell-pstack-panel-acp-test--request (lead json &optional observe)
   "Prompt LEAD to request the panel JSON and wait for its follow-up.
-Assert that no member shell was shown on the way."
+Call OBSERVE while waiting.  Assert that no member shell was shown on the
+way."
   (let ((shown (window-buffer (selected-window))))
     (should (+agent-shell-drive-send lead (concat "PSTACK-LEAD " json)))
     (+agent-shell-pstack-panel-acp-test--wait-for
-     (lambda () (seq-some #'+agent-shell-pstack-panel-delivered
-                          (+agent-shell-pstack-panel-list))))
+     (lambda ()
+       (when observe (funcall observe))
+       (seq-some #'+agent-shell-pstack-panel-delivered
+                 (+agent-shell-pstack-panel-list))))
     (should (eq shown (window-buffer (selected-window))))
     (should (= 1 (length (window-list)))))
   (car (+agent-shell-pstack-panel-list)))
@@ -126,12 +129,28 @@ Assert that no member shell was shown on the way."
                   (search-forward text nil t))))))
 
 (ert-deftest +agent-shell-pstack-panel-acp-test-how ()
-  "Run a two-agent how panel read-only in the lead's directory."
+  "Run a two-agent how panel read-only in the lead's directory.
+Members stay out of `agent-shell-buffers' and the lead's mode line shows
+their progress."
   (+agent-shell-pstack-panel-acp-test--with-lead
-    (let* ((panel (+agent-shell-pstack-panel-acp-test--request
+    (let* ((live-members nil) (listed-members nil) (progress nil)
+           (observe
+            (lambda ()
+              (dolist (panel (+agent-shell-pstack-panel-list))
+                (dolist (member (+agent-shell-pstack-panel-members panel))
+                  (let ((shell (+agent-shell-pstack-panel-member-shell member)))
+                    (when (buffer-live-p shell)
+                      (cl-pushnew shell live-members)
+                      (when (memq shell (agent-shell-buffers))
+                        (cl-pushnew shell listed-members))))))
+              (when-let* ((item (buffer-local-value
+                                 '+agent-shell-pstack-panel--mode-line lead)))
+                (cl-pushnew (substring-no-properties item) progress
+                            :test #'equal))))
+           (panel (+agent-shell-pstack-panel-acp-test--request
                    lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"Explain \
 the drive.\",\"members\":[{\"role\":\"data-flow\",\"agent\":\"fixture-codex\"},\
-{\"role\":\"risks\",\"agent\":\"fixture-claude\"}]}"))
+{\"role\":\"risks\",\"agent\":\"fixture-claude\"}]}" observe))
            (members (+agent-shell-pstack-panel-members panel))
            (lead-cwd (directory-file-name
                       (with-current-buffer lead (agent-shell-cwd)))))
@@ -151,6 +170,12 @@ the drive.\",\"members\":[{\"role\":\"data-flow\",\"agent\":\"fixture-codex\"},\
                             reports))
                      (mapcar #'+agent-shell-pstack-panel-member-report
                              members)))
+      (should (= 2 (length live-members)))
+      (should-not listed-members)
+      (should (memq lead (agent-shell-buffers)))
+      (should (member "panel 0/2 " progress))
+      (should-not (buffer-local-value '+agent-shell-pstack-panel--mode-line
+                                      lead))
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 2")
       (+agent-shell-pstack-panel-acp-test--members-gone panel))))
 
