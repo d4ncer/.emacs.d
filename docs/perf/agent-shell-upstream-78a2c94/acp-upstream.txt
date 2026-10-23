@@ -1,0 +1,23 @@
+=== PERF_LISP=
+agent-shell from /tmp/asup/agent-shell/agent-shell.elc, perf from /Users/raghuk/.emacs.d/lisp/+agent-shell-perf.el
+   passed  1/5  +agent-shell-perf-acp-test-cache-dir-recreated-after-recheck (0.303955 sec)
+   passed  2/5  +agent-shell-perf-acp-test-relabel-matches-upstream (4.775552 sec)
+   passed  3/5  +agent-shell-perf-acp-test-relabel-shows-label-while-streaming (2.361589 sec)
+   passed  4/5  +agent-shell-perf-acp-test-transcript-matches-upstream (4.702346 sec)
+   FAILED  5/5  +agent-shell-perf-acp-test-transcript-recreated-after-deletion (0.678991 sec) at ../../Users/raghuk/.emacs.d/test/agent-shell-perf-acp-test.el:187
+Ran 5 tests, 4 results as expected, 1 unexpected (2026-10-24 11:17:58+1300, 13.268147 sec)
+1 unexpected results:
+   FAILED  +agent-shell-perf-acp-test-transcript-recreated-after-deletion
+=== PERF_LISP=/tmp/as-upstream-bench/fixed-lisp
+agent-shell from /tmp/asup/agent-shell/agent-shell.elc, perf from /tmp/as-upstream-bench/fixed-lisp/+agent-shell-perf.el
+   passed  1/5  +agent-shell-perf-acp-test-cache-dir-recreated-after-recheck (0.307806 sec)
+   passed  2/5  +agent-shell-perf-acp-test-relabel-matches-upstream (5.176419 sec)
+   passed  3/5  +agent-shell-perf-acp-test-relabel-shows-label-while-streaming (2.440693 sec)
+   passed  4/5  +agent-shell-perf-acp-test-transcript-matches-upstream (4.824761 sec)
+   FAILED  5/5  +agent-shell-perf-acp-test-transcript-recreated-after-deletion (0.533587 sec) at ../../Users/raghuk/.emacs.d/test/agent-shell-perf-acp-test.el:187
+Ran 5 tests, 4 results as expected, 1 unexpected (2026-10-24 11:18:14+1300, 13.545570 sec)
+1 unexpected results:
+   FAILED  +agent-shell-perf-acp-test-transcript-recreated-after-deletion
+   passed  4/5  +agent-shell-perf-acp-test-transcript-matches-upstream (4.814303 sec)
+   passed  5/5  +agent-shell-perf-acp-test-transcript-recreated-after-deletion (0.519213 sec)
+Ran 5 tests, 5 results as expected, 0 unexpected (2026-10-24 11:18:28+1300, 13.009195 sec)

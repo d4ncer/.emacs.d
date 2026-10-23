@@ -1,0 +1,26 @@
+--- /Users/raghuk/.emacs.d/lisp/+agent-shell-perf.el	2026-10-24 10:16:05
++++ /tmp/as-upstream-bench/perf-fixed.el	2026-10-24 10:25:19
+@@ -38,16 +38,17 @@
+ (defun +agent-shell-perf--throttle-relabel (schedule &rest args)
+   "Call SCHEDULE with ARGS at turn boundaries; defer other relabels.
+ Works around `agent-shell-chat--schedule-relabel', which relabels the
+-whole buffer on the next tick after every event, so the cost grows with
+-buffer size times chunk rate.  An event in
+-`+agent-shell-perf-relabel-boundary-events', or a call with no event such
+-as `shell-maker-finish-output-hook', replaces any pending relabel with
+-upstream's immediate one.  Any other event schedules one relabel
++whole buffer on the next tick after every event and every rendered
++section, so the cost grows with buffer size times chunk rate.  An event
++in `+agent-shell-perf-relabel-boundary-events', or a call with no
++arguments such as `shell-maker-finish-output-hook', replaces any pending
++relabel with upstream's immediate one.  Any other event, or a section
++range from `agent-shell-section-functions', schedules one relabel
+ `+agent-shell-perf-relabel-delay' seconds later unless one is pending.
+ Delete once upstream stops rescanning the buffer per streamed event."
+   (let ((event (and (consp (car args)) (alist-get :event (car args)))))
+     (cond
+-     ((or (null event)
++     ((or (null args)
+           (memq event +agent-shell-perf-relabel-boundary-events))
+       (when (timerp agent-shell-chat--relabel-timer)
+         (cancel-timer agent-shell-chat--relabel-timer)
