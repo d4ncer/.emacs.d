@@ -6,8 +6,10 @@ agent shells stream. Measured on 2026-10-23 with GNU Emacs 32.0.50 on a
 time. Every number is the median of 5 runs per variant, with the range in
 brackets. Variants alternate within each round in fresh batch Emacs processes.
 
-Rerun with `test/bench-agent-shell-stream.sh`. The raw JSONL rows and the CPU
-profile are in `agent-shell-streaming-baseline/`.
+Rerun with `test/bench-agent-shell-stream.sh`. Add `:perf` to a variant to
+measure upstream without the local workarounds, whose numbers are in
+`agent-shell-streaming-after.md`. The raw JSONL rows and the CPU profile are
+in `agent-shell-streaming-baseline/`.
 
 ## What the harness runs
 
