@@ -130,8 +130,19 @@ def handle_pstack_prompt(message, text, state):
     if position >= 0:
         request, _ = json.JSONDecoder().raw_decode(
             text[position + len("PSTACK-LEAD "):])
-        return ("Requesting a panel.\n\n```pstack-panel\n"
-                + json.dumps(request) + "\n```\n")
+        block = ("Requesting a panel.\n\n```pstack-panel\n"
+                 + json.dumps(request) + "\n```\n")
+        if "KEEP-WORKING" not in text:
+            return block
+        chunk(session_id, block + "\nMeanwhile, more digging.")
+        emit({"method": "session/update", "params": {
+            "sessionId": session_id,
+            "update": {"sessionUpdate": "tool_call", "toolCallId": "run-1",
+                       "title": "Run git show", "kind": "execute",
+                       "status": "in_progress"},
+        }})
+        working[session_id] = message["id"]
+        return False
     return None
 
 
@@ -241,6 +252,7 @@ MODES = [{"id": mode, "name": mode} for mode in ("default", "plan", "read-only")
 
 sessions = {}
 pending = {}
+working = {}
 for line in sys.stdin:
     message = json.loads(line)
     method = message.get("method")
@@ -289,6 +301,10 @@ for line in sys.stdin:
         chunk(params["sessionId"], reply)
         result = {"stopReason": "end_turn"}
     elif method == "session/cancel":
+        prompt_id = working.pop(params["sessionId"], None)
+        if prompt_id is not None:
+            chunk(params["sessionId"], "CANCELLED")
+            emit({"id": prompt_id, "result": {"stopReason": "cancelled"}})
         continue
     if "id" in message:
         emit({"id": message["id"], "result": result})

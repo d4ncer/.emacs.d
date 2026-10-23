@@ -90,12 +90,13 @@ Agents `fixture-codex' and `fixture-claude' have read-only modes;
        (delete-directory cwd t)
        (delete-directory reports t))))
 
-(defun +agent-shell-pstack-panel-acp-test--request (lead json &optional observe)
+(defun +agent-shell-pstack-panel-acp-test--request
+    (lead json &optional observe prefix)
   "Prompt LEAD to request the panel JSON and wait for its follow-up.
-Call OBSERVE while waiting.  Assert that no member shell was shown on the
-way."
+PREFIX starts the prompt.  Call OBSERVE while waiting.  Assert that no
+member shell was shown on the way."
   (let ((shown (window-buffer (selected-window))))
-    (should (+agent-shell-drive-send lead (concat "PSTACK-LEAD " json)))
+    (should (+agent-shell-drive-send lead (concat prefix "PSTACK-LEAD " json)))
     (+agent-shell-pstack-panel-acp-test--wait-for
      (lambda ()
        (when observe (funcall observe))
@@ -225,6 +226,19 @@ read-only"
 watchers."
                      (+agent-shell-pstack-panel-acp-test--report member)))
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1"))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-block-before-more-work ()
+  "Run the panel of a lead that kept working after its block, and stop it."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let* ((panel (+agent-shell-pstack-panel-acp-test--request
+                   lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
+\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"
+                   nil "KEEP-WORKING "))
+           (member (car (+agent-shell-pstack-panel-members panel))))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (+agent-shell-pstack-panel-acp-test--lead-saw lead "CANCELLED")
+      (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
+      (should (= 1 (length (+agent-shell-pstack-panel-list)))))))
 
 (provide 'agent-shell-pstack-panel-acp-test)
 ;;; agent-shell-pstack-panel-acp-test.el ends here
