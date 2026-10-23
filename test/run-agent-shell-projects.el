@@ -5,6 +5,8 @@
 
 ;;; Code:
 
+(setq load-prefer-newer t)
+
 (require 'bytecomp)
 (let ((root (file-name-directory
              (directory-file-name (file-name-directory load-file-name)))))

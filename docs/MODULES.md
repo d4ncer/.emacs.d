@@ -29,7 +29,7 @@ The authoritative order is the sequence of requires in `init.el`.
 | Module | Ownership |
 | --- | --- |
 | mod-keybindings | General, global leader map and personal commands |
-| mod-core | Core macros, environment, lifecycle hooks and editing defaults |
+| mod-core | Core macros, environment, lifecycle hooks, idle compilation of lisp/ and editing defaults |
 | mod-evil | Evil, collection bindings, surround, undo and region selection |
 | mod-completion | Vertico, Orderless, Consult, Embark, Corfu, Cape and history |
 | mod-ui | Batppuccin, fonts and frame appearance, ligatures, Pulsar and mode lines |

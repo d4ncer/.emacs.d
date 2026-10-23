@@ -17,8 +17,9 @@
   "Run isolated Emacs ARGUMENTS for gate NAME."
   (with-temp-buffer
     (let ((status (apply #'call-process +config-check-emacs nil t nil
-                         "-Q" "--batch" "-L"
-                         (expand-file-name "test" +config-check-root) arguments)))
+                         "-Q" "--batch" "--eval" "(setq load-prefer-newer t)"
+                         "-L" (expand-file-name "test" +config-check-root)
+                         arguments)))
       (unless (and (integerp status) (zerop status))
         (princ (buffer-string))
         (error "%s failed (%s)" name status))
@@ -44,7 +45,7 @@
    "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
-   "-l" "agent-shell-pstack-panel-test"
+   "-l" "agent-shell-pstack-panel-test" "-l" "config-compile-local-test"
    "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Native syntax configuration" "-l" "config-treesit-test"
                          "-f" "ert-run-tests-batch-and-exit")

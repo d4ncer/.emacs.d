@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+(setq load-prefer-newer t)
+
 (let ((root (file-name-directory
              (directory-file-name (file-name-directory load-file-name)))))
   (add-to-list 'load-path (expand-file-name "lisp/" root))

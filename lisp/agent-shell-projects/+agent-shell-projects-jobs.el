@@ -101,7 +101,8 @@
   "Start the queued worker JOB."
   (let* ((file (plist-get job :file))
          (progress (plist-get job :progress))
-         (form `(progn (require '+agent-shell-projects-worker)
+         (form `(progn (setq load-prefer-newer t)
+                       (require '+agent-shell-projects-worker)
                        (+agent-shell-projects-worker-main ,file)))
          (default-directory temporary-file-directory)
          process)

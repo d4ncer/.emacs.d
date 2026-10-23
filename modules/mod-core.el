@@ -50,6 +50,17 @@
   :config
   (keychain-refresh-environment))
 
+;;; Local library compilation
+
+(use-package +compile-local
+  ;; Byte-compile stale lisp/ libraries in a batch Emacs once startup is idle.
+  :ensure nil
+  :unless noninteractive
+  :commands +compile-local-start
+  :init
+  (add-hook 'elpaca-after-init-hook
+            (lambda () (run-with-idle-timer 10 nil #'+compile-local-start))))
+
 ;;; Global directory variables
 
 (defvar +cloud-dir (format "/Users/%s/Library/Mobile Documents/com~apple~CloudDocs/rkdev" user-login-name))

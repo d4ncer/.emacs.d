@@ -29,6 +29,9 @@
             (if (file-directory-p source)
                 (copy-directory source target nil t t)
               (copy-file source target))))
+        (dolist (file (directory-files-recursively
+                       (expand-file-name "lisp" temporary) "\\.elc\\'"))
+          (delete-file file))
         (dolist (entry lock)
           (let* ((recipe (plist-get (cdr entry) :recipe))
                  (original (elpaca-git-repo-dir recipe))
