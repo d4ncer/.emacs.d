@@ -203,5 +203,28 @@ times, read by a 10 ms timer and event subscriptions."
           (should (string-search "BENCH-END-second" (buffer-string)))
           (should-not (string-search "BENCH-END-first" (buffer-string))))))))
 
+(ert-deftest +agent-shell-perf-acp-test-cache-dir-recreated-after-recheck ()
+  "The cache directory matches upstream's and comes back once deleted."
+  (let* ((cache (make-temp-file "agent-shell-perf-cache-" t))
+         (process-environment (cons (concat "XDG_CACHE_HOME=" cache)
+                                    process-environment))
+         (perf-mode +agent-shell-perf-mode)
+         (+agent-shell-perf-cache-dir-recheck 0.2)
+         upstream)
+    (unwind-protect
+        (progn
+          (+agent-shell-perf-mode -1)
+          (setq upstream (agent-shell-cache-dir "content"))
+          (delete-directory upstream t)
+          (+agent-shell-perf-mode 1)
+          (should (equal (agent-shell-cache-dir "content") upstream))
+          (should (file-directory-p upstream))
+          (delete-directory upstream t)
+          (sleep-for 0.3)
+          (should (equal (agent-shell-cache-dir "content") upstream))
+          (should (file-directory-p upstream)))
+      (+agent-shell-perf-mode (if perf-mode 1 -1))
+      (delete-directory cache t))))
+
 (provide 'agent-shell-perf-acp-test)
 ;;; agent-shell-perf-acp-test.el ends here
