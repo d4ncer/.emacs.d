@@ -14,9 +14,10 @@
   "Run BODY with a pstack lead, stubbed drive functions and fresh panels.
 BODY sees `lead', `directory' (the reports root), `cwd' (the lead's),
 `sent' (newest first, each (SHELL . TEXT)), `started' (each (AGENT SHELL
-READ-ONLY CWD)), `send-ok' (whether sends succeed), `start-error' (a start
-failure message), `partials' (alist of shell to partial text), and the
-functions `lead-event' and `member-event'."
+READ-ONLY CWD)), `interrupted' (shells, newest first), `send-ok' (whether
+sends succeed), `start-error' (a start failure message), `partials' (alist
+of shell to partial text), and the functions `lead-event' and
+`member-event'."
   (declare (indent 0))
   `(let* ((directory (make-temp-file "pstack-panels-" t))
           (cwd (file-name-as-directory (make-temp-file "pstack-lead-" t)))
@@ -26,7 +27,8 @@ functions `lead-event' and `member-event'."
           (+agent-shell-pstack-mode-hook nil)
           (+agent-shell-pstack-panel-mode nil)
           (handlers (make-hash-table :test #'equal))
-          (sent nil) (started nil) (send-ok t) (partials nil)
+          (sent nil) (started nil) (interrupted nil) (send-ok t)
+          (partials nil)
           (start-error nil)
           (lead (generate-new-buffer " *lead*")))
      (cl-letf (((symbol-function '+agent-shell-drive-read-only-agents)
@@ -44,6 +46,8 @@ functions `lead-event' and `member-event'."
                ((symbol-function '+agent-shell-drive-send)
                 (lambda (shell text)
                   (when send-ok (push (cons shell text) sent) t)))
+               ((symbol-function '+agent-shell-drive-interrupt)
+                (lambda (shell) (push shell interrupted)))
                ((symbol-function '+agent-shell-drive-partial-text)
                 (lambda (shell) (alist-get shell partials)))
                ((symbol-function '+agent-shell-drive-kill)
@@ -105,18 +109,48 @@ functions `lead-event' and `member-event'."
                                      sent))))
 
 (ert-deftest +agent-shell-pstack-panel-test-block ()
-  "Read only a pstack-panel block that ends the message."
+  "Read the first complete pstack-panel block in the message."
   (should (equal "{\"a\":1}"
                  (+agent-shell-pstack-panel--block
                   "Text\n```pstack-panel\n{\"a\":1}\n```\n  \n")))
-  (should (equal "{\"b\":2}"
+  (should (equal "{\"a\":1}"
                  (+agent-shell-pstack-panel--block
                   (concat "```pstack-panel\n{\"a\":1}\n```\nmore\n"
                           "```pstack-panel\n{\"b\":2}\n```"))))
+  (should (equal "{\"a\":1}\n{\"x\":\"```\"}"
+                 (+agent-shell-pstack-panel--block
+                  (concat "```pstack-panel\n{\"a\":1}\n{\"x\":\"```\"}\n```\n"
+                          "Then I continue."))))
   (should-not (+agent-shell-pstack-panel--block
-               "```pstack-panel\n{\"a\":1}\n```\nThen I continue."))
+               "Text ```pstack-panel\n{\"a\":1}\n```"))
+  (should-not (+agent-shell-pstack-panel--block "```pstack-panel\n{\"a\":1}\n"))
   (should-not (+agent-shell-pstack-panel--block "```json\n{}\n```"))
   (should-not (+agent-shell-pstack-panel--block nil)))
+
+(ert-deftest +agent-shell-pstack-panel-test-block-before-more-work ()
+  "Start a panel whose lead kept working after the block, and interrupt it."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (concat (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how)
+                        "\nMeanwhile, more digging.")))
+      (lead-event :kind 'tool-call-update :session "s1" :text "Reading.")
+      (should-not started)
+      (should-not interrupted)
+      (lead-event :kind 'tool-call-update :session "s1" :text text)
+      (should (= 2 (length started)))
+      (should (equal (list lead) interrupted))
+      (lead-event :kind 'tool-call-update :session "s1" :text text)
+      (lead-event :kind 'turn-complete :session "s1" :text text)
+      (should (= 2 (length started)))
+      (should (equal (list lead) interrupted))
+      (should (= 1 (length (+agent-shell-pstack-panel-list)))))
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (concat (+agent-shell-pstack-panel-test--message
+                               "{\"version\":1,\"shape\":\"how\",\
+\"brief\":\"c\",\"members\":[{\"role\":\"a\",\"agent\":\"codex\"}]}")
+                              "\nOne more thought."))
+    (should (= 3 (length started)))
+    (should (= 1 (length interrupted)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-validation ()
   "Accept a well-formed request and explain each rejection to the lead."

@@ -184,9 +184,12 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (should (equal "" (+agent-shell-drive-partial-text shell)))
           (chunk "Looking. ")
           (emit shell '((:event . tool-call-update)))
+          (should (eq 'tool-call-update (plist-get (car events) :kind)))
+          (should (equal "Looking. " (plist-get (car events) :text)))
+          (emit shell '((:event . tool-call-update)))
           (chunk "Answer")
           (chunk nil)
-          (should (= 1 (length events)))
+          (should (= 2 (length events)))
           (should (equal "Looking. Answer"
                          (+agent-shell-drive-partial-text shell)))
           (emit shell '((:event . turn-complete)
