@@ -430,5 +430,32 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
         (should (buffer-live-p member))
         (should (equal '(init-finished) events))))))
 
+(ert-deftest +agent-shell-drive-test-read-only-hidden ()
+  "Leave read-only shells out of agent-shell lists and project reuse."
+  (require 'agent-shell)
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (let* ((plain (+agent-shell-drive-start :config 'gemini
+                                              :directory directory))
+             (member (+agent-shell-drive-start :config 'codex
+                                               :directory directory
+                                               :read-only t)))
+        (unwind-protect
+            (progn
+              (dolist (shell (list plain member))
+                (with-current-buffer shell
+                  (setq major-mode 'agent-shell-mode)
+                  (setq-local shell-maker--config '((:name . "stub")))))
+              (should (+agent-shell-drive-read-only-p member))
+              (should-not (+agent-shell-drive-read-only-p plain))
+              (should (memq plain (agent-shell-buffers)))
+              (should-not (memq member (agent-shell-buffers)))
+              (with-temp-buffer
+                (setq default-directory
+                      (file-name-as-directory (file-truename directory)))
+                (should (equal (list plain) (agent-shell-project-buffers)))
+                (should (eq plain (agent-shell-shell-buffer :no-create t)))))
+          (kill-buffer plain))))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here

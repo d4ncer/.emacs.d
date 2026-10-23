@@ -16,7 +16,9 @@
 ;; it approves reads once and rejects everything else.  Its `turn-complete'
 ;; adds :plan when it rejected a request carrying a plan.  If the session is
 ;; not in that mode once initialized, the shell is killed and its watchers get
-;; `clean-up' with :reason instead of `init-finished'.
+;; `clean-up' with :reason instead of `init-finished'.  Read-only shells are
+;; left out of `agent-shell-buffers', so upstream pickers and project reuse
+;; never offer them.
 
 ;;; Code:
 
@@ -117,6 +119,16 @@ Return nil, leaving the dialog to the user, only when no option rejects."
           (format "Session mode is %s, not the read-only mode %s"
                   (or actual "unset") mode))))))
 
+(defun +agent-shell-drive-read-only-p (shell)
+  "Return whether SHELL was started read-only."
+  (and (buffer-live-p shell)
+       (buffer-local-value '+agent-shell-drive--mode shell)
+       t))
+
+(defun +agent-shell-drive--hide-read-only (shells)
+  "Return SHELLS without read-only shells."
+  (seq-remove #'+agent-shell-drive-read-only-p shells))
+
 (defun +agent-shell-drive-kill (shell &optional reason)
   "Kill SHELL without prompting; its watchers get `clean-up' with REASON."
   (when (buffer-live-p shell)
@@ -127,7 +139,8 @@ Return nil, leaving the dialog to the user, only when no option rejects."
 (cl-defun +agent-shell-drive-start (&key config directory read-only)
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
 With READ-ONLY, start it in its agent's read-only mode with a responder that
-rejects everything but reads; see `+agent-shell-drive-read-only-modes'."
+rejects everything but reads, and hide it from `agent-shell-buffers'; see
+`+agent-shell-drive-read-only-modes'."
   (require 'agent-shell)
   (let* ((config (+agent-shell-drive-config config))
          (mode (and read-only
@@ -160,6 +173,8 @@ rejects everything but reads; see `+agent-shell-drive-read-only-modes'."
               (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
     (when mode
+      (advice-add 'agent-shell-buffers :filter-return
+                  #'+agent-shell-drive--hide-read-only)
       (agent-shell-subscribe-to
        :shell-buffer shell :event 'init-finished
        :on-event (lambda (_event)
