@@ -204,7 +204,8 @@ file paths\",\"timeout\":%d,\"members\":[{\"role\":\"data-flow\",\"agent\":\
 ```
 
 Shapes: %s.
-Agents: %s.  Mix them when the skill asks for diverse models.
+Agents: %s.  With two or more members, mix agents so the panel spans \
+vendors.
 Each member starts fresh, read-only, in your working directory, and sees \
 only the brief and its own focus.  Use 1 to %d members with unique roles of \
 lowercase letters, digits and hyphens.  The timeout is in seconds, at most \

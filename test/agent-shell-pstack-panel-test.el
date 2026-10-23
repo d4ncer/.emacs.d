@@ -377,6 +377,7 @@ high signal." followup))))))
         (should (= 2 (length first)))
         (should (string-match-p "^Agents: codex, claude-code\\.  "
                                 (cadr first)))
+        (should (string-match-p "two or more members, mix agents" (cadr first)))
         (should (string-match-p "end your turn" (cadr first)))
         (should (string-match-p "Emacs sends you a prompt" (cadr first)))
         (should (equal (list "again" +agent-shell-pstack-reminder) second))
