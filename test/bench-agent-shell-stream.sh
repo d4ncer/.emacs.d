@@ -3,8 +3,9 @@
 #
 # Usage: test/bench-agent-shell-stream.sh RUNS OUT.jsonl VARIANT...
 #        test/bench-agent-shell-stream.sh summary OUT.jsonl
-# A VARIANT is SCENARIO[:OFF[,OFF...]][@LOAD], for example preload:chat or
-# panel@el.  Each round runs every variant once, so drift favours none.
+# A VARIANT is SCENARIO[:OFF[,OFF...]][@LOAD][+PACKAGES], for example
+# preload:chat, panel@el or mixed@eln+/tmp/builds, where PACKAGES becomes
+# BENCH_PACKAGES.  Each round runs every variant once, so drift favours none.
 # BENCH_CHUNKS, BENCH_DELAY_MS and BENCH_PRELOAD_BYTES pass through.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -66,13 +67,17 @@ runs=$1 out=$2
 shift 2
 for round in $(seq "$runs"); do
   for variant in "$@"; do
+    packages=
+    case $variant in *+*) packages=${variant#*+} ;; esac
+    base=${variant%%+*}
     load=elc
-    case $variant in *@*) load=${variant#*@} ;; esac
-    spec=${variant%@*}
+    case $base in *@*) load=${base#*@} ;; esac
+    spec=${base%@*}
     scenario=${spec%%:*}
     off=
     case $spec in *:*) off=${spec#*:} ;; esac
     line=$(BENCH_SCENARIO=$scenario BENCH_OFF=$off BENCH_LOAD=$load \
+             BENCH_PACKAGES=$packages \
              emacs -Q --batch -l "$root/test/bench-agent-shell-stream.el" \
              -f +bench-run 2>/dev/null | grep '^BENCH-RESULT ' || true)
     if [ -z "$line" ]; then

@@ -10,6 +10,8 @@
 ;;   BENCH_OFF       Comma-separated toggles to disable (`+bench-toggles').
 ;;   BENCH_LOAD      elc (default) loads compiled packages, el loads sources,
 ;;                   eln also reads native code from BENCH_ELN_DIR.
+;;   BENCH_PACKAGES  Directory whose subdirectories replace the same-named
+;;                   elpaca/builds/ packages, to bench another version.
 ;;   BENCH_PROFILE   File for a CPU profile report of the measured turn.
 ;;   BENCH_CHUNKS, BENCH_DELAY_MS, BENCH_PRELOAD_BYTES override the turn.
 
@@ -65,10 +67,20 @@ NAME, leaving the other workarounds on.")
   ("eln" (push (file-name-as-directory (getenv "BENCH_ELN_DIR"))
                native-comp-eln-load-path)))
 (add-to-list 'load-path (expand-file-name "lisp/" +bench-root))
-(dolist (directory (directory-files (expand-file-name "elpaca/builds/"
-                                                      +bench-root)
-                                    t "^[^. ]"))
-  (when (file-directory-p directory) (add-to-list 'load-path directory t)))
+(let ((override (getenv "BENCH_PACKAGES")))
+  (dolist (directory (directory-files (expand-file-name "elpaca/builds/"
+                                                        +bench-root)
+                                      t "^[^. ]"))
+    (let ((replacement (and override
+                            (expand-file-name (file-name-nondirectory
+                                               directory)
+                                              override))))
+      (when (file-directory-p directory)
+        (add-to-list 'load-path
+                     (if (and replacement (file-directory-p replacement))
+                         replacement
+                       directory)
+                     t)))))
 
 (setq gc-cons-threshold (* 16 1024 1024))
 
@@ -412,6 +424,22 @@ Settled means one more upstream relabel leaves every label unchanged."
                       '(agent-shell--on-notification
                         agent-shell-chat--relabel
                         +agent-shell-drive--parse))
+              :package-files
+              (mapcar (lambda (feature)
+                        (abbreviate-file-name (locate-library
+                                               (symbol-name feature))))
+                      '(agent-shell shell-maker acp))
+              :native-files
+              (mapcar (lambda (symbol)
+                        (let ((code (and (fboundp symbol)
+                                         (advice--cd*r
+                                          (symbol-function symbol)))))
+                          (and (native-comp-function-p code)
+                               (file-name-nondirectory
+                                (native-comp-unit-file
+                                 (subr-native-comp-unit code))))))
+                      '(agent-shell-chat--relabel agent-shell-prompt-ranges
+                                                  shell-maker-start))
               :notifications +bench-notifications
               :new-errors (- (+bench--messages-matching
                               "errored\\|[Ee]rror")
