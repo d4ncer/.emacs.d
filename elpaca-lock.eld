@@ -24,7 +24,7 @@
 			   "README*" "*-pkg.el"))
 		:source "MELPA" :id acp :type git :protocol https
 		:inherit t :depth treeless :ref
-		"242cef63d76cc1073485847f67a21f6d8406d158"))
+		"2959da5fa8657da17a78ac6ceef303a50e3e69de"))
  (agent-shell :source "elpaca-menu-lock-file" :recipe
 	      (:package "agent-shell" :fetcher github :repo
 			"xenodium/agent-shell" :files
@@ -39,7 +39,7 @@
 			:source "MELPA" :id agent-shell :type git
 			:protocol https :inherit t :depth treeless
 			:ref
-			"868850f5fa577c3178bcf75b00d0ad29db6a8ae4"))
+			"78a2c94daa255b97ea001bd8a6507c60af20e89d"))
  (agent-shell-math-renderer :source "elpaca-menu-lock-file" :recipe
 			    (:source "Init file" :package
 				     "agent-shell-math-renderer" :id
@@ -909,7 +909,7 @@
 			:source "MELPA" :id shell-maker :type git
 			:protocol https :inherit t :depth treeless
 			:ref
-			"f448a74a8eded23aa42f8d60a41c5d8d3a183d07"))
+			"e089f07fb4f5a8ce226932e192a2c11682a51102"))
  (shrink-path :source "elpaca-menu-lock-file" :recipe
 	      (:package "shrink-path" :fetcher gitlab :repo
 			"bennya/shrink-path.el" :files

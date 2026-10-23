@@ -52,6 +52,10 @@ Generating a lock file records the installed state. Loading the configuration
 with a different lock does not reset an existing checkout automatically. To
 restore an older state, restore its lock and bootstrap pin together and build in
 a fresh directory, or explicitly rebuild the affected packages at those refs.
+`emacs -Q --batch -l scripts/elpaca-apply-lock.el PACKAGE...` does the latter
+for the named packages right before a restart. It fetches and checks out each
+locked commit, refusing a source with local changes, rebuilds the package as
+Elpaca would, and deletes `lisp/` bytecode so it recompiles after the restart.
 
 ## Emacs and grammar updates
 
