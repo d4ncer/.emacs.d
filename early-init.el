@@ -8,6 +8,10 @@
 
 ;;; Code:
 
+;; Local libraries such as ~/life/elisp ship .elc files beside their sources;
+;; never let a stale .elc shadow an edited .el.
+(setq load-prefer-newer t)
+
 (load (expand-file-name "lisp/+bootstrap.el" user-emacs-directory) nil t)
 (+bootstrap-setup)
 
