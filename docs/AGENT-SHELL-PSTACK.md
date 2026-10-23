@@ -144,6 +144,16 @@ member's role, agent, state and report. `RET` visits the report or the member
 or lead shell. The buffer redraws whenever a panel changes. The decision trail
 and plan views are planned.
 
+While a lead has a panel running, its mode line shows `panel 1/3`, the
+settled and total member counts, next to `pstack`. Hovering lists each
+member's role, agent and state, and `mouse-1` opens the panels view. The item
+updates only when a member or panel changes state and disappears once every
+member has settled.
+
+Member shells stay out of `agent-shell-buffers`, so
+`agent-shell-switch-buffer`, project reuse through `SPC p a` and the agent
+projects author picker never offer them. Reach them from the panels view.
+
 ## Non-goals
 
 - Reimplementing playbooks in Elisp.

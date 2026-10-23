@@ -453,5 +453,59 @@ high signal." followup))))))
               (should (eq lead (current-buffer))))))
         (kill-buffer view)))))
 
+(ert-deftest +agent-shell-pstack-panel-test-mode-line ()
+  "Show member progress in the lead's mode line while its panel runs."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((updates nil)
+           (id (+agent-shell-pstack-panel-test--id
+                +agent-shell-pstack-panel-test--how))
+           (item (lambda () (buffer-local-value
+                             '+agent-shell-pstack-panel--mode-line lead)))
+           (rendered (lambda ()
+                       (format-mode-line mode-line-misc-info nil nil lead))))
+      (should (member +agent-shell-pstack-panel--mode-line-construct
+                      mode-line-misc-info))
+      (should-not (funcall item))
+      (cl-letf (((symbol-function 'force-mode-line-update)
+                 (lambda (&optional all)
+                   (push (list (current-buffer) all) updates))))
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--how))
+        (should (equal "panel 0/2 " (substring-no-properties (funcall item))))
+        (should (equal (format "pstack panel %s (how)
+  data-flow  codex  starting
+  risks  claude-code  starting
+mouse-1: show panels" id)
+                       (get-text-property 0 'help-echo (funcall item))))
+        (should (eq #'+agent-shell-pstack-panels
+                    (lookup-key (get-text-property 0 'local-map (funcall item))
+                                [mode-line mouse-1])))
+        ;; `format-mode-line' renders nothing in batch Emacs.
+        (unless noninteractive
+          (let* ((line (funcall rendered))
+                 (start (string-match "panel 0/2 " line)))
+            (should start)
+            (should (get-text-property start 'help-echo line))))
+        (should (equal (list (list lead nil)) updates))
+        (setq updates nil)
+        (member-event "data-flow" :kind 'prompt-ready)
+        (should-not updates)
+        (member-event "data-flow" :kind 'init-finished)
+        (should (string-match-p "data-flow  codex  running"
+                                (get-text-property 0 'help-echo
+                                                   (funcall item))))
+        (member-event "data-flow" :kind 'turn-complete :text "Report A")
+        (should (equal "panel 1/2 " (substring-no-properties (funcall item))))
+        (should (equal (list (list lead nil) (list lead nil)) updates))
+        (member-event "risks" :kind 'init-finished)
+        (member-event "risks" :kind 'turn-complete :text "Report B"))
+      (should-not (funcall item))
+      (unless noninteractive
+        (should-not (string-match-p "panel" (funcall rendered))))
+      (+agent-shell-pstack-panel-mode -1)
+      (should-not (member +agent-shell-pstack-panel--mode-line-construct
+                          mode-line-misc-info)))))
+
 (provide 'agent-shell-pstack-panel-test)
 ;;; agent-shell-pstack-panel-test.el ends here

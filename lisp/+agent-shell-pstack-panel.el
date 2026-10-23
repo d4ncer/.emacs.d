@@ -9,7 +9,8 @@
 ;;
 ;; Panels live in memory.  Only live `turn-complete' events are read, so a
 ;; restored session never starts a panel, and a request seen before is
-;; ignored.  See docs/AGENT-SHELL-PSTACK.md.
+;; ignored.  A lead's mode line shows its running panels.  See
+;; docs/AGENT-SHELL-PSTACK.md.
 
 ;;; Code:
 
@@ -93,6 +94,14 @@ brief unsent) to `running' (brief sent), then settles once as `done',
 
 (defconst +agent-shell-pstack-panel--settled '(done error timeout)
   "Member states that end a member.")
+
+(defvar-local +agent-shell-pstack-panel--mode-line nil
+  "Mode-line text for this lead's running panels, or nil.")
+(put '+agent-shell-pstack-panel--mode-line 'risky-local-variable t)
+
+(defconst +agent-shell-pstack-panel--mode-line-construct
+  '("" +agent-shell-pstack-panel--mode-line)
+  "Mode-line construct showing `+agent-shell-pstack-panel--mode-line'.")
 
 ;;;; Requests
 
@@ -538,8 +547,66 @@ message with a pstack-panel block.\n"))
     (goto-char (point-min))
     (forward-line (1- line))))
 
+(defvar-keymap +agent-shell-pstack-panel--mode-line-map
+  :doc "Keymap for a lead's panel mode-line item."
+  "<mode-line> <mouse-1>" #'+agent-shell-pstack-panels)
+
+(defun +agent-shell-pstack-panel--mode-line-text (lead)
+  "Return mode-line text for LEAD's running panels, or nil."
+  (when-let* ((panels (seq-filter
+                       (lambda (panel)
+                         (and (eq lead (+agent-shell-pstack-panel-lead panel))
+                              (not (+agent-shell-pstack-panel-rejection panel))
+                              (not (+agent-shell-pstack-panel-followup panel))))
+                       (+agent-shell-pstack-panel-list))))
+    (let ((members (mapcan (lambda (panel)
+                             (copy-sequence
+                              (+agent-shell-pstack-panel-members panel)))
+                           panels)))
+      (propertize
+       (format "%s %d/%d " (if (cdr panels) "panels" "panel")
+               (seq-count #'+agent-shell-pstack-panel--settled-p members)
+               (length members))
+       'face '+agent-shell-pstack-mode-line
+       'mouse-face 'mode-line-highlight
+       'local-map +agent-shell-pstack-panel--mode-line-map
+       'help-echo
+       (concat
+        (mapconcat
+         (lambda (panel)
+           (concat
+            (format "pstack panel %s (%s)" (+agent-shell-pstack-panel-id panel)
+                    (+agent-shell-pstack-panel-shape panel))
+            (mapconcat
+             (lambda (member)
+               (format "\n  %s  %s  %s"
+                       (+agent-shell-pstack-panel-member-role member)
+                       (+agent-shell-pstack-panel-member-agent member)
+                       (+agent-shell-pstack-panel-member-state member)))
+             (+agent-shell-pstack-panel-members panel) "")))
+         panels "\n")
+        "\nmouse-1: show panels")))))
+
+(defun +agent-shell-pstack-panel--update-mode-lines ()
+  "Update the mode line of each lead whose panels changed."
+  (dolist (lead (seq-uniq (mapcar #'+agent-shell-pstack-panel-lead
+                                  (+agent-shell-pstack-panel-list))))
+    (when (buffer-live-p lead)
+      (let ((text (+agent-shell-pstack-panel--mode-line-text lead)))
+        (with-current-buffer lead
+          ;; Redisplay adds properties to the shown string.  The help-echo
+          ;; determines the label, so it alone tells whether anything changed.
+          (unless (equal (and text (get-text-property 0 'help-echo text))
+                         (and +agent-shell-pstack-panel--mode-line
+                              (get-text-property
+                               0 'help-echo
+                               +agent-shell-pstack-panel--mode-line)))
+            (setq +agent-shell-pstack-panel--mode-line text)
+            (force-mode-line-update)))))))
+
 (defun +agent-shell-pstack-panels--refresh ()
-  "Redraw the panels buffer if it exists."
+  "Redraw the panels buffer if it exists, and the leads' mode lines."
+  (+agent-shell-pstack-panel--update-mode-lines)
   (when-let* ((buffer (get-buffer +agent-shell-pstack-panels--buffer)))
     (with-current-buffer buffer (+agent-shell-pstack-panels--render))))
 
@@ -584,6 +651,8 @@ explains the request protocol; see `+agent-shell-pstack-panel-shapes'."
                   #'+agent-shell-pstack-panel--track)
         (add-to-list '+agent-shell-pstack-prime-texts
                      #'+agent-shell-pstack-panel--protocol t)
+        (add-to-list 'mode-line-misc-info
+                     +agent-shell-pstack-panel--mode-line-construct)
         (dolist (buffer (buffer-list))
           (when (buffer-local-value '+agent-shell-pstack-mode buffer)
             (with-current-buffer buffer (+agent-shell-pstack-panel--track)))))
@@ -592,6 +661,13 @@ explains the request protocol; see `+agent-shell-pstack-panel-shapes'."
     (setq +agent-shell-pstack-prime-texts
           (delq #'+agent-shell-pstack-panel--protocol
                 +agent-shell-pstack-prime-texts))
+    (setq mode-line-misc-info
+          (delete +agent-shell-pstack-panel--mode-line-construct
+                  mode-line-misc-info))
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (kill-local-variable '+agent-shell-pstack-panel--mode-line)))
+    (force-mode-line-update t)
     (+agent-shell-drive-unwatch 'pstack-lead)))
 
 (provide '+agent-shell-pstack-panel)
