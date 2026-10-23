@@ -1,0 +1,594 @@
+=== Top-down, 4396 samples
+        4256  96% - normal-top-level
+        4256  96%  - command-line
+        4256  96%   - command-line-1
+        4256  96%    - +bench-run
+        4256  96%     - let*
+        4254  96%      - setq
+        4254  96%       - +bench--turns
+        4254  96%        - let
+        4221  96%         - +bench--wait-for
+        4221  96%          - let
+        4221  96%           - while
+        4221  96%            - accept-process-output
+        3693  84%             - timer-event-handler
+        3687  83%              - apply
+        2260  51%               - agent-shell-chat--relabel-buffer
+        2260  51%                - apply
+        2260  51%                 - agent-shell-chat--relabel-buffer@bench
+        2260  51%                  - let
+        2260  51%                   - prog1
+        2259  51%                    - progn
+        2259  51%                     - apply
+        2259  51%                      - #<byte-code-function D54>
+        2256  51%                       - agent-shell-chat--relabel
+        2059  46%                        - agent-shell-chat--label-prompts
+        1904  43%                         - agent-shell-chat--prompt-runs
+        1209  27%                            next-single-property-change
+         333   7%                            get-text-property
+         161   3%                            agent-shell-chat--prompt-face-p
+          45   1%                         - seq-do-indexed
+          43   0%                          - seq-do
+          43   0%                           - mapc
+          43   0%                            - #<byte-code-function 7A8>
+          43   0%                             - #<byte-code-function 79B>
+          43   0%                              - agent-shell-chat--ensure-overlay
+          19   0%                               + map-do
+           9   0%                               + seq-find
+           3   0%                                 plist-member
+           2   0%                                 make-closure
+           1   0%                                 overlays-in
+           1   0%                                 make-overlay
+          25   0%                         - agent-shell-chat--ensure-overlay
+           7   0%                          + seq-find
+           5   0%                          + map-do
+           3   0%                            make-closure
+           1   0%                            overlay-get
+           1   0%                            plist-member
+          17   0%                           buffer-substring-no-properties
+           8   0%                         + agent-shell-chat--gc-overlays
+           6   0%                         + agent-shell-chat--label-rows
+           6   0%                         + agent-shell-chat--extends-bg-p
+           4   0%                         + agent-shell-chat--label
+           4   0%                           text-property-any
+           3   0%                           make-closure
+           3   0%                           get-char-property
+           2   0%                           get-text-property
+           2   0%                           string-match
+           2   0%                           overlay-get
+           1   0%                         + agent-shell-chat--draft-indent
+           1   0%                           boundp
+           1   0%                           propertize
+         197   4%                        - agent-shell-chat--label-responses
+         142   3%                         - agent-shell-chat--search-marker-forward
+         141   3%                            re-search-forward
+          18   0%                         + seq-do-indexed
+           7   0%                         + agent-shell-chat--gc-overlays
+           6   0%                           get-text-property
+           5   0%                         + agent-shell-chat--label-rows
+           3   0%                         + agent-shell-chat--agent-name
+           2   0%                         + agent-shell-chat--ensure-overlay
+           2   0%                           overlay-get
+           1   0%                           overlays-in
+           1   0%                         + agent-shell-chat--extends-bg-p
+           1   0%                    + +bench--record
+        1427  32%               - #<byte-code-function 519>
+        1427  32%                - acp--route-incoming-message
+        1405  31%                 - #<byte-code-function A0B>
+        1405  31%                  - #<byte-code-function 082>
+        1400  31%                   - #<byte-code-function 39F>
+        1397  31%                    - agent-shell--on-notification
+        1397  31%                     - apply
+        1397  31%                      - agent-shell--on-notification@bench
+        1397  31%                       - let
+        1396  31%                        - prog1
+        1396  31%                         - progn
+        1396  31%                          - apply
+        1396  31%                           - #<byte-code-function 5E9>
+         884  20%                            - agent-shell--append-transcript
+         465  10%                             - write-region
+           3   0%                              + make-lock-file-name
+         418   9%                             - agent-shell--ensure-transcript-file
+         416   9%                                file-exists-p
+           2   0%                                file-name-directory
+         463  10%                            - agent-shell--update-fragment
+         288   6%                             - agent-shell--render-markdown
+         177   4%                              - agent-shell-cache-dir
+         175   3%                               - make-directory
+         172   3%                                - files--ensure-directory
+         170   3%                                   make-directory-internal
+           1   0%                                   file-directory-p
+           2   0%                                  expand-file-name
+           1   0%                                  find-file-name-handler
+           2   0%                                 expand-file-name
+         111   2%                              - agent-shell-markdown-replace-markup
+          38   0%                               - agent-shell-markdown--style-source-blocks
+          31   0%                                - agent-shell-markdown--highlight-code
+          22   0%                                 - python-mode
+          16   0%                                  + python-base-mode
+           3   0%                                  + python-indent-guess-indent-offset
+           3   0%                                  + python-skeleton-add-menu-items
+           8   0%                                 + font-lock-ensure
+           2   0%                                + agent-shell-markdown--apply-faces-from
+           2   0%                                  re-search-forward
+           1   0%                                + agent-shell-markdown--make-ret-binding-map
+           1   0%                                  add-text-properties
+          28   0%                               - agent-shell-markdown--style-tables
+          28   0%                                - agent-shell-markdown--render-table
+          15   0%                                 + agent-shell-markdown--render-table-source
+           5   0%                                 + agent-shell-markdown--mirror-face-to-font-lock-face
+           1   0%                                 + agent-shell-markdown--add-rear-nonsticky
+          10   0%                               + agent-shell-markdown--whitespace-normalization-start
+           5   0%                               + agent-shell-markdown--replace-image-file-paths
+           5   0%                               + agent-shell-markdown--collapse-list-blank-lines
+           4   0%                                 put-text-property
+           4   0%                               + agent-shell-markdown--pad-rendered-blocks
+           3   0%                               + agent-shell-markdown--replace-links
+           3   0%                               + agent-shell-markdown--mirror-face-to-font-lock-face
+           2   0%                               + agent-shell-markdown-context
+           2   0%                               + agent-shell-markdown--update-watermark
+           1   0%                                 agent-shell-markdown--style-inline-code
+           1   0%                               + agent-shell-markdown--decode-escapes
+           1   0%                               + agent-shell-markdown--linkify-file-references
+           1   0%                                 agent-shell-markdown--style-lists
+           1   0%                                 agent-shell-markdown--replace-images
+           1   0%                                 agent-shell-markdown--style-dividers
+           1   0%                               + agent-shell-markdown--replace-bolds
+         164   3%                             - agent-shell-ui-update-fragment
+          53   1%                              - text-property-search-backward
+           4   0%                               + text-property--match-p
+          35   0%                              - agent-shell-ui--group-insertion-point
+          35   0%                               - agent-shell-ui--group-header-range
+          35   0%                                - text-property-search-forward
+           5   0%                                 + text-property--match-p
+          32   0%                              - agent-shell-ui--insert-group-header
+          31   0%                               - agent-shell-ui--group-header-range
+          31   0%                                - text-property-search-forward
+           1   0%                                 + text-property--match-p
+           1   0%                                 agent-shell-ui--insert-fragment
+          28   0%                              - agent-shell-ui--group-header-range
+          27   0%                               - text-property-search-forward
+           1   0%                                + text-property--match-p
+           4   0%                                agent-shell-ui--append-body
+           3   0%                              + agent-shell-ui--cache-block
+           2   0%                                agent-shell-ui--insert-read-only
+           2   0%                                agent-shell-ui--insert-fragment
+           1   0%                                agent-shell-ui--required-newlines
+           1   0%                                agent-shell-ui--replace-label
+           1   0%                              + map-elt
+           3   0%                             + agent-shell--tag-untagged-output
+           2   0%                               shell-maker--clip-output-range
+           2   0%                             + map-nested-elt
+           1   0%                             + shell-maker--should-auto-scroll-p
+           1   0%                               map-elt
+          22   0%                            - agent-shell--delete-fragment
+          22   0%                             - agent-shell-ui-delete-fragment
+          22   0%                              - text-property-search-backward
+           1   0%                               + text-property--match-p
+          18   0%                            + agent-shell--emit-event
+           2   0%                            + agent-shell--refresh-activity-group-header
+           2   0%                            + agent-shell--indent-markdown-headers
+           2   0%                            + map-elt
+           1   0%                            + agent-shell-make-tool-call-label
+           1   0%                              current-time
+           1   0%                            + agent-shell--activity-group-id
+           3   0%                    + agent-shell--adapt-notification
+           1   0%                     generate-new-buffer
+           1   0%                   + #<byte-code-function FC0>
+          21   0%                 + #<byte-code-function A32>
+           1   0%                 + map-elt
+           3   0%              + timer-inc-time
+           2   0%              + timer-activate
+           1   0%                cancel-timer-internal
+          33   0%         - let*
+          33   0%          - while
+          33   0%           - if
+          33   0%            - +agent-shell-drive-send
+          33   0%             - if
+          33   0%              - progn
+          33   0%               - agent-shell-insert
+          33   0%                - agent-shell--insert-to-shell-buffer
+          33   0%                 - shell-maker-submit
+          31   0%                  - shell-maker--eval-input-on-buffer-v2
+          27   0%                   - shell-maker--extract-history
+          19   0%                      string-trim
+           1   0%                    + shell-maker--re-search-forward-prompt
+           1   0%                    + shell-maker--find-marker
+           3   0%                   + #<byte-code-function CF5>
+           1   0%                   + shell-maker--write-partial-reply
+           2   0%                  + shell-maker--clear-input-for-execution
+           2   0%      + let*
+         137   3%   Automatic GC
+           3   0% + ...
+
+=== Bottom-up, 4396 samples
+        1214  27% - next-single-property-change
+        1209  27%  - agent-shell-chat--prompt-runs
+        1209  27%   - agent-shell-chat--label-prompts
+        1209  27%    - agent-shell-chat--relabel
+        1209  27%     - #<byte-code-function D54>
+        1209  27%      - apply
+        1209  27%       - progn
+        1209  27%        - prog1
+        1209  27%         - let
+        1209  27%          - agent-shell-chat--relabel-buffer@bench
+        1209  27%           - apply
+        1209  27%            - agent-shell-chat--relabel-buffer
+        1209  27%             - apply
+        1209  27%              - timer-event-handler
+        1209  27%               - accept-process-output
+        1209  27%                  while
+           2   0%  + agent-shell-markdown--pad-regions
+           2   0%  + agent-shell-markdown--block-end
+           1   0%  + agent-shell-markdown--decode-escapes
+         528  12% - accept-process-output
+         528  12%  - while
+         528  12%   - let
+         528  12%    - +bench--wait-for
+         528  12%     - let
+         528  12%      - +bench--turns
+         528  12%       - setq
+         528  12%        - let*
+         528  12%         - +bench-run
+         528  12%          - command-line-1
+         528  12%           - command-line
+         528  12%              normal-top-level
+         467  10% - write-region
+         464  10%  - agent-shell--append-transcript
+         462  10%   - #<byte-code-function 5E9>
+         462  10%    - apply
+         462  10%     - progn
+         462  10%      - prog1
+         462  10%       - let
+         462  10%        - agent-shell--on-notification@bench
+         462  10%         - apply
+         462  10%          - agent-shell--on-notification
+         462  10%           - #<byte-code-function 39F>
+         462  10%            - #<byte-code-function 082>
+         462  10%             - #<byte-code-function C94>
+         462  10%              - acp--route-incoming-message
+         462  10%               - #<byte-code-function 519>
+         462  10%                  apply
+           1   0%   + agent-shell--send-command
+           1   0%   + agent-shell--separate-transcript-after-agent-message
+           3   0%  + shell-maker--write-input-ring-history
+         417   9% - file-exists-p
+         417   9%  - agent-shell--ensure-transcript-file
+         417   9%   - agent-shell--append-transcript
+         416   9%    - #<byte-code-function 5E9>
+         416   9%     - apply
+         416   9%      - progn
+         416   9%       - prog1
+         416   9%        - let
+         416   9%         - agent-shell--on-notification@bench
+         416   9%          - apply
+         416   9%           - agent-shell--on-notification
+         416   9%            - #<byte-code-function 39F>
+         416   9%             - #<byte-code-function 082>
+         416   9%              - #<byte-code-function FBB>
+         416   9%               - acp--route-incoming-message
+         416   9%                  #<byte-code-function 519>
+           1   0%    + agent-shell--send-command
+         343   7% - get-text-property
+         333   7%  - agent-shell-chat--prompt-runs
+         333   7%   - agent-shell-chat--label-prompts
+         333   7%    - agent-shell-chat--relabel
+         333   7%     - #<byte-code-function D54>
+         333   7%      - apply
+         333   7%       - progn
+         333   7%        - prog1
+         333   7%         - let
+         333   7%          - agent-shell-chat--relabel-buffer@bench
+         333   7%           - apply
+         333   7%            - agent-shell-chat--relabel-buffer
+         333   7%             - apply
+         333   7%              - timer-event-handler
+         333   7%               - accept-process-output
+         333   7%                  while
+           6   0%  + agent-shell-chat--label-responses
+           2   0%  + agent-shell-chat--label-prompts
+           1   0%  + agent-shell-markdown--parse-table-row
+           1   0%  + #<byte-code-function ED3>
+         201   4% - agent-shell-chat--prompt-runs
+         201   4%  - agent-shell-chat--label-prompts
+         201   4%   - agent-shell-chat--relabel
+         201   4%    - #<byte-code-function D54>
+         201   4%     - apply
+         201   4%      - progn
+         201   4%       - prog1
+         201   4%        - let
+         201   4%         - agent-shell-chat--relabel-buffer@bench
+         201   4%          - apply
+         201   4%           - agent-shell-chat--relabel-buffer
+         201   4%            - apply
+         201   4%             - timer-event-handler
+         201   4%              - accept-process-output
+         201   4%               - while
+         201   4%                  let
+         171   3% - make-directory-internal
+         171   3%  - files--ensure-directory
+         171   3%   - make-directory
+         170   3%    - agent-shell-cache-dir
+         170   3%     - agent-shell--render-markdown
+         170   3%      - agent-shell--update-fragment
+         170   3%       - #<byte-code-function 5E9>
+         170   3%        - apply
+         170   3%         - progn
+         170   3%          - prog1
+         170   3%           - let
+         170   3%            - agent-shell--on-notification@bench
+         170   3%             - apply
+         170   3%              - agent-shell--on-notification
+         170   3%               - #<byte-code-function 59F>
+         170   3%                  #<byte-code-function 682>
+           1   0%    + shell-maker--write-input-ring-history
+         161   3% - agent-shell-chat--prompt-face-p
+         161   3%  - agent-shell-chat--prompt-runs
+         161   3%   - agent-shell-chat--label-prompts
+         161   3%    - agent-shell-chat--relabel
+         161   3%     - #<byte-code-function D54>
+         161   3%      - apply
+         161   3%       - progn
+         161   3%        - prog1
+         161   3%         - let
+         161   3%          - agent-shell-chat--relabel-buffer@bench
+         161   3%           - apply
+         161   3%            - agent-shell-chat--relabel-buffer
+         161   3%             - apply
+         161   3%              - timer-event-handler
+         161   3%               - accept-process-output
+         161   3%                  while
+         155   3% - re-search-forward
+         141   3%  - agent-shell-chat--search-marker-forward
+         141   3%   - agent-shell-chat--label-responses
+         141   3%    - agent-shell-chat--relabel
+         141   3%     - #<byte-code-function D54>
+         141   3%      - apply
+         141   3%       - progn
+         141   3%        - prog1
+         141   3%         - let
+         141   3%          - agent-shell-chat--relabel-buffer@bench
+         141   3%           - apply
+         141   3%            - agent-shell-chat--relabel-buffer
+         141   3%             - apply
+         141   3%              - timer-event-handler
+         141   3%               - accept-process-output
+         141   3%                  while
+           5   0%  + agent-shell--render-deferred-images
+           2   0%  + #<byte-code-function 871>
+           2   0%  + agent-shell-markdown--style-source-blocks
+           1   0%  + shell-maker--re-search-forward-prompt
+           1   0%  + agent-shell-markdown--source-blocks
+           1   0%  + agent-shell-markdown--linkify-file-references
+           1   0%  + agent-shell-markdown--replace-bolds
+           1   0%  + #<byte-code-function 821>
+         137   3%   Automatic GC
+          87   1% - text-property-search-forward
+          86   1%  - agent-shell-ui--group-header-range
+          30   0%   - agent-shell-ui--insert-group-header
+          30   0%    - agent-shell-ui-update-fragment
+          30   0%     - agent-shell--update-fragment
+          30   0%      - #<byte-code-function 5E9>
+          30   0%       - apply
+          30   0%        - progn
+          30   0%         - prog1
+          30   0%          - let
+          30   0%           - agent-shell--on-notification@bench
+          30   0%            - apply
+          30   0%             - agent-shell--on-notification
+          30   0%              - #<byte-code-function 59F>
+          30   0%               - #<byte-code-function 682>
+          30   0%                  #<byte-code-function ADB>
+          30   0%   - agent-shell-ui--group-insertion-point
+          30   0%    - agent-shell-ui-update-fragment
+          30   0%     - agent-shell--update-fragment
+          30   0%      - #<byte-code-function 5E9>
+          30   0%       - apply
+          30   0%        - progn
+          30   0%         - prog1
+          30   0%          - let
+          30   0%           - agent-shell--on-notification@bench
+          30   0%            - apply
+          30   0%             - agent-shell--on-notification
+          30   0%              - #<byte-code-function 59F>
+          30   0%               - #<byte-code-function 682>
+          30   0%                  #<byte-code-function ADB>
+          26   0%   - agent-shell-ui-update-fragment
+          26   0%    - agent-shell--update-fragment
+          26   0%     - #<byte-code-function 5E9>
+          26   0%      - apply
+          26   0%       - progn
+          26   0%        - prog1
+          26   0%         - let
+          26   0%          - agent-shell--on-notification@bench
+          26   0%           - apply
+          26   0%            - agent-shell--on-notification
+          26   0%             - #<byte-code-function 59F>
+          26   0%              - #<byte-code-function 682>
+          26   0%               - #<byte-code-function ADB>
+          26   0%                  acp--route-incoming-message
+           1   0%  + agent-shell--render-deferred-images
+          70   1% - text-property-search-backward
+          49   1%  - agent-shell-ui-update-fragment
+          49   1%   - agent-shell--update-fragment
+          49   1%    - #<byte-code-function 5E9>
+          49   1%     - apply
+          49   1%      - progn
+          49   1%       - prog1
+          49   1%        - let
+          49   1%         - agent-shell--on-notification@bench
+          49   1%          - apply
+          49   1%           - agent-shell--on-notification
+          49   1%            - #<byte-code-function 59F>
+          49   1%             - #<byte-code-function 682>
+          49   1%              - #<byte-code-function ADB>
+          49   1%               - acp--route-incoming-message
+          49   1%                  #<byte-code-function 308>
+          21   0%  + agent-shell-ui-delete-fragment
+          25   0% - agent-shell-chat--label-prompts
+          25   0%  - agent-shell-chat--relabel
+          25   0%   - #<byte-code-function D54>
+          25   0%    - apply
+          25   0%     - progn
+          25   0%      - prog1
+          25   0%       - let
+          25   0%        - agent-shell-chat--relabel-buffer@bench
+          25   0%         - apply
+          25   0%          - agent-shell-chat--relabel-buffer
+          25   0%           - apply
+          25   0%            - timer-event-handler
+          25   0%             - accept-process-output
+          25   0%              - while
+          25   0%               - let
+          25   0%                  +bench--wait-for
+          25   0% - make-closure
+           9   0%  + agent-shell-chat--ensure-overlay
+           4   0%  + #<byte-code-function E5C>
+           4   0%  + seq-find
+           4   0%  + seq-some
+           3   0%  + agent-shell-chat--label-prompts
+           1   0%  + seq-reduce
+          20   0% + overlay-get
+          19   0% + string-trim
+          19   0% + agent-shell-chat--ensure-overlay
+          17   0% + buffer-substring-no-properties
+          16   0% + eldoc-add-command-completions
+          16   0% + concat
+          11   0% + put-text-property
+          10   0% + agent-shell-chat--label-responses
+           9   0% + #<byte-code-function A9C>
+           9   0% + split-string
+           9   0% + #<byte-code-function 650>
+           9   0% + agent-shell-chat--gc-overlays
+           7   0% + agent-shell-markdown--render-table
+           6   0% + shell-maker--extract-history
+           6   0% + #<byte-code-function B9E>
+           6   0% + plist-member
+           5   0% + map-elt
+           5   0% + overlays-in
+           4   0% + equal
+           4   0% + seq-find
+           4   0% + agent-shell-markdown--blank-line-at-p
+           4   0% + agent-shell-ui--append-body
+           4   0% + text-property-any
+           4   0% + expand-file-name
+           4   0% + prin1-to-string
+           3   0% + agent-shell-ui--insert-fragment
+           3   0% + files--transform-file-name
+           3   0% + mapconcat
+           3   0% + text-property-not-all
+           3   0% + format
+           3   0% + agent-shell-markdown--collapse-list-blank-lines
+           3   0% + cl-type-of
+           3   0% + regexp-opt-charset
+           3   0% + mapcar
+           3   0% + #<byte-code-function D54>
+           3   0% + string-match
+           3   0% + map-do
+           3   0% + line-beginning-position
+           3   0% + alist-get
+           3   0% + #<byte-code-function 082>
+           3   0% + get-char-property
+           3   0% + text-property--find-end-forward
+           2   0% + call-process-shell-command
+           2   0% + agent-shell-ui--insert-read-only
+           2   0% + rx--parse-any
+           2   0% + seq-do
+           2   0% + timer-relative-time
+           2   0% + char-width
+           2   0% + shell-maker--clip-output-range
+           2   0% + seq-do-indexed
+           2   0% + file-directory-p
+           2   0% + #<byte-code-function E5C>
+           2   0% + #<byte-code-function 435>
+           2   0% + agent-shell-ui-update-fragment
+           2   0% + apply
+           2   0% + #<byte-code-function F97>
+           2   0% + file-name-directory
+           2   0% + agent-shell--update-fragment
+           1   0% + shell-maker--output-filter
+           1   0% + search-forward
+           1   0% + map-put!
+           1   0% + agent-shell-ui--required-newlines
+           1   0% + copy-sequence
+           1   0% + agent-shell-markdown--style-inline-code
+           1   0% + agent-shell-markdown--replace-links
+           1   0% + find-file-name-handler
+           1   0% + regexp-opt-group
+           1   0% + append
+           1   0% + python-util-forward-comment
+           1   0% + agent-shell-ui--replace-label
+           1   0% + agent-shell--adapt-notification
+           1   0% + map-nested-elt
+           1   0% + cancel-timer-internal
+           1   0% + define-key
+           1   0% + agent-shell--reset-undo-history
+           1   0% + rx--translate-form
+           1   0% + #<native-comp-function F616e6f6e796d6f75732d6c616d626461_anonymous_lambda_12>
+           1   0% + add-face-text-property
+           1   0% + font-lock-default-fontify-syntactically
+           1   0% + seq-reduce
+           1   0% + agent-shell-markdown--style-source-blocks
+           1   0% + gethash
+           1   0% + string-width
+           1   0% + reverse
+           1   0% + python-info-line-ends-backslash-p
+           1   0% + seq-empty-p
+           1   0% + generate-new-buffer
+           1   0% + agent-shell-chat--search-marker-forward
+           1   0% + parse-partial-sexp
+           1   0% + agent-shell-chat--label-rows
+           1   0% + add-text-properties
+           1   0% + agent-shell-chat--label
+           1   0% + mapc
+           1   0% + agent-shell-markdown--apply-faces-from
+           1   0% + #<byte-code-function E37>
+           1   0% + agent-shell-markdown--highlight-code
+           1   0% + seq-remove
+           1   0% + agent-shell-markdown--style-lists
+           1   0% + timerp
+           1   0% + timer--time
+           1   0% + let
+           1   0% + replace-buffer-in-windows
+           1   0% + window-normalize-buffer
+           1   0% + agent-shell-markdown--table-wrap-char-width
+           1   0% + evil-track-last-insertion
+           1   0% + evil-replace-state-p
+           1   0% + seq-some
+           1   0% + agent-shell-ui--group-header-range
+           1   0% + boundp
+           1   0% + agent-shell-markdown--replace-images
+           1   0% + map-keymap
+           1   0% + propertize
+           1   0% + throw
+           1   0% + python-info-assignment-statement-p
+           1   0% + agent-shell-markdown--style-dividers
+           1   0% + agent-shell-markdown--render-table-data-row
+           1   0% + python--font-lock-f-strings
+           1   0% + line-end-position
+           1   0% + seq-map
+           1   0% + agent-shell-markdown--whitespace-normalization-start
+           1   0% + unibyte-char-to-multibyte
+           1   0% + agent-shell--append-transcript
+           1   0% + #<byte-code-function B1E>
+           1   0% + files--ensure-directory
+           1   0% + timer--time-less-p
+           1   0% + #<byte-code-function 206>
+           1   0% + font-lock-value-in-major-mode
+           1   0% + facep
+           1   0% + agent-shell-markdown--pad-table-string
+           1   0% + current-active-maps
+           1   0% + float-time
+           1   0% + current-time
+           1   0% + last
+           1   0% + #<byte-code-function E8D>
+           1   0% + make-overlay
+           1   0% + agent-shell-chat--extends-bg-p
+           1   0% + syntax--lbp
+           1   0% + looking-at
+           1   0% + beginning-of-line
+           1   0% + eq
+           1   0% + #<byte-code-function 121>
+           1   0% + auto-coding-alist-lookup
+           1   0% + sort
+
