@@ -27,6 +27,7 @@
 
 (declare-function agent-shell-start "agent-shell")
 (declare-function agent-shell-cwd "agent-shell-project")
+(declare-function agent-shell--current-mode-id "agent-shell-config")
 (declare-function agent-shell-status "agent-shell")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-insert "agent-shell")
@@ -108,9 +109,10 @@ Return nil, leaving the dialog to the user, only when no option rejects."
 
 (defun +agent-shell-drive--refusal (shell)
   "Return why read-only SHELL is not in its read-only mode, or nil."
+  (require 'agent-shell-config)
   (with-current-buffer shell
     (when-let* ((mode +agent-shell-drive--mode))
-      (let ((actual (map-nested-elt agent-shell--state '(:session :mode-id))))
+      (let ((actual (agent-shell--current-mode-id agent-shell--state)))
         (unless (equal actual mode)
           (format "Session mode is %s, not the read-only mode %s"
                   (or actual "unset") mode))))))
