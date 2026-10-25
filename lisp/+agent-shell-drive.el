@@ -159,7 +159,10 @@ Return nil, leaving the dialog to the user, only when no option fits."
 (defun +agent-shell-drive-kill (shell &optional reason)
   "Kill SHELL without prompting; its watchers get `clean-up' with REASON."
   (when (buffer-live-p shell)
-    (with-current-buffer shell (setq +agent-shell-drive--reason reason))
+    (with-current-buffer shell
+      (setq +agent-shell-drive--reason reason)
+      ;; shell-maker adds its transcript prompt to the local hook value.
+      (setq-local kill-buffer-query-functions nil))
     (let ((kill-buffer-query-functions nil))
       (kill-buffer shell))))
 
