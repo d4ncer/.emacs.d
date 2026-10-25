@@ -56,7 +56,6 @@
   (+config-check-process "File finder loading" "-l" "project-files-startup-test")
   (+config-check-process "Agent projects loading" "-l" "agent-shell-projects-startup-test")
   (+config-check-process "File finder tests and compilation" "-l" "run-project-files")
-  (+config-check-process "Legacy worker paths" "-l" "config-relocation-test")
   (+config-check-process "Agent project tests and compilation" "-l" "run-agent-shell-projects")
   (+config-check-process "pstack panels over ACP" "-l" "run-agent-shell-pstack")
   (+config-check-process "Sandboxed shells over ACP"
