@@ -255,7 +255,9 @@ Otherwise defer to `+agent-shell-pstack--next-responder'."
   "Send irreversible agent commands to the interactive permission prompt.
 Wraps `agent-shell-permission-responder-function', so automatic approval
 still applies to everything else.  Agents only ask when their session
-mode requires it; see `+agent-shell-pstack-unguarded-modes'."
+mode requires it; see `+agent-shell-pstack-unguarded-modes'.  Matching is
+textual, so a quoted or indirect command can slip past; it catches
+mistakes, not an adversary."
   :global t
   :group '+agent-shell-pstack
   (if +agent-shell-pstack-guard-mode
