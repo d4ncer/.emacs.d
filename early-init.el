@@ -22,16 +22,6 @@
 (setq user-full-name "Raghuvir Kasturi")
 (setq user-mail-address "raghuvir.kasturi@gmail.com")
 
-;;; Configure use-package
-
-(unless init-file-debug
-  (add-hook 'after-init-hook
-            (lambda ()
-              ;; Enable this when the configuration reaches a steady state; it
-              ;; will make it much easier to read the macro-expanded output of
-              ;; use-package calls.
-              (setq use-package-expand-minimally t))))
-
 ;;; Customise as much UI as possible early in init sequence.
 
 ;; Theme + fonts
@@ -90,8 +80,6 @@
 (when (eq system-type 'darwin)
   (setq frame-title-format nil)
   (setq ns-use-native-fullscreen nil)
-  (when (executable-find "gls")
-    (setq insert-directory-program "gls"))
   (add-to-list 'default-frame-alist '(ns-transparent-titlebar . t))
   (add-to-list 'default-frame-alist '(ns-appearance . light)))
 
