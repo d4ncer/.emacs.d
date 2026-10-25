@@ -1,0 +1,656 @@
+;;; +agent-shell-arena-git.el --- Git and filesystem work for pstack arenas -*- lexical-binding: t; -*-
+
+;;; Commentary:
+;; An arena snapshots the lead's working tree as a base commit, gives each
+;; candidate a detached worktree at that base, captures each candidate's tree
+;; as a result commit under refs/pstack-arena/, and cleans up from the
+;; manifest it keeps at <arena-dir>/manifest.json.
+;;
+;; Every git command after discovery names its git directory and work tree
+;; and runs with hooks and fsmonitor off.  Snapshots go through a temporary
+;; index, so the lead's index and HEAD never change.  Slow work runs in async
+;; processes.  Asynchronous operations take a CALLBACK of (RESULT ERROR):
+;; exactly one is non-nil, and the callback never runs before the operation
+;; returns.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'seq)
+(require 'subr-x)
+
+(defgroup +agent-shell-pstack-arena nil
+  "Candidate workspaces for pstack arena panels."
+  :group 'tools)
+
+(defcustom +agent-shell-pstack-arena-directory
+  (expand-file-name "~/.local/state/pstack-arena/")
+  "Directory holding one subdirectory per arena."
+  :type 'directory)
+
+(defcustom +agent-shell-pstack-arena-dependencies nil
+  "Dependency paths per repository, keyed by its top-level directory.
+Each value is a plist.  :shared lists paths symlinked from the lead into
+each candidate; :private lists paths cloned into each candidate, with
+symlinks into the lead's checkout rewritten to the candidate's copy.
+Paths are relative to the top level."
+  :type '(alist :key-type directory
+                :value-type (plist :options ((:shared (repeat string))
+                                             (:private (repeat string))))))
+
+(cl-defstruct (+agent-shell-arena-git-base
+               (:constructor +agent-shell-arena-git--base)
+               (:copier nil))
+  "A lead's repository and the commit snapshotting its working tree."
+  git-dir toplevel prefix head commit)
+
+(cl-defstruct (+agent-shell-arena-git-role
+               (:constructor +agent-shell-arena-git--role)
+               (:copier nil))
+  "A candidate's worktree, the dependency paths it got, and its result."
+  name worktree shared private ref commit state)
+
+(cl-defstruct (+agent-shell-arena-git-manifest
+               (:constructor +agent-shell-arena-git--manifest)
+               (:copier nil))
+  "An arena's record.  Cleanup trusts nothing else."
+  id directory git-dir toplevel prefix base roles)
+
+(defconst +agent-shell-arena-git--manifest-version 1)
+
+(defconst +agent-shell-arena-git--identity
+  '("GIT_AUTHOR_NAME=pstack arena" "GIT_AUTHOR_EMAIL=pstack-arena@localhost"
+    "GIT_COMMITTER_NAME=pstack arena"
+    "GIT_COMMITTER_EMAIL=pstack-arena@localhost"))
+
+(defconst +agent-shell-arena-git--agent-shell-exclude
+  ":(exclude,glob)**/.agent-shell/**"
+  "Pathspec leaving agent-shell transcripts out of every snapshot.")
+
+;;;; Processes
+
+(defun +agent-shell-arena-git--environment (extra)
+  "Return `process-environment' plus EXTRA, without repository overrides."
+  (append extra '("GIT_OPTIONAL_LOCKS=0" "GIT_TERMINAL_PROMPT=0")
+          (seq-remove
+           (lambda (entry)
+             (string-match-p
+              "\\`GIT_\\(DIR\\|WORK_TREE\\|INDEX_FILE\\|COMMON_DIR\\|\
+OBJECT_DIRECTORY\\|NAMESPACE\\)=" entry))
+           process-environment)))
+
+(defun +agent-shell-arena-git--run (command directory env fail done)
+  "Run COMMAND in DIRECTORY with ENV added to the environment.
+Call DONE with its output on success, otherwise FAIL with a message."
+  (let* ((default-directory (file-name-as-directory directory))
+         (process-environment (+agent-shell-arena-git--environment env))
+         (out (generate-new-buffer " *pstack-arena*" t))
+         (err (generate-new-buffer " *pstack-arena-stderr*" t))
+         (stderr (make-pipe-process :name "pstack-arena-stderr" :buffer err
+                                    :noquery t :sentinel #'ignore)))
+    (process-send-eof
+     (make-process
+      :name "pstack-arena" :buffer out :stderr stderr :command command
+      :coding 'utf-8-unix :connection-type 'pipe :noquery t
+      :sentinel
+      (lambda (process _event)
+        (unless (process-live-p process)
+          (dotimes (_ 50)
+            (when (process-live-p stderr) (accept-process-output stderr 0.01)))
+          (let ((status (process-exit-status process))
+                (output (with-current-buffer out (buffer-string)))
+                (message (with-current-buffer err
+                           (string-trim (buffer-string)))))
+            (delete-process stderr)
+            (kill-buffer out)
+            (kill-buffer err)
+            (if (and (eq (process-status process) 'exit) (zerop status))
+                (funcall done output)
+              (funcall fail (if (string-empty-p message)
+                                (format "exit status %s" status)
+                              message))))))))))
+
+(defun +agent-shell-arena-git--git (git-dir work-tree args fail done
+                                            &optional env)
+  "Run git ARGS on GIT-DIR and WORK-TREE, then call DONE or FAIL.
+ENV adds environment entries."
+  (+agent-shell-arena-git--run
+   (append (list "git" "--git-dir" git-dir "--work-tree" work-tree
+                 "-c" "core.hooksPath=/dev/null" "-c" "core.fsmonitor=false")
+           args)
+   work-tree env
+   (lambda (message) (funcall fail (format "git %s: %s" (car args) message)))
+   done))
+
+(defun +agent-shell-arena-git--read (directory &rest args)
+  "Return the output of git ARGS run in DIRECTORY, or nil if it fails.
+Only for reads that stay fast however large the repository is."
+  (with-temp-buffer
+    (let ((default-directory (file-name-as-directory directory))
+          (process-environment (+agent-shell-arena-git--environment nil)))
+      (when (eql 0 (apply #'process-file "git" nil (list t nil) nil
+                          "-c" "core.hooksPath=/dev/null"
+                          "-c" "core.fsmonitor=false" args))
+        (buffer-string)))))
+
+(defun +agent-shell-arena-git--read-in (git-dir work-tree &rest args)
+  "Return trimmed output of git ARGS on GIT-DIR and WORK-TREE, or nil."
+  (when-let* ((output (apply #'+agent-shell-arena-git--read work-tree
+                             "--git-dir" git-dir "--work-tree" work-tree
+                             args)))
+    (string-trim output)))
+
+(defun +agent-shell-arena-git--later (callback &rest args)
+  "Call CALLBACK with ARGS once the current command returns."
+  (apply #'run-at-time 0 nil callback args))
+
+;;;; Snapshots
+
+(defun +agent-shell-arena-git--snapshot (git-dir work-tree seed excludes
+                                                 fail done)
+  "Call DONE with WORK-TREE's tree once two consecutive snapshots match.
+Each snapshot fills a fresh temporary index by calling SEED with the index
+file, FAIL and a continuation, then adds every file except EXCLUDES
+pathspecs.  FAIL gets a message after three snapshots that differ."
+  (cl-labels
+      ((attempt (previous count)
+         (let* ((directory (make-temp-file "pstack-arena-index-" t))
+                (index (expand-file-name "index" directory))
+                (env (list (concat "GIT_INDEX_FILE=" index)))
+                (fail (lambda (message)
+                        (delete-directory directory t)
+                        (funcall fail message))))
+           (funcall
+            seed index fail
+            (lambda ()
+              (+agent-shell-arena-git--git
+               git-dir work-tree (append '("add" "-A" "--" ".") excludes) fail
+               (lambda (_)
+                 (+agent-shell-arena-git--git
+                  git-dir work-tree '("write-tree") fail
+                  (lambda (output)
+                    (delete-directory directory t)
+                    (let ((tree (string-trim output)))
+                      (cond ((equal tree previous) (funcall done tree))
+                            ((< count 3) (attempt tree (1+ count)))
+                            (t (funcall fail "The files kept changing during \
+capture; retry once they settle")))))
+                  env))
+               env))))))
+    (attempt nil 1)))
+
+(defun +agent-shell-arena-git--commit (git-dir work-tree tree parent message
+                                               fail done)
+  "Call DONE with a commit of TREE on PARENT with MESSAGE, or FAIL.
+The commit needs no user identity and is never signed."
+  (+agent-shell-arena-git--git
+   git-dir work-tree
+   (list "commit-tree" "--no-gpg-sign" "-p" parent "-m" message tree)
+   fail (lambda (output) (funcall done (string-trim output)))
+   +agent-shell-arena-git--identity))
+
+;;;; Base
+
+(defun +agent-shell-arena-git--locate (directory)
+  "Return a base for the lead at DIRECTORY, without its commit.
+Signal `user-error' when the repository cannot host an arena."
+  (let* ((output (and (file-directory-p directory)
+                      (+agent-shell-arena-git--read
+                       directory "rev-parse" "--show-toplevel"
+                       "--absolute-git-dir" "--show-prefix")))
+         (lines (and output (split-string output "\n"))))
+    (unless (and lines (not (string-empty-p (car lines))))
+      (user-error "%s is not inside a git working tree" directory))
+    (let* ((toplevel (file-name-as-directory (nth 0 lines)))
+           (git-dir (nth 1 lines))
+           (read (lambda (&rest args)
+                   (apply #'+agent-shell-arena-git--read-in git-dir toplevel
+                          args)))
+           (head (funcall read "rev-parse" "--verify" "-q" "HEAD^{commit}")))
+      (unless head
+        (user-error "HEAD in %s is unborn; commit once before starting an \
+arena" toplevel))
+      (when (file-exists-p (expand-file-name ".gitmodules" toplevel))
+        (user-error "%s has submodules, which arenas do not support"
+                    toplevel))
+      (when (equal (funcall read "config" "--type=bool" "core.sparseCheckout")
+                   "true")
+        (user-error "%s uses a sparse checkout, which arenas do not support"
+                    toplevel))
+      (when (or (file-exists-p (expand-file-name ".lfsconfig" toplevel))
+                (funcall read "config" "--local" "--get-regexp" "^lfs\\.")
+                (+agent-shell-arena-git--lfs-attributes-p
+                 (funcall read "rev-parse" "--git-path" "info/attributes")
+                 toplevel))
+        (user-error "%s uses Git LFS, which arenas do not support" toplevel))
+      (+agent-shell-arena-git--base
+       :git-dir git-dir :toplevel toplevel :prefix (nth 2 lines) :head head))))
+
+(defun +agent-shell-arena-git--lfs-attributes-p (file directory)
+  "Return non-nil when attributes FILE, relative to DIRECTORY, uses LFS."
+  (let ((file (expand-file-name file directory)))
+    (and (file-regular-p file)
+         (with-temp-buffer
+           (insert-file-contents file)
+           (re-search-forward "filter=lfs\\b" nil t)))))
+
+(defun +agent-shell-arena-git--check-index (base fail done)
+  "Call DONE unless BASE's index has gitlinks, sparse entries or LFS files.
+Otherwise call FAIL with the reason."
+  (let ((toplevel (+agent-shell-arena-git-base-toplevel base)))
+    (+agent-shell-arena-git--git
+     (+agent-shell-arena-git-base-git-dir base) toplevel
+     '("ls-files" "--stage" "-t" "-z") fail
+     (lambda (output)
+       (let ((reason nil))
+         (dolist (entry (split-string output "\0" t))
+           (when (and (not reason)
+                      (string-match
+                       "\\`\\(.\\) \\([0-7]+\\) [^\t]*\t\\(.*\\)\\'" entry))
+             (let ((tag (match-string 1 entry))
+                   (mode (match-string 2 entry))
+                   (path (match-string 3 entry)))
+               (setq reason
+                     (cond ((equal mode "160000") "has submodules")
+                           ((equal tag "S")
+                            "has skip-worktree entries from a sparse checkout")
+                           ((and (equal (file-name-nondirectory path)
+                                        ".gitattributes")
+                                 (+agent-shell-arena-git--lfs-attributes-p
+                                  path toplevel))
+                            "uses Git LFS"))))))
+         (if reason
+             (funcall fail (format "%s %s, which arenas do not support"
+                                   (directory-file-name toplevel) reason))
+           (funcall done)))))))
+
+(defun +agent-shell-arena-git-capture-base (directory callback)
+  "Snapshot the working tree of the lead at DIRECTORY as a base commit.
+The commit's parent is HEAD and its tree holds tracked and untracked,
+non-ignored files.  Call CALLBACK with a `+agent-shell-arena-git-base' and
+nil, or nil and a message saying why there is no base."
+  (let ((fail (lambda (message) (funcall callback nil message))))
+    (condition-case err
+        (let* ((base (+agent-shell-arena-git--locate directory))
+               (git-dir (+agent-shell-arena-git-base-git-dir base))
+               (toplevel (+agent-shell-arena-git-base-toplevel base))
+               (head (+agent-shell-arena-git-base-head base))
+               (real-index (expand-file-name "index" git-dir)))
+          (+agent-shell-arena-git--check-index
+           base fail
+           (lambda ()
+             (+agent-shell-arena-git--snapshot
+              git-dir toplevel
+              (lambda (index fail done)
+                (if (file-exists-p real-index)
+                    (+agent-shell-arena-git--run
+                     (list "cp" real-index index) toplevel nil fail
+                     (lambda (_) (funcall done)))
+                  (+agent-shell-arena-git--git
+                   git-dir toplevel (list "read-tree" head) fail
+                   (lambda (_) (funcall done))
+                   (list (concat "GIT_INDEX_FILE=" index)))))
+              (list +agent-shell-arena-git--agent-shell-exclude)
+              fail
+              (lambda (tree)
+                (+agent-shell-arena-git--commit
+                 git-dir toplevel tree head "pstack arena base" fail
+                 (lambda (commit)
+                   (setf (+agent-shell-arena-git-base-commit base) commit)
+                   (funcall callback base nil))))))))
+      (user-error (+agent-shell-arena-git--later fail (cadr err))))))
+
+;;;; Manifest
+
+(defun +agent-shell-arena-git--manifest-file (directory)
+  "Return the manifest file of the arena in DIRECTORY."
+  (expand-file-name "manifest.json" directory))
+
+(defun +agent-shell-arena-git-write-manifest (manifest)
+  "Write MANIFEST to its arena directory, replacing any earlier copy."
+  (let* ((directory (+agent-shell-arena-git-manifest-directory manifest))
+         (file (+agent-shell-arena-git--manifest-file directory))
+         (temporary (make-temp-file (expand-file-name ".manifest-" directory)))
+         (json
+          `((version . ,+agent-shell-arena-git--manifest-version)
+            (id . ,(+agent-shell-arena-git-manifest-id manifest))
+            (git_dir . ,(+agent-shell-arena-git-manifest-git-dir manifest))
+            (toplevel . ,(+agent-shell-arena-git-manifest-toplevel manifest))
+            (prefix . ,(+agent-shell-arena-git-manifest-prefix manifest))
+            (base . ,(+agent-shell-arena-git-manifest-base manifest))
+            (roles
+             . ,(vconcat
+                 (mapcar
+                  (lambda (role)
+                    `((role . ,(+agent-shell-arena-git-role-name role))
+                      (worktree . ,(+agent-shell-arena-git-role-worktree role))
+                      (shared
+                       . ,(vconcat (+agent-shell-arena-git-role-shared role)))
+                      (private
+                       . ,(vconcat (+agent-shell-arena-git-role-private role)))
+                      (ref . ,(or (+agent-shell-arena-git-role-ref role) :null))
+                      (commit
+                       . ,(or (+agent-shell-arena-git-role-commit role) :null))
+                      (state
+                       . ,(or (+agent-shell-arena-git-role-state role) :null))))
+                  (+agent-shell-arena-git-manifest-roles manifest)))))))
+    (with-temp-file temporary
+      (insert (json-serialize json) "\n"))
+    (rename-file temporary file t)
+    manifest))
+
+(defun +agent-shell-arena-git-read-manifest (directory)
+  "Return the manifest of the arena in DIRECTORY."
+  (let ((json (with-temp-buffer
+                (insert-file-contents
+                 (+agent-shell-arena-git--manifest-file directory))
+                (json-parse-buffer :object-type 'alist :array-type 'list
+                                   :null-object nil :false-object nil))))
+    (unless (eql (alist-get 'version json)
+                 +agent-shell-arena-git--manifest-version)
+      (error "Unknown arena manifest version in %s" directory))
+    (+agent-shell-arena-git--manifest
+     :id (alist-get 'id json)
+     :directory (file-name-as-directory (expand-file-name directory))
+     :git-dir (alist-get 'git_dir json)
+     :toplevel (alist-get 'toplevel json)
+     :prefix (alist-get 'prefix json)
+     :base (alist-get 'base json)
+     :roles (mapcar (lambda (role)
+                      (+agent-shell-arena-git--role
+                       :name (alist-get 'role role)
+                       :worktree (alist-get 'worktree role)
+                       :shared (alist-get 'shared role)
+                       :private (alist-get 'private role)
+                       :ref (alist-get 'ref role)
+                       :commit (alist-get 'commit role)
+                       :state (alist-get 'state role)))
+                    (alist-get 'roles json)))))
+
+(defun +agent-shell-arena-git-arenas ()
+  "Return the manifests of arenas under `+agent-shell-pstack-arena-directory'.
+Unreadable manifests are reported and skipped."
+  (let ((root +agent-shell-pstack-arena-directory))
+    (when (file-directory-p root)
+      (delq nil
+            (mapcar
+             (lambda (directory)
+               (when (file-exists-p
+                      (+agent-shell-arena-git--manifest-file directory))
+                 (condition-case err
+                     (+agent-shell-arena-git-read-manifest directory)
+                   (error (message "Skipping arena %s: %s" directory
+                                   (error-message-string err))
+                          nil))))
+             (directory-files root t "\\`[^.]"))))))
+
+(defun +agent-shell-arena-git-role (manifest name)
+  "Return the role called NAME in MANIFEST, or nil."
+  (seq-find (lambda (role) (equal (+agent-shell-arena-git-role-name role) name))
+            (+agent-shell-arena-git-manifest-roles manifest)))
+
+;;;; Candidates
+
+(defconst +agent-shell-arena-git--name-regexp
+  "\\`[[:alnum:]][[:alnum:]_-]*\\'"
+  "Names usable as a directory and a ref component.")
+
+(defun +agent-shell-arena-git-create (base panel-id)
+  "Create a directory for a new arena of PANEL-ID over BASE.
+Write and return its manifest.  The arena id is PANEL-ID plus a random
+suffix, so a repeated request never meets an earlier arena's leftovers."
+  (unless (string-match-p +agent-shell-arena-git--name-regexp panel-id)
+    (error "Invalid arena panel id: %S" panel-id))
+  (let* ((root (file-name-as-directory
+                (expand-file-name +agent-shell-pstack-arena-directory)))
+         (id (format "%s-%08x" panel-id (random #x100000000)))
+         (directory (file-name-as-directory (expand-file-name id root))))
+    (make-directory root t)
+    (make-directory directory)
+    (+agent-shell-arena-git-write-manifest
+     (+agent-shell-arena-git--manifest
+      :id id :directory directory
+      :git-dir (+agent-shell-arena-git-base-git-dir base)
+      :toplevel (+agent-shell-arena-git-base-toplevel base)
+      :prefix (+agent-shell-arena-git-base-prefix base)
+      :base (+agent-shell-arena-git-base-commit base)))))
+
+(defun +agent-shell-arena-git--dependencies (toplevel)
+  "Return the dependency plist configured for TOPLEVEL.
+Signal an error for a path that is absolute or leaves the top level."
+  (let* ((key (file-truename (file-name-as-directory toplevel)))
+         (entry (seq-find (lambda (entry)
+                            (equal (file-truename
+                                    (file-name-as-directory (car entry)))
+                                   key))
+                          +agent-shell-pstack-arena-dependencies))
+         (plist (cdr entry)))
+    (dolist (path (append (plist-get plist :shared) (plist-get plist :private)))
+      (when (or (file-name-absolute-p path)
+                (member ".." (split-string path "/")))
+        (error "Arena dependency path must stay inside %s: %s" toplevel path)))
+    plist))
+
+(defun +agent-shell-arena-git-directory (manifest role)
+  "Return ROLE's working directory in MANIFEST: its worktree plus the prefix."
+  (expand-file-name (+agent-shell-arena-git-manifest-prefix manifest)
+                    (+agent-shell-arena-git-role-worktree role)))
+
+(defun +agent-shell-arena-git--add-role (manifest name)
+  "Add role NAME to MANIFEST, write the manifest and return the role.
+The role lists the configured dependency paths present in the lead."
+  (unless (string-match-p +agent-shell-arena-git--name-regexp name)
+    (error "Invalid arena role name: %S" name))
+  (when (+agent-shell-arena-git-role manifest name)
+    (error "Arena %s already has a role %s"
+           (+agent-shell-arena-git-manifest-id manifest) name))
+  (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (dependencies (+agent-shell-arena-git--dependencies toplevel))
+         (present (lambda (key)
+                    (seq-filter (lambda (path)
+                                  (file-exists-p
+                                   (expand-file-name path toplevel)))
+                                (plist-get dependencies key))))
+         (role (+agent-shell-arena-git--role
+                :name name
+                :worktree (file-name-as-directory
+                           (expand-file-name
+                            name
+                            (+agent-shell-arena-git-manifest-directory
+                             manifest)))
+                :shared (funcall present :shared)
+                :private (funcall present :private))))
+    (setf (+agent-shell-arena-git-manifest-roles manifest)
+          (append (+agent-shell-arena-git-manifest-roles manifest)
+                  (list role)))
+    (+agent-shell-arena-git-write-manifest manifest)
+    role))
+
+(defun +agent-shell-arena-git-provision (manifest name callback)
+  "Add candidate NAME to MANIFEST's arena: a worktree at the base commit.
+Link and clone its dependency paths, then call CALLBACK with the
+candidate's working directory and nil, or nil and a message."
+  (let ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+        (fail (lambda (message) (funcall callback nil message))))
+    (condition-case err
+        ;; The role is on disk before its worktree, so cleanup finds a
+        ;; partly provisioned candidate.
+        (let* ((role (+agent-shell-arena-git--add-role manifest name))
+               (worktree (+agent-shell-arena-git-role-worktree role)))
+          (+agent-shell-arena-git--git
+           (+agent-shell-arena-git-manifest-git-dir manifest) toplevel
+           (list "worktree" "add" "--detach" (directory-file-name worktree)
+                 (+agent-shell-arena-git-manifest-base manifest))
+           fail
+           (lambda (_)
+             (condition-case err
+                 (progn
+                   (dolist (path (+agent-shell-arena-git-role-shared role))
+                     (let ((link (directory-file-name
+                                  (expand-file-name path worktree))))
+                       (make-directory (file-name-directory link) t)
+                       (make-symbolic-link
+                        (directory-file-name (expand-file-name path toplevel))
+                        link)))
+                   (+agent-shell-arena-git--clone
+                    toplevel worktree
+                    (+agent-shell-arena-git-role-private role) fail
+                    (lambda ()
+                      (let ((directory (+agent-shell-arena-git-directory
+                                        manifest role)))
+                        (make-directory directory t)
+                        (funcall callback directory nil)))))
+               (error (funcall fail (error-message-string err)))))))
+      (error (+agent-shell-arena-git--later fail (error-message-string err))))))
+
+(defun +agent-shell-arena-git--clone (toplevel worktree paths fail done)
+  "Clone each of PATHS from TOPLEVEL into WORKTREE, then call DONE.
+Symlinks in a clone that point into TOPLEVEL are rewritten to point at
+the same path in WORKTREE.  Call FAIL with a message on failure."
+  (if (null paths)
+      (funcall done)
+    (let ((source (directory-file-name
+                   (expand-file-name (car paths) toplevel)))
+          (target (directory-file-name
+                   (expand-file-name (car paths) worktree))))
+      (make-directory (file-name-directory target) t)
+      (+agent-shell-arena-git--run
+       (list "cp" "-c" "-R" source target) worktree nil fail
+       (lambda (_)
+         (+agent-shell-arena-git--run
+          (list "find" target "-type" "l" "-print0") worktree nil fail
+          (lambda (output)
+            (dolist (link (split-string output "\0" t))
+              (let ((destination (file-symlink-p link)))
+                (when (and destination (string-prefix-p toplevel destination))
+                  (make-symbolic-link
+                   (concat worktree (substring destination (length toplevel)))
+                   link t))))
+            (+agent-shell-arena-git--clone toplevel worktree (cdr paths)
+                                           fail done))))))))
+
+(defun +agent-shell-arena-git-capture (manifest name callback)
+  "Commit candidate NAME's worktree in MANIFEST as a child of the base.
+Leave out agent-shell transcripts and the shared dependency links.  Point
+refs/pstack-arena/ID/NAME at the commit and record it in the manifest.
+Call CALLBACK with the commit and nil, or nil and a message."
+  (let* ((role (+agent-shell-arena-git-role manifest name))
+         (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (base (+agent-shell-arena-git-manifest-base manifest))
+         (fail (lambda (message) (funcall callback nil message))))
+    (if (not role)
+        (+agent-shell-arena-git--later fail (format "No arena role %s" name))
+      (let ((worktree (+agent-shell-arena-git-role-worktree role))
+            (ref (+agent-shell-arena-git--ref manifest name)))
+        (+agent-shell-arena-git--snapshot
+         git-dir worktree
+         (lambda (index fail done)
+           (+agent-shell-arena-git--git
+            git-dir worktree (list "read-tree" base) fail
+            (lambda (_) (funcall done))
+            (list (concat "GIT_INDEX_FILE=" index))))
+         (cons +agent-shell-arena-git--agent-shell-exclude
+               (mapcar (lambda (path) (concat ":(exclude,literal)" path))
+                       (+agent-shell-arena-git-role-shared role)))
+         fail
+         (lambda (tree)
+           (+agent-shell-arena-git--commit
+            git-dir worktree tree base
+            (format "pstack arena %s %s"
+                    (+agent-shell-arena-git-manifest-id manifest) name)
+            fail
+            (lambda (commit)
+              (+agent-shell-arena-git--git
+               git-dir worktree (list "update-ref" ref commit) fail
+               (lambda (_)
+                 (setf (+agent-shell-arena-git-role-ref role) ref
+                       (+agent-shell-arena-git-role-commit role) commit)
+                 (+agent-shell-arena-git-write-manifest manifest)
+                 (funcall callback commit nil)))))))))))
+
+(defun +agent-shell-arena-git--ref (manifest name)
+  "Return the result ref of role NAME in MANIFEST."
+  (format "refs/pstack-arena/%s/%s"
+          (+agent-shell-arena-git-manifest-id manifest) name))
+
+;;;; Cleanup
+
+(defun +agent-shell-arena-git-clean (manifest callback)
+  "Remove MANIFEST's worktrees, private clones and result refs.
+A worktree the repository does not list, or a ref that no longer points
+at the recorded commit, stays in place.  When no worktree stays, delete
+the arena directory too.  Call CALLBACK with a list of messages naming
+what stayed, and nil; or nil and a message."
+  (let* ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (fail (lambda (message) (funcall callback nil message)))
+         (left nil)
+         (worktree-left nil))
+    (+agent-shell-arena-git--git
+     git-dir toplevel '("worktree" "list" "--porcelain" "-z") fail
+     (lambda (output)
+       (let ((registered
+              (delq nil (mapcar (lambda (field)
+                                  (when (string-prefix-p "worktree " field)
+                                    (file-truename
+                                     (file-name-as-directory
+                                      (substring field (length "worktree "))))))
+                                (split-string output "\0" t)))))
+         (cl-labels
+             ((next (roles)
+                (if roles
+                    (clean-role (car roles) (lambda () (next (cdr roles))))
+                  (unless worktree-left
+                    (delete-directory
+                     (+agent-shell-arena-git-manifest-directory manifest) t))
+                  (funcall callback (nreverse left) nil)))
+              (clean-role (role done)
+                (let ((worktree (+agent-shell-arena-git-role-worktree role)))
+                  (cond
+                   ((member (file-truename worktree) registered)
+                    (remove-private
+                     worktree (+agent-shell-arena-git-role-private role)
+                     (lambda ()
+                       (+agent-shell-arena-git--git
+                        git-dir toplevel
+                        (list "worktree" "remove" "--force"
+                              (directory-file-name worktree))
+                        fail (lambda (_) (clean-ref role done))))))
+                   ((file-exists-p worktree)
+                    (setq worktree-left t)
+                    (push (format "%s is not a registered worktree; left in \
+place" worktree)
+                          left)
+                    (clean-ref role done))
+                   (t (clean-ref role done)))))
+              (remove-private (worktree paths done)
+                (if (null paths)
+                    (funcall done)
+                  (+agent-shell-arena-git--run
+                   (append '("rm" "-rf" "--")
+                           (mapcar (lambda (path)
+                                     (expand-file-name path worktree))
+                                   paths))
+                   toplevel nil fail (lambda (_) (funcall done)))))
+              (clean-ref (role done)
+                (let* ((ref (+agent-shell-arena-git--ref
+                             manifest (+agent-shell-arena-git-role-name role)))
+                       (commit (+agent-shell-arena-git-role-commit role))
+                       (current (+agent-shell-arena-git--read-in
+                                 git-dir toplevel "rev-parse" "--verify" "-q"
+                                 ref)))
+                  (cond
+                   ((null current) (funcall done))
+                   ((equal current commit)
+                    (+agent-shell-arena-git--git
+                     git-dir toplevel (list "update-ref" "-d" ref commit) fail
+                     (lambda (_) (funcall done))))
+                   (t
+                    (push (format "%s points at %s, not the recorded %s; left \
+in place" ref current (or commit "nothing"))
+                          left)
+                    (funcall done))))))
+           (next (+agent-shell-arena-git-manifest-roles manifest))))))))
+
+(provide '+agent-shell-arena-git)
+;;; +agent-shell-arena-git.el ends here
