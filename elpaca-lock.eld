@@ -39,7 +39,7 @@
 			:source "MELPA" :id agent-shell :type git
 			:protocol https :inherit t :depth treeless
 			:ref
-			"78a2c94daa255b97ea001bd8a6507c60af20e89d"))
+			"b3553916e7b6b8fe7ed00bba3811f4c5a1e43496"))
  (agent-shell-math-renderer :source "elpaca-menu-lock-file" :recipe
 			    (:source "Init file" :package
 				     "agent-shell-math-renderer" :id
