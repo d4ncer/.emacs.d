@@ -46,7 +46,7 @@
    "|" '(rotate-layout :wk "rotate window layout")
    "-" '(window-toggle-side-windows :wk "side windows")
    ":" '(pp-eval-expression :wk "eval")
-   ";" '(comment-dwim :wk "REPL")
+   ";" '(comment-dwim :wk "comment")
    "d" '(dired :wk "dir editor")
    "i" '(consult-imenu :wk "imenu")
    "r" #'vertico-repeat
@@ -119,8 +119,6 @@
 
    ",k" '(puni-splice-killing-forward :wk "splice-killing-forward")
    ",K" '(puni-splice-killing-backward :wk "splice-killing-backward")
-   ;; TODO: define a killing-around variant.
-   ",s" '(puni-splice-killing-backward :wk "splice-killing-backward")
    ",r" '(puni-raise :wk "raise")
    ",b" '(puni-barf-forward :wk "barf-forward")
    ",B" '(puni-barf-backward :wk "barf-backward")
@@ -251,7 +249,7 @@
    "l?" '(gptel-menu :wk "menu")
    "lb" '(agent-shell-switch-buffer :wk "switch agent shell")
    "ll" '(gptel :wk "open chat")
-   "lw" '(gptel :wk "rewrite")
+   "lw" '(gptel-rewrite :wk "rewrite")
 
    "o"  '(nil :wk "org")
    "oa" (list (defun +org-agenda-dwim ()
@@ -331,12 +329,11 @@
 
    "s" '(nil :wk "selection/search")
    "se" '(evil-iedit-state/iedit-mode :wk "iedit")
-   ;; TODO FIX THIS FIRST - see buffer on right for help
    "ss" (list (defun +symbol-in-file ()
                 (interactive)
                 (let ((selection (if (use-region-p)
                                      (buffer-substring-no-properties (region-beginning) (region-end))
-                                   (substring-no-properties (thing-at-point 'symbol)))))
+                                   (thing-at-point 'symbol t))))
                   (consult-line selection)))
               :wk "search symbol in file")
    "sp" (list (defun +symbol-in-project ()
@@ -344,8 +341,10 @@
                 (interactive)
                 (let ((selection (if (use-region-p)
                                      (buffer-substring-no-properties (region-beginning) (region-end))
-                                   (substring-no-properties (thing-at-point 'symbol)))))
-                  (consult-ripgrep (project-root (project-current)) selection)))
+                                   (thing-at-point 'symbol t))))
+                  (consult-ripgrep (when-let* ((project (project-current)))
+                                    (project-root project))
+                                  selection)))
               :wk "search symbol in project")
 
    "t"  '(nil :wk "toggles")
