@@ -42,7 +42,7 @@ Scenarios:
   live 2.8 MB transcript, which is mostly tool output (415 tool calls, 109
   agent messages, 9 prompts).
 - **panel.** The lead plus two read-only panel members started with
-  `+agent-shell-drive-start :read-only t` and watched by the drive. All
+  `+agent-shell-drive-start :policy 'read-only` and watched by the drive. All
   three stream at once.
 - **mixed.** `panel` with the lead preloaded to 2.45 MB. This is the closest
   to the live session.

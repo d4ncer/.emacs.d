@@ -448,7 +448,7 @@ Prefer a rejected plan when it is longer than the final text."
         (let ((shell (+agent-shell-drive-start
                       :config (+agent-shell-pstack-panel-member-agent member)
                       :directory (+agent-shell-pstack-panel-cwd panel)
-                      :read-only t)))
+                      :policy 'read-only)))
           (setf (+agent-shell-pstack-panel-member-shell member) shell)
           (+agent-shell-drive-watch
            shell 'pstack-panel (cons id role)

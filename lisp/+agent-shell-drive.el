@@ -12,14 +12,15 @@
 ;; first `tool-call-update' after agent text reports that part as :text and
 ;; the call's :title.
 ;;
-;; A read-only shell runs in its agent's mode from
-;; `+agent-shell-drive-read-only-modes' and answers permission requests itself:
-;; it approves reads once and rejects everything else.  Its `turn-complete'
-;; adds :plan when it rejected a request carrying a plan.  If the session is
-;; not in that mode once initialized, the shell is killed and its watchers get
-;; `clean-up' with :reason instead of `init-finished'.  Read-only shells are
-;; left out of `agent-shell-buffers', so upstream pickers and project reuse
-;; never offer them.
+;; A shell started with a policy runs in a mode the policy names and answers
+;; permission requests itself.  A `read-only' shell runs in its agent's mode
+;; from `+agent-shell-drive-read-only-modes': it approves reads once and
+;; rejects everything else.  Its `turn-complete' adds :plan when it rejected
+;; a request carrying a plan.  If the session is not in the policy's mode once
+;; initialized, the shell is killed and its watchers get `clean-up' with
+;; :reason instead of `init-finished'.  Shells with a policy are left out of
+;; `agent-shell-buffers', so upstream pickers and project reuse never offer
+;; them.
 
 ;;; Code:
 
@@ -61,8 +62,10 @@
 (defvar +agent-shell-drive--shells (make-hash-table :test #'eq)
   "Map a watched shell to (:subscription TOKEN :turn TEXT :final TEXT).")
 
+(defvar-local +agent-shell-drive--policy nil
+  "Policy this shell was started with; see `+agent-shell-drive-start'.")
 (defvar-local +agent-shell-drive--mode nil
-  "Read-only session mode this shell must run in.")
+  "Session mode this shell's policy requires.")
 (defvar-local +agent-shell-drive--plan nil
   "Plan from the last request this shell rejected during the turn.")
 (defvar-local +agent-shell-drive--reason nil
@@ -89,21 +92,18 @@
               (mapcar (lambda (config) (map-elt config :identifier))
                       (+agent-shell-drive--configs))))
 
-(defun +agent-shell-drive--respond (permission)
-  "Approve PERMISSION once if it only reads, otherwise reject it.
-Return nil, leaving the dialog to the user, only when no option rejects."
+(defun +agent-shell-drive--answer (permission allow)
+  "Approve PERMISSION once when ALLOW, otherwise reject it.
+Return nil, leaving the dialog to the user, only when no option fits."
   (let* ((tool-call (map-elt permission :tool-call))
          (options (map-elt permission :options))
-         (pick (lambda (&rest kinds)
-                 (seq-some (lambda (kind)
+         (choice (seq-some (lambda (kind)
                              (seq-find (lambda (option)
                                          (equal (map-elt option :kind) kind))
                                        options))
-                           kinds)))
-         (choice (if (member (map-elt tool-call :kind)
-                             +agent-shell-drive--read-kinds)
-                     (funcall pick "allow_once" "reject_once" "reject_always")
-                   (funcall pick "reject_once" "reject_always"))))
+                           (if allow
+                               '("allow_once" "reject_once" "reject_always")
+                             '("reject_once" "reject_always")))))
     (when choice
       (when-let* (((string-prefix-p "reject" (map-elt choice :kind)))
                   (plan (map-elt (map-elt tool-call :raw-input) 'plan)))
@@ -111,25 +111,33 @@ Return nil, leaving the dialog to the user, only when no option rejects."
       (funcall (map-elt permission :respond) (map-elt choice :option-id))
       t)))
 
+(defun +agent-shell-drive--respond (permission)
+  "Approve PERMISSION once if it only reads, otherwise reject it."
+  (+agent-shell-drive--answer
+   permission (member (map-nested-elt permission '(:tool-call :kind))
+                      +agent-shell-drive--read-kinds)))
+
 (defun +agent-shell-drive--refusal (shell)
-  "Return why read-only SHELL is not in its read-only mode, or nil."
+  "Return why SHELL is not in the mode its policy requires, or nil."
   (require 'agent-shell-config)
   (with-current-buffer shell
     (when-let* ((mode +agent-shell-drive--mode))
       (let ((actual (agent-shell--current-mode-id agent-shell--state)))
         (unless (equal actual mode)
-          (format "Session mode is %s, not the read-only mode %s"
-                  (or actual "unset") mode))))))
+          (format "Session mode is %s, not the %s mode %s"
+                  (or actual "unset")
+                  (if (eq +agent-shell-drive--policy 'read-only) "read-only"
+                    "full-access")
+                  mode))))))
 
-(defun +agent-shell-drive-read-only-p (shell)
-  "Return whether SHELL was started read-only."
+(defun +agent-shell-drive-policy (shell)
+  "Return the policy live SHELL was started with, or nil."
   (and (buffer-live-p shell)
-       (buffer-local-value '+agent-shell-drive--mode shell)
-       t))
+       (buffer-local-value '+agent-shell-drive--policy shell)))
 
-(defun +agent-shell-drive--hide-read-only (shells)
-  "Return SHELLS without read-only shells."
-  (seq-remove #'+agent-shell-drive-read-only-p shells))
+(defun +agent-shell-drive--hide-owned (shells)
+  "Return SHELLS without the shells started with a policy."
+  (seq-remove #'+agent-shell-drive-policy shells))
 
 (defun +agent-shell-drive-kill (shell &optional reason)
   "Kill SHELL without prompting; its watchers get `clean-up' with REASON."
@@ -138,30 +146,37 @@ Return nil, leaving the dialog to the user, only when no option rejects."
     (let ((kill-buffer-query-functions nil))
       (kill-buffer shell))))
 
-(cl-defun +agent-shell-drive-start (&key config directory read-only)
+(defun +agent-shell-drive--override (config key value)
+  "Return CONFIG with KEY set to VALUE."
+  (cons (cons key value) (assq-delete-all key (copy-alist config))))
+
+(cl-defun +agent-shell-drive-start (&key config directory policy)
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
-With READ-ONLY, start it in its agent's read-only mode with a responder that
-rejects everything but reads, and hide it from `agent-shell-buffers'; see
-`+agent-shell-drive-read-only-modes'."
+POLICY nil starts an ordinary shell.  With `read-only', the shell runs in its
+agent's mode from `+agent-shell-drive-read-only-modes' with a responder that
+rejects everything but reads.  A shell with a policy is hidden from
+`agent-shell-buffers'."
   (require 'agent-shell)
   (let* ((config (+agent-shell-drive-config config))
-         (mode (and read-only
-                    (or (alist-get (map-elt config :identifier)
-                                   +agent-shell-drive-read-only-modes)
-                        (user-error "No read-only mode for agent %s"
-                                    (map-elt config :identifier)))))
+         (agent (map-elt config :identifier))
+         (mode (pcase policy
+                 ('nil nil)
+                 ('read-only
+                  (or (alist-get agent +agent-shell-drive-read-only-modes)
+                      (user-error "No read-only mode for agent %s" agent)))
+                 (_ (error "Unknown shell policy %S" policy))))
          (config (if mode
-                     (cons (cons :default-session-mode-id (lambda () mode))
-                           (assq-delete-all :default-session-mode-id
-                                            (copy-alist config)))
+                     (+agent-shell-drive--override
+                      config :default-session-mode-id (lambda () mode))
                    config))
          (directory (file-name-as-directory (file-truename directory)))
          (cwd-function (lambda () directory))
          (pin (lambda ()
                 (setq-local agent-shell-cwd-function cwd-function
                             default-directory directory)
-                (when mode
-                  (setq-local +agent-shell-drive--mode mode
+                (when policy
+                  (setq-local +agent-shell-drive--policy policy
+                              +agent-shell-drive--mode mode
                               agent-shell-permission-responder-function
                               #'+agent-shell-drive--respond))))
          (shell
@@ -174,9 +189,9 @@ rejects everything but reads, and hide it from `agent-shell-buffers'; see
                   (agent-shell-session-strategy 'new))
               (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
-    (when mode
+    (when policy
       (advice-add 'agent-shell-buffers :filter-return
-                  #'+agent-shell-drive--hide-read-only)
+                  #'+agent-shell-drive--hide-owned)
       (agent-shell-subscribe-to
        :shell-buffer shell :event 'init-finished
        :on-event (lambda (_event)

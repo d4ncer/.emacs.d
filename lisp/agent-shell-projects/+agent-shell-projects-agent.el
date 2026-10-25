@@ -87,8 +87,8 @@
   (unless (and (buffer-live-p shell)
                (with-current-buffer shell (derived-mode-p 'agent-shell-mode)))
     (user-error "Choose an agent-shell buffer"))
-  (when (+agent-shell-drive-read-only-p shell)
-    (user-error "Read-only panel shells cannot join a project"))
+  (when (+agent-shell-drive-policy shell)
+    (user-error "Panel shells cannot join a project"))
   (unless (+agent-shell-drive-pinned-p shell (plist-get project :root))
     (user-error "Agent shell belongs to another workspace; start or choose one in %s"
                 (plist-get project :root)))

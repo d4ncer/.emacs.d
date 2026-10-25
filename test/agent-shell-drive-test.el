@@ -338,18 +338,18 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
     (+agent-shell-drive-test--with-start
       (should-error (+agent-shell-drive-start :config 'missing
                                               :directory directory
-                                              :read-only t)
+                                              :policy 'read-only)
                     :type 'user-error)
       (should-error (+agent-shell-drive-start :config 'gemini
                                               :directory directory
-                                              :read-only t)
+                                              :policy 'read-only)
                     :type 'user-error)
       (should-not started)
       (should (equal '(claude-code codex)
                      (sort (+agent-shell-drive-read-only-agents) #'string<)))
       (let ((member (+agent-shell-drive-start :config 'codex
                                               :directory directory
-                                              :read-only t)))
+                                              :policy 'read-only)))
         (should (equal "read-only"
                        (funcall (map-elt (car started)
                                          :default-session-mode-id))))
@@ -371,7 +371,7 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
     (+agent-shell-drive-test--with-start
       (let* ((member (+agent-shell-drive-start :config 'claude-code
                                                :directory directory
-                                               :read-only t))
+                                               :policy 'read-only))
              (events nil))
         (with-current-buffer member
           (add-hook 'kill-buffer-hook
@@ -399,7 +399,7 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
     (+agent-shell-drive-test--with-start
       (let ((member (+agent-shell-drive-start :config 'claude-code
                                               :directory directory
-                                              :read-only t))
+                                              :policy 'read-only))
             (events nil))
         (+agent-shell-drive-watch member 'a 1
                                   (lambda (e) (push (plist-get e :kind) events)))
@@ -417,7 +417,7 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
     (+agent-shell-drive-test--with-start
       (let ((member (+agent-shell-drive-start :config 'codex
                                               :directory directory
-                                              :read-only t))
+                                              :policy 'read-only))
             (events nil))
         (+agent-shell-drive-watch member 'a 1
                                   (lambda (e) (push (plist-get e :kind) events)))
@@ -444,15 +444,15 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
                                               :directory directory))
              (member (+agent-shell-drive-start :config 'codex
                                                :directory directory
-                                               :read-only t)))
+                                               :policy 'read-only)))
         (unwind-protect
             (progn
               (dolist (shell (list plain member))
                 (with-current-buffer shell
                   (setq major-mode 'agent-shell-mode)
                   (setq-local shell-maker--config '((:name . "stub")))))
-              (should (+agent-shell-drive-read-only-p member))
-              (should-not (+agent-shell-drive-read-only-p plain))
+              (should (+agent-shell-drive-policy member))
+              (should-not (+agent-shell-drive-policy plain))
               (should (memq plain (agent-shell-buffers)))
               (should-not (memq member (agent-shell-buffers)))
               (with-temp-buffer

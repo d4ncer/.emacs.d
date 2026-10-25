@@ -209,7 +209,7 @@ NAME, leaving the other workarounds on.")
   (let* ((lead (= index 0))
          (shell (+agent-shell-drive-start :config 'bench
                                           :directory +bench-workdir
-                                          :read-only (not lead))))
+                                          :policy (unless lead 'read-only))))
     (+bench--wait-for (lambda () (+bench--ready-p shell)) 30 "a ready shell")
     (unless (memq 'drive +bench-off)
       (if lead

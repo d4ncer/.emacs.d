@@ -302,7 +302,8 @@
   "Refuse a read-only panel member as a project shell."
   (+agent-shell-projects-test--isolated
     (+agent-shell-projects-test--agent
-      (with-current-buffer shell (setq-local +agent-shell-drive--mode "plan"))
+      (with-current-buffer shell
+        (setq-local +agent-shell-drive--policy 'read-only))
       (should-error (+agent-shell-projects-associate project shell)
                     :type 'user-error)
       (should-not (plist-get project :agents)))))

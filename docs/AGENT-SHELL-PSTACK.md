@@ -104,7 +104,7 @@ it. The file inbox stays in `agent-shell-projects`, its only user.
 
 ### Keep members read-only
 
-Each member starts through `+agent-shell-drive-start :read-only t` in the
+Each member starts through `+agent-shell-drive-start :policy 'read-only` in the
 lead's directory. Three layers keep it read-only:
 
 1. The session mode comes from `+agent-shell-drive-read-only-modes`: `plan`

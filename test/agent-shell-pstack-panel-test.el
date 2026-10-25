@@ -14,7 +14,7 @@
   "Run BODY with a pstack lead, stubbed drive functions and fresh panels.
 BODY sees `lead', `directory' (the reports root), `cwd' (the lead's),
 `sent' (newest first, each (SHELL . TEXT)), `started' (each (AGENT SHELL
-READ-ONLY CWD)), `interrupted' (shells, newest first), `send-ok' (whether
+POLICY CWD)), `interrupted' (shells, newest first), `send-ok' (whether
 sends succeed), `start-error' (a start failure message), `partials' (alist
 of shell to partial text), and the functions `lead-event' and
 `member-event'."
@@ -56,11 +56,11 @@ of shell to partial text), and the functions `lead-event' and
                   (when (buffer-live-p shell) (kill-buffer shell))))
                ((symbol-function '+agent-shell-drive-start)
                 (cl-function
-                 (lambda (&key config directory read-only)
+                 (lambda (&key config directory policy)
                    (when start-error (user-error "%s" start-error))
                    (let ((shell (generate-new-buffer " *member*")))
                      (setq started (append started
-                                           (list (list config shell read-only
+                                           (list (list config shell policy
                                                        directory))))
                      shell)))))
        (cl-flet* ((lead-event (&rest event)
@@ -223,7 +223,8 @@ The block is not valid JSON" (cdar sent)))
            (reports (expand-file-name id directory)))
       (lead-event :kind 'turn-complete :session "s1"
                   :text (+agent-shell-pstack-panel-test--message json))
-      (should (equal (list (list 'codex t cwd) (list 'claude-code t cwd))
+      (should (equal (list (list 'codex 'read-only cwd)
+                           (list 'claude-code 'read-only cwd))
                      (mapcar (lambda (entry)
                                (list (nth 0 entry) (nth 2 entry) (nth 3 entry)))
                              started)))
