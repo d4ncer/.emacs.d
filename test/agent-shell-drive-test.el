@@ -169,6 +169,21 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
         (+agent-shell-drive-unwatch 'b 1)
         (should (equal '(2 1) unsubscribed))))))
 
+(ert-deftest +agent-shell-drive-test-kill-skips-local-queries ()
+  "Kill a shell without running its buffer-local kill queries."
+  (let ((shell (generate-new-buffer " *drive-kill*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer shell
+            (add-hook 'kill-buffer-query-functions
+                      (lambda () (error "Asked before killing")) nil t))
+          (+agent-shell-drive-kill shell)
+          (should-not (buffer-live-p shell)))
+      (when (buffer-live-p shell)
+        (with-current-buffer shell
+          (kill-local-variable 'kill-buffer-query-functions))
+        (kill-buffer shell)))))
+
 (ert-deftest +agent-shell-drive-test-turn-text ()
   "Collect turn text, preferring the part after the last tool call."
   (+agent-shell-drive-test--with-upstream
