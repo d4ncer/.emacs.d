@@ -71,7 +71,8 @@ design.
   files.
 - **Deny writes** everywhere except:
   - ROOT;
-  - the candidate's private `TMPDIR`;
+  - the candidate's private temp folder, `/tmp/pa-<8 hex>`, set as both
+    `TMPDIR` and `CLAUDE_CODE_TMPDIR`;
   - the candidate's private agent config directory, set through
     `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, so it cannot plant hooks or
     settings in the user's real config;
@@ -160,12 +161,14 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
 - **Stopping.**
   1. The kill is deferred out of the candidate's own event callback, as
      today.
-  2. The adapter runs in its own process group, which Emacs signals with
-     TERM, then KILL after a grace period.
-  3. Emacs waits for the group to empty.
+  2. Emacs walks the adapter's process tree and kills every descendant,
+     whatever its process group, then the adapter.
+  3. Emacs sweeps processes whose working directory lies under ROOT or the
+     private temp folder, and repeats until none remain.
 
-  A process that left the group can still write to ROOT. The capture and
-  the judge below don't depend on ROOT after this point.
+  Experiment 2 shows why both steps are needed. A process that escapes
+  both can still write to ROOT, but the capture and the judge below don't
+  depend on ROOT after this point.
 - **Capturing** records each candidate's result commit (see Snapshots).
 - **Judging.** The judge reads an immutable checkout of each result commit,
   made outside every candidate's root, never the live worktree. Its timer
@@ -203,7 +206,7 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   2. Copy the lead's real index to a temporary file, so force-added files
      and the tracked set carry over.
   3. Run `git add -A` against it through `GIT_INDEX_FILE`.
-  4. Run `write-tree`, then `commit-tree -p <resolved HEAD>`.
+  4. Run `write-tree`, then `commit-tree --no-gpg-sign -p <resolved HEAD>`.
   5. Repeat steps 2 to 4 until two consecutive trees match, up to three
      attempts.
 
@@ -279,24 +282,45 @@ The `emacsclient` row comes from rerunning the command against the real
 socket path under the same profile. Inside the agent, the private `TMPDIR`
 meant `emacsclient` never found the socket, so it never tried to connect.
 
-**Claude Code in `bypassPermissions` cannot authenticate yet.** The session
-started and reported the mode, but every prompt failed. Your live
-credentials are in the Keychain item `Claude Code-credentials`.
-`~/.claude/.credentials.json` is a stale copy from Aug 5.
+**Claude Code in `bypassPermissions` passes with its own token.** It
+signed in with a long-lived `CLAUDE_CODE_OAUTH_TOKEN` made by `claude
+setup-token`. Emacs read the token from the Keychain item
+`pstack-arena-claude-token` and passed it in the environment. Claude Code
+also had a private `CLAUDE_CONFIG_DIR` holding no credentials file. Every
+probe gave the same result as for Codex, and the file checks matched on
+disk. Two earlier attempts failed, and they show why the token is needed:
 
-- With `CLAUDE_CONFIG_DIR` pointing at a private folder holding that copy,
-  the prompt failed: "OAuth session expired and could not be refreshed".
-- With `HOME` pointing at a private folder, the prompt failed:
-  "Authentication required". Claude Code did not find the Keychain item.
+- **Copied credentials file.** Your live credentials are in the Keychain
+  item `Claude Code-credentials`. `~/.claude/.credentials.json` is a stale
+  copy from Aug 5. With `CLAUDE_CONFIG_DIR` pointing at a copy of it, the
+  prompt failed: "OAuth session expired and could not be refreshed".
+- **Private `HOME`.** With `HOME` pointing at a private folder, the prompt
+  failed: "Authentication required". Claude Code did not find the Keychain
+  item.
 
-**What this changes in the design.**
+**Claude Code's Bash ignores `TMPDIR`.** Its per-project scratch directory
+(`/private/tmp/claude-<uid>/<cwd slug>`) and each command's cwd file
+(`/tmp/claude-XXXX-cwd`) went straight to `/tmp`, which the profile denied.
+Every command failed until the scratch directory was allowed. After that,
+commands still exited with an error after printing correct output, because
+of the cwd file. Setting `CLAUDE_CODE_TMPDIR` to the private temp folder
+moved both files there. All probes then passed with correct exit statuses,
+and the profile needed no `/tmp` exception.
 
-- **Claude candidates need their own credential.** The plan is a
-  long-lived `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, kept in a
-  Keychain item that Emacs reads and passes to each Claude candidate. A
-  token like that is never refreshed, so a candidate cannot rotate your
-  login away. Until such a token exists, Claude Code can be a judge, which
-  runs read-only and unsandboxed as today, but not a candidate.
+The Claude Code binary warns when that directory is longer than about 30
+bytes. The path has to fit an AF_UNIX socket address, and the 39-byte test
+path was over the limit. Past the limit, child processes fall back to
+another `$TMPDIR`. Candidates therefore get a short private temp folder,
+`/tmp/pa-<8 hex>`.
+
+**What experiment 1 changes in the design.**
+
+- **Each agent signs in its own way.** A Claude Code candidate gets
+  `CLAUDE_CODE_OAUTH_TOKEN` from the Keychain item
+  `pstack-arena-claude-token`. It is never refreshed, so a candidate cannot
+  rotate your login away. Emacs rejects an arena with a Claude Code
+  candidate when the item is missing. A Codex candidate gets a copy of
+  `~/.codex/auth.json` in a private `CODEX_HOME`.
 - **Codex token refreshes need a copy-back.** A candidate that refreshes
   its token holds the newest refresh token. If refresh tokens rotate, that
   would leave your real `~/.codex/auth.json` stale. No refresh happened in
@@ -311,23 +335,57 @@ credentials are in the Keychain item `Claude Code-credentials`.
   (transcripts) inside each root. Candidates start with transcripts off,
   and capture excludes `.agent-shell/` either way.
 
+## Experiment 2 results: stopping background writers
+
+Each agent ran `(sleep 20; touch late.txt) > /dev/null 2>&1 &` and ended
+its turn. Emacs then killed its shell with `+agent-shell-drive-kill`.
+
+| Agent | Result |
+|---|---|
+| Claude Code | The background job survived the kill and wrote `late.txt` about 20 s later. It ran in its own process group, 35702. |
+| Codex | No `late.txt`, and no surviving `sleep` was seen. Inferred, not verified: Codex kills a command's process group when the command finishes. |
+
+So signalling the adapter's process group misses Claude Code's commands.
+The stop step becomes:
+
+1. **Walk the adapter's process tree** by parent pid while the adapter is
+   still alive. Kill every descendant whatever its process group, then the
+   adapter.
+2. **Sweep by working directory.** Kill every process whose cwd lies under
+   ROOT or the private temp folder (`lsof -t -a -d cwd +D <dir>`), and
+   repeat until none remain. This catches jobs that were orphaned and
+   reparented to launchd before the walk.
+
+A probe confirmed the sweep. A detached `(sleep 15; touch late3.txt) &`
+started under the profile was found by its working directory and killed,
+and `late3.txt` never appeared. A process that leaves ROOT and
+double-forks can still escape the sweep. Its writes stay inside ROOT, the
+private temp folder and the private config folder, and nothing reads those
+after capture. The capture's two-matching-trees check covers writes that
+land during capture.
+
+## Experiment 3 results: result refs
+
+In a scratch repository, a commit referenced only by
+`refs/pstack-arena/abc123/opus` behaved as follows:
+
+| Check | Result |
+|---|---|
+| `git gc --prune=now` with reflogs expired | kept |
+| `git worktree prune` | kept |
+| `git branch` and `git status` | unaffected |
+| A normal `git push` | did not send the ref |
+| `git log --all` | lists it, so "all refs" views show candidate results until cleanup |
+| Delete the ref, then gc | removed, which confirms cleanup frees it |
+
+This user has `commit.gpgSign` set globally. A plain `git commit-tree`
+therefore tried to sign and failed. Snapshot commits pass `--no-gpg-sign`,
+so capture never needs the user's signing key.
+
 ## Remaining experiments
 
-1. **Agents under the profile.** Done for Codex. Waiting on a
-   setup-token for Claude Code; see Experiment 1 results.
-   - Start `claude-agent-acp` with `bypassPermissions` and `codex-acp` with
-     `agent-full-access`, each under the profile with a private config
-     directory.
-   - Check that authentication works: Claude Code keeps credentials in the
-     Keychain, and Codex in `auth.json`.
-   - Check that a prompt completes, and that writes outside ROOT, reads of
-     the lead's checkout and `emacsclient` all fail.
-2. **Process-group stop.** Start a background `sleep 5; touch late` from a
-   candidate, stop the candidate, and confirm the file never appears, or
-   that the capture and the judge ignore it.
-3. **`refs/pstack-arena/` refs.** Confirm that `git gc` keeps the commits
-   they point at, and that `git worktree prune` and the lead's normal git
-   commands ignore them.
+None. Every probe above was run on this machine. The design is ready for
+implementation, starting with the drive's sandboxed launch.
 
 ## Tests
 
