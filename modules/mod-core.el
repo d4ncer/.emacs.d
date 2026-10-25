@@ -53,7 +53,8 @@
 ;;; Local library compilation
 
 (use-package +compile-local
-  ;; Byte-compile stale lisp/ libraries in a batch Emacs once startup is idle.
+  ;; Byte-compile stale lisp/ libraries and package builds in a batch Emacs
+  ;; once startup is idle, so deleted bytecode repairs itself.
   :ensure nil
   :unless noninteractive
   :commands +compile-local-start

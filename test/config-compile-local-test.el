@@ -41,6 +41,8 @@
       (+compile-local-test--write (expand-file-name "current.el" dir) "" 60)
       (+compile-local-test--write (expand-file-name "current.elc" dir) "")
       (+compile-local-test--write (expand-file-name ".#lock.el" dir) "")
+      (+compile-local-test--write (expand-file-name "pkg-autoloads.el" dir)
+                                  ";; Local Variables:\n;; no-byte-compile: t\n;; End:\n")
       (+compile-local-test--write (expand-file-name "skipped.el" other) "")
       (should (equal (sort (mapcar #'file-name-nondirectory
                                    (+compile-local-stale-files dir))
@@ -57,9 +59,9 @@
       (+compile-local-test--write
        (expand-file-name "+clt-bad.el" dir)
        ";;; -*- lexical-binding: t; -*-\n(require '+clt-missing-feature)\n")
-      (let ((process (+compile-local-start dir)))
+      (let ((process (+compile-local-start (list dir))))
         (should (processp process))
-        (should-not (+compile-local-start dir))
+        (should-not (+compile-local-start (list dir)))
         (let ((deadline (+ (float-time) 60)))
           (while (and (process-live-p process) (< (float-time) deadline))
             (accept-process-output process 0.1)))
@@ -74,6 +76,27 @@
         (should (equal (mapcar #'file-name-nondirectory
                                (+compile-local-stale-files dir))
                        '("+clt-bad.el")))))))
+
+(ert-deftest +compile-local-test-covers-every-directory ()
+  "One compilation covers stale files across all the given directories."
+  (+compile-local-test--with-dir
+    (let* ((second (file-name-as-directory (expand-file-name "builds/" dir)))
+           (load-path (cons second load-path))
+           (+compile-local-buffer (generate-new-buffer-name " *compile-local*"))
+           (+compile-local--process nil))
+      (make-directory second)
+      (+compile-local-test--write (expand-file-name "+clt-one.el" dir)
+                                  (+compile-local-test--library '+clt-one 1))
+      (+compile-local-test--write (expand-file-name "+clt-two.el" second)
+                                  (+compile-local-test--library '+clt-two 2))
+      (let ((process (+compile-local-start (list dir second)))
+            (deadline (+ (float-time) 60)))
+        (while (and (process-live-p process) (< (float-time) deadline))
+          (accept-process-output process 0.1))
+        (should (= (process-exit-status process) 0))
+        (should (file-exists-p (expand-file-name "+clt-one.elc" dir)))
+        (should (file-exists-p (expand-file-name "+clt-two.elc" second)))
+        (kill-buffer +compile-local-buffer)))))
 
 (ert-deftest +compile-local-test-gate-loads-newer-source ()
   "The gate loads a source edited after compilation, not its old bytecode."

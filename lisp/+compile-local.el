@@ -1,8 +1,9 @@
 ;;; +compile-local.el --- Byte-compile local libraries in the background -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Local libraries live as source under `+lisp-dir'.  `+compile-local-start'
-;; byte-compiles the stale ones in a batch Emacs that shares this session's
+;; Local libraries live as source under `+lisp-dir', and package builds under
+;; `elpaca-builds-directory'.  `+compile-local-start' byte-compiles the stale
+;; ones in a batch Emacs that shares this session's
 ;; `load-path', so the session never waits on the compiler.  With
 ;; `load-prefer-newer', an edited source still wins over its old .elc, and
 ;; native compilation follows from loading the .elc.
@@ -17,15 +18,23 @@
 (defvar +compile-local--process nil
   "The running compilation process, or nil.")
 
+(defun +compile-local--compilable-p (file)
+  "Return non-nil unless FILE declares `no-byte-compile'."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (not (re-search-forward "no-byte-compile: *t" nil t))))
+
 (defun +compile-local-stale-files (directory)
   "Return the .el files under DIRECTORY whose .elc is missing or older.
-Only files in a `load-path' directory count, since nothing loads the rest."
+Only compilable files in a `load-path' directory count, since nothing
+loads the rest."
   (let ((loadable (mapcar (lambda (dir) (file-name-as-directory
                                          (expand-file-name dir)))
                           load-path)))
     (seq-filter (lambda (file)
                   (and (member (file-name-directory file) loadable)
-                       (file-newer-than-file-p file (concat file "c"))))
+                       (file-newer-than-file-p file (concat file "c"))
+                       (+compile-local--compilable-p file)))
                 (directory-files-recursively
                  (expand-file-name directory) "\\`[^.].*\\.el\\'"))))
 
@@ -53,14 +62,20 @@ Only files in a `load-path' directory count, since nothing loads the rest."
         (message "%s local librar%s failed to byte-compile; see %s"
                  failed (if (= failed 1) "y" "ies") +compile-local-buffer)))))
 
-(defun +compile-local-start (&optional directory)
-  "Byte-compile stale libraries under DIRECTORY in a batch Emacs.
-DIRECTORY defaults to `+lisp-dir'.  Return the process, or nil when
-nothing is stale or a compilation is already running.  Output, including
-warnings and failures, goes to `+compile-local-buffer'."
+(defun +compile-local-start (&optional directories)
+  "Byte-compile stale libraries under DIRECTORIES in a batch Emacs.
+DIRECTORIES defaults to `+lisp-dir' and `elpaca-builds-directory'.
+Return the process, or nil when nothing is stale or a compilation is
+already running.  Output, including warnings and failures, goes to
+`+compile-local-buffer'."
   (interactive)
-  (let ((files (+compile-local-stale-files (or directory +lisp-dir))))
+  (let ((files (mapcan #'+compile-local-stale-files
+                       (or directories
+                           (list +lisp-dir
+                                 (bound-and-true-p elpaca-builds-directory))))))
     (when (and files (not (process-live-p +compile-local--process)))
+      (message "Byte-compiling %d stale librar%s in the background"
+               (length files) (if (cdr files) "ies" "y"))
       (let ((buffer (get-buffer-create +compile-local-buffer)))
         (with-current-buffer buffer (erase-buffer))
         (setq +compile-local--process
