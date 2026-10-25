@@ -835,6 +835,10 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
       (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
                                          (+agent-shell-pstack-panel-test--arena)
                                          nil))))
+      (let ((+agent-shell-drive-read-only-modes '((codex . "read-only"))))
+        (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
+                                           (+agent-shell-pstack-panel-test--arena)
+                                           'codex)))))
       (let ((panel (+agent-shell-pstack-panel--parse
                     (+agent-shell-pstack-panel-test--arena
                      '(judge . ((agent . "codex"))) '(judge_timeout . 120))

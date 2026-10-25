@@ -1,12 +1,15 @@
 # pstack arena panels: design
 
-Status: proposed, revision 2. Only the sandboxed launch and stop are
-implemented: `lisp/+agent-shell-sandbox.el`, `+agent-shell-drive-start
-:policy` and `+agent-shell-drive-stop`. It extends the panels in
-`docs/AGENT-SHELL-PSTACK.md`. Revision 1 relied on a permission
-responder. Interrogate panel `30662dcfd102` broke that, and this revision
-replaces it with an OS sandbox. The triage at the end maps each finding to
-the change it caused.
+Status: implemented, revision 2. The panel side lives in
+`lisp/+agent-shell-pstack-panel.el`, the git work in
+`lisp/+agent-shell-arena-git.el`, and the sandbox in
+`lisp/+agent-shell-sandbox.el` with `+agent-shell-drive-start :policy` and
+`+agent-shell-drive-stop`. [How the implementation departs from this
+design](#how-the-implementation-departs) lists every difference. It extends
+the panels in `docs/AGENT-SHELL-PSTACK.md`. Revision 1 relied on a
+permission responder. Interrogate panel `30662dcfd102` broke that, and this
+revision replaces it with an OS sandbox. The triage at the end maps each
+finding to the change it caused.
 
 ## Goal
 
@@ -390,8 +393,7 @@ nor their signing key.
 
 ## Remaining experiments
 
-None. Every probe above was run on this machine. The design is ready for
-implementation, starting with the drive's sandboxed launch.
+None. Every probe above was run on this machine.
 
 ## Tests
 
@@ -417,6 +419,49 @@ implementation, starting with the drive's sandboxed launch.
   probes did.
 - **A live check** with real Claude Code and Codex candidates on a scratch
   repository.
+
+## How the implementation departs
+
+- **An `interrupting` phase.** A request found mid-turn puts the panel in
+  `interrupting` until the lead's cancelled `turn-complete`, then
+  `preparing` starts. The design folded that wait into `preparing`.
+- **Capture runs per candidate.** Each candidate is stopped and captured as
+  soon as it settles, and a result that differs from the base gets its
+  judge checkout then, not after every candidate is captured. `capturing`
+  is the wait for the last of these.
+- **Checkouts are worktrees.** Each judge checkout is a detached worktree
+  under the arena's `checkouts/` folder, recorded as the role's `checkout`
+  in the manifest, so `+agent-shell-arena-git-clean` removes it like a
+  candidate worktree.
+- **Labels hide the agent.** The judge sees candidates as A, B, C and D,
+  not by role, so a role named after a model does not tell the judge the
+  vendor. The follow-up maps each label to its role and agent.
+- **The graft command names the top level.** It reads `(cd <top level> &&
+  git diff --binary <base> <result> | git apply --3way)`, because `git
+  apply` run from a subdirectory skips paths outside it.
+- **Shared links need an allowance.** A `sandbox-exec` probe showed that a
+  read through a symlink is checked against its target, so a shared
+  dependency linked into a read-denied checkout was unreadable. The sandbox
+  spec gained `:allow-reads`, emitted after the denials, and each candidate
+  allows its shared paths. The profile also denies reads of `~/.claude`
+  and `~/.codex`, as experiment 1 did.
+- **A missing Claude Code token fails the candidate, not the request.** The
+  Keychain lookup happens when the candidate starts. That candidate settles
+  as `error` with the `security add-generic-password` hint, and the others
+  run.
+- **An `error` event settles a running member.** The event carries only a
+  code and a message, so Emacs cannot tell a failed prompt from another
+  failed request. It settles a member on any `error` while the member's
+  brief runs, and ignores it otherwise.
+- **Failed preparation is a rejection.** A base or worktree failure ends the
+  arena with the rejection follow-up, and Emacs discards the partly built
+  arena itself, since no candidate ran in it.
+- **The default judge falls back to the lead's agent.** When no other
+  read-only agent exists, the judge runs on the lead's own agent.
+- **The ACP test checks reads, not late writers.** The arena ACP test
+  checks that each candidate cannot read the lead's checkout and never
+  saw the rubric. Late background writers are covered by the sandboxed
+  shell test, `test/agent-shell-sandbox-acp-test.el`.
 
 ## Triage of interrogate panel 30662dcfd102
 

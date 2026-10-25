@@ -12,7 +12,7 @@ single-harness port cannot, while upstream text stays untouched.
 |---|---|---|
 | 0. Skills in agents | Done | pstack installed in Claude Code and Codex |
 | 1. Sticky mode and guard | Done | `+agent-shell-pstack-mode`, `+agent-shell-pstack-guard-mode` |
-| 2. Cross-vendor panels | Partial | `how` and `interrogate` panels run as read-only sibling shells; `arena` is planned |
+| 2. Cross-vendor panels | Done | `how` and `interrogate` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees |
 | 3. Views | Partial | Panel status buffer; decision trail and plan views are planned |
 
 ## Layer 0: install the skills
@@ -58,9 +58,10 @@ Upstream panels mix model families. Ports to one harness lose that, or shell
 out to other vendors' CLIs. Here Emacs starts each panel member as an agent
 shell for a configured agent. `lisp/+agent-shell-pstack-panel.el` holds the
 panels, and `+agent-shell-pstack-panel-mode` is global and enabled with
-agent-shell. It covers the `how` and `interrogate` shapes in
-`+agent-shell-pstack-panel-shapes`. `arena` is still planned, because its
-members write code and need isolated, sandboxed worktrees. Its design is in
+agent-shell. It covers the `how`, `interrogate` and `arena` shapes in
+`+agent-shell-pstack-panel-shapes`. `how` and `interrogate` members only
+read. `arena` candidates write code, so each runs in its own sandboxed
+worktree; see [Run an arena](#run-an-arena) and the design in
 `docs/AGENT-SHELL-PSTACK-ARENA.md`.
 
 ### Request a panel
@@ -68,8 +69,8 @@ members write code and need isolated, sandboxed worktrees. Its design is in
 A lead is a shell with `+agent-shell-pstack-mode` on. Its priming prompt
 carries the protocol, which names every agent in `agent-shell-agent-configs`
 that has a read-only mode and tells the lead to use panels in place of the
-`how` and `interrogate` skills' own subagents. Every later prompt adds one
-line that restates the rule and names
+`how`, `interrogate` and `arena` skills' own subagents. Every later prompt
+adds one line that restates the rule and names
 `var/pstack-panels/PROTOCOL.md`, which Emacs rewrites with the current
 protocol, so a lead that compacted its context can reread it. The lead ends
 its final message with a fenced block, then ends its turn:
@@ -122,7 +123,9 @@ alone. Members are never displayed.
 A member's prompt is the brief, its focus and the shape's contract. Its report
 is the final text of its turn, after its last tool call. When Claude Code asks
 to leave plan mode with a plan longer than that text, the rejected plan is the
-report.
+report. A turn that ends `cancelled`, `refusal`, `max_tokens` or
+`max_turn_requests` settles the member as `error` with that reason, and so
+does an `error` event while the member's brief runs.
 
 ### Reports and the follow-up
 
@@ -140,7 +143,80 @@ an unsent draft. Emacs retries on the lead's next `turn-complete` or
 
 Panels live in memory. Restarting Emacs ends the lead and every member, so an
 interrupted panel does not resume. Killing the lead stops its unfinished
-panels.
+panels. The panel and member structs only gain slots at the end and carry
+a schema number, `+agent-shell-pstack-panel--schema`. Loading the library
+again drops in-memory panels from another schema, with a message, rather
+than letting a changed struct break them.
+
+### Run an arena
+
+An arena runs arena's Fan out and Cross-judge phases; the lead keeps Frame,
+Pick, Graft and Verify. It needs macOS and a lead inside a git repository
+with a commit, no submodules, no Git LFS and no sparse checkout. The
+protocol describes arenas only when some configured agent has an entry in
+`+agent-shell-sandbox-agents`. A Claude Code candidate signs in with the
+token in the Keychain item `pstack-arena-claude-token`, made by `claude
+setup-token`; without it that candidate fails to start.
+
+The request adds three fields to the panel block:
+
+````
+```pstack-panel
+{"version":1,"shape":"arena","brief":"The task, identical for every candidate",
+ "rubric":["correctness","simplicity","tests"],"timeout":2400,"judge_timeout":900,
+ "members":[{"role":"opus","agent":"claude-code"},
+            {"role":"codex","agent":"codex","focus":"optional direction"}],
+ "judge":{"agent":"codex"}}
+```
+````
+
+- `members` lists 1 to 4 candidates, each on an agent in
+  `+agent-shell-sandbox-agents`. The role `judge` is reserved.
+- `rubric` lists 3 to 6 criteria. Only the judge sees them.
+- `judge` is optional. By default it is the first read-only agent whose
+  identifier differs from the lead's.
+- `timeout` bounds the candidates, and `judge_timeout` bounds the judge,
+  900 seconds by default.
+
+The panel moves through these phases, shown in the panels view and the
+lead's mode-line help:
+
+1. `interrupting`, only for a request found mid-turn: Emacs waits for the
+   lead's interrupted turn to end, so its last edit lands in the base.
+2. `preparing`: `lisp/+agent-shell-arena-git.el` snapshots the lead's
+   working tree as a base commit and gives each candidate a detached
+   worktree under `+agent-shell-pstack-arena-directory`. A failure here
+   rejects the arena and discards what it made.
+3. `candidates`: each candidate starts through `+agent-shell-drive-start`
+   with a `+agent-shell-sandbox` rooted at its worktree. The sandbox
+   refuses writes outside the worktree and refuses reads of the lead's
+   checkout, `+agent-shell-pstack-panel-directory`, `~/.claude`, `~/.codex`
+   and the other candidates' worktrees. Shared dependency links from
+   `+agent-shell-pstack-arena-dependencies` stay readable. The candidates'
+   timer starts here.
+4. `capturing`: Emacs stops each settled candidate with every process it
+   started, commits its tree under `refs/pstack-arena/<arena-id>/<role>`,
+   and checks a result that differs from the base out in a separate
+   worktree under the arena's `checkouts/` folder.
+5. `judging`: a read-only judge in the lead's directory gets the task, the
+   rubric, and each changed candidate's label, outcome, checkout, diff stat
+   and rationale. It scores each criterion and recommends a base.
+6. `finished`: the lead gets one follow-up with each candidate's state,
+   result commit, ref, diff stat, rationale and a command that applies its
+   diff, `(cd <top level> && git diff --binary <base> <result> | git apply
+   --3way)`, then the judge's report and arena's Pick, Graft and Verify
+   instructions.
+
+With no candidate that changed the base, the arena finishes without a
+judge. Killing the lead captures what the candidates made and finishes
+without a judge.
+
+Results stay on disk, because grafting can take days. To clean up an
+arena, press `x` on its lines in the panels view once it has finished, or
+run `M-x +agent-shell-pstack-arena-clean` to choose from every arena on
+disk. Either asks first, then removes the worktrees, checkouts, result
+refs and the arena's folder through `+agent-shell-arena-git-clean`, which
+trusts only the arena's manifest.
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
@@ -149,10 +225,12 @@ event watching shared with `agent-shell-projects`.
 ## Layer 3: views
 
 `C-c P` in an agent shell runs `+agent-shell-pstack-panels`. It lists every
-panel since Emacs started, with its id, shape, status and lead, and each
-member's role, agent, state and report. `RET` visits the report or the member
-or lead shell. The buffer redraws whenever a panel changes. The decision trail
-and plan views are planned.
+panel since Emacs started, with its id, shape, phase or status and lead, and
+each member's role, agent, state and report. An arena also shows its folder
+and each candidate's capture. `RET` visits the report, the arena folder, or
+the member or lead shell, and `x` cleans up a finished arena. The buffer
+redraws whenever a panel changes. The decision trail and plan views are
+planned.
 
 While a lead has a panel running, its mode line shows `panel 1/3`, the
 settled and total member counts, next to `pstack`. Hovering lists each

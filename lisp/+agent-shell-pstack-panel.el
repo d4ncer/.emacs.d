@@ -10,10 +10,16 @@
 ;; writes each report once under `+agent-shell-pstack-panel-directory', and
 ;; prompts the lead with every report and the shape's triage line.
 ;;
+;; An arena panel instead snapshots the lead's tree, runs each candidate in
+;; a sandboxed worktree, captures each result as a commit, has a read-only
+;; judge score the results against a rubric no candidate saw, and sends the
+;; lead one follow-up to pick, graft and verify from.  Its results stay on
+;; disk until `+agent-shell-pstack-arena-clean' or x in the panels view.
+;;
 ;; Panels live in memory.  Only live `turn-complete' events are read, so a
 ;; restored session never starts a panel, and a request seen before is
 ;; ignored.  A lead's mode line shows its running panels.  See
-;; docs/AGENT-SHELL-PSTACK.md.
+;; docs/AGENT-SHELL-PSTACK.md and docs/AGENT-SHELL-PSTACK-ARENA.md.
 
 ;;; Code:
 
@@ -258,6 +264,7 @@ Without VALUE, prefer a read-only agent other than LEAD-AGENT."
          (agent
           (if (null value)
               (or (seq-find (lambda (agent) (not (eq agent lead-agent))) agents)
+                  (car agents)
                   (user-error "No read-only agent can judge the arena"))
             (let ((name (and (+agent-shell-pstack-panel--object-p value)
                              (map-elt value 'agent))))
