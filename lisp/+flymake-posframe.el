@@ -112,11 +112,11 @@
 
 ;;; Internals
 
-(defvar-local +flymake-posframe--last-diag nil
+(defvar +flymake-posframe--last-diag nil
   "The diagnostic currently shown, used to avoid redundant redisplay.")
 
-(defvar +flymake-posframe-hide-hooks '(pre-command-hook post-command-hook)
-  "Hooks that trigger automatic removal of the posframe.")
+(defvar +flymake-posframe--owner nil
+  "The buffer whose diagnostic is currently shown.")
 
 (defun +flymake-posframe--diagnostic-at-point ()
   "Return the flymake diagnostic under point, or nil."
@@ -144,16 +144,24 @@ existing yet, which is the case before the first display."
     (and (frame-live-p frame) (frame-visible-p frame))))
 
 (defun +flymake-posframe-hide ()
-  "Hide the posframe and detach the hooks that trigger hiding."
+  "Hide the posframe and stop watching for point leaving its diagnostic."
   (posframe-hide +flymake-posframe-buffer)
-  (setq +flymake-posframe--last-diag nil)
-  (dolist (hook +flymake-posframe-hide-hooks)
-    (remove-hook hook #'+flymake-posframe-hide t)))
+  (setq +flymake-posframe--last-diag nil
+        +flymake-posframe--owner nil)
+  (remove-hook 'post-command-hook #'+flymake-posframe--check))
+
+(defun +flymake-posframe--check ()
+  "Hide the posframe once point leaves the shown diagnostic or its buffer."
+  (unless (and (eq (current-buffer) +flymake-posframe--owner)
+               (eq (+flymake-posframe--diagnostic-at-point)
+                   +flymake-posframe--last-diag))
+    (+flymake-posframe-hide)))
 
 (defun +flymake-posframe--show (diag)
   "Show DIAG's message in the posframe."
   (let ((prefix (+flymake-posframe--prefix diag)))
-    (setq +flymake-posframe--last-diag diag)
+    (setq +flymake-posframe--last-diag diag
+          +flymake-posframe--owner (current-buffer))
     (posframe-show
      +flymake-posframe-buffer
      :internal-border-width +flymake-posframe-internal-border-width
@@ -171,8 +179,7 @@ existing yet, which is the case before the first display."
     (when-let* ((buf (get-buffer +flymake-posframe-buffer))
                 (frame (buffer-local-value 'posframe--frame buf)))
       (redirect-frame-focus frame (frame-parent frame)))
-    (dolist (hook +flymake-posframe-hide-hooks)
-      (add-hook hook #'+flymake-posframe-hide nil t))))
+    (add-hook 'post-command-hook #'+flymake-posframe--check)))
 
 (defun +flymake-posframe-display ()
   "Display the diagnostic under point, if any.
