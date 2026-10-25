@@ -17,11 +17,22 @@ BODY sees `lead', `directory' (the reports root), `cwd' (the lead's),
 POLICY CWD)), `interrupted' (shells, newest first), `send-ok' (whether
 sends succeed), `start-error' (a start failure message), `partials' (alist
 of shell to partial text), and the functions `lead-event' and
-`member-event'."
+`member-event'.
+
+Arena git work is stubbed too: `bases' lists the directories snapshotted,
+`base-error' and `provision-error' make those steps fail, `shared' lists
+the dependency paths each candidate links, `stopped' lists the shells
+stopped (newest first), `swept' the sandboxes swept without a shell, and
+`cleaned' the manifests cleaned.  Each worktree gets a directory under
+`arenas', the arena root."
   (declare (indent 0))
   `(let* ((directory (make-temp-file "pstack-panels-" t))
-          (cwd (file-name-as-directory (make-temp-file "pstack-lead-" t)))
+          (cwd (file-name-as-directory
+                (file-truename (make-temp-file "pstack-lead-" t))))
+          (arenas (file-name-as-directory
+                   (file-truename (make-temp-file "pstack-arenas-" t))))
           (+agent-shell-pstack-panel-directory directory)
+          (+agent-shell-pstack-arena-directory arenas)
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-pstack-prime-texts nil)
           (+agent-shell-pstack-reminder-texts nil)
@@ -31,6 +42,8 @@ of shell to partial text), and the functions `lead-event' and
           (sent nil) (started nil) (interrupted nil) (send-ok t)
           (partials nil)
           (start-error nil)
+          (bases nil) (base-error nil) (provision-error nil) (shared nil)
+          (stopped nil) (swept nil) (cleaned nil)
           (+agent-shell-drive-read-only-modes
            '((claude-code . "plan") (codex . "read-only")))
           (+agent-shell-sandbox-agents
@@ -69,7 +82,49 @@ of shell to partial text), and the functions `lead-event' and
                      (setq started (append started
                                            (list (list config shell policy
                                                        directory))))
-                     shell)))))
+                     shell))))
+               ((symbol-function '+agent-shell-drive-stop)
+                (lambda (shell &optional _reason callback)
+                  (push shell stopped)
+                  (run-at-time 0 nil (lambda ()
+                                       (when (buffer-live-p shell)
+                                         (kill-buffer shell))
+                                       (funcall callback nil)))))
+               ((symbol-function '+agent-shell-sandbox-sweep)
+                (lambda (sandbox callback &optional _rounds)
+                  (push sandbox swept)
+                  (run-at-time 0 nil callback nil)))
+               ((symbol-function '+agent-shell-arena-git-capture-base)
+                (lambda (directory callback)
+                  (push directory bases)
+                  (run-at-time
+                   0 nil callback
+                   (unless base-error
+                     (+agent-shell-arena-git--base
+                      :git-dir (expand-file-name ".git" cwd) :toplevel cwd
+                      :prefix "" :head "head" :commit "base"))
+                   base-error)))
+               ((symbol-function '+agent-shell-arena-git-provision)
+                (lambda (manifest name callback)
+                  (let ((worktree
+                         (file-name-as-directory
+                          (expand-file-name
+                           name (+agent-shell-arena-git-manifest-directory
+                                 manifest)))))
+                    (make-directory worktree t)
+                    (setf (+agent-shell-arena-git-manifest-roles manifest)
+                          (append (+agent-shell-arena-git-manifest-roles
+                                   manifest)
+                                  (list (+agent-shell-arena-git--role
+                                         :name name :worktree worktree
+                                         :shared shared))))
+                    (run-at-time 0 nil callback
+                                 (unless provision-error worktree)
+                                 provision-error))))
+               ((symbol-function '+agent-shell-arena-git-clean)
+                (lambda (manifest callback)
+                  (push manifest cleaned)
+                  (run-at-time 0 nil callback nil nil))))
        (cl-flet* ((lead-event (&rest event)
                     (funcall (gethash (cons 'pstack-lead lead) handlers)
                              (append event (list :shell lead))))
@@ -90,11 +145,22 @@ of shell to partial text), and the functions `lead-event' and
              (when-let* ((timer (+agent-shell-pstack-panel-timer panel)))
                (cancel-timer timer)))
            (accept-process-output nil 0.01)
+           (dolist (panel (+agent-shell-pstack-panel-list))
+             (dolist (member (+agent-shell-pstack-panel-members panel))
+               (when-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox
+                                     member)))
+                 (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+                 (delete-directory (+agent-shell-sandbox-config sandbox) t))))
            (dolist (entry started)
              (when (buffer-live-p (cadr entry)) (kill-buffer (cadr entry))))
            (kill-buffer lead)
            (delete-directory directory t)
+           (delete-directory arenas t)
            (delete-directory cwd t))))))
+
+(defun +agent-shell-pstack-panel-test--drain ()
+  "Run pending timers and process output for a moment."
+  (dotimes (_ 5) (accept-process-output nil 0.01)))
 
 (defun +agent-shell-pstack-panel-test--message (json &optional prose)
   "Return a lead message of PROSE ending with a pstack-panel block of JSON."
@@ -785,6 +851,200 @@ Emacs runs on gnu/linux" (cdar sent))))
                          (+agent-shell-pstack-panel-test--arena)))
       (should (string-match-p "available agents: none" (cdar sent))))
     (should-not started)))
+
+(defun +agent-shell-pstack-panel-test--candidates (panel)
+  "Return PANEL's candidate members."
+  (seq-filter (lambda (member)
+                (eq 'candidate (+agent-shell-pstack-panel-member-kind member)))
+              (+agent-shell-pstack-panel-members panel)))
+
+(defun +agent-shell-pstack-panel-test--states (panel)
+  "Return the state of each of PANEL's members."
+  (mapcar #'+agent-shell-pstack-panel-member-state
+          (+agent-shell-pstack-panel-members panel)))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-phase-barrier ()
+  "Start candidates in their sandboxes only once preparing ends.
+Their timer starts then too, and the judge stays pending."
+  (+agent-shell-pstack-panel-test--with
+    (setq shared '("elpaca"))
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (let ((panel (car (+agent-shell-pstack-panel-list))))
+      (should (eq 'preparing (+agent-shell-pstack-panel-phase panel)))
+      (should (equal (list cwd) bases))
+      (should-not started)
+      (should-not (+agent-shell-pstack-panel-timer panel))
+      (should (string-match-p (format "%s  arena  preparing"
+                                      (+agent-shell-pstack-panel-id panel))
+                              (with-temp-buffer
+                                (+agent-shell-pstack-panels--render)
+                                (buffer-string))))
+      (+agent-shell-pstack-panel-test--drain)
+      (should (eq 'candidates (+agent-shell-pstack-panel-phase panel)))
+      (should (+agent-shell-pstack-panel-timer panel))
+      (should (equal '(starting starting pending)
+                     (+agent-shell-pstack-panel-test--states panel)))
+      (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+             (worktrees (mapcar #'+agent-shell-arena-git-role-worktree
+                                (+agent-shell-arena-git-manifest-roles
+                                 manifest))))
+        (should (string-prefix-p
+                 arenas (+agent-shell-arena-git-manifest-directory manifest)))
+        (should (equal '(claude-code codex) (mapcar #'car started)))
+        (should (equal worktrees (mapcar (lambda (entry)
+                                           (file-name-as-directory
+                                            (nth 3 entry)))
+                                         started)))
+        (cl-loop
+         for (_agent _shell sandbox _directory) in started
+         for worktree in worktrees
+         for other in (reverse worktrees)
+         do (should (+agent-shell-sandbox-p sandbox))
+         (should (equal (directory-file-name worktree)
+                        (+agent-shell-sandbox-root sandbox)))
+         (let ((denied (+agent-shell-sandbox-deny-reads sandbox)))
+           (dolist (path (list cwd directory "~/.claude" "~/.codex" other))
+             (should (member (directory-file-name
+                              (file-truename (expand-file-name path)))
+                             denied)))
+           (should-not (member (directory-file-name worktree) denied)))
+         (should (equal (list (expand-file-name "elpaca" cwd))
+                        (+agent-shell-sandbox-allow-reads sandbox))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-candidate-brief ()
+  "Brief each candidate with the task, its focus and the contract, never
+the rubric."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "opus" :kind 'init-finished)
+    (member-event "codex" :kind 'init-finished)
+    (let ((briefs (mapcar (lambda (entry) (cdr (assq (cadr entry) sent)))
+                          started)))
+      (should (= 2 (length (delq nil briefs))))
+      (should (string-prefix-p "You are the opus candidate of a pstack arena \
+that Emacs runs for another agent.  Other candidates work on the same task \
+elsewhere.\n\nTask:\nAdd a cache.\n\nImplement the task in the current \
+directory" (nth 0 briefs)))
+      (should (string-match-p "\n\nYour focus:\nPrefer an LRU\n\n"
+                              (nth 1 briefs)))
+      (dolist (brief briefs)
+        (should (string-match-p "Leave your changes in the tree, uncommitted"
+                                brief))
+        (should (string-match-p "Do not run git commands that write, such as \
+git add, commit, stash or checkout" brief))
+        (should (string-match-p "the alternatives you considered, and what \
+you rejected and why" brief))
+        (should-not (string-match-p "RUBRIC" brief))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-mid-turn ()
+  "Snapshot the base only after the interrupted lead's turn ends."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (concat (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena))
+                        "\nOne more edit.")))
+      (lead-event :kind 'tool-call-update :session "s1" :text text
+                  :title "Edit file")
+      (let ((panel (car (+agent-shell-pstack-panel-list))))
+        (should (equal (list lead) interrupted))
+        (should (eq 'interrupting (+agent-shell-pstack-panel-phase panel)))
+        (+agent-shell-pstack-panel-test--drain)
+        (should-not bases)
+        (lead-event :kind 'turn-complete :session "s1" :text text
+                    :stop-reason "cancelled")
+        (should (equal (list cwd) bases))
+        (+agent-shell-pstack-panel-test--drain)
+        (should (eq 'candidates (+agent-shell-pstack-panel-phase panel)))
+        (should (= 2 (length started)))
+        (lead-event :kind 'turn-complete :session "s1" :text "Next")
+        (should (= 1 (length bases)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-preparation-fails ()
+  "Reject an arena whose base or worktrees cannot be made."
+  (+agent-shell-pstack-panel-test--with
+    (setq base-error "/x is not inside a git working tree")
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (should (string-prefix-p "Emacs rejected your pstack-panel request: /x is \
+not inside a git working tree\nNo panel started." (cdar sent)))
+    (should-not started)
+    (setq base-error nil provision-error "git worktree: no space")
+    (lead-event :kind 'turn-complete :session "s2"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((panel (car (last (+agent-shell-pstack-panel-list)))))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (equal '(error error error)
+                     (+agent-shell-pstack-panel-test--states panel)))
+      (should (string-prefix-p "Emacs rejected your pstack-panel request: \
+git worktree: no space" (cdar sent)))
+      (should (= 1 (length cleaned)))
+      (should-not (+agent-shell-pstack-panel-arena panel)))
+    (should-not started)))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-abandon-preparing ()
+  "End an arena whose lead died while it was being prepared.
+An arena already on disk is discarded once the step in flight returns."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (lead-event :kind 'clean-up)
+    (let ((panel (car (+agent-shell-pstack-panel-list))))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (equal '(error error error)
+                     (+agent-shell-pstack-panel-test--states panel)))
+      (+agent-shell-pstack-panel-test--drain)
+      (should-not (+agent-shell-pstack-panel-arena panel))
+      (should-not cleaned))
+    (let ((held nil))
+      (cl-letf (((symbol-function '+agent-shell-arena-git-provision)
+                 (lambda (_manifest _name callback) (setq held callback))))
+        (lead-event :kind 'turn-complete :session "s2"
+                    :text (+agent-shell-pstack-panel-test--message
+                           (+agent-shell-pstack-panel-test--arena)))
+        (+agent-shell-pstack-panel-test--drain)
+        (should held)
+        (lead-event :kind 'clean-up)
+        (funcall held "/somewhere" nil)
+        (+agent-shell-pstack-panel-test--drain)
+        (should (= 1 (length cleaned)))
+        (should-not (+agent-shell-pstack-panel-arena
+                     (car (last (+agent-shell-pstack-panel-list)))))))
+    (should-not started)))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-stops-candidates ()
+  "Stop a settled candidate with every process it started."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (let* ((panel (car (+agent-shell-pstack-panel-list)))
+           (opus (car (+agent-shell-pstack-panel-test--candidates panel)))
+           (codex (cadr (+agent-shell-pstack-panel-test--candidates panel)))
+           (sandbox (+agent-shell-pstack-panel-member-sandbox opus)))
+      (member-event "opus" :kind 'init-finished)
+      (member-event "opus" :kind 'turn-complete :text "Rationale")
+      (should-not stopped)
+      (+agent-shell-pstack-panel-test--drain)
+      (should (equal (list (+agent-shell-pstack-panel-member-shell opus))
+                     stopped))
+      (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
+      (should-not (file-exists-p (+agent-shell-sandbox-config sandbox)))
+      (kill-buffer (+agent-shell-pstack-panel-member-shell codex))
+      (member-event "codex" :kind 'clean-up :reason "Adapter crashed")
+      (+agent-shell-pstack-panel-test--drain)
+      (should (equal (list (+agent-shell-pstack-panel-member-sandbox codex))
+                     swept))
+      (should (= 1 (length stopped))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-protocol ()
   "Describe arenas only where candidates can run sandboxed."

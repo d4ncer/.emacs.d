@@ -25,6 +25,8 @@
 (require 'subr-x)
 (require '+agent-shell-drive)
 (require '+agent-shell-pstack)
+(require '+agent-shell-arena-git)
+(require '+agent-shell-sandbox)
 
 (declare-function agent-shell-cwd "agent-shell-project")
 
@@ -105,7 +107,7 @@ arena's :judge ends its judge's prompt."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 3
+(defconst +agent-shell-pstack-panel--schema 4
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -119,7 +121,7 @@ PHASE moves through the shape's phases and ends at `finished'; see
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
-  rubric judge-timeout)
+  rubric judge-timeout arena)
 
 (cl-defstruct (+agent-shell-pstack-panel-member
                (:constructor nil)
@@ -129,8 +131,9 @@ PHASE moves through the shape's phases and ends at `finished'; see
 STATE starts at `pending' (waiting for its phase) or `starting' (shell
 initializing), moves to `waiting' (initialized, brief unsent) and `running'
 (brief sent), then settles once as `done', `error' or `timeout'.  KIND
-says which phase runs the member."
-  role agent focus shell (state 'starting) text error report (kind 'member))
+says which phase runs the member.  A candidate has a SANDBOX."
+  role agent focus shell (state 'starting) text error report (kind 'member)
+  sandbox)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -155,7 +158,8 @@ kill their member shells by hand" (length stale) (if (cdr stale) "s" ""))))
 (defconst +agent-shell-pstack-panel--settled '(done error timeout)
   "Member states that end a member.")
 
-(defconst +agent-shell-pstack-panel--phase-kinds '((running . member))
+(defconst +agent-shell-pstack-panel--phase-kinds
+  '((running . member) (candidates . candidate) (judging . judge))
   "The kind of member each phase runs.
 Expiry and abandonment reach only the current phase's members.")
 
@@ -429,16 +433,31 @@ protocol is in %s.  Reread it if it is no longer in context."
 
 (defun +agent-shell-pstack-panel--brief (panel member)
   "Return the prompt that briefs MEMBER of PANEL."
-  (concat
-   (format "You are the %s member of a pstack %s panel that Emacs runs for \
-another agent.  You are read-only: Emacs refuses edits and commands that \
+  (let ((role (+agent-shell-pstack-panel-member-role member))
+        (focus (when-let* ((focus (+agent-shell-pstack-panel-member-focus
+                                   member)))
+                 (format "\nYour focus:\n%s\n" focus))))
+    (pcase (+agent-shell-pstack-panel-member-kind member)
+      ('member
+       (concat
+        (format "You are the %s member of a pstack %s panel that Emacs runs \
+for another agent.  You are read-only: Emacs refuses edits and commands that \
 change state.\n\nBrief:\n%s\n"
-           (+agent-shell-pstack-panel-member-role member)
-           (+agent-shell-pstack-panel-shape panel)
-           (+agent-shell-pstack-panel-brief panel))
-   (when-let* ((focus (+agent-shell-pstack-panel-member-focus member)))
-     (format "\nYour focus:\n%s\n" focus))
-   "\n" (+agent-shell-pstack-panel--shape panel :contract)))
+                role (+agent-shell-pstack-panel-shape panel)
+                (+agent-shell-pstack-panel-brief panel))
+        focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
+      ('candidate
+       (concat
+        (format "You are the %s candidate of a pstack arena that Emacs runs \
+for another agent.  Other candidates work on the same task elsewhere.\n\n\
+Task:\n%s\n"
+                role (+agent-shell-pstack-panel-brief panel))
+        focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
+      ('judge (+agent-shell-pstack-panel--judge-brief panel)))))
+
+(defun +agent-shell-pstack-panel--judge-brief (_panel)
+  "Return the prompt that briefs the judge of arena PANEL."
+  "")
 
 (defun +agent-shell-pstack-panel-followup-text (panel)
   "Return the prompt that hands PANEL's results to its lead."
@@ -561,11 +580,17 @@ started.  To retry, end a message with a corrected pstack-panel block."
 (defun +agent-shell-pstack-panel--advance (panel)
   "Move PANEL on from its phase once that phase is over.
 Safe to call after any change: a phase that is not over stays."
-  (pcase (+agent-shell-pstack-panel-phase panel)
-    ('running
-     (when (seq-every-p #'+agent-shell-pstack-panel--settled-p
-                        (+agent-shell-pstack-panel-members panel))
-       (+agent-shell-pstack-panel--finish panel)))))
+  (let ((settled (lambda (members)
+                   (seq-every-p #'+agent-shell-pstack-panel--settled-p
+                                members))))
+    (pcase (+agent-shell-pstack-panel-phase panel)
+      ((or 'running 'interrupting 'preparing)
+       (when (funcall settled (+agent-shell-pstack-panel-members panel))
+         (+agent-shell-pstack-panel--finish panel)))
+      ('candidates
+       (when (funcall settled (+agent-shell-pstack-panel--kind-members
+                               panel 'candidate))
+         (+agent-shell-pstack-panel--finish panel))))))
 
 (defun +agent-shell-pstack-panel--write (panel member)
   "Write MEMBER's text as its report under PANEL's directory."
@@ -588,9 +613,38 @@ Safe to call after any change: a phase that is not over stays."
           (+agent-shell-pstack-panel-member-text member) text
           (+agent-shell-pstack-panel-member-error member) error)
     (+agent-shell-pstack-panel--write panel member)
-    (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
-      (run-at-time 0 nil #'+agent-shell-drive-kill shell))
+    ;; Killing a shell from its own event callback corrupts upstream state.
+    (if (eq (+agent-shell-pstack-panel-member-kind member) 'candidate)
+        (run-at-time 0 nil #'+agent-shell-pstack-panel--collect panel member)
+      (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
+        (run-at-time 0 nil #'+agent-shell-drive-kill shell)))
     (+agent-shell-pstack-panel--advance panel)))
+
+(defun +agent-shell-pstack-panel--stop (member callback)
+  "Stop settled candidate MEMBER and every process it started.
+Then delete its sandbox's private folders and call CALLBACK."
+  (if-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
+      (let ((shell (+agent-shell-pstack-panel-member-shell member))
+            (done (lambda (survivors)
+                    (when survivors
+                      (message "pstack arena: processes %s outlived candidate \
+%s" survivors (+agent-shell-pstack-panel-member-role member)))
+                    (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+                    (delete-directory (+agent-shell-sandbox-config sandbox) t)
+                    (funcall callback))))
+        (if (buffer-live-p shell)
+            (+agent-shell-drive-stop shell nil done)
+          ;; Its adapter is gone, so only the sweep can find what it left.
+          (+agent-shell-sandbox-sweep
+           sandbox (lambda (survivors)
+                     (unwind-protect (+agent-shell-sandbox-finish sandbox)
+                       (funcall done survivors))))))
+    (funcall callback)))
+
+(defun +agent-shell-pstack-panel--collect (panel member)
+  "Stop settled candidate MEMBER of PANEL."
+  (+agent-shell-pstack-panel--stop
+   member (lambda () (+agent-shell-pstack-panel--advance panel))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
   "Send MEMBER of PANEL its brief once it is waiting for one."
@@ -646,7 +700,9 @@ Prefer a rejected plan when it is longer than the final text."
 
 (defun +agent-shell-pstack-panel--phase-timeout (panel)
   "Return the seconds PANEL's current phase may run."
-  (+agent-shell-pstack-panel-timeout panel))
+  (if (eq (+agent-shell-pstack-panel-phase panel) 'judging)
+      (+agent-shell-pstack-panel-judge-timeout panel)
+    (+agent-shell-pstack-panel-timeout panel)))
 
 (defun +agent-shell-pstack-panel--expire (id phase)
   "Settle the unfinished members of panel ID's PHASE as timed out.
@@ -664,15 +720,24 @@ Do nothing once the panel has left PHASE."
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)
-  "Start MEMBER of PANEL in a read-only shell."
+  "Start MEMBER of PANEL: a candidate in its sandbox, others read-only."
   (let ((id (+agent-shell-pstack-panel-id panel))
-        (role (+agent-shell-pstack-panel-member-role member)))
+        (role (+agent-shell-pstack-panel-member-role member))
+        (sandbox (+agent-shell-pstack-panel-member-sandbox member)))
     (condition-case err
         (let ((shell (+agent-shell-drive-start
                       :config (+agent-shell-pstack-panel-member-agent member)
-                      :directory (+agent-shell-pstack-panel-cwd panel)
-                      :policy 'read-only)))
-          (setf (+agent-shell-pstack-panel-member-shell member) shell)
+                      :directory
+                      (if sandbox
+                          (let ((manifest (+agent-shell-pstack-panel-arena
+                                           panel)))
+                            (+agent-shell-arena-git-directory
+                             manifest (+agent-shell-arena-git-role
+                                       manifest role)))
+                        (+agent-shell-pstack-panel-cwd panel))
+                      :policy (or sandbox 'read-only))))
+          (setf (+agent-shell-pstack-panel-member-state member) 'starting
+                (+agent-shell-pstack-panel-member-shell member) shell)
           (+agent-shell-drive-watch
            shell 'pstack-panel (cons id role)
            (lambda (event)
@@ -694,12 +759,8 @@ Return the panel, or nil when TEXT requests none or one already seen."
               (id (+agent-shell-pstack-panel--id (or session "") block))
               ((not (+agent-shell-pstack-panel--find id))))
     (let ((panel (condition-case err
-                     (let ((panel (+agent-shell-pstack-panel--parse
-                                   block (+agent-shell-pstack-panel--lead-agent
-                                          lead))))
-                       (when (+agent-shell-pstack-panel--arena-p panel)
-                         (user-error "Arena panels are not available yet"))
-                       panel)
+                     (+agent-shell-pstack-panel--parse
+                      block (+agent-shell-pstack-panel--lead-agent lead))
                    (user-error
                     (+agent-shell-pstack-panel--make
                      :rejection (error-message-string err))))))
@@ -709,17 +770,127 @@ Return the panel, or nil when TEXT requests none or one already seen."
       (when tool
         (setf (+agent-shell-pstack-panel-interrupted panel) tool)
         (+agent-shell-drive-interrupt lead))
-      (if (+agent-shell-pstack-panel-rejection panel)
-          (+agent-shell-pstack-panel--finish panel)
+      (cond
+       ((+agent-shell-pstack-panel-rejection panel)
+        (+agent-shell-pstack-panel--finish panel))
+       ((+agent-shell-pstack-panel--arena-p panel)
+        (setf (+agent-shell-pstack-panel-cwd panel)
+              (with-current-buffer lead (agent-shell-cwd)))
+        ;; The base must include the edit the interrupt may cut short.
+        (if tool
+            (setf (+agent-shell-pstack-panel-phase panel) 'interrupting)
+          (+agent-shell-pstack-panel--prepare panel)))
+       (t
         (setf (+agent-shell-pstack-panel-cwd panel)
               (with-current-buffer lead (agent-shell-cwd)))
         (+agent-shell-pstack-panel--arm
          panel (+agent-shell-pstack-panel--phase-timeout panel))
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (+agent-shell-pstack-panel--start-member panel member))
-        (+agent-shell-pstack-panel--advance panel))
+        (+agent-shell-pstack-panel--advance panel)))
       (+agent-shell-pstack-panels--refresh)
       panel)))
+
+;;;; Arenas
+
+(defun +agent-shell-pstack-panel--discard-arena (panel)
+  "Remove PANEL's arena from disk; no candidate in it ever ran."
+  (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
+    (setf (+agent-shell-pstack-panel-arena panel) nil)
+    (+agent-shell-arena-git-clean
+     manifest (lambda (left error)
+                (when (or left error)
+                  (message "pstack arena %s: cleanup left %s"
+                           (+agent-shell-arena-git-manifest-id manifest)
+                           (or error (string-join left "; "))))))))
+
+(defun +agent-shell-pstack-panel--fail-preparation (panel reason)
+  "End PANEL, whose arena could not be prepared, because of REASON."
+  (setf (+agent-shell-pstack-panel-rejection panel) reason)
+  (dolist (member (+agent-shell-pstack-panel-members panel))
+    (+agent-shell-pstack-panel--settle panel member 'error nil reason))
+  (+agent-shell-pstack-panel--discard-arena panel)
+  (+agent-shell-pstack-panel--finish panel)
+  (+agent-shell-pstack-panels--refresh))
+
+(defun +agent-shell-pstack-panel--preparing (panel error next)
+  "Continue preparing PANEL by calling NEXT, unless ERROR or it has ended.
+A preparation the lead abandoned discards its arena."
+  (cond ((not (eq (+agent-shell-pstack-panel-phase panel) 'preparing))
+         (+agent-shell-pstack-panel--discard-arena panel))
+        (error (+agent-shell-pstack-panel--fail-preparation panel error))
+        (t (condition-case err (funcall next)
+             (error (+agent-shell-pstack-panel--fail-preparation
+                     panel (error-message-string err)))))))
+
+(defun +agent-shell-pstack-panel--prepare (panel)
+  "Snapshot the lead's tree as PANEL's base and give each candidate a worktree.
+Then start the candidates."
+  (setf (+agent-shell-pstack-panel-phase panel) 'preparing)
+  (+agent-shell-arena-git-capture-base
+   (+agent-shell-pstack-panel-cwd panel)
+   (lambda (base error)
+     (+agent-shell-pstack-panel--preparing
+      panel error
+      (lambda ()
+        (let ((manifest (+agent-shell-arena-git-create
+                         base (+agent-shell-pstack-panel-id panel))))
+          (setf (+agent-shell-pstack-panel-arena panel) manifest)
+          (cl-labels
+              ((provision (members)
+                 (if (null members)
+                     (+agent-shell-pstack-panel--launch panel)
+                   (+agent-shell-arena-git-provision
+                    manifest
+                    (+agent-shell-pstack-panel-member-role (car members))
+                    (lambda (_directory error)
+                      (+agent-shell-pstack-panel--preparing
+                       panel error
+                       (lambda () (provision (cdr members)))))))))
+            (provision (+agent-shell-pstack-panel--kind-members
+                        panel 'candidate))))))))
+  (+agent-shell-pstack-panels--refresh))
+
+(defun +agent-shell-pstack-panel--sandbox (panel member)
+  "Return a sandbox confining candidate MEMBER of PANEL to its worktree.
+It cannot read the lead's checkout, other than the shared dependencies,
+the panel reports, the agents' own config, or any other candidate."
+  (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (role (+agent-shell-arena-git-role
+                manifest (+agent-shell-pstack-panel-member-role member)))
+         (worktree (+agent-shell-arena-git-role-worktree role)))
+    (+agent-shell-sandbox-create
+     worktree
+     :deny-reads
+     (append (list toplevel +agent-shell-pstack-panel-directory
+                   "~/.claude" "~/.codex")
+             (delete worktree
+                     (mapcar #'+agent-shell-arena-git-role-worktree
+                             (+agent-shell-arena-git-manifest-roles manifest))))
+     :allow-reads (mapcar (lambda (path) (expand-file-name path toplevel))
+                          (+agent-shell-arena-git-role-shared role)))))
+
+(defun +agent-shell-pstack-panel--launch (panel)
+  "Start PANEL's candidates in their sandboxes and their timer."
+  (let ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate)))
+    (dolist (member candidates)
+      (setf (+agent-shell-pstack-panel-member-sandbox member)
+            (+agent-shell-pstack-panel--sandbox panel member)))
+    (setf (+agent-shell-pstack-panel-phase panel) 'candidates)
+    (+agent-shell-pstack-panel--arm panel (+agent-shell-pstack-panel-timeout
+                                           panel))
+    (dolist (member candidates)
+      (+agent-shell-pstack-panel--start-member panel member))
+    (+agent-shell-pstack-panel--advance panel)
+    (+agent-shell-pstack-panels--refresh)))
+
+(defun +agent-shell-pstack-panel--resume (lead)
+  "Prepare the arenas that waited for LEAD's interrupted turn to end."
+  (dolist (panel (+agent-shell-pstack-panel-list))
+    (when (and (eq lead (+agent-shell-pstack-panel-lead panel))
+               (eq (+agent-shell-pstack-panel-phase panel) 'interrupting))
+      (+agent-shell-pstack-panel--prepare panel))))
 
 (defun +agent-shell-pstack-panel--abandon (lead)
   "Stop the unfinished panels of LEAD, whose shell has ended.
@@ -746,6 +917,7 @@ no longer start."
       ('turn-complete
        (+agent-shell-pstack-panel--request lead (plist-get event :session)
                                            (plist-get event :text))
+       (+agent-shell-pstack-panel--resume lead)
        (+agent-shell-pstack-panel--deliver-to lead))
       ('prompt-ready (+agent-shell-pstack-panel--deliver-to lead))
       ('clean-up (+agent-shell-pstack-panel--abandon lead)))))

@@ -59,7 +59,9 @@ Paths are true names without a trailing slash."
   (config nil :read-only t :documentation "Private agent config folder.")
   (deny-reads nil :read-only t :documentation "Folders the agent cannot read.")
   (agent nil :documentation "Agent identifier, set when prepared.")
-  (credentials nil :documentation "Plist the agent's :finish reads."))
+  (credentials nil :documentation "Plist the agent's :finish reads.")
+  (allow-reads nil :read-only t
+               :documentation "Folders inside DENY-READS the agent may read."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -77,10 +79,13 @@ Claude Code needs it under about 30 bytes to hold AF_UNIX socket paths."
           (file-already-exists nil))))
     (error "Could not create a private temp folder in /tmp")))
 
-(cl-defun +agent-shell-sandbox-create (root &key config deny-reads)
+(cl-defun +agent-shell-sandbox-create (root &key config deny-reads
+                                             allow-reads)
   "Return a sandbox writing to ROOT, creating its private folders.
 CONFIG is the private agent config folder, a new temporary one by default.
-DENY-READS lists folders the agent may not read."
+DENY-READS lists folders the agent may not read, and ALLOW-READS folders
+inside them it may read anyway.  A read is checked against the path a
+symlink resolves to, so a link into a denied folder needs an allowance."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (+agent-shell-sandbox--make
@@ -89,7 +94,8 @@ DENY-READS lists folders the agent may not read."
    :config (+agent-shell-sandbox--path
             (if config (progn (make-directory config t) config)
               (make-temp-file "pa-config-" t)))
-   :deny-reads (mapcar #'+agent-shell-sandbox--path deny-reads)))
+   :deny-reads (mapcar #'+agent-shell-sandbox--path deny-reads)
+   :allow-reads (mapcar #'+agent-shell-sandbox--path allow-reads)))
 
 (defun +agent-shell-sandbox--string (path)
   "Return PATH as an SBPL string literal."
@@ -115,6 +121,9 @@ DENY-READS lists folders the agent may not read."
               (concat (+agent-shell-sandbox-root sandbox) "/.git")))
      (when-let* ((denied (+agent-shell-sandbox-deny-reads sandbox)))
        (format "(deny file-read*%s)\n" (funcall subpaths denied)))
+     ;; A later rule overrides an earlier one.
+     (when-let* ((allowed (+agent-shell-sandbox-allow-reads sandbox)))
+       (format "(allow file-read*%s)\n" (funcall subpaths allowed)))
      "(deny network-outbound (remote unix-socket))\n"
      "(allow network-outbound (remote unix-socket (path-literal "
      "\"/private/var/run/mDNSResponder\")))\n")))

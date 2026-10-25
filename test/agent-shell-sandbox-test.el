@@ -268,6 +268,43 @@ BODY sees `real' and `copy', the real and copied auth.json, and `env'."
         (should-not (eql 0 (funcall run "/bin/sh" "-c" "echo x > .git")))
         (should-not (file-exists-p (expand-file-name ".git" root)))))))
 
+(ert-deftest +agent-shell-sandbox-test-shared-links ()
+  "Read, but never write, a shared folder linked from a denied checkout.
+The link resolves into the denied folder, so only the allowance opens it."
+  (+agent-shell-sandbox-test--on-macos
+    (let* ((root (file-truename (make-temp-file "pa-test-" t)))
+           (lead (file-truename (make-temp-file "pa-test-" t)))
+           (shared (expand-file-name "elpaca" lead))
+           (secret (expand-file-name "secret" lead))
+           (link (expand-file-name "elpaca/dep.el" root))
+           (closed (+agent-shell-sandbox-create root :deny-reads (list lead)))
+           (open (+agent-shell-sandbox-create root :deny-reads (list lead)
+                                              :allow-reads (list shared))))
+      (unwind-protect
+          (progn
+            (make-directory shared)
+            (+agent-shell-sandbox-test--write
+             (expand-file-name "dep.el" shared) "dep")
+            (+agent-shell-sandbox-test--write secret "hidden")
+            (make-symbolic-link shared (expand-file-name "elpaca" root))
+            (should (equal (list shared)
+                           (+agent-shell-sandbox-allow-reads open)))
+            (should-not (eql 0 (+agent-shell-sandbox-test--run
+                                closed root "/bin/cat" link)))
+            (should (eql 0 (+agent-shell-sandbox-test--run
+                            open root "/bin/cat" link)))
+            (should-not (eql 0 (+agent-shell-sandbox-test--run
+                                open root "/bin/cat" secret)))
+            (should-not (eql 0 (+agent-shell-sandbox-test--run
+                                open root "/usr/bin/touch"
+                                (expand-file-name "elpaca/new.el" root))))
+            (should-not (file-exists-p (expand-file-name "new.el" shared))))
+        (dolist (sandbox (list closed open))
+          (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+          (delete-directory (+agent-shell-sandbox-config sandbox) t))
+        (delete-directory root t)
+        (delete-directory lead t)))))
+
 (ert-deftest +agent-shell-sandbox-test-quoted-root ()
   "Confine a root whose path holds quotes, spaces and backslashes."
   (+agent-shell-sandbox-test--on-macos
