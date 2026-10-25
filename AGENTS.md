@@ -31,7 +31,7 @@ Guidance for changing this Emacs configuration.
   Elisp, then run focused byte compilation or ERT tests when they add value.
   Use `emacsclient` for live Emacs inspection when a server is running.
   Run `emacs -Q --batch -l test/run-config.el` for the complete local gate.
-  See `docs/DEPENDENCIES.md` for package locking and isolated restore checks.
+  See `docs/DEPENDENCIES.md` for package updates and the fresh install check.
 
 ## Elisp style
 

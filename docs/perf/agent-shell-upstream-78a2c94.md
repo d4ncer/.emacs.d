@@ -159,8 +159,8 @@ watcher's `concat` is local and is the next local target.
 
 ## Recommendation
 
-Bump agent-shell to 78a2c94, shell-maker to e089f07 or later, and acp to
-0.17.1 or later in `elpaca-lock.eld`. In the same change, apply
+Update agent-shell to 78a2c94 or later, shell-maker to e089f07 or later, and
+acp to 0.17.1 or later. In the same change, apply
 `relabel-fix.patch`, delete the cache-dir workaround, update the ACP test's
 transcript header assertion, and keep the relabel and transcript workarounds.
 Bumping without the patch lands near production today (A is 234 ms lower in

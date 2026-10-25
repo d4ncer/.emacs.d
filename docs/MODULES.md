@@ -11,8 +11,8 @@ establishes local library paths, the optional site library directory, core
 macros, and use-package conventions. `init.el` can invoke the same idempotent
 setup when loaded directly.
 
-Elpaca is bootstrapped at a recorded commit. Its lock menu is configured before
-package declarations. General initializes before modules that install leader
+Elpaca is bootstrapped before package declarations, and packages track their
+latest upstream revisions. General initializes before modules that install leader
 bindings. The core module establishes shell environment inheritance before
 later features can launch external tools. The optional keychain refresh follows
 shell environment initialization.
@@ -157,10 +157,10 @@ temporary directories with warnings treated as errors. No compiled files are
 written beside configuration sources.
 
 The suite covers cancellation, face inheritance, loader retries, first-use
-activation, cached rendering, source saving, compatibility adapters, locked
-recipes, headless capture and resource teardown. Slow Git fixtures check that
+activation, cached rendering, source saving, compatibility adapters,
+headless capture and resource teardown. Slow Git fixtures check that
 editor input can continue while workers run.
 
-Use `test/restore-config.el` for a separate rebuild and GUI gate. Performance
+Use `test/restore-config.el` for an opt-in fresh install and GUI gate. Performance
 measurements have their own command; wall-clock comparisons are recorded as
 observations rather than timing assertions in ERT.

@@ -36,13 +36,12 @@
     (with-temp-buffer (insert-file-contents file) (emacs-lisp-mode) (check-parens)))
   (princ "Elisp syntax: PASS\n")
   (+config-check-process
-   "Core, activation, caching, compatibility, locks and lifecycle"
+   "Core, activation, caching, compatibility and lifecycle"
    "-l" "config-test-support" "-l" "config-core-test"
    "-l" "config-profile-test" "-l" "config-loader-test"
    "-l" "config-modeline-test" "-l" "config-activation-test"
-   "-l" "config-compat-test" "-l" "config-lock-test"
-   "-l" "config-grep-test" "-l" "agent-shell-projects-lifecycle-test"
-   "-l" "project-files-lifecycle-test"
+   "-l" "config-compat-test" "-l" "config-grep-test"
+   "-l" "agent-shell-projects-lifecycle-test" "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
    "-l" "agent-shell-pstack-panel-test" "-l" "config-compile-local-test"

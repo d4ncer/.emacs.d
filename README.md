@@ -54,9 +54,9 @@ environment where its local Chromium renderer can launch.
 emacs -Q --batch -L test -l test/restore-config.el
 ```
 
-The restore check copies the configuration, checks out the locked revisions from
-local Git objects, rebuilds packages in a temporary directory, and runs the same
-gates. On macOS it also opens a disposable GUI Emacs for completion and mode line
+The opt-in fresh install check needs network access. It copies the
+configuration, clones the latest package sources into a temporary directory,
+builds them, and runs the same gates. On macOS it also opens a disposable GUI Emacs for completion and mode line
 checks, then closes it.
 
 [MODULES.md](docs/MODULES.md) describes ownership, dependencies, and activation.

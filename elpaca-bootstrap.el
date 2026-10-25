@@ -1,12 +1,11 @@
 ;;; elpaca-bootstrap.el --- Bootstrap for Elpaca  -*- lexical-binding: t; -*-
 
-(defvar elpaca-lock-file (expand-file-name "elpaca-lock.eld" user-emacs-directory))
 (defvar elpaca-installer-version 0.12)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-sources-directory (expand-file-name "sources/" elpaca-directory))
 (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
-                              :ref "78b8e7cc98c198c8dbeb18140649e2d668126712"
+                              :ref nil
                               :depth nil :inherit ignore
                               :files (:defaults "elpaca-test.el" (:exclude "extensions"))
                               :build (:not elpaca-activate)))

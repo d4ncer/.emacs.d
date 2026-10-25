@@ -1,16 +1,16 @@
 # Dependency setup and maintenance
 
-The configuration uses Emacs 32 native facilities and Elpaca. Three files record
-its reproducible inputs:
+The configuration uses Emacs 32 native facilities and Elpaca. Packages track
+their latest upstream revisions; nothing pins them. When an update breaks
+something, fix the configuration forward. Two files record other inputs:
 
 | File | Contents |
 | --- | --- |
 | emacs-build.eld | Verified Emacs source and Homebrew formula identities, build options and runtime libraries |
-| elpaca-lock.eld | Active package recipes and Git commit hashes |
 | treesit-grammars.eld | Grammar source commits and source subdirectories |
 
-The Elpaca bootstrap commit is also pinned in `elpaca-bootstrap.el`. Keep that
-pin aligned with Elpaca's entry in the package lock.
+`elpaca-bootstrap.el` clones Elpaca's default branch on a fresh install. After
+that, Elpaca updates itself like any other package.
 
 ## System prerequisites
 
@@ -38,24 +38,10 @@ image type was compiled in. Optional feature checks remain in the configuration.
 
 ## Package updates
 
-1. Restart Emacs with this configuration so Elpaca's active orders match it.
-2. Check the package source directories for local changes. Preserve or resolve
-   those changes explicitly; commit hashes do not capture uncommitted patches.
-3. Update the selected packages through Elpaca. Exercise the affected workflow
-   and run `emacs -Q --batch -l test/run-config.el`.
-4. Run `M-x elpaca-write-lock-file` and select this repository's
-   `elpaca-lock.eld`. Inspect the recipe and commit changes.
-5. If Elpaca changed, update its bootstrap pin to the same recorded commit.
-6. Run the locked recipe check and isolated restore before committing the update.
-
-Generating a lock file records the installed state. Loading the configuration
-with a different lock does not reset an existing checkout automatically. To
-restore an older state, restore its lock and bootstrap pin together and build in
-a fresh directory, or explicitly rebuild the affected packages at those refs.
-`emacs -Q --batch -l scripts/elpaca-apply-lock.el PACKAGE...` does the latter
-for the named packages right before a restart. It fetches and checks out each
-locked commit, refusing a source with local changes, rebuilds the package as
-Elpaca would, and deletes `lisp/` bytecode so it recompiles after the restart.
+1. Check the package source directories for local changes. Preserve or resolve
+   those changes explicitly before merging upstream.
+2. Update through Elpaca, for example `M-x elpaca-update-all`.
+3. Exercise the affected workflow and run `emacs -Q --batch -l test/run-config.el`.
 
 ## Emacs and grammar updates
 
@@ -86,27 +72,21 @@ emacs -Q --batch -l test/benchmark-config.el
 The first command runs local tests with installed dependencies. Mermaid tests
 need an environment that permits Chromium to launch.
 
-The restore command copies the configuration to a disposable directory, clones
-package repositories from local Git objects, checks out recorded commits and
-rebuilds packages. It runs the same tests against that restored directory. On
+The second command is an opt-in fresh install check and needs network access.
+It copies the configuration to a disposable directory, clones every package
+from upstream, builds them, and runs the same tests against that directory. On
 macOS it also starts and closes a separate GUI Emacs to check first completion,
-source and Org activation, Dired counts, and mode line rendering. Shell environment
-refresh and optional private configuration are disabled only inside this test.
-The user's running server is not reloaded.
-
-The offline restore uses local clone transport so partial repositories can reuse
-their available Git objects without attempting to serve missing historical trees.
-It requires the recorded objects to exist in local repositories;
-a machine without those objects must fetch the recorded revisions first. Native
-build dependencies must also be installed. Elpaca may need its archive metadata
-for undeclared dependencies; the active lock includes transitive packages.
+source and Org activation, Dired counts, and mode line rendering. Shell
+environment refresh and optional private configuration are disabled only
+inside this check. The user's running server is not reloaded. Native build
+dependencies must be installed.
 
 ## Compatibility adapter removal
 
 | Adapter | Reason and upstream | Removal gate |
 | --- | --- | --- |
 | +expert-compat | Expert 0.1.5/0.1.6 exit validation, incremental sync and project toolchain discovery; github.com/expert-lsp/expert, toolchain settings from PR 682 | With advice disabled, verify EOF typing and completion, a clean shutdown, and the project's Elixir/Erlang executables against the deployed server. Retain each workaround until its reproducer passes. |
-| +eglot-tempel-compat | Literal indentation from the pinned eglot-tempel 0.8.2 converter; github.com/fejfighter/eglot-tempel | The multiline snippet insertion check must pass without the adapter, including a representative Elixir snippet. |
+| +eglot-tempel-compat | Literal indentation from the eglot-tempel 0.8.2 converter; github.com/fejfighter/eglot-tempel | The multiline snippet insertion check must pass without the adapter, including a representative Elixir snippet. |
 
 Each adapter can be disabled independently and removes its advice and hooks.
 Their tests verify scope, indentation and lifecycle; a simulated protocol fixture
