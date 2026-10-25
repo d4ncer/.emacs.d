@@ -35,6 +35,11 @@
 (require 'subr-x)
 (require '+agent-shell-sandbox)
 
+(declare-function acp-send-response "acp")
+(declare-function acp-make-error "acp")
+(declare-function acp-make-fs-write-text-file-response "acp")
+(declare-function acp-make-fs-read-text-file-response "acp")
+(declare-function agent-shell--resolve-path "agent-shell")
 (declare-function agent-shell-start "agent-shell")
 (declare-function agent-shell-cwd "agent-shell-project")
 (declare-function agent-shell--current-mode-id "agent-shell-config")
@@ -156,6 +161,59 @@ Return nil, leaving the dialog to the user, only when no option fits."
   "Return SHELLS without the shells started with a policy."
   (seq-remove #'+agent-shell-drive-policy shells))
 
+(defun +agent-shell-drive--under-p (path directories)
+  "Return non-nil if PATH is one of DIRECTORIES or inside one."
+  (seq-some (lambda (directory)
+              (or (equal path directory)
+                  (string-prefix-p (file-name-as-directory directory) path)))
+            directories))
+
+(defun +agent-shell-drive--file-allowed-p (policy write path)
+  "Return non-nil if POLICY lets the agent read, or with WRITE write, PATH.
+agent-shell serves these requests itself, outside any sandbox-exec profile
+and before any permission prompt, so the policy is enforced here too."
+  (let ((path (+agent-shell-sandbox--path path)))
+    (pcase policy
+      ('nil t)
+      ('read-only (not write))
+      ((pred +agent-shell-sandbox-p)
+       (if write
+           (and (+agent-shell-drive--under-p
+                 path (list (+agent-shell-sandbox-root policy)
+                            (+agent-shell-sandbox-tmp policy)
+                            (+agent-shell-sandbox-config policy)))
+                (not (equal path (concat (+agent-shell-sandbox-root policy)
+                                         "/.git"))))
+         (not (+agent-shell-drive--under-p
+               path (+agent-shell-sandbox-deny-reads policy)))))
+      (_ nil))))
+
+(defun +agent-shell-drive--file-gate (write)
+  "Return advice that refuses file requests, writes when WRITE, by policy."
+  (cl-function
+   (lambda (handle &rest args &key state acp-request &allow-other-keys)
+     (let ((policy (+agent-shell-drive-policy (map-elt state :buffer)))
+           (path (agent-shell--resolve-path
+                  (map-nested-elt acp-request '(params path)))))
+       (if (+agent-shell-drive--file-allowed-p policy write path)
+           (apply handle args)
+         (acp-send-response
+          :client (map-elt state :client)
+          :response (funcall (if write #'acp-make-fs-write-text-file-response
+                               #'acp-make-fs-read-text-file-response)
+                             :request-id (map-elt acp-request 'id)
+                             :error (acp-make-error
+                                     :code -32603
+                                     :message (format "Refused by %s policy"
+                                                      (if (eq policy 'read-only)
+                                                          "read-only"
+                                                        "sandbox"))))))))))
+
+(defalias '+agent-shell-drive--gate-write (+agent-shell-drive--file-gate t)
+  "Refuse ACP file writes that the shell's policy forbids.")
+(defalias '+agent-shell-drive--gate-read (+agent-shell-drive--file-gate nil)
+  "Refuse ACP file reads that the shell's policy forbids.")
+
 (defun +agent-shell-drive-kill (shell &optional reason)
   "Kill SHELL without prompting; its watchers get `clean-up' with REASON."
   (when (buffer-live-p shell)
@@ -230,6 +288,10 @@ transcript is kept.  A shell with a policy is hidden from
     (when policy
       (advice-add 'agent-shell-buffers :filter-return
                   #'+agent-shell-drive--hide-owned)
+      (advice-add 'agent-shell--on-fs-write-text-file-request :around
+                  #'+agent-shell-drive--gate-write)
+      (advice-add 'agent-shell--on-fs-read-text-file-request :around
+                  #'+agent-shell-drive--gate-read)
       (agent-shell-subscribe-to
        :shell-buffer shell :event 'init-finished
        :on-event (lambda (_event)

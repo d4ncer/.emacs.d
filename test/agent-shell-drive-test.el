@@ -558,5 +558,62 @@ mode full")
   (+agent-shell-drive-test--with-shells (shell)
     (should-error (+agent-shell-drive-stop shell))))
 
+(ert-deftest +agent-shell-drive-test-policies-gate-client-files ()
+  "agent-shell's own file requests obey each shell's policy."
+  (require 'agent-shell)
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (let* ((+agent-shell-sandbox-agents '((codex :mode "full" :prepare ignore)))
+             (secret (expand-file-name "secret/" directory))
+             (outside (file-name-as-directory (make-temp-file "drive-outside-" t)))
+             (sandbox (progn (make-directory secret)
+                             (+agent-shell-sandbox-create
+                              directory :deny-reads (list secret))))
+             (plain (+agent-shell-drive-start :config 'gemini :directory directory))
+             (read-only (+agent-shell-drive-start :config 'codex :directory directory
+                                                  :policy 'read-only))
+             (confined (+agent-shell-drive-start :config 'codex :directory directory
+                                                 :policy sandbox)))
+        (write-region "s" nil (expand-file-name "key" secret))
+        (unwind-protect
+            (cl-flet ((refused-p (shell method path)
+                        (let (response)
+                          (cl-letf (((symbol-function 'acp-send-response)
+                                     (cl-function
+                                      (lambda (&key ((:response sent))
+                                                    &allow-other-keys)
+                                        (setq response sent)))))
+                            (agent-shell--on-request
+                             :state (list (cons :buffer shell) (cons :client 'client))
+                             :acp-request
+                             `((id . 7) (method . ,method)
+                               (params (path . ,path) (content . "x")))))
+                          (string-prefix-p
+                           "Refused by"
+                           (or (map-nested-elt response '(:error message)) "")))))
+              (let ((inside (expand-file-name "inside.txt" directory))
+                    (escape (expand-file-name "escape.txt" outside))
+                    (key (expand-file-name "key" secret)))
+                (should (refused-p read-only "fs/write_text_file" inside))
+                (should-not (refused-p read-only "fs/read_text_file" key))
+                (should-not (refused-p confined "fs/write_text_file" inside))
+                (should (refused-p confined "fs/write_text_file" escape))
+                (should (refused-p confined "fs/write_text_file"
+                                   (expand-file-name ".git" directory)))
+                (should (refused-p confined "fs/read_text_file" key))
+                (should-not (refused-p plain "fs/write_text_file" escape))
+                (should-not (refused-p plain "fs/read_text_file" key))
+                (should (file-exists-p inside))
+                (should (file-exists-p escape))))
+          (dolist (buffer (buffer-list))
+            (when (and (buffer-file-name buffer)
+                       (or (string-prefix-p directory (buffer-file-name buffer))
+                           (string-prefix-p outside (buffer-file-name buffer))))
+              (kill-buffer buffer)))
+          (kill-buffer plain)
+          (delete-directory outside t)
+          (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+          (delete-directory (+agent-shell-sandbox-config sandbox) t))))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here
