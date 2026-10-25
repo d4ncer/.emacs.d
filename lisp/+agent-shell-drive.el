@@ -72,7 +72,8 @@
 (defvar +agent-shell-drive--watchers (make-hash-table :test #'equal)
   "Map (OWNER . ID) to (SHELL . FUNCTION).")
 (defvar +agent-shell-drive--shells (make-hash-table :test #'eq)
-  "Map a watched shell to (:subscription TOKEN :turn TEXT :final TEXT).")
+  "Map a watched shell to (:subscription TOKEN :turn CHUNKS :final CHUNKS).
+CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.")
 
 (defvar-local +agent-shell-drive--policy nil
   "Policy this shell was started with; see `+agent-shell-drive-start'.")
@@ -358,9 +359,14 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
              (agent-shell-session-id :shell-buffer shell))
     (with-current-buffer shell (agent-shell-interrupt t))))
 
+(defun +agent-shell-drive--text (chunks)
+  "Return the text of CHUNKS, which lists text newest first."
+  (apply #'concat (reverse chunks)))
+
 (defun +agent-shell-drive-partial-text (shell)
   "Return the agent text of watched SHELL's current turn."
-  (plist-get (gethash shell +agent-shell-drive--shells) :turn))
+  (+agent-shell-drive--text
+   (plist-get (gethash shell +agent-shell-drive--shells) :turn)))
 
 (defun +agent-shell-drive--forget (shell)
   "Drop SHELL's upstream subscription and turn state."
@@ -393,12 +399,12 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
     (pcase kind
       ('agent-message-chunk
        (when-let* ((chunk (map-elt data :text-chunk)))
-         (plist-put state :turn (concat (plist-get state :turn) chunk))
-         (plist-put state :final (concat (plist-get state :final) chunk)))
+         (plist-put state :turn (cons chunk (plist-get state :turn)))
+         (plist-put state :final (cons chunk (plist-get state :final))))
        nil)
       ('tool-call-update
-       (let ((part (plist-get state :final)))
-         (plist-put state :final "")
+       (let ((part (+agent-shell-drive--text (plist-get state :final))))
+         (plist-put state :final nil)
          (unless (string-blank-p part)
            (list :kind kind :shell shell
                  :session (ignore-errors
@@ -407,8 +413,8 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
                  :title (map-nested-elt data '(:tool-call :title))))))
       (_
        (when (eq kind 'input-submitted)
-         (plist-put state :turn "")
-         (plist-put state :final ""))
+         (plist-put state :turn nil)
+         (plist-put state :final nil))
        (unless (and (eq kind 'init-finished)
                     (+agent-shell-drive--refusal shell))
          (append
@@ -419,8 +425,10 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
             ('turn-complete
              (append
               (list :stop-reason (map-elt data :stop-reason)
-                    :text (let ((final (plist-get state :final)))
-                            (if (string-blank-p final) (plist-get state :turn)
+                    :text (let ((final (+agent-shell-drive--text
+                                        (plist-get state :final))))
+                            (if (string-blank-p final)
+                                (+agent-shell-drive--text (plist-get state :turn))
                               final)))
               (when-let* ((plan (buffer-local-value
                                  '+agent-shell-drive--plan shell)))
@@ -464,7 +472,7 @@ it moves the watcher."
                         :shell-buffer shell
                         :on-event (lambda (event)
                                     (+agent-shell-drive--dispatch shell event)))
-                       :turn "" :final "")
+                       :turn nil :final nil)
                  +agent-shell-drive--shells))
       (puthash key (cons shell function) +agent-shell-drive--watchers))))
 
