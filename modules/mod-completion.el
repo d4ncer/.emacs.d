@@ -114,7 +114,6 @@
   :demand t
   :config (savehist-mode +1)
   :custom
-  (savehist-autosave-interval nil) ; on exit
   (history-delete-duplicates t)
   :config
   (pushnew! savehist-additional-variables

@@ -26,20 +26,13 @@
 (use-package files
   ;; General built-in file IO.
   :custom
-  (backup-inhibited t)
   (require-final-newline t)
   (find-file-visit-truename t)
   (make-backup-files nil)
   (confirm-nonexistent-file-or-buffer nil)
   (auto-mode-case-fold nil)
-  (version-control nil)
-  (backup-by-copying t)
-  (delete-old-versions t)
-  (kept-old-versions 5)
-  (kept-new-versions 5)
   ;; Prefer GNU ls (coreutils) on macOS; BSD ls lacks --dired & long options.
   (insert-directory-program (or (executable-find "gls") "ls"))
-  (backup-directory-alist `(("." . ,+auto-save-dir)))
   (auto-save-list-file-prefix (file-name-concat +auto-save-dir ".saves-"))
   (auto-save-file-name-transforms `((".*" ,+auto-save-dir t)))
 
@@ -54,19 +47,12 @@
      ,(list (rx (group (+? any)) ".ts" eos)
             (rx (backref 1) ".test.ts")
             (rx (backref 1) ".integration.ts"))
-     ))
-
-  :config
-  (define-advice after-find-file (:around (fn &rest args) dont-block-on-autosave-exists)
-    "Prevent the editor blocking to inform you when an autosave file exists."
-    (cl-letf (((symbol-function #'sit-for) #'ignore))
-      (apply fn args))))
+     )))
 
 (use-package tramp
   ;; Provides remote editing support, e.g. over SSH connections.
   :after files
   :config
-  (setq tramp-backup-directory-alist backup-directory-alist)
   (setq tramp-auto-save-directory (file-name-concat user-emacs-directory "tramp-autosave/")))
 
 (use-package uniquify
