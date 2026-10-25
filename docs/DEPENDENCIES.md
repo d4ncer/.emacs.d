@@ -69,10 +69,10 @@ pins deliberately, then verify fontification, indentation, and syntax navigation
 for affected languages. The configured Nix source pin was compiled and exercised
 against nix-ts-mode in a temporary grammar directory.
 
-Existing grammar binaries are retained. The recipe file controls future
-installations; it does not establish the provenance of an older installed
-binary. Reinstall a grammar when validating a changed source pin. No grammar
-download occurs without installation confirmation during ordinary editing.
+Grammar binaries are built locally into `tree-sitter/`, which Git ignores.
+Opening a file whose grammar is missing offers to build it from its pin in
+`treesit-grammars.eld`. Reinstall a grammar when validating a changed source
+pin. No grammar download occurs without installation confirmation.
 
 ## Verification commands
 
