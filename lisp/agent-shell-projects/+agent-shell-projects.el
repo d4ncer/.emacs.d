@@ -447,6 +447,11 @@
 (require '+agent-shell-projects-annotations)
 (require '+agent-shell-projects-agent)
 (require '+agent-shell-projects-menu)
+(define-key +agent-shell-projects-sidebar-mode-map (kbd "f")
+            #'+agent-shell-projects-toggle-resolved)
+(define-key +agent-shell-projects-home-mode-map (kbd "?") #'+agent-shell-projects-menu)
+(define-key +agent-shell-projects-sidebar-mode-map (kbd "?") #'+agent-shell-projects-menu)
+(define-key +agent-shell-projects-artefact-mode-map (kbd "C-c C-m") #'+agent-shell-projects-menu)
 
 (provide '+agent-shell-projects)
 ;;; +agent-shell-projects.el ends here

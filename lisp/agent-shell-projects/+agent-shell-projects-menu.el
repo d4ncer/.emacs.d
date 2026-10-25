@@ -8,9 +8,6 @@
 (require 'transient)
 (require '+agent-shell-projects-core)
 (defvar-local +agent-shell-projects--project-id nil)
-(defvar +agent-shell-projects-home-mode-map)
-(defvar +agent-shell-projects-sidebar-mode-map)
-(defvar +agent-shell-projects-artefact-mode-map)
 (declare-function +agent-shell-projects "+agent-shell-projects")
 (declare-function +agent-shell-projects-home "+agent-shell-projects")
 (declare-function +agent-shell-projects-rename "+agent-shell-projects")
@@ -71,10 +68,6 @@
   (interactive)
   (unless +agent-shell-projects--project-id (+agent-shell-projects))
   (transient-setup '+agent-shell-projects-menu))
-
-(define-key +agent-shell-projects-home-mode-map (kbd "?") #'+agent-shell-projects-menu)
-(define-key +agent-shell-projects-sidebar-mode-map (kbd "?") #'+agent-shell-projects-menu)
-(define-key +agent-shell-projects-artefact-mode-map (kbd "C-c C-m") #'+agent-shell-projects-menu)
 
 (provide '+agent-shell-projects-menu)
 ;;; +agent-shell-projects-menu.el ends here

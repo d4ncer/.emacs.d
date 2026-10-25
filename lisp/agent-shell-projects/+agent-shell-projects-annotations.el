@@ -10,7 +10,6 @@
 
 (defvar +agent-shell-projects-view-functions)
 (defvar +agent-shell-projects-sidebar-functions)
-(defvar +agent-shell-projects-sidebar-mode-map)
 (defvar +agent-shell-projects--targets (make-hash-table :test #'equal))
 (defvar +agent-shell-projects-selection-function nil)
 (defvar +agent-shell-projects-annotation-text-function nil)
@@ -536,8 +535,6 @@ TITLE names the buffer; ACTION labels its submit binding."
 
 (+agent-shell-projects-register-hook '+agent-shell-projects-view-functions #'+agent-shell-projects--decorate)
 (+agent-shell-projects-register-hook '+agent-shell-projects-sidebar-functions #'+agent-shell-projects--render-comments)
-(define-key +agent-shell-projects-sidebar-mode-map (kbd "f")
-            #'+agent-shell-projects-toggle-resolved)
 
 (provide '+agent-shell-projects-annotations)
 ;;; +agent-shell-projects-annotations.el ends here
