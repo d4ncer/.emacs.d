@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import random
 import re
+import subprocess
 import sys
 import time
 import uuid
@@ -247,8 +248,40 @@ def bench_stream(session_id, spec):
 
 
 
+def sandbox_probe(text, state):
+    """Write inside and outside the cwd, read a secret, start late writers.
+
+    One late writer is a child working outside the cwd; the other is an
+    orphan working inside it.  Both touch a file in the cwd after a delay."""
+    marker = "SANDBOX-PROBE "
+    spec, _ = json.JSONDecoder().raw_decode(text[text.find(marker) + len(marker):])
+    cwd = Path(state["cwd"])
+    results = {"mode": state["mode"], "env": os.environ.get("PA_ENV"),
+               "tmpdir": os.environ.get("TMPDIR")}
+
+    def attempt(name, action):
+        try:
+            action()
+            results[name] = "ok"
+        except OSError as error:
+            results[name] = "denied " + str(error.errno)
+
+    attempt("inside", lambda: (cwd / "inside.txt").write_text("inside\n"))
+    attempt("outside", lambda: Path(spec["outside"]).write_text("outside\n"))
+    attempt("secret", lambda: Path(spec["secret"]).read_text())
+    quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+             "stderr": subprocess.DEVNULL, "start_new_session": True}
+    delay = str(spec["delay"])
+    subprocess.Popen(["/bin/sh", "-c", 'sleep "$1"; touch "$2"', "sh", delay,
+                      str(cwd / "late-child.txt")], cwd="/", **quiet)
+    subprocess.Popen(["/bin/sh", "-c", '(sleep "$1"; touch late-orphan.txt) &',
+                      "sh", delay], cwd=cwd, **quiet)
+    return "PROBE " + json.dumps(results)
+
+
 REFUSE_SET_MODE = "--refuse-set-mode" in sys.argv
-MODES = [{"id": mode, "name": mode} for mode in ("default", "plan", "read-only")]
+MODES = [{"id": mode, "name": mode} for mode in ("default", "plan", "read-only",
+                                                 "agent-full-access")]
 
 sessions = {}
 pending = {}
@@ -293,7 +326,10 @@ for line in sys.stdin:
             chunk(params["sessionId"], bench_stream(params["sessionId"], spec))
             emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
             continue
-        reply = handle_pstack_prompt(message, text, state)
+        if "SANDBOX-PROBE " in text:
+            reply = sandbox_probe(text, state)
+        else:
+            reply = handle_pstack_prompt(message, text, state)
         if reply is False:
             continue
         if reply is None:

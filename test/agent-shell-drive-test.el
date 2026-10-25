@@ -332,6 +332,17 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
          (when (buffer-live-p shell) (kill-buffer shell))
          (delete-directory directory t)))))
 
+(defmacro +agent-shell-drive-test--with-sandbox (&rest body)
+  "Run BODY with `sandbox', a sandbox rooted at `directory'.
+Its agent `codex' prepares nothing and runs in mode \"full\"."
+  (declare (indent 0))
+  `(let ((+agent-shell-sandbox-agents
+          '((codex :mode "full" :prepare ignore)))
+         (sandbox (+agent-shell-sandbox-create directory)))
+     (unwind-protect (progn ,@body)
+       (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+       (delete-directory (+agent-shell-sandbox-config sandbox) t))))
+
 (ert-deftest +agent-shell-drive-test-read-only-start ()
   "Force the read-only mode and responder; refuse unknown agents early."
   (+agent-shell-drive-test--with-upstream
@@ -435,32 +446,102 @@ BODY sees `started', the configs passed in, newest first, and `shell'."
         (should (buffer-live-p member))
         (should (equal '(init-finished) events))))))
 
-(ert-deftest +agent-shell-drive-test-read-only-hidden ()
-  "Leave read-only shells out of agent-shell lists and project reuse."
+(ert-deftest +agent-shell-drive-test-policy-hidden ()
+  "Leave read-only and sandboxed shells out of lists and project reuse."
   (require 'agent-shell)
   (+agent-shell-drive-test--with-upstream
     (+agent-shell-drive-test--with-start
-      (let* ((plain (+agent-shell-drive-start :config 'gemini
-                                              :directory directory))
-             (member (+agent-shell-drive-start :config 'codex
-                                               :directory directory
-                                               :policy 'read-only)))
-        (unwind-protect
-            (progn
-              (dolist (shell (list plain member))
-                (with-current-buffer shell
-                  (setq major-mode 'agent-shell-mode)
-                  (setq-local shell-maker--config '((:name . "stub")))))
-              (should (+agent-shell-drive-policy member))
-              (should-not (+agent-shell-drive-policy plain))
-              (should (memq plain (agent-shell-buffers)))
-              (should-not (memq member (agent-shell-buffers)))
-              (with-temp-buffer
-                (setq default-directory
-                      (file-name-as-directory (file-truename directory)))
-                (should (equal (list plain) (agent-shell-project-buffers)))
-                (should (eq plain (agent-shell-shell-buffer :no-create t)))))
-          (kill-buffer plain))))))
+      (+agent-shell-drive-test--with-sandbox
+        (let* ((plain (+agent-shell-drive-start :config 'gemini
+                                                :directory directory))
+               (member (+agent-shell-drive-start :config 'codex
+                                                 :directory directory
+                                                 :policy 'read-only))
+               (candidate (+agent-shell-drive-start :config 'codex
+                                                    :directory directory
+                                                    :policy sandbox)))
+          (unwind-protect
+              (progn
+                (dolist (shell (list plain member candidate))
+                  (with-current-buffer shell
+                    (setq major-mode 'agent-shell-mode)
+                    (setq-local shell-maker--config '((:name . "stub")))))
+                (should (eq 'read-only (+agent-shell-drive-policy member)))
+                (should (eq sandbox (+agent-shell-drive-policy candidate)))
+                (should-not (+agent-shell-drive-policy plain))
+                (should (memq plain (agent-shell-buffers)))
+                (should-not (memq member (agent-shell-buffers)))
+                (should-not (memq candidate (agent-shell-buffers)))
+                (with-temp-buffer
+                  (setq default-directory
+                        (file-name-as-directory (file-truename directory)))
+                  (should (equal (list plain) (agent-shell-project-buffers)))
+                  (should (eq plain (agent-shell-shell-buffer :no-create t)))))
+            (kill-buffer plain)
+            (kill-buffer member)))))))
+
+;;;; Sandboxed shells
+
+(ert-deftest +agent-shell-drive-test-sandbox-start ()
+  "Confine the client, force full access, reject requests, keep no transcript."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (+agent-shell-drive-test--with-sandbox
+        (should-error (+agent-shell-drive-start :config 'gemini
+                                                :directory directory
+                                                :policy sandbox)
+                      :type 'user-error)
+        (should-not started)
+        (let* ((candidate (+agent-shell-drive-start
+                           :config '((:identifier . codex)
+                                     (:client-maker
+                                      . (lambda (_) '((:command . "sh")))))
+                           :directory directory :policy sandbox))
+               (config (car started))
+               (request (+agent-shell-drive-test--permission
+                         "read" '("allow_once" "reject_once"))))
+          (should (equal "full" (funcall (map-elt config
+                                                  :default-session-mode-id))))
+          (should (equal "/usr/bin/sandbox-exec"
+                         (map-elt (funcall (map-elt config :client-maker) nil)
+                                  :command)))
+          (with-current-buffer candidate
+            (should (funcall agent-shell-permission-responder-function
+                             (cdr request)))
+            (should (local-variable-p
+                     'agent-shell-transcript-file-path-function))
+            (should-not agent-shell-transcript-file-path-function))
+          (should (equal "reject_once" (caar request))))))))
+
+(ert-deftest +agent-shell-drive-test-sandbox-mode-mismatch ()
+  "Kill a sandboxed shell left outside its full-access mode."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (+agent-shell-drive-test--with-sandbox
+        (let ((candidate (+agent-shell-drive-start :config 'codex
+                                                   :directory directory
+                                                   :policy sandbox))
+              (events nil))
+          (with-current-buffer candidate
+            (add-hook 'kill-buffer-hook
+                      (lambda () (emit candidate '((:event . clean-up))))
+                      nil t)
+            (setf (map-elt (map-elt agent-shell--state :session) :mode-id)
+                  "default"))
+          (+agent-shell-drive-watch candidate 'a 1
+                                    (lambda (e)
+                                      (push (plist-get e :reason) events)))
+          (emit candidate '((:event . init-finished)))
+          (accept-process-output nil 0.05)
+          (should-not (buffer-live-p candidate))
+          (should (equal '("Session mode is default, not the full-access \
+mode full")
+                         events)))))))
+
+(ert-deftest +agent-shell-drive-test-stop-needs-sandbox ()
+  "Refuse to stop a shell that is not sandboxed."
+  (+agent-shell-drive-test--with-shells (shell)
+    (should-error (+agent-shell-drive-stop shell))))
 
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here

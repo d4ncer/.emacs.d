@@ -1,7 +1,9 @@
 # pstack arena panels: design
 
-Status: proposed, revision 2. Nothing here is implemented yet. It extends the
-panels in `docs/AGENT-SHELL-PSTACK.md`. Revision 1 relied on a permission
+Status: proposed, revision 2. Only the sandboxed launch and stop are
+implemented: `lisp/+agent-shell-sandbox.el`, `+agent-shell-drive-start
+:policy` and `+agent-shell-drive-stop`. It extends the panels in
+`docs/AGENT-SHELL-PSTACK.md`. Revision 1 relied on a permission
 responder. Interrogate panel `30662dcfd102` broke that, and this revision
 replaces it with an OS sandbox. The triage at the end maps each finding to
 the change it caused.

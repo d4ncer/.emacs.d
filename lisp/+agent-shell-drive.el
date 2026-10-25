@@ -21,6 +21,11 @@
 ;; :reason instead of `init-finished'.  Shells with a policy are left out of
 ;; `agent-shell-buffers', so upstream pickers and project reuse never offer
 ;; them.
+;;
+;; A shell whose policy is a `+agent-shell-sandbox' runs its adapter under
+;; sandbox-exec in the agent's full-access mode, rejects every permission
+;; request and keeps no transcript.  Stop it with `+agent-shell-drive-stop',
+;; which also ends every process it started.
 
 ;;; Code:
 
@@ -28,6 +33,7 @@
 (require 'map)
 (require 'seq)
 (require 'subr-x)
+(require '+agent-shell-sandbox)
 
 (declare-function agent-shell-start "agent-shell")
 (declare-function agent-shell-cwd "agent-shell-project")
@@ -43,6 +49,7 @@
 (defvar agent-shell-cwd-function)
 (defvar agent-shell-mode-hook)
 (defvar agent-shell-permission-responder-function)
+(defvar agent-shell-transcript-file-path-function)
 (defvar agent-shell--state)
 
 (defgroup +agent-shell-drive nil
@@ -117,6 +124,10 @@ Return nil, leaving the dialog to the user, only when no option fits."
    permission (member (map-nested-elt permission '(:tool-call :kind))
                       +agent-shell-drive--read-kinds)))
 
+(defun +agent-shell-drive--reject (permission)
+  "Reject PERMISSION."
+  (+agent-shell-drive--answer permission nil))
+
 (defun +agent-shell-drive--refusal (shell)
   "Return why SHELL is not in the mode its policy requires, or nil."
   (require 'agent-shell-config)
@@ -154,7 +165,10 @@ Return nil, leaving the dialog to the user, only when no option fits."
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
 POLICY nil starts an ordinary shell.  With `read-only', the shell runs in its
 agent's mode from `+agent-shell-drive-read-only-modes' with a responder that
-rejects everything but reads.  A shell with a policy is hidden from
+rejects everything but reads.  With a `+agent-shell-sandbox', its adapter
+runs confined to the sandbox in the agent's full-access mode from
+`+agent-shell-sandbox-agents', every permission request is rejected, and no
+transcript is kept.  A shell with a policy is hidden from
 `agent-shell-buffers'."
   (require 'agent-shell)
   (let* ((config (+agent-shell-drive-config config))
@@ -164,10 +178,19 @@ rejects everything but reads.  A shell with a policy is hidden from
                  ('read-only
                   (or (alist-get agent +agent-shell-drive-read-only-modes)
                       (user-error "No read-only mode for agent %s" agent)))
+                 ((pred +agent-shell-sandbox-p)
+                  (+agent-shell-sandbox-mode agent))
                  (_ (error "Unknown shell policy %S" policy))))
+         (sandboxed (+agent-shell-sandbox-p policy))
          (config (if mode
                      (+agent-shell-drive--override
                       config :default-session-mode-id (lambda () mode))
+                   config))
+         (config (if sandboxed
+                     (+agent-shell-drive--override
+                      config :client-maker
+                      (+agent-shell-sandbox-client-maker
+                       policy agent (map-elt config :client-maker)))
                    config))
          (directory (file-name-as-directory (file-truename directory)))
          (cwd-function (lambda () directory))
@@ -178,7 +201,10 @@ rejects everything but reads.  A shell with a policy is hidden from
                   (setq-local +agent-shell-drive--policy policy
                               +agent-shell-drive--mode mode
                               agent-shell-permission-responder-function
-                              #'+agent-shell-drive--respond))))
+                              (if sandboxed #'+agent-shell-drive--reject
+                                #'+agent-shell-drive--respond)))
+                (when sandboxed
+                  (setq-local agent-shell-transcript-file-path-function nil))))
          (shell
           ;; A caller's buffer-local values would shadow these bindings.
           (with-temp-buffer
@@ -186,7 +212,10 @@ rejects everything but reads.  A shell with a policy is hidden from
                   (agent-shell-cwd-function cwd-function)
                   (agent-shell-mode-hook
                    (append agent-shell-mode-hook (list pin)))
-                  (agent-shell-session-strategy 'new))
+                  (agent-shell-session-strategy 'new)
+                  (agent-shell-transcript-file-path-function
+                   (unless sandboxed
+                     agent-shell-transcript-file-path-function)))
               (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
     (when policy
@@ -199,6 +228,35 @@ rejects everything but reads.  A shell with a policy is hidden from
                      (run-at-time 0 nil #'+agent-shell-drive-kill
                                   shell reason)))))
     shell))
+
+(defun +agent-shell-drive--adapter (shell)
+  "Return the pid of live SHELL's agent adapter, or nil."
+  (when-let* (((buffer-live-p shell))
+              (process (map-nested-elt
+                        (buffer-local-value 'agent-shell--state shell)
+                        '(:client :process)))
+              ((process-live-p process)))
+    (process-id process)))
+
+(defun +agent-shell-drive-stop (shell &optional reason callback)
+  "Stop sandboxed SHELL and every process it started, then call CALLBACK.
+Kill the adapter's descendants, kill SHELL as `+agent-shell-drive-kill'
+does with REASON, sweep processes working in the sandbox, and finish its
+agent's credentials.  CALLBACK gets the pids that survived the sweep.  The
+work runs from a timer, so SHELL's own event callbacks may call this."
+  (let ((sandbox (+agent-shell-drive-policy shell)))
+    (unless (+agent-shell-sandbox-p sandbox)
+      (error "Shell %s is not sandboxed" shell))
+    (run-at-time
+     0 nil
+     (lambda ()
+       (when-let* ((pid (+agent-shell-drive--adapter shell)))
+         (+agent-shell-sandbox-kill-tree pid))
+       (+agent-shell-drive-kill shell reason)
+       (+agent-shell-sandbox-sweep
+        sandbox (lambda (survivors)
+                  (unwind-protect (+agent-shell-sandbox-finish sandbox)
+                    (when callback (funcall callback survivors)))))))))
 
 (defun +agent-shell-drive-pinned-p (shell directory)
   "Return whether live SHELL works in DIRECTORY."

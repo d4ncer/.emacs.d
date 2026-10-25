@@ -59,6 +59,8 @@
   (+config-check-process "Legacy worker paths" "-l" "config-relocation-test")
   (+config-check-process "Agent project tests and compilation" "-l" "run-agent-shell-projects")
   (+config-check-process "pstack panels over ACP" "-l" "run-agent-shell-pstack")
+  (+config-check-process "Sandboxed shells over ACP"
+                         "-l" "run-agent-shell-sandbox")
   (+config-check-process "agent-shell workarounds over ACP" "-l" "run-agent-shell-perf")
   (+config-check-process "Helper compilation" "-l" "config-compile-test")
   (princ (format "All configuration gates passed; %d ERT tests.\n" +config-check-tests)))
