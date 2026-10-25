@@ -68,13 +68,44 @@ causes.  Say plainly when you find nothing.  End your turn with the findings \
 as your final message.  Nobody will answer questions during the turn."
      :triage "Triage each finding as the interrogate skill's lead: verify it \
 against the code, then fix it, dismiss it with a concrete reason, or ask.  \
-Findings that several agents agree on are high signal."))
+Findings that several agents agree on are high signal.")
+    (arena
+     :summary "candidates each implement the brief in a sandboxed worktree, \
+then a read-only judge scores them against your rubric"
+     :contract "Implement the task in the current directory, a snapshot of \
+the lead's working tree in its own git worktree.  Work only there: a sandbox \
+refuses writes anywhere else.  Leave your changes in the tree, uncommitted; \
+Emacs captures them when your turn ends.  Do not run git commands that \
+write, such as git add, commit, stash or checkout: the worktree's index \
+lives outside the sandbox, so they fail.  End your turn with a rationale as \
+your final message: what you built, the alternatives you considered, and \
+what you rejected and why.  Nobody will answer questions during the turn."
+     :judge "Read every candidate's checkout, not only its rationale.  Score \
+each candidate on each rubric criterion from 1 to 5 with a one-line reason.  \
+Then recommend one candidate as the base, with reasons, and name parts of \
+the others worth grafting onto it.  End your turn with the scores and the \
+recommendation as your final message.  Nobody will answer questions during \
+the turn."
+     :triage "Pick, graft and verify as the arena skill's lead.  Read every \
+candidate's diff yourself and score it against your rubric, then compare \
+your scores with the judge's.  Pick one candidate as the base and apply its \
+diff with its command above.  Graft the best parts of the others by hand, \
+never by checking their files out over your tree.  Then verify the result \
+as the arena skill says."))
   "Panel shapes by name.
 Each value is a plist: :summary describes the shape to the lead, :contract
-ends each member's prompt, and :triage ends the follow-up to the lead."
+ends each member's prompt, and :triage ends the follow-up to the lead.  An
+arena's :judge ends its judge's prompt."
   :type '(alist :key-type symbol :value-type plist))
 
-(defconst +agent-shell-pstack-panel--schema 2
+(defcustom +agent-shell-pstack-panel-default-judge-timeout 900
+  "Seconds an arena's judge may run when the request names none."
+  :type 'natnum)
+
+(defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
+  "Fewest and most criteria an arena rubric may list.")
+
+(defconst +agent-shell-pstack-panel--schema 3
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -87,7 +118,8 @@ PHASE moves through the shape's phases and ends at `finished'; see
 `+agent-shell-pstack-panel--advance'."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
-  (schema +agent-shell-pstack-panel--schema) (phase 'running))
+  (schema +agent-shell-pstack-panel--schema) (phase 'running)
+  rubric judge-timeout)
 
 (cl-defstruct (+agent-shell-pstack-panel-member
                (:constructor nil)
@@ -109,8 +141,9 @@ says which phase runs the member."
        +agent-shell-pstack-panel--schema))
 
 ;; A reload that changed a struct would break every older record in place.
-(let ((stale (seq-remove #'+agent-shell-pstack-panel--current-p
-                         (hash-table-values +agent-shell-pstack-panel--panels))))
+(let ((stale (seq-remove
+              #'+agent-shell-pstack-panel--current-p
+              (hash-table-values +agent-shell-pstack-panel--panels))))
   (when stale
     (dolist (id (hash-table-keys +agent-shell-pstack-panel--panels))
       (unless (+agent-shell-pstack-panel--current-p
@@ -157,19 +190,28 @@ Expiry and abandonment reach only the current phase's members.")
   "Return the agent identifiers a panel member may use."
   (+agent-shell-drive-read-only-agents))
 
+(defun +agent-shell-pstack-panel--candidate-agents ()
+  "Return the agent identifiers an arena candidate may use."
+  (+agent-shell-drive-sandbox-agents))
+
 (defun +agent-shell-pstack-panel--names (symbols)
   "Return SYMBOLS as a comma-separated string."
-  (mapconcat #'symbol-name symbols ", "))
+  (if symbols (mapconcat #'symbol-name symbols ", ") "none"))
 
-(defun +agent-shell-pstack-panel--parse-member (value agents)
-  "Return a member from request VALUE, one of AGENTS."
-  (unless (and (consp value) (consp (car value)))
+(defun +agent-shell-pstack-panel--object-p (value)
+  "Return whether VALUE is a parsed JSON object."
+  (and (consp value) (consp (car value))))
+
+(defun +agent-shell-pstack-panel--parse-member (value agents kind)
+  "Return a member of KIND from request VALUE, one of AGENTS."
+  (unless (+agent-shell-pstack-panel--object-p value)
     (user-error "Each member must be an object"))
   (let ((role (map-elt value 'role))
         (agent (map-elt value 'agent))
         (focus (map-elt value 'focus)))
-    (unless (and (stringp role) (string-match-p (rx bos (+ (any "a-z0-9-")) eos)
-                                                role))
+    (unless (and (stringp role)
+                 (string-match-p (rx bos (any "a-z0-9") (* (any "a-z0-9-")) eos)
+                                 role))
       (user-error "Member role %S must be lowercase letters, digits and \
 hyphens" role))
     (unless (and (stringp agent) (memq (intern agent) agents))
@@ -178,61 +220,151 @@ hyphens" role))
     (unless (or (null focus) (stringp focus))
       (user-error "Member %s has a focus that is not a string" role))
     (+agent-shell-pstack-panel--make-member
-     :role role :agent (intern agent) :focus focus)))
+     :role role :agent (intern agent) :focus focus :kind kind
+     :state (if (eq kind 'member) 'starting 'pending))))
 
-(defun +agent-shell-pstack-panel--parse (block)
-  "Return a panel described by request BLOCK, or signal `user-error' why not."
+(defun +agent-shell-pstack-panel--seconds (request key default name)
+  "Return REQUEST's KEY, or DEFAULT, as seconds; NAME the field in errors."
+  (let ((seconds (or (map-elt request key) default)))
+    (unless (and (natnump seconds)
+                 (<= 1 seconds +agent-shell-pstack-panel-max-timeout))
+      (user-error "%s must be a whole number of seconds from 1 to %d" name
+                  +agent-shell-pstack-panel-max-timeout))
+    seconds))
+
+(defun +agent-shell-pstack-panel--parse-rubric (rubric)
+  "Return RUBRIC, a list of criteria, or signal `user-error' why not."
+  (pcase-let ((`(,least . ,most) +agent-shell-pstack-panel--rubric-range))
+    (unless (and (proper-list-p rubric) (<= least (length rubric) most)
+                 (seq-every-p (lambda (criterion)
+                                (and (stringp criterion)
+                                     (not (string-blank-p criterion))))
+                              rubric))
+      (user-error "Rubric must list %d to %d non-empty strings" least most))
+    rubric))
+
+(defun +agent-shell-pstack-panel--parse-judge (value lead-agent)
+  "Return the judge member from request VALUE.
+Without VALUE, prefer a read-only agent other than LEAD-AGENT."
+  (let* ((agents (+agent-shell-pstack-panel--agents))
+         (agent
+          (if (null value)
+              (or (seq-find (lambda (agent) (not (eq agent lead-agent))) agents)
+                  (user-error "No read-only agent can judge the arena"))
+            (let ((name (and (+agent-shell-pstack-panel--object-p value)
+                             (map-elt value 'agent))))
+              (unless (and (stringp name) (memq (intern name) agents))
+                (user-error "Judge must be an object whose agent is \
+read-only; available agents: %s" (+agent-shell-pstack-panel--names agents)))
+              (intern name)))))
+    (+agent-shell-pstack-panel--make-member
+     :role "judge" :agent agent :kind 'judge :state 'pending)))
+
+(defun +agent-shell-pstack-panel--parse (block &optional lead-agent)
+  "Return a panel described by request BLOCK, or signal `user-error' why not.
+LEAD-AGENT is the requesting lead's agent identifier."
   (let* ((request (condition-case nil
                       (json-parse-string block :object-type 'alist
                                          :array-type 'list
                                          :null-object nil :false-object nil)
                     (json-parse-error
                      (user-error "The block is not valid JSON"))))
-         (_ (unless (and (consp request) (consp (car request)))
+         (_ (unless (+agent-shell-pstack-panel--object-p request)
               (user-error "The block must hold a JSON object")))
          (shapes (mapcar #'car +agent-shell-pstack-panel-shapes))
          (shape (let ((name (map-elt request 'shape)))
                   (and (stringp name) (car (memq (intern name) shapes)))))
+         (arena (eq shape 'arena))
          (brief (map-elt request 'brief))
-         (timeout (or (map-elt request 'timeout)
-                      +agent-shell-pstack-panel-default-timeout))
-         (values (map-elt request 'members))
-         (agents (+agent-shell-pstack-panel--agents)))
+         (values (map-elt request 'members)))
     (unless (equal (map-elt request 'version) 1)
       (user-error "Version must be 1"))
     (unless shape
       (user-error "Shape %S is unknown; shapes: %s" (map-elt request 'shape)
                   (+agent-shell-pstack-panel--names shapes)))
+    (when (and arena (not (eq system-type 'darwin)))
+      (user-error "Arena panels need macOS, whose sandbox-exec confines the \
+candidates; this Emacs runs on %s" system-type))
     (unless (and (stringp brief) (not (string-blank-p brief)))
       (user-error "Brief must be a non-empty string"))
-    (unless (and (natnump timeout) (<= 1 timeout
-                                       +agent-shell-pstack-panel-max-timeout))
-      (user-error "Timeout must be a whole number of seconds from 1 to %d"
-                  +agent-shell-pstack-panel-max-timeout))
-    (unless (and (proper-list-p values)
-                 (<= 1 (length values) +agent-shell-pstack-panel-max-members))
-      (user-error "Members must list 1 to %d members"
-                  +agent-shell-pstack-panel-max-members))
-    (let ((members (mapcar (lambda (value)
-                             (+agent-shell-pstack-panel--parse-member
-                              value agents))
-                           values)))
-      (when-let* ((roles (mapcar #'+agent-shell-pstack-panel-member-role
-                                 members))
-                  (duplicate (seq-find (lambda (role)
-                                         (member role
-                                                 (cdr (member role roles))))
-                                       roles)))
-        (user-error "Role %s appears more than once" duplicate))
-      (+agent-shell-pstack-panel--make
-       :shape shape :brief brief :timeout timeout :members members))))
+    (let ((timeout (+agent-shell-pstack-panel--seconds
+                    request 'timeout +agent-shell-pstack-panel-default-timeout
+                    "Timeout"))
+          (agents (if arena (+agent-shell-pstack-panel--candidate-agents)
+                    (+agent-shell-pstack-panel--agents))))
+      (unless (and (proper-list-p values)
+                   (<= 1 (length values) +agent-shell-pstack-panel-max-members))
+        (user-error "Members must list 1 to %d members"
+                    +agent-shell-pstack-panel-max-members))
+      (let* ((members (mapcar (lambda (value)
+                                (+agent-shell-pstack-panel--parse-member
+                                 value agents (if arena 'candidate 'member)))
+                              values))
+             (roles (mapcar #'+agent-shell-pstack-panel-member-role members)))
+        (when-let* ((duplicate (seq-find (lambda (role)
+                                           (member role
+                                                   (cdr (member role roles))))
+                                         roles)))
+          (user-error "Role %s appears more than once" duplicate))
+        (if (not arena)
+            (+agent-shell-pstack-panel--make
+             :shape shape :brief brief :timeout timeout :members members)
+          (when (member "judge" roles)
+            (user-error "Role judge is reserved for the arena's judge"))
+          (let ((rubric (+agent-shell-pstack-panel--parse-rubric
+                         (map-elt request 'rubric)))
+                (judge (+agent-shell-pstack-panel--parse-judge
+                        (map-elt request 'judge) lead-agent))
+                (judge-timeout (+agent-shell-pstack-panel--seconds
+                                request 'judge_timeout
+                                +agent-shell-pstack-panel-default-judge-timeout
+                                "Judge timeout")))
+            (+agent-shell-pstack-panel--make
+             :shape shape :brief brief :timeout timeout :rubric rubric
+             :judge-timeout judge-timeout :phase 'preparing
+             :members (append members (list judge)))))))))
 
 ;;;; Prompts
+
+(defun +agent-shell-pstack-panel--shapes ()
+  "Return the entries of the shapes a lead may request here.
+An arena needs macOS and an agent that can run sandboxed."
+  (seq-remove (lambda (shape)
+                (and (eq (car shape) 'arena)
+                     (not (and (eq system-type 'darwin)
+                               (+agent-shell-pstack-panel--candidate-agents)))))
+              +agent-shell-pstack-panel-shapes))
+
+(defun +agent-shell-pstack-panel--series (shapes conjunction)
+  "Return the names of SHAPES as a series joined by CONJUNCTION."
+  (let ((names (mapcar (lambda (shape) (symbol-name (car shape))) shapes)))
+    (if (cdr names)
+        (format "%s %s %s" (string-join (butlast names) ", ") conjunction
+                (car (last names)))
+      (car names))))
+
+(defun +agent-shell-pstack-panel--arena-protocol (agents)
+  "Return the protocol paragraph about arenas, naming read-only AGENTS."
+  (format "\nAn arena's members are candidates that write code.  Each starts \
+in its own sandboxed git worktree holding a snapshot of your working tree, and \
+sees only the brief and its focus.  Candidate agents: %s.  An arena request \
+also carries \"rubric\", %d to %d criteria that only the judge sees.  It may \
+add \"judge\":{\"agent\":\"%s\"}, a read-only agent that by default differs \
+from yours, and \"judge_timeout\", %d seconds by default; \"timeout\" bounds \
+the candidates.  Emacs runs the candidates, then the judge, and sends you one \
+prompt with each candidate's result commit, diff stat, rationale and the \
+command that applies its diff, then the judge's scores and how to pick, \
+graft and verify."
+          (+agent-shell-pstack-panel--names
+           (+agent-shell-pstack-panel--candidate-agents))
+          (car +agent-shell-pstack-panel--rubric-range)
+          (cdr +agent-shell-pstack-panel--rubric-range)
+          (car agents) +agent-shell-pstack-panel-default-judge-timeout))
 
 (defun +agent-shell-pstack-panel--protocol ()
   "Return the text telling a lead how to request a panel, or nil."
   (when-let* ((agents (+agent-shell-pstack-panel--agents)))
-    (let ((shapes +agent-shell-pstack-panel-shapes))
+    (let ((shapes (+agent-shell-pstack-panel--shapes)))
       (format "Emacs can run pstack panels on other agents for you.  When a \
 skill calls for a %s panel, request it from Emacs: end your final message \
 with a fenced block like this one, then end your turn.  This replaces the \
@@ -255,9 +387,8 @@ lowercase letters, digits and hyphens.  The timeout is in seconds, at most \
 the block is complete, and interrupts your turn if you call a tool after it.
 Do not wait or poll after the block.  When every member has finished or \
 timed out, Emacs sends you a prompt with each report inline, the path it was \
-saved to, and how to triage the reports."
-              (mapconcat (lambda (shape) (symbol-name (car shape)))
-                         shapes " or ")
+saved to, and how to triage the reports.%s"
+              (+agent-shell-pstack-panel--series shapes "or")
               (caar shapes) +agent-shell-pstack-panel-default-timeout
               (car agents)
               (mapconcat (lambda (shape)
@@ -266,7 +397,10 @@ saved to, and how to triage the reports."
                          shapes "; ")
               (+agent-shell-pstack-panel--names agents)
               +agent-shell-pstack-panel-max-members
-              +agent-shell-pstack-panel-max-timeout))))
+              +agent-shell-pstack-panel-max-timeout
+              (if (assq 'arena shapes)
+                  (+agent-shell-pstack-panel--arena-protocol agents)
+                "")))))
 
 (defun +agent-shell-pstack-panel-protocol-file ()
   "Return the file that holds the panel protocol for leads."
@@ -280,9 +414,11 @@ Return nil when no agent can be a member."
       (make-directory (file-name-directory file) t)
       (let ((coding-system-for-write 'utf-8-unix))
         (write-region protocol nil file nil 'silent))
-      (format "Request how and interrogate panels from Emacs, never on your \
-own subagents: end your final message with a pstack-panel block, then end \
-your turn.  The protocol is in %s.  Reread it if it is no longer in context."
+      (format "Request %s panels from Emacs, never on your own subagents: \
+end your final message with a pstack-panel block, then end your turn.  The \
+protocol is in %s.  Reread it if it is no longer in context."
+              (+agent-shell-pstack-panel--series
+               (+agent-shell-pstack-panel--shapes) "and")
               file))))
 
 (defun +agent-shell-pstack-panel--shape (panel key)
@@ -349,6 +485,10 @@ started.  To retry, end a message with a corrected pstack-panel block."
        "\n" (+agent-shell-pstack-panel--shape panel :triage)))))
 
 ;;;; Lifecycle
+
+(defun +agent-shell-pstack-panel--arena-p (panel)
+  "Return whether PANEL is an arena."
+  (eq (+agent-shell-pstack-panel-shape panel) 'arena))
 
 (defun +agent-shell-pstack-panel--find (id)
   "Return the panel with ID, or nil."
@@ -540,6 +680,12 @@ Do nothing once the panel has left PHASE."
       (error (+agent-shell-pstack-panel--settle
               panel member 'error nil (error-message-string err))))))
 
+(defun +agent-shell-pstack-panel--lead-agent (lead)
+  "Return the agent identifier of LEAD's shell, or nil."
+  (when (local-variable-p 'agent-shell--state lead)
+    (map-nested-elt (buffer-local-value 'agent-shell--state lead)
+                    '(:agent-config :identifier))))
+
 (defun +agent-shell-pstack-panel--request (lead session text &optional tool)
   "Start the panel that LEAD requested in TEXT in SESSION.
 TOOL names the call LEAD made after TEXT; a new request interrupts LEAD.
@@ -547,7 +693,13 @@ Return the panel, or nil when TEXT requests none or one already seen."
   (when-let* ((block (+agent-shell-pstack-panel--block text))
               (id (+agent-shell-pstack-panel--id (or session "") block))
               ((not (+agent-shell-pstack-panel--find id))))
-    (let ((panel (condition-case err (+agent-shell-pstack-panel--parse block)
+    (let ((panel (condition-case err
+                     (let ((panel (+agent-shell-pstack-panel--parse
+                                   block (+agent-shell-pstack-panel--lead-agent
+                                          lead))))
+                       (when (+agent-shell-pstack-panel--arena-p panel)
+                         (user-error "Arena panels are not available yet"))
+                       panel)
                    (user-error
                     (+agent-shell-pstack-panel--make
                      :rejection (error-message-string err))))))
@@ -701,7 +853,8 @@ message with a pstack-panel block.\n"))
         (mapconcat
          (lambda (panel)
            (concat
-            (format "pstack panel %s (%s%s)" (+agent-shell-pstack-panel-id panel)
+            (format "pstack panel %s (%s%s)"
+                    (+agent-shell-pstack-panel-id panel)
                     (+agent-shell-pstack-panel-shape panel)
                     (let ((phase (+agent-shell-pstack-panel-phase panel)))
                       (if (eq phase 'running) "" (format ", %s" phase))))

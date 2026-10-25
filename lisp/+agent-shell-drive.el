@@ -99,6 +99,12 @@
               (mapcar (lambda (config) (map-elt config :identifier))
                       (+agent-shell-drive--configs))))
 
+(defun +agent-shell-drive-sandbox-agents ()
+  "Return configured agent identifiers in `+agent-shell-sandbox-agents'."
+  (seq-filter (lambda (id) (alist-get id +agent-shell-sandbox-agents))
+              (mapcar (lambda (config) (map-elt config :identifier))
+                      (+agent-shell-drive--configs))))
+
 (defun +agent-shell-drive--answer (permission allow)
   "Approve PERMISSION once when ALLOW, otherwise reject it.
 Return nil, leaving the dialog to the user, only when no option fits."

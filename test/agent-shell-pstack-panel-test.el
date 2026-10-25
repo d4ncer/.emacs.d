@@ -31,9 +31,16 @@ of shell to partial text), and the functions `lead-event' and
           (sent nil) (started nil) (interrupted nil) (send-ok t)
           (partials nil)
           (start-error nil)
+          (+agent-shell-drive-read-only-modes
+           '((claude-code . "plan") (codex . "read-only")))
+          (+agent-shell-sandbox-agents
+           '((claude-code :mode "bypassPermissions")
+             (codex :mode "agent-full-access")))
           (lead (generate-new-buffer " *lead*")))
-     (cl-letf (((symbol-function '+agent-shell-drive-read-only-agents)
-                (lambda () '(codex claude-code)))
+     (cl-letf (((symbol-function '+agent-shell-drive--configs)
+                (lambda () '(((:identifier . codex))
+                             ((:identifier . claude-code))
+                             ((:identifier . gemini)))))
                ((symbol-function 'agent-shell-cwd) (lambda () cwd))
                ((symbol-function '+agent-shell-drive-watch)
                 (lambda (_shell owner id function)
@@ -188,8 +195,8 @@ The block is not valid JSON" (cdar sent)))
              ("[1]" "JSON object")
              (,(format "{\"version\":2,\"shape\":\"how\",\"brief\":\"b\",\
 \"members\":[%s]}" member) "Version must be 1")
-             (,(format "{\"version\":1,\"shape\":\"arena\",\"brief\":\"b\",\
-\"members\":[%s]}" member) "shapes: how, interrogate")
+             (,(format "{\"version\":1,\"shape\":\"bakeoff\",\"brief\":\"b\",\
+\"members\":[%s]}" member) "shapes: how, interrogate, arena")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\" \",\
 \"members\":[%s]}" member) "Brief")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
@@ -677,6 +684,132 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
       (member-event "a" :kind 'init-finished)
       (member-event "a" :kind 'turn-complete :text "Still works")
       (should (string-match-p "Still works" (cdar sent))))))
+
+(defun +agent-shell-pstack-panel-test--arena (&rest fields)
+  "Return an arena request with FIELDS, an alist overriding the defaults."
+  (json-serialize
+   (append fields
+           (seq-remove
+            (lambda (entry) (assq (car entry) fields))
+            `((version . 1) (shape . "arena") (brief . "Add a cache.")
+              (rubric . ["RUBRIC-ONE correctness" "RUBRIC-TWO simplicity"
+                         "RUBRIC-THREE tests"])
+              (timeout . 60)
+              (members . [((role . "opus") (agent . "claude-code"))
+                          ((role . "codex") (agent . "codex")
+                           (focus . "Prefer an LRU"))]))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-request ()
+  "Parse an arena into pending candidates and a pending judge."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((panel (+agent-shell-pstack-panel--parse
+                   (+agent-shell-pstack-panel-test--arena) 'codex))
+           (members (+agent-shell-pstack-panel-members panel)))
+      (should (eq 'preparing (+agent-shell-pstack-panel-phase panel)))
+      (should (equal '("RUBRIC-ONE correctness" "RUBRIC-TWO simplicity"
+                       "RUBRIC-THREE tests")
+                     (+agent-shell-pstack-panel-rubric panel)))
+      (should (= 60 (+agent-shell-pstack-panel-timeout panel)))
+      (should (= 900 (+agent-shell-pstack-panel-judge-timeout panel)))
+      (should (equal '(("opus" claude-code candidate pending nil)
+                       ("codex" codex candidate pending "Prefer an LRU")
+                       ("judge" claude-code judge pending nil))
+                     (mapcar (lambda (member)
+                               (list (+agent-shell-pstack-panel-member-role
+                                      member)
+                                     (+agent-shell-pstack-panel-member-agent
+                                      member)
+                                     (+agent-shell-pstack-panel-member-kind
+                                      member)
+                                     (+agent-shell-pstack-panel-member-state
+                                      member)
+                                     (+agent-shell-pstack-panel-member-focus
+                                      member)))
+                             members))))
+    (let ((judge (lambda (panel)
+                   (+agent-shell-pstack-panel-member-agent
+                    (car (last (+agent-shell-pstack-panel-members panel)))))))
+      (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
+                                         (+agent-shell-pstack-panel-test--arena)
+                                         'claude-code))))
+      (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
+                                         (+agent-shell-pstack-panel-test--arena)
+                                         nil))))
+      (let ((panel (+agent-shell-pstack-panel--parse
+                    (+agent-shell-pstack-panel-test--arena
+                     '(judge . ((agent . "codex"))) '(judge_timeout . 120))
+                    'codex)))
+        (should (eq 'codex (funcall judge panel)))
+        (should (= 120 (+agent-shell-pstack-panel-judge-timeout panel)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-validation ()
+  "Explain each arena rejection so the lead can correct its request."
+  (+agent-shell-pstack-panel-test--with
+    (pcase-dolist
+        (`(,field ,reason)
+         `(((rubric . ["a" "b"]) "Rubric must list 3 to 6 non-empty strings")
+           ((rubric . ["a" "b" "c" "d" "e" "f" "g"]) "Rubric must list 3 to 6")
+           ((rubric . ["a" "b" 3]) "Rubric must list 3 to 6")
+           ((rubric . ["a" "b" " "]) "Rubric must list 3 to 6")
+           ((members . [((role . "a") (agent . "gemini"))])
+            "Member a has agent \"gemini\"; available agents: codex, \
+claude-code")
+           ((members . [((role . "judge") (agent . "codex"))])
+            "Role judge is reserved")
+           ((members . [((role . "-a") (agent . "codex"))])
+            "Member role \"-a\" must be lowercase")
+           ((judge . ((agent . "gemini"))) "Judge must be an object whose \
+agent is read-only; available agents: codex, claude-code")
+           ((judge . "codex") "Judge must be an object")
+           ((judge_timeout . 0) "Judge timeout must be a whole number of \
+seconds from 1 to 3600")
+           ((timeout . 4000) "Timeout must be")))
+      (let ((sent-before (length sent)))
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-panel-test--message
+                           (+agent-shell-pstack-panel-test--arena field)))
+        (should (= (1+ sent-before) (length sent)))
+        (should (string-prefix-p
+                 (concat "Emacs rejected your pstack-panel request: " reason)
+                 (cdar sent)))))
+    (let ((system-type 'gnu/linux))
+      (lead-event :kind 'turn-complete :session "s2"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena)))
+      (should (string-prefix-p "Emacs rejected your pstack-panel request: \
+Arena panels need macOS, whose sandbox-exec confines the candidates; this \
+Emacs runs on gnu/linux" (cdar sent))))
+    (let ((+agent-shell-sandbox-agents nil))
+      (lead-event :kind 'turn-complete :session "s3"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena)))
+      (should (string-match-p "available agents: none" (cdar sent))))
+    (should-not started)))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-protocol ()
+  "Describe arenas only where candidates can run sandboxed."
+  (+agent-shell-pstack-panel-test--with
+    (let ((protocol (+agent-shell-pstack-panel--protocol)))
+      (should (string-match-p "calls for a how, interrogate or arena panel"
+                              protocol))
+      (should (string-match-p "^Shapes: how (.*); interrogate (.*); arena \
+(candidates each implement" protocol))
+      (should (string-match-p "Candidate agents: codex, claude-code\\."
+                              protocol))
+      (should (string-match-p "\"rubric\", 3 to 6 criteria that only the judge \
+sees" protocol))
+      (should (string-match-p "\"judge_timeout\", 900 seconds" protocol))
+      (should (string-match-p "^Request how, interrogate and arena panels"
+                              (+agent-shell-pstack-panel--reminder))))
+    (dolist (binding '((system-type . gnu/linux)
+                       (+agent-shell-sandbox-agents . nil)))
+      (cl-progv (list (car binding)) (list (cdr binding))
+        (let ((protocol (+agent-shell-pstack-panel--protocol)))
+          (should (string-match-p "calls for a how or interrogate panel"
+                                  protocol))
+          (should-not (string-match-p "arena\\|rubric" protocol))
+          (should (string-match-p "^Request how and interrogate panels"
+                                  (+agent-shell-pstack-panel--reminder))))))))
 
 (provide 'agent-shell-pstack-panel-test)
 ;;; agent-shell-pstack-panel-test.el ends here
