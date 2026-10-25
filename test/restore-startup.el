@@ -6,6 +6,7 @@
 ;;; Code:
 
 (defvar +private-config-directory nil)
+(defvar +site-lisp-directory nil)
 (setq use-package-expand-minimally t)
 (advice-add 'exec-path-from-shell-initialize :override #'ignore)
 (advice-add 'keychain-refresh-environment :override #'ignore)
