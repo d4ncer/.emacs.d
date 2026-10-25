@@ -45,6 +45,7 @@
    "-l" "agent-shell-projects-lifecycle-test" "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
+   "-l" "agent-shell-sandbox-test"
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-arena-git-test"
    "-l" "config-compile-local-test"
    "-f" "ert-run-tests-batch-and-exit")
