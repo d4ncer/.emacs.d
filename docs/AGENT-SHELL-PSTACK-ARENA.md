@@ -378,9 +378,13 @@ In a scratch repository, a commit referenced only by
 | `git log --all` | lists it, so "all refs" views show candidate results until cleanup |
 | Delete the ref, then gc | removed, which confirms cleanup frees it |
 
-This user has `commit.gpgSign` set globally. A plain `git commit-tree`
-therefore tried to sign and failed. Snapshot commits pass `--no-gpg-sign`,
-so capture never needs the user's signing key.
+This user has `commit.gpgSign` set globally. That made the scratch repo's
+first `git commit` try to sign and fail. `git commit-tree` itself did not
+sign, even with `commit.gpgSign=true` set globally and locally. The git
+library's tests confirmed this on git 2.56: its output had no `gpgsig`
+header. Snapshot commits still pass `--no-gpg-sign` as a guard, and set a
+fixed author and committer, so capture needs neither the user's identity
+nor their signing key.
 
 ## Remaining experiments
 
