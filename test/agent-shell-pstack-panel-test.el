@@ -577,5 +577,106 @@ mouse-1: show panels" id)
       (should-not (member +agent-shell-pstack-panel--mode-line-construct
                           mode-line-misc-info)))))
 
+(defconst +agent-shell-pstack-panel-test--one
+  "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
+\"members\":[{\"role\":\"a\",\"agent\":\"codex\"}]}"
+  "A valid one-member how request.")
+
+(ert-deftest +agent-shell-pstack-panel-test-stop-reasons ()
+  "Settle a turn that ended without a report as an error with its reason."
+  (pcase-dolist (`(,reason ,state)
+                 '(("end_turn" done) (nil done) ("cancelled" error)
+                   ("refusal" error) ("max_tokens" error)
+                   ("max_turn_requests" error)))
+    (+agent-shell-pstack-panel-test--with
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--one))
+      (member-event "a" :kind 'init-finished)
+      (member-event "a" :kind 'turn-complete :text "Half a report"
+                    :stop-reason reason)
+      (let ((followup (car (+agent-shell-pstack-panel-test--followups
+                            sent lead))))
+        (should (string-match-p (format "## a (codex): %s\n" state) followup))
+        (if (eq state 'done)
+            (should-not (string-match-p "stop reason" followup))
+          (should (string-match-p
+                   (format "The turn ended with stop reason %s\\.\n\
+Partial text:\n\nHalf a report" reason)
+                   followup)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-error-event ()
+  "Settle a member on an error event only while its brief is running."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--how))
+    (member-event "data-flow" :kind 'error :message "Bootstrapping failed")
+    (member-event "data-flow" :kind 'init-finished)
+    (member-event "risks" :kind 'init-finished)
+    (member-event "risks" :kind 'turn-complete :text "B")
+    (let ((member (+agent-shell-pstack-panel--member
+                   (car (+agent-shell-pstack-panel-list)) "data-flow")))
+      (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+      (should-not (+agent-shell-pstack-panel-test--followups sent lead))
+      (push (cons (+agent-shell-pstack-panel-member-shell member) "So far")
+            partials)
+      (member-event "data-flow" :kind 'error :message "Prompt failed")
+      (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+      (member-event "data-flow" :kind 'error :message "Second failure")
+      (let ((followups (+agent-shell-pstack-panel-test--followups sent lead)))
+        (should (= 1 (length followups)))
+        (should (string-match-p "## data-flow (codex): error\nReport: .*\n\
+The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
+                                (car followups)))
+        (should-not (string-match-p "Second failure" (car followups)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-expiry-in-phase ()
+  "Expire only the phase that armed the timer."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--one))
+    (let* ((panel (car (+agent-shell-pstack-panel-list)))
+           (id (+agent-shell-pstack-panel-id panel)))
+      (+agent-shell-pstack-panel--expire id 'judging)
+      (should (eq 'starting (+agent-shell-pstack-panel-member-state
+                             (car (+agent-shell-pstack-panel-members panel)))))
+      (+agent-shell-pstack-panel--expire id 'running)
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (eq 'timeout (+agent-shell-pstack-panel-member-state
+                            (car (+agent-shell-pstack-panel-members panel))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-schema-guard ()
+  "Drop panels from an older struct layout when the file loads again."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--one))
+    (let ((current (car (+agent-shell-pstack-panel-list)))
+          (messages nil))
+      (puthash "old" (record '+agent-shell-pstack-panel "old" 'how "b" 900)
+               +agent-shell-pstack-panel--panels)
+      (puthash "older"
+               (let ((panel (copy-sequence current)))
+                 (setf (+agent-shell-pstack-panel-schema panel) 1)
+                 panel)
+               +agent-shell-pstack-panel--panels)
+      (cl-letf (((symbol-function 'message)
+                 (lambda (format &rest args)
+                   (push (apply #'format-message format args) messages))))
+        (load (locate-library "+agent-shell-pstack-panel.el") nil t t))
+      (should (equal (list current) (+agent-shell-pstack-panel-list)))
+      (should (string-prefix-p "Dropped 2 pstack panels" (car messages)))
+      (setq messages nil)
+      (cl-letf (((symbol-function 'message)
+                 (lambda (format &rest args)
+                   (push (apply #'format-message format args) messages))))
+        (load (locate-library "+agent-shell-pstack-panel.el") nil t t))
+      (should-not messages)
+      (member-event "a" :kind 'init-finished)
+      (member-event "a" :kind 'turn-complete :text "Still works")
+      (should (string-match-p "Still works" (cdar sent))))))
+
 (provide 'agent-shell-pstack-panel-test)
 ;;; agent-shell-pstack-panel-test.el ends here

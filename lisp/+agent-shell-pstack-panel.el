@@ -74,29 +74,61 @@ Each value is a plist: :summary describes the shape to the lead, :contract
 ends each member's prompt, and :triage ends the follow-up to the lead."
   :type '(alist :key-type symbol :value-type plist))
 
+(defconst +agent-shell-pstack-panel--schema 2
+  "Layout of the panel and member structs.
+Slots are only appended.  Bump this whenever either struct gains one.")
+
 (cl-defstruct (+agent-shell-pstack-panel (:constructor nil)
                                          (:constructor
                                           +agent-shell-pstack-panel--make)
                                          (:copier nil))
-  "A panel request and its progress."
+  "A panel request and its progress.
+PHASE moves through the shape's phases and ends at `finished'; see
+`+agent-shell-pstack-panel--advance'."
   id shape brief timeout lead cwd members timer rejection followup delivered
-  interrupted (created (float-time)))
+  interrupted (created (float-time))
+  (schema +agent-shell-pstack-panel--schema) (phase 'running))
 
 (cl-defstruct (+agent-shell-pstack-panel-member
                (:constructor nil)
                (:constructor +agent-shell-pstack-panel--make-member)
                (:copier nil))
   "One panel member.
-STATE moves from `starting' (shell initializing) to `waiting' (initialized,
-brief unsent) to `running' (brief sent), then settles once as `done',
-`error' or `timeout'."
-  role agent focus shell (state 'starting) text error report)
+STATE starts at `pending' (waiting for its phase) or `starting' (shell
+initializing), moves to `waiting' (initialized, brief unsent) and `running'
+(brief sent), then settles once as `done', `error' or `timeout'.  KIND
+says which phase runs the member."
+  role agent focus shell (state 'starting) text error report (kind 'member))
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
 
+(defun +agent-shell-pstack-panel--current-p (panel)
+  "Return whether PANEL was made with the current struct schema."
+  (eql (ignore-errors (+agent-shell-pstack-panel-schema panel))
+       +agent-shell-pstack-panel--schema))
+
+;; A reload that changed a struct would break every older record in place.
+(let ((stale (seq-remove #'+agent-shell-pstack-panel--current-p
+                         (hash-table-values +agent-shell-pstack-panel--panels))))
+  (when stale
+    (dolist (id (hash-table-keys +agent-shell-pstack-panel--panels))
+      (unless (+agent-shell-pstack-panel--current-p
+               (gethash id +agent-shell-pstack-panel--panels))
+        (remhash id +agent-shell-pstack-panel--panels)))
+    (message "Dropped %d pstack panel%s made before the panel code changed; \
+kill their member shells by hand" (length stale) (if (cdr stale) "s" ""))))
+
 (defconst +agent-shell-pstack-panel--settled '(done error timeout)
   "Member states that end a member.")
+
+(defconst +agent-shell-pstack-panel--phase-kinds '((running . member))
+  "The kind of member each phase runs.
+Expiry and abandonment reach only the current phase's members.")
+
+(defconst +agent-shell-pstack-panel--failed-stops
+  '("cancelled" "refusal" "max_tokens" "max_turn_requests")
+  "Stop reasons that end a member's turn without a report.")
 
 (defvar-local +agent-shell-pstack-panel--mode-line nil
   "Mode-line text for this lead's running panels, or nil.")
@@ -350,18 +382,50 @@ started.  To retry, end a message with a corrected pstack-panel block."
                           (eq lead (+agent-shell-pstack-panel-lead panel)))
                         (+agent-shell-pstack-panel-list))))
 
+(defun +agent-shell-pstack-panel--disarm (panel)
+  "Cancel PANEL's timer."
+  (when-let* ((timer (+agent-shell-pstack-panel-timer panel)))
+    (cancel-timer timer))
+  (setf (+agent-shell-pstack-panel-timer panel) nil))
+
+(defun +agent-shell-pstack-panel--arm (panel seconds)
+  "Expire PANEL's current phase after SECONDS."
+  (+agent-shell-pstack-panel--disarm panel)
+  (setf (+agent-shell-pstack-panel-timer panel)
+        (run-at-time seconds nil #'+agent-shell-pstack-panel--expire
+                     (+agent-shell-pstack-panel-id panel)
+                     (+agent-shell-pstack-panel-phase panel))))
+
 (defun +agent-shell-pstack-panel--finish (panel)
-  "Compose PANEL's follow-up once every member has settled, then deliver it."
-  (when (and (not (+agent-shell-pstack-panel-followup panel))
-             (seq-every-p #'+agent-shell-pstack-panel--settled-p
-                          (+agent-shell-pstack-panel-members panel)))
-    (when-let* ((timer (+agent-shell-pstack-panel-timer panel)))
-      (cancel-timer timer))
-    (setf (+agent-shell-pstack-panel-timer panel) nil
+  "End PANEL, compose its follow-up and deliver it, once."
+  (unless (eq (+agent-shell-pstack-panel-phase panel) 'finished)
+    (+agent-shell-pstack-panel--disarm panel)
+    (setf (+agent-shell-pstack-panel-phase panel) 'finished
           (+agent-shell-pstack-panel-followup panel)
           (+agent-shell-pstack-panel-followup-text panel))
     (+agent-shell-pstack-panel--deliver-to
      (+agent-shell-pstack-panel-lead panel))))
+
+(defun +agent-shell-pstack-panel--kind-members (panel kind)
+  "Return PANEL's members of KIND."
+  (seq-filter (lambda (member)
+                (eq kind (+agent-shell-pstack-panel-member-kind member)))
+              (+agent-shell-pstack-panel-members panel)))
+
+(defun +agent-shell-pstack-panel--phase-members (panel)
+  "Return the members PANEL's current phase runs."
+  (when-let* ((kind (alist-get (+agent-shell-pstack-panel-phase panel)
+                               +agent-shell-pstack-panel--phase-kinds)))
+    (+agent-shell-pstack-panel--kind-members panel kind)))
+
+(defun +agent-shell-pstack-panel--advance (panel)
+  "Move PANEL on from its phase once that phase is over.
+Safe to call after any change: a phase that is not over stays."
+  (pcase (+agent-shell-pstack-panel-phase panel)
+    ('running
+     (when (seq-every-p #'+agent-shell-pstack-panel--settled-p
+                        (+agent-shell-pstack-panel-members panel))
+       (+agent-shell-pstack-panel--finish panel)))))
 
 (defun +agent-shell-pstack-panel--write (panel member)
   "Write MEMBER's text as its report under PANEL's directory."
@@ -386,7 +450,7 @@ started.  To retry, end a message with a corrected pstack-panel block."
     (+agent-shell-pstack-panel--write panel member)
     (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
       (run-at-time 0 nil #'+agent-shell-drive-kill shell))
-    (+agent-shell-pstack-panel--finish panel)))
+    (+agent-shell-pstack-panel--advance panel)))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
   "Send MEMBER of PANEL its brief once it is waiting for one."
@@ -418,8 +482,21 @@ Prefer a rejected plan when it is longer than the final text."
       ('prompt-ready (+agent-shell-pstack-panel--send-brief panel member))
       ('turn-complete
        (when (eq (+agent-shell-pstack-panel-member-state member) 'running)
+         (let ((text (+agent-shell-pstack-panel--report-text event))
+               (reason (plist-get event :stop-reason)))
+           (if (member reason +agent-shell-pstack-panel--failed-stops)
+               (+agent-shell-pstack-panel--settle
+                panel member 'error text
+                (format "The turn ended with stop reason %s." reason))
+             (+agent-shell-pstack-panel--settle panel member 'done text)))))
+      ('error
+       (when (eq (+agent-shell-pstack-panel-member-state member) 'running)
          (+agent-shell-pstack-panel--settle
-          panel member 'done (+agent-shell-pstack-panel--report-text event))))
+          panel member 'error
+          (+agent-shell-drive-partial-text
+           (+agent-shell-pstack-panel-member-shell member))
+          (format "The agent reported an error: %s"
+                  (or (plist-get event :message) "no message")))))
       ('clean-up
        (+agent-shell-pstack-panel--settle
         panel member 'error nil
@@ -427,17 +504,23 @@ Prefer a rejected plan when it is longer than the final text."
             "The member's shell ended before it reported."))))
     (+agent-shell-pstack-panels--refresh)))
 
-(defun +agent-shell-pstack-panel--expire (id)
-  "Settle every unfinished member of panel ID as timed out."
-  (when-let* ((panel (+agent-shell-pstack-panel--find id)))
+(defun +agent-shell-pstack-panel--phase-timeout (panel)
+  "Return the seconds PANEL's current phase may run."
+  (+agent-shell-pstack-panel-timeout panel))
+
+(defun +agent-shell-pstack-panel--expire (id phase)
+  "Settle the unfinished members of panel ID's PHASE as timed out.
+Do nothing once the panel has left PHASE."
+  (when-let* ((panel (+agent-shell-pstack-panel--find id))
+              ((eq phase (+agent-shell-pstack-panel-phase panel))))
     (setf (+agent-shell-pstack-panel-timer panel) nil)
-    (dolist (member (+agent-shell-pstack-panel-members panel))
+    (dolist (member (+agent-shell-pstack-panel--phase-members panel))
       (+agent-shell-pstack-panel--settle
        panel member 'timeout
        (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
          (+agent-shell-drive-partial-text shell))
        (format "No report within the %d-second timeout."
-               (+agent-shell-pstack-panel-timeout panel))))
+               (+agent-shell-pstack-panel--phase-timeout panel))))
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)
@@ -474,25 +557,30 @@ Return the panel, or nil when TEXT requests none or one already seen."
       (when tool
         (setf (+agent-shell-pstack-panel-interrupted panel) tool)
         (+agent-shell-drive-interrupt lead))
-      (unless (+agent-shell-pstack-panel-rejection panel)
+      (if (+agent-shell-pstack-panel-rejection panel)
+          (+agent-shell-pstack-panel--finish panel)
         (setf (+agent-shell-pstack-panel-cwd panel)
-              (with-current-buffer lead (agent-shell-cwd))
-              (+agent-shell-pstack-panel-timer panel)
-              (run-at-time (+agent-shell-pstack-panel-timeout panel) nil
-                           #'+agent-shell-pstack-panel--expire id))
+              (with-current-buffer lead (agent-shell-cwd)))
+        (+agent-shell-pstack-panel--arm
+         panel (+agent-shell-pstack-panel--phase-timeout panel))
         (dolist (member (+agent-shell-pstack-panel-members panel))
-          (+agent-shell-pstack-panel--start-member panel member)))
-      (+agent-shell-pstack-panel--finish panel)
+          (+agent-shell-pstack-panel--start-member panel member))
+        (+agent-shell-pstack-panel--advance panel))
       (+agent-shell-pstack-panels--refresh)
       panel)))
 
 (defun +agent-shell-pstack-panel--abandon (lead)
-  "Stop the unfinished panels of LEAD, whose shell has ended."
+  "Stop the unfinished panels of LEAD, whose shell has ended.
+Settle the current phase's members and every pending member, which can
+no longer start."
   (dolist (panel (+agent-shell-pstack-panel-list))
     (when (eq lead (+agent-shell-pstack-panel-lead panel))
       (dolist (member (+agent-shell-pstack-panel-members panel))
-        (+agent-shell-pstack-panel--settle panel member 'error nil
-                                           "The lead's shell ended."))))
+        (when (or (memq member (+agent-shell-pstack-panel--phase-members
+                                panel))
+                  (eq 'pending (+agent-shell-pstack-panel-member-state member)))
+          (+agent-shell-pstack-panel--settle panel member 'error nil
+                                             "The lead's shell ended.")))))
   (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--lead-event (event)
@@ -537,7 +625,7 @@ Return the panel, or nil when TEXT requests none or one already seen."
   (cond ((+agent-shell-pstack-panel-rejection panel) "rejected")
         ((+agent-shell-pstack-panel-delivered panel) "delivered")
         ((+agent-shell-pstack-panel-followup panel) "waiting for the lead")
-        (t "running")))
+        (t (symbol-name (+agent-shell-pstack-panel-phase panel)))))
 
 (defun +agent-shell-pstack-panels--line (target &rest parts)
   "Insert PARTS as one line that visits TARGET."
@@ -613,8 +701,10 @@ message with a pstack-panel block.\n"))
         (mapconcat
          (lambda (panel)
            (concat
-            (format "pstack panel %s (%s)" (+agent-shell-pstack-panel-id panel)
-                    (+agent-shell-pstack-panel-shape panel))
+            (format "pstack panel %s (%s%s)" (+agent-shell-pstack-panel-id panel)
+                    (+agent-shell-pstack-panel-shape panel)
+                    (let ((phase (+agent-shell-pstack-panel-phase panel)))
+                      (if (eq phase 'running) "" (format ", %s" phase))))
             (mapconcat
              (lambda (member)
                (format "\n  %s  %s  %s"
