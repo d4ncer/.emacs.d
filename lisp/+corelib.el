@@ -295,21 +295,6 @@ If FETCHER is a function, ELT is used as the key in LIST (an alist)."
                         elt)
                      ,list)))
 
-(defun +partition-by (pred sequence)
-  "Partition SEQUENCE by applying PRED to each element.
-Elements are partitioned according to whether the result is truthy or
-nil.
-
-Return a cons cell, where the CAR is the truthy partition and the CDR is
-the falsey partition."
-  (let (truthy falsey)
-    (seq-do (lambda (it)
-              (push it (if (funcall pred it)
-                           truthy
-                         falsey)))
-            sequence)
-    (cons truthy falsey)))
-
 (defmacro alist-set! (alist key value)
   `(setf (alist-get ,key ,alist nil nil #'equal) ,value))
 

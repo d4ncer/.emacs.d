@@ -147,8 +147,6 @@ mode that installs and removes its advice. See [dependency management](DEPENDENC
 for upstream removal criteria.
 
 Other `lisp/+*.el` files are small editing, theme, window, Org, or UI helpers.
-The old `lisp/rk-*` directories are historical helpers and are not added by
-bootstrap or loaded by active modules.
 
 ## Verification
 
