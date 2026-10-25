@@ -62,22 +62,9 @@
              :wk "edit templates...")
 
 
-   "'" (general-predicate-dispatch #'poporg-dwim
-
-         ;; Exit indirect edit session if active
-
-         (bound-and-true-p poporg-mode) #'poporg-edit-exit
-         (bound-and-true-p edit-indirect--overlay) #'edit-indirect-commit
+   "'" (general-predicate-dispatch
+           (lambda () (interactive) (user-error "Nothing to edit indirectly here"))
          (bound-and-true-p org-src-mode) #'org-edit-src-exit
-
-         ;; Otherwise, open indirect-edit buffer
-
-         (and (derived-mode-p 'prog-mode)
-              ;; Are we in a string or comment? See: `parse-partial-sexp'
-              (or (nth 3 (syntax-ppss)) (nth 4 (syntax-ppss))))
-         #'poporg-dwim
-
-         (and (derived-mode-p 'prog-mode) (region-active-p)) #'edit-indirect-region
          (equal (buffer-name) "*Edit Formulas*") #'org-table-fedit-finish
          (derived-mode-p 'org-mode) #'org-edit-special
          (and (derived-mode-p 'markdown-mode)
@@ -219,7 +206,7 @@
    "c"  '(nil :wk "code/comments")
    "cm" '(xref-find-references :wk "find refs")
    "cr" '(comment-dwim :wk "comment (dwim)")
-   "cd" '(eglot-find-typeDefinition :wk "find type def")
+   "cd" '(eglot-find-type-definition :wk "find type def")
    "cc" '(eglot-find-declaration :wk "find decl")
    "ci" '(eglot-find-implementation :wk "find impl")
    "cl" '(comment-line :wk "comment out")
@@ -247,7 +234,7 @@
    "gS" (list (defun +goto-emacs-site-file ()
                 (interactive)
                 (find-file
-                 (read-file-name "Site file: " +site-files-directory)))
+                 (read-file-name "Site file: " +site-lisp-directory)))
               :wk "site file...")
 
    "gn" (list (defun +goto-nix-file ()
@@ -287,7 +274,6 @@
               :wk "search (org)")
    "ov" '(org-tags-view :wk "search by tag")
    "ow" '(+life/workflows :wk "workflows")
-   "oW" '(timekeep-visit-node :wk "work file")
    "oo" '(+life/oracle :wk "oracle")
    "oA" '(+life/agenda-person :wk "agenda (person)")
    "oC" '(+life/invalidate-agenda-cache :wk "clear agenda cache")
@@ -366,7 +352,6 @@
    "tb" '(breadcrumb-mode :wk "breadcrumbs (header)")
    "th" '(global-hl-line-mode :wk "highlight line")
    "tf" '(toggle-frame-maximized :wk "frame")
-   "ti" '(indent-bars-mode :wk "indent bars")
    "tl" '(global-display-line-numbers-mode :wk "line numbers")
    "tm" '(toggle-input-method :wk "input method")
    "ts" '(spell-fu-mode :wk "spellchecks")
