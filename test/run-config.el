@@ -51,6 +51,8 @@
    "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Native syntax configuration" "-l" "config-treesit-test"
                          "-f" "ert-run-tests-batch-and-exit")
+  (+config-check-process "Every module and the theme" "-l" "config-modules-test"
+                         "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "First input and file activation" "-l" "config-startup-test")
   (+config-check-process "Headless capture" "-l" "config-headless-test")
   (+config-check-process "File finder loading" "-l" "project-files-startup-test")
