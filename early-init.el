@@ -131,8 +131,10 @@
 
 (set-language-environment "UTF-8")
 
-;; Banish the customisation interface to the shadow realm.
-(setq custom-file (make-temp-file "emacs-custom-"))
+;; Keep Customize's saves, such as permanently safe dir-local values, in one
+;; ignored file.  Loading it before the modules lets their settings win.
+(setq custom-file (expand-file-name "var/custom.el" user-emacs-directory))
+(load custom-file t t)
 
 ;; Local Variables:
 ;; no-native-compile: t
