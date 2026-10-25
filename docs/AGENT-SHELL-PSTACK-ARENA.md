@@ -253,9 +253,68 @@ commit. Cleanup then deletes the private directories and the
 manifest's commit is left alone and reported. Nothing is removed
 automatically, because grafting can take days.
 
-## Experiments before implementation
+## Experiment 1 results
 
-1. **Agents under the profile.**
+Run on 2026-10-25 with `claude-agent-acp` 0.81.2 and `codex-acp` 2.1.1.
+Each agent started from a sandboxed copy of its live agent-shell config,
+under `sandbox-exec` with a profile shaped like the one above. The profile
+denied writes outside the root, the private config folder and the private
+`TMPDIR`. It denied reads of `~/.emacs.d`, `~/.claude` and `~/.codex`, and
+every unix socket except `mDNSResponder`. Each agent then ran six probe
+commands, one per tool call, and the results were checked on disk.
+
+**Codex in `agent-full-access` passes.** It authenticated from a copied
+`auth.json` in a private `CODEX_HOME` and completed the turn.
+
+| Probe | Result |
+|---|---|
+| Write a file in the root | written, and present on disk |
+| Write a file outside the root | `operation not permitted`, and absent on disk |
+| Read `~/.emacs.d/AGENTS.md` | `Operation not permitted` |
+| List `~/.claude` | `Operation not permitted` |
+| `emacsclient` to the live server socket | `Operation not permitted` |
+| HTTPS to example.com | `200` |
+
+The `emacsclient` row comes from rerunning the command against the real
+socket path under the same profile. Inside the agent, the private `TMPDIR`
+meant `emacsclient` never found the socket, so it never tried to connect.
+
+**Claude Code in `bypassPermissions` cannot authenticate yet.** The session
+started and reported the mode, but every prompt failed. Your live
+credentials are in the Keychain item `Claude Code-credentials`.
+`~/.claude/.credentials.json` is a stale copy from Aug 5.
+
+- With `CLAUDE_CONFIG_DIR` pointing at a private folder holding that copy,
+  the prompt failed: "OAuth session expired and could not be refreshed".
+- With `HOME` pointing at a private folder, the prompt failed:
+  "Authentication required". Claude Code did not find the Keychain item.
+
+**What this changes in the design.**
+
+- **Claude candidates need their own credential.** The plan is a
+  long-lived `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, kept in a
+  Keychain item that Emacs reads and passes to each Claude candidate. A
+  token like that is never refreshed, so a candidate cannot rotate your
+  login away. Until such a token exists, Claude Code can be a judge, which
+  runs read-only and unsandboxed as today, but not a candidate.
+- **Codex token refreshes need a copy-back.** A candidate that refreshes
+  its token holds the newest refresh token. If refresh tokens rotate, that
+  would leave your real `~/.codex/auth.json` stale. No refresh happened in
+  this run: both files still recorded the Oct 18 refresh. When a candidate
+  ends, Emacs copies its `auth.json` back if the copy is newer and the real
+  file has not changed since it was copied.
+- **Candidates can read their own credentials.** The token or `auth.json`
+  sits inside the sandbox, and the network is open, so a hostile candidate
+  could send it out. That's the same exposure any agent session has today,
+  and v1 accepts it.
+- **agent-shell writes into the root.** It created `.agent-shell/`
+  (transcripts) inside each root. Candidates start with transcripts off,
+  and capture excludes `.agent-shell/` either way.
+
+## Remaining experiments
+
+1. **Agents under the profile.** Done for Codex. Waiting on a
+   setup-token for Claude Code; see Experiment 1 results.
    - Start `claude-agent-acp` with `bypassPermissions` and `codex-acp` with
      `agent-full-access`, each under the profile with a private config
      directory.
