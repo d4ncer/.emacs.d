@@ -285,6 +285,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   (:states '(normal motion) :keymaps '+agent-shell-pstack-panels-mode-map
    "RET" #'+agent-shell-pstack-panels-visit
    "<return>" #'+agent-shell-pstack-panels-visit
+   "x" #'+agent-shell-pstack-panels-clean
    "gr" #'revert-buffer
    "q" #'quit-window)
   :config

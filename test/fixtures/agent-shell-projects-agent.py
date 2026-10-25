@@ -97,6 +97,26 @@ def handle_pstack_prompt(message, text, state):
 
     A reply of False means the turn stays open."""
     session_id = message["params"]["sessionId"]
+    # A follow-up can quote member briefs, so recognise it first.
+    if "has finished:" in text and "pstack panel" in text:
+        return f"TRIAGED {text.count(chr(10) + '## ')}"
+    candidate = re.search(r"You are the (\S+) candidate of a pstack arena", text)
+    if candidate:
+        role = candidate[1]
+        Path(state["cwd"], role + ".txt").write_text(role + "\n")
+        rubric = "seen" if "RUBRIC-" in text else "unseen"
+        lead = "none"
+        if os.environ.get("PA_LEAD"):
+            try:
+                Path(os.environ["PA_LEAD"]).read_text()
+                lead = "readable"
+            except OSError:
+                lead = "denied"
+        return (f"RATIONALE role={role} mode={state['mode']} rubric={rubric}"
+                f" lead={lead}."
+                " Considered editing in place; rejected it for a new file.")
+    if "judge of a pstack arena" in text:
+        return "SCORES mode=" + state["mode"] + "\n" + text
     if "member of a pstack" in text:
         if "HANG" in text:
             chunk(session_id, "Partial before hang.")
@@ -125,8 +145,6 @@ def handle_pstack_prompt(message, text, state):
                        "status": "completed"},
         }})
         return f"REPORT cwd={state['cwd']} mode={state['mode']}"
-    if "has finished:" in text and "pstack panel" in text:
-        return f"TRIAGED {text.count(chr(10) + '## ')}"
     position = text.find("PSTACK-LEAD ")
     if position >= 0:
         request, _ = json.JSONDecoder().raw_decode(

@@ -526,10 +526,14 @@ still need it.\n\n" tool))
 
 (defun +agent-shell-pstack-panel--outcome-text (panel)
   "Return the part of PANEL's follow-up that reports its outcome."
-  (if-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
-      (format "Emacs rejected your pstack-panel request: %s\nNo panel \
+  (cond
+   ((+agent-shell-pstack-panel-rejection panel)
+    (format "Emacs rejected your pstack-panel request: %s\nNo panel \
 started.  To retry, end a message with a corrected pstack-panel block."
-              rejection)
+            (+agent-shell-pstack-panel-rejection panel)))
+   ((+agent-shell-pstack-panel--arena-p panel)
+    (+agent-shell-pstack-panel--arena-text panel))
+   (t
     (let ((members (+agent-shell-pstack-panel-members panel)))
       (concat
        (format "pstack panel %s (%s) has finished: %s.\n"
@@ -541,23 +545,87 @@ started.  To retry, end a message with a corrected pstack-panel block."
                                             :key #'+agent-shell-pstack-panel-member-state)
                           state))
                 +agent-shell-pstack-panel--settled ", "))
-       (mapconcat
-        (lambda (member)
-          (let ((state (+agent-shell-pstack-panel-member-state member))
-                (text (+agent-shell-pstack-panel-member-text member))
-                (report (+agent-shell-pstack-panel-member-report member))
-                (error (+agent-shell-pstack-panel-member-error member)))
-            (concat
-             (format "\n## %s (%s): %s\n"
-                     (+agent-shell-pstack-panel-member-role member)
-                     (+agent-shell-pstack-panel-member-agent member) state)
-             (when report (format "Report: %s\n" report))
-             (when error (format "%s\n" error))
-             (when (and text (not (string-blank-p text)))
-               (concat (unless (eq state 'done) "Partial text:\n")
-                       "\n" (string-trim text) "\n")))))
-        members "")
-       "\n" (+agent-shell-pstack-panel--shape panel :triage)))))
+       (mapconcat #'+agent-shell-pstack-panel--member-text members "")
+       "\n" (+agent-shell-pstack-panel--shape panel :triage))))))
+
+(defun +agent-shell-pstack-panel--member-text (member)
+  "Return MEMBER's section of a follow-up: its state, report and text."
+  (let ((state (+agent-shell-pstack-panel-member-state member))
+        (text (+agent-shell-pstack-panel-member-text member))
+        (report (+agent-shell-pstack-panel-member-report member))
+        (error (+agent-shell-pstack-panel-member-error member)))
+    (concat
+     (format "\n## %s (%s): %s\n"
+             (+agent-shell-pstack-panel-member-role member)
+             (+agent-shell-pstack-panel-member-agent member) state)
+     (when report (format "Report: %s\n" report))
+     (when error (format "%s\n" error))
+     (when (and text (not (string-blank-p text)))
+       (concat (unless (eq state 'done) "Partial text:\n")
+               "\n" (string-trim text) "\n")))))
+
+(defun +agent-shell-pstack-panel--candidate-text (panel candidate)
+  "Return CANDIDATE's section of arena PANEL's follow-up."
+  (let* ((result (+agent-shell-pstack-panel-member-result candidate))
+         (commit (plist-get result :commit))
+         (manifest (+agent-shell-pstack-panel-arena panel)))
+    (concat
+     (format "\n## %s: %s (%s): %s\n"
+             (+agent-shell-pstack-panel--label panel candidate)
+             (+agent-shell-pstack-panel-member-role candidate)
+             (+agent-shell-pstack-panel-member-agent candidate)
+             (+agent-shell-pstack-panel-member-state candidate))
+     (when-let* ((error (+agent-shell-pstack-panel-member-error candidate)))
+       (format "%s\n" error))
+     (cond
+      ((plist-get result :error)
+       (format "Capture failed: %s\n" (plist-get result :error)))
+      ((not (plist-get result :changed))
+       (if commit
+           (format "Result: %s (%s), the same tree as the base.\n" commit
+                   (plist-get result :ref))
+         "No result.\n"))
+      (t
+       (format "Result: %s (%s)\nDiff against the base:\n%s\nApply: (cd %s \
+&& git diff --binary %s %s | git apply --3way)\n"
+               commit (plist-get result :ref) (plist-get result :stat)
+               (shell-quote-argument
+                (directory-file-name
+                 (+agent-shell-arena-git-manifest-toplevel manifest)))
+               (+agent-shell-arena-git-manifest-base manifest) commit)))
+     (format "Rationale:\n%s\n"
+             (+agent-shell-pstack-panel--rationale candidate)))))
+
+(defun +agent-shell-pstack-panel--arena-text (panel)
+  "Return the part of arena PANEL's follow-up that reports its outcome."
+  (let* ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate))
+         (judge (car (+agent-shell-pstack-panel--kind-members panel 'judge)))
+         (manifest (+agent-shell-pstack-panel-arena panel)))
+    (if (null manifest)
+        (format "pstack panel %s (arena) ended before its candidates \
+started: %s"
+                (+agent-shell-pstack-panel-id panel)
+                (+agent-shell-pstack-panel-member-error judge))
+      (concat
+       (format "pstack panel %s (arena) has finished: %d of %d candidates \
+changed the base.\n"
+               (+agent-shell-pstack-panel-id panel)
+               (seq-count #'+agent-shell-pstack-panel--usable-p candidates)
+               (length candidates))
+       (format "Base: %s, a snapshot of %s when the arena started.  Arena \
+directory: %s\n"
+               (+agent-shell-arena-git-manifest-base manifest)
+               (directory-file-name
+                (+agent-shell-arena-git-manifest-toplevel manifest))
+               (directory-file-name
+                (+agent-shell-arena-git-manifest-directory manifest)))
+       (mapconcat (lambda (candidate)
+                    (+agent-shell-pstack-panel--candidate-text panel candidate))
+                  candidates "")
+       (+agent-shell-pstack-panel--member-text judge)
+       "\n" (+agent-shell-pstack-panel--shape panel :triage)
+       "\nThe results stay until you clean the arena up: press x on its line \
+in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean."))))
 
 ;;;; Lifecycle
 
@@ -787,6 +855,7 @@ A usable result also gets a checkout of its own for the judge to read."
                       (end 'captured
                            (append result (list :checkout checkout)))))))))
       (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
+      (+agent-shell-pstack-panels--refresh)
       (+agent-shell-pstack-panel--stop
        member
        (step (lambda ()
@@ -1086,12 +1155,14 @@ no longer start."
 
 (defvar-keymap +agent-shell-pstack-panels-mode-map
   :doc "Keymap for `+agent-shell-pstack-panels-mode'."
-  "RET" #'+agent-shell-pstack-panels-visit)
+  "RET" #'+agent-shell-pstack-panels-visit
+  "x" #'+agent-shell-pstack-panels-clean)
 
 (define-derived-mode +agent-shell-pstack-panels-mode special-mode
   "pstack panels"
   "List pstack panels, their members and reports.
-\\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line."
+\\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line.
+\\[+agent-shell-pstack-panels-clean] cleans up the finished arena on the line."
   (setq-local revert-buffer-function
               (lambda (&rest _) (+agent-shell-pstack-panels--render))
               truncate-lines t))
@@ -1109,8 +1180,10 @@ no longer start."
                       '+agent-shell-pstack-panels-target target)))
 
 (defun +agent-shell-pstack-panels--name (buffer)
-  "Return BUFFER's name, or a note that it has ended."
-  (if (buffer-live-p buffer) (buffer-name buffer) "ended"))
+  "Return BUFFER's name, or a note that it has ended or never started."
+  (cond ((buffer-live-p buffer) (buffer-name buffer))
+        (buffer "ended")
+        (t "not started")))
 
 (defun +agent-shell-pstack-panels--render ()
   "Redraw the current panels buffer, keeping point's line."
@@ -1122,7 +1195,8 @@ no longer start."
       (insert "No panels yet.  A pstack lead requests one by ending its \
 message with a pstack-panel block.\n"))
     (dolist (panel panels)
-      (let ((lead (+agent-shell-pstack-panel-lead panel)))
+      (let ((lead (+agent-shell-pstack-panel-lead panel))
+            (start (point)))
         (+agent-shell-pstack-panels--line
          lead
          (propertize (+agent-shell-pstack-panel-id panel) 'face 'bold)
@@ -1133,19 +1207,36 @@ message with a pstack-panel block.\n"))
          lead "  Lead: " (+agent-shell-pstack-panels--name lead))
         (when-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
           (+agent-shell-pstack-panels--line lead "  " rejection))
+        (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
+          (let ((directory (+agent-shell-arena-git-manifest-directory
+                            manifest)))
+            (+agent-shell-pstack-panels--line
+             directory "  Arena: " (abbreviate-file-name directory)
+             (if (eq (+agent-shell-pstack-panel-phase panel) 'finished)
+                 "  (x cleans it up)" ""))))
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (let ((report (+agent-shell-pstack-panel-member-report member))
-                (shell (+agent-shell-pstack-panel-member-shell member)))
+                (shell (+agent-shell-pstack-panel-member-shell member))
+                (capture (+agent-shell-pstack-panel-member-capture member))
+                (result (+agent-shell-pstack-panel-member-result member)))
             (+agent-shell-pstack-panels--line
              (or report shell)
              (format "  %-16s %-12s %-9s "
                      (+agent-shell-pstack-panel-member-role member)
                      (+agent-shell-pstack-panel-member-agent member)
                      (+agent-shell-pstack-panel-member-state member))
-             (cond (report (abbreviate-file-name report))
+             (cond (capture
+                    (string-join
+                     (delq nil (list (symbol-name capture)
+                                     (plist-get result :commit)
+                                     (plist-get result :error)))
+                     " "))
+                   (report (abbreviate-file-name report))
                    ((+agent-shell-pstack-panel-member-error member))
                    (t (+agent-shell-pstack-panels--name shell))))))
-        (insert "\n")))
+        (insert "\n")
+        (put-text-property start (point) '+agent-shell-pstack-panels-panel
+                           panel)))
     (goto-char (point-min))
     (forward-line (1- line))))
 
@@ -1233,6 +1324,68 @@ message with a pstack-panel block.\n"))
     ((and (pred stringp) file) (find-file-other-window file))
     ((and (pred buffer-live-p) buffer) (pop-to-buffer buffer))
     (_ (user-error "Nothing to visit on this line"))))
+
+(defun +agent-shell-pstack-arena--clean (manifest)
+  "Clean MANIFEST's arena after confirmation, forgetting it in its panel."
+  (let ((id (+agent-shell-arena-git-manifest-id manifest)))
+    (when (yes-or-no-p (format "Remove arena %s's worktrees, checkouts and \
+result refs from %s? " id (+agent-shell-arena-git-manifest-toplevel manifest)))
+      (dolist (panel (+agent-shell-pstack-panel-list))
+        (when-let* ((held (+agent-shell-pstack-panel-arena panel))
+                    ((equal id (+agent-shell-arena-git-manifest-id held))))
+          (setf (+agent-shell-pstack-panel-arena panel) nil)))
+      (+agent-shell-arena-git-clean
+       manifest
+       (lambda (left error)
+         (cond (error (message "Arena %s: cleanup failed: %s" id error))
+               (left (message "Arena %s: cleaned, but left %s" id
+                              (string-join left "; ")))
+               (t (message "Arena %s: cleaned" id)))
+         (+agent-shell-pstack-panels--refresh)))
+      (+agent-shell-pstack-panels--refresh))))
+
+(defun +agent-shell-pstack-panels-clean ()
+  "Clean up the finished arena on the current line, after confirmation."
+  (interactive)
+  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel)))
+    (cond
+     ((not (and panel (+agent-shell-pstack-panel-arena panel)))
+      (user-error "No arena on this line"))
+     ((not (eq (+agent-shell-pstack-panel-phase panel) 'finished))
+      (user-error "Arena %s is still %s" (+agent-shell-pstack-panel-id panel)
+                  (+agent-shell-pstack-panel-phase panel)))
+     (t (+agent-shell-pstack-arena--clean
+         (+agent-shell-pstack-panel-arena panel))))))
+
+;;;###autoload
+(defun +agent-shell-pstack-arena-clean ()
+  "Choose an arena on disk and clean it up, after confirmation.
+Arenas whose panel still runs are left out."
+  (interactive)
+  (let* ((running
+          (seq-keep (lambda (panel)
+                      (when-let* (((not (eq (+agent-shell-pstack-panel-phase
+                                             panel)
+                                            'finished)))
+                                  (manifest (+agent-shell-pstack-panel-arena
+                                             panel)))
+                        (+agent-shell-arena-git-manifest-id manifest)))
+                    (+agent-shell-pstack-panel-list)))
+         (choices
+          (seq-keep (lambda (manifest)
+                      (let ((id (+agent-shell-arena-git-manifest-id manifest))
+                            (toplevel (+agent-shell-arena-git-manifest-toplevel
+                                       manifest)))
+                        (unless (member id running)
+                          (cons (format "%s  %s" id
+                                        (abbreviate-file-name toplevel))
+                                manifest))))
+                    (+agent-shell-arena-git-arenas))))
+    (unless choices
+      (user-error "No arenas to clean in %s"
+                  +agent-shell-pstack-arena-directory))
+    (+agent-shell-pstack-arena--clean
+     (cdr (assoc (completing-read "Clean arena: " choices nil t) choices)))))
 
 ;;;; Mode
 

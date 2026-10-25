@@ -1137,7 +1137,8 @@ a timer of its own."
             (checkouts (expand-file-name
                         "checkouts/"
                         (+agent-shell-arena-git-manifest-directory manifest))))
-        (should (string-prefix-p (format "You are the judge of a pstack arena that \
+        (should (string-prefix-p
+                 (format "You are the judge of a pstack arena that \
 Emacs runs for another agent.  You are read-only: Emacs refuses edits and \
 commands that change state.  Each candidate below worked on the same task \
 from the same base commit, alone in a sandbox.
@@ -1168,7 +1169,7 @@ Rationale:
 Half way
 
 Read every candidate's checkout" checkouts checkouts)
-                                 brief))
+                 brief))
         (should (string-match-p "Score each candidate on each rubric \
 criterion from 1 to 5" brief))
         (should (string-match-p "recommend one candidate as the base" brief)))
@@ -1265,7 +1266,8 @@ criterion from 1 to 5" brief))
                              candidates)))
       (should (equal '(:commit "commit-opus" :ref "refs/pstack-arena/x/opus"
                                :changed nil :stat "")
-                     (+agent-shell-pstack-panel-member-result (car candidates))))
+                     (+agent-shell-pstack-panel-member-result
+                      (car candidates))))
       (should (equal '(:error "git add: boom")
                      (+agent-shell-pstack-panel-member-result
                       (cadr candidates))))
@@ -1288,6 +1290,140 @@ criterion from 1 to 5" brief))
       (should-not (string-match-p "## Candidate B" brief))
       (should (string-match-p "\nNot judged, because they left no usable \
 change: B\\.\n" brief)))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-followup ()
+  "Hand the lead each candidate's result, a graft command and the judge's
+report, then how to pick, graft, verify and clean up."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq unchanged '("codex"))
+    (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+           (arena (+agent-shell-arena-git-manifest-directory manifest))
+           (id (+agent-shell-pstack-panel-id panel))
+           (report (expand-file-name (concat id "/judge.md") directory)))
+      (finish "opus" "Rationale A")
+      (push (cons (nth 1 (nth 1 started)) "Half way") partials)
+      (+agent-shell-pstack-panel--expire id 'candidates)
+      (+agent-shell-pstack-panel-test--drain)
+      (member-event "judge" :kind 'init-finished)
+      (member-event "judge" :kind 'turn-complete :text "A wins: 5, 4, 5.")
+      (let ((followup (car (+agent-shell-pstack-panel-test--followups
+                            sent lead))))
+        (should (string-prefix-p
+                 (format "pstack panel %s (arena) has finished: 1 of 2 \
+candidates changed the base.
+Base: base, a snapshot of %s when the arena started.  Arena directory: %s
+
+## A: opus (claude-code): done
+Result: commit-opus (refs/pstack-arena/x/opus)
+Diff against the base:
+ opus.txt | 1 +
+Apply: (cd %s && git diff --binary base commit-opus | git apply --3way)
+Rationale:
+Rationale A
+
+## B: codex (codex): timeout
+No report within the 60-second timeout.
+Result: commit-codex (refs/pstack-arena/x/codex), the same tree as the base.
+Rationale:
+Half way
+
+## judge (codex): done
+Report: %s
+
+A wins: 5, 4, 5.
+
+Pick, graft and verify as the arena skill's lead."
+                         id (directory-file-name cwd)
+                         (directory-file-name arena)
+                         (shell-quote-argument (directory-file-name cwd))
+                         report)
+                 followup))
+        (should (string-match-p "never by checking their files out over \
+your tree" followup))
+        (should-not (string-match-p "checkout [^ ]+ --" followup))
+        (should (string-suffix-p "press x on its line in the pstack panels \
+view, or run M-x +agent-shell-pstack-arena-clean." followup))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-view-and-clean ()
+  "Show an arena's phase and directory, and clean it with x once finished."
+  (+agent-shell-pstack-panel-test--with-arena
+    (save-window-excursion
+      (+agent-shell-pstack-panels)
+      (let* ((view (current-buffer))
+             (id (+agent-shell-pstack-panel-id panel))
+             (manifest (+agent-shell-pstack-panel-arena panel))
+             (arena (abbreviate-file-name
+                     (+agent-shell-arena-git-manifest-directory manifest)))
+             (answers nil)
+             (text (lambda () (with-current-buffer view (buffer-string)))))
+        (should (string-match-p (format "^%s  arena  candidates$" id)
+                                (funcall text)))
+        (should (string-match-p (format "^  Arena: %s$" (regexp-quote arena))
+                                (funcall text)))
+        (should (string-match-p (format "pstack panel %s (arena, candidates)"
+                                        id)
+                                (get-text-property
+                                 0 'help-echo
+                                 (buffer-local-value
+                                  '+agent-shell-pstack-panel--mode-line lead))))
+        (with-current-buffer view
+          (goto-char (point-min))
+          (search-forward "Arena:")
+          (should-error (+agent-shell-pstack-panels-clean) :type 'user-error))
+        (should (string-match-p "^  judge            codex        pending   \
+not started$" (funcall text)))
+        (finish "opus" "A")
+        (finish "codex" "B")
+        (+agent-shell-pstack-panel-test--drain)
+        (should (string-match-p "^  opus             claude-code  done      \
+captured commit-opus$" (funcall text)))
+        (should (string-match-p (format "^%s  arena  judging$" id)
+                                (funcall text)))
+        (member-event "judge" :kind 'init-finished)
+        (member-event "judge" :kind 'turn-complete :text "Scores")
+        (should (string-match-p
+                 (format "^  Arena: %s  (x cleans it up)$" (regexp-quote arena))
+                 (funcall text)))
+        (cl-letf (((symbol-function 'yes-or-no-p)
+                   (lambda (prompt) (push prompt answers) nil)))
+          (with-current-buffer view
+            (goto-char (point-min))
+            (search-forward "judge ")
+            (+agent-shell-pstack-panels-clean)))
+        (should (= 1 (length answers)))
+        (should-not cleaned)
+        (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+          (with-current-buffer view
+            (goto-char (point-min))
+            (search-forward "Lead:")
+            (+agent-shell-pstack-panels-clean)))
+        (should (equal (list manifest) cleaned))
+        (should-not (+agent-shell-pstack-panel-arena panel))
+        (should-not (string-match-p "Arena:" (funcall text)))
+        (kill-buffer view)))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-clean-command ()
+  "Offer every arena on disk except those whose panel still runs."
+  (+agent-shell-pstack-panel-test--with-arena
+    (let* ((other (+agent-shell-arena-git-create
+                   (+agent-shell-arena-git--base
+                    :git-dir (expand-file-name ".git" cwd) :toplevel cwd
+                    :prefix "" :head "head" :commit "base")
+                   "old"))
+           (offered nil))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_prompt choices &rest _)
+                   (setq offered (mapcar #'car choices))
+                   (car offered)))
+                ((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (+agent-shell-pstack-arena-clean))
+      (should (equal (list (format "%s  %s"
+                                   (+agent-shell-arena-git-manifest-id other)
+                                   (abbreviate-file-name cwd)))
+                     offered))
+      (should (equal (list (+agent-shell-arena-git-manifest-id other))
+                     (mapcar #'+agent-shell-arena-git-manifest-id cleaned)))
+      (should (+agent-shell-pstack-panel-arena panel)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-protocol ()
   "Describe arenas only where candidates can run sandboxed."
