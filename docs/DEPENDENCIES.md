@@ -41,7 +41,20 @@ image type was compiled in. Optional feature checks remain in the configuration.
 1. Check the package source directories for local changes. Preserve or resolve
    those changes explicitly before merging upstream.
 2. Update through Elpaca, for example `M-x elpaca-update-all`.
-3. Exercise the affected workflow and run `emacs -Q --batch -l test/run-config.el`.
+3. Run `emacs -Q --batch -l scripts/verify-packages.el`. It lists every package
+   build whose bytecode is missing or older than its source, compiles those
+   files, and exits non-zero if any fail.
+4. Restart Emacs, exercise the affected workflow, and run
+   `emacs -Q --batch -l test/run-config.el`.
+
+Elpaca compiles a package only when it builds it. It treats an existing build
+directory as complete and never compiles it again, so .elc files deleted from
+`elpaca/builds` stay missing. Run the verify script instead of deleting
+bytecode. Each of its compilers sees every build directory, so a package that
+requires a library its `Package-Requires` header omits still compiles. It
+recompiles files whose source changed after their last compile, but not the
+unchanged dependents of an updated macro library. Use `M-x elpaca-rebuild` for
+those, or to rebuild any one package from scratch.
 
 ## Emacs and grammar updates
 
@@ -64,15 +77,18 @@ download occurs without installation confirmation during ordinary editing.
 ## Verification commands
 
 ```sh
+emacs -Q --batch -l scripts/verify-packages.el
 emacs -Q --batch -l test/run-config.el
 emacs -Q --batch -L test -l test/restore-config.el
 emacs -Q --batch -l test/benchmark-config.el
 ```
 
-The first command runs local tests with installed dependencies. Mermaid tests
-need an environment that permits Chromium to launch.
+The first command compiles stale package bytecode, as described above. An
+optional argument names another builds directory. The second runs local tests
+with installed dependencies. Mermaid tests need an environment that permits
+Chromium to launch.
 
-The second command is an opt-in fresh install check and needs network access.
+The third command is an opt-in fresh install check and needs network access.
 It copies the configuration to a disposable directory, clones every package
 from upstream, builds them, and runs the same tests against that directory. On
 macOS it also starts and closes a separate GUI Emacs to check first completion,
