@@ -18,30 +18,13 @@
 
 (require 'cl-lib)
 
-(defun +verify-packages-compilable-p (file)
-  "Return non-nil unless FILE opts out of byte compilation."
-  (with-temp-buffer
-    (insert-file-contents file)
-    (not (re-search-forward "no-byte-compile: *t" nil t))))
-
-(defun +verify-packages-sources (directory)
-  "Return the .el files under DIRECTORY, as Elpaca's compiler finds them.
-Skip dot files and symlinked directories.  Avoid
-`directory-files-recursively': on Emacs 32.0.50 it sometimes drops a
-symlinked file, and every file in a build is a symlink."
-  (cl-loop for name in (directory-files directory nil "\\`[^.]")
-           for file = (expand-file-name name directory)
-           nconc (cond ((file-directory-p file)
-                        (unless (file-symlink-p file)
-                          (+verify-packages-sources file)))
-                       ((string-suffix-p ".el" name) (list file)))))
+(add-to-list 'load-path
+             (expand-file-name "../lisp" (file-name-directory load-file-name)))
+(require '+compile-local)
 
 (defun +verify-packages-stale (package)
   "Return PACKAGE directory's compilable .el files lacking an up-to-date .elc."
-  (cl-loop for file in (+verify-packages-sources package)
-           when (and (file-newer-than-file-p file (concat file "c"))
-                     (+verify-packages-compilable-p file))
-           collect file))
+  (seq-filter #'+compile-local-stale-p (+compile-local--sources package)))
 
 (defun +verify-packages-form (packages files)
   "Return a batch form compiling FILES with every directory in PACKAGES."

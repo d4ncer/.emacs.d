@@ -10,6 +10,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 (defvar +lisp-dir)
 
 (defvar +compile-local-buffer "*+compile-local*"
@@ -18,25 +20,36 @@
 (defvar +compile-local--process nil
   "The running compilation process, or nil.")
 
-(defun +compile-local--compilable-p (file)
-  "Return non-nil unless FILE declares `no-byte-compile'."
-  (with-temp-buffer
-    (insert-file-contents file)
-    (not (re-search-forward "no-byte-compile: *t" nil t))))
+(defun +compile-local--sources (directory)
+  "Return the .el files under DIRECTORY, skipping dot files.
+Symlinked directories are not followed.  Avoid
+`directory-files-recursively': on Emacs 32.0.50 it sometimes drops a
+symlinked file, and every file in a package build is a symlink."
+  (cl-loop for name in (directory-files directory nil "\\`[^.]")
+           for file = (expand-file-name name directory)
+           nconc (cond ((file-directory-p file)
+                        (unless (file-symlink-p file)
+                          (+compile-local--sources file)))
+                       ((string-suffix-p ".el" name) (list file)))))
+
+(defun +compile-local-stale-p (file)
+  "Return non-nil if FILE's .elc is missing or older and FILE compiles.
+Files that declare `no-byte-compile' never count."
+  (and (file-newer-than-file-p file (concat file "c"))
+       (with-temp-buffer
+         (insert-file-contents file)
+         (not (re-search-forward "no-byte-compile: *t" nil t)))))
 
 (defun +compile-local-stale-files (directory)
-  "Return the .el files under DIRECTORY whose .elc is missing or older.
-Only compilable files in a `load-path' directory count, since nothing
-loads the rest."
+  "Return the stale .el files under DIRECTORY; see `+compile-local-stale-p'.
+Only files in a `load-path' directory count, since nothing loads the rest."
   (let ((loadable (mapcar (lambda (dir) (file-name-as-directory
                                          (expand-file-name dir)))
                           load-path)))
     (seq-filter (lambda (file)
                   (and (member (file-name-directory file) loadable)
-                       (file-newer-than-file-p file (concat file "c"))
-                       (+compile-local--compilable-p file)))
-                (directory-files-recursively
-                 (expand-file-name directory) "\\`[^.].*\\.el\\'"))))
+                       (+compile-local-stale-p file)))
+                (+compile-local--sources (expand-file-name directory)))))
 
 (defun +compile-local--form (files)
   "Return the batch form that byte-compiles FILES with this `load-path'."
