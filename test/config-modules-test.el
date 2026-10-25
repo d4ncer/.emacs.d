@@ -48,9 +48,54 @@
         (delete-directory temporary t)))
     (nreverse problems)))
 
+(defvar +config-modules-test--problems 'unloaded
+  "Problems from loading every module once, or `unloaded'.")
+
+(defun +config-modules-test--ensure-loaded ()
+  "Load every module once per process; return the problems raised."
+  (when (eq +config-modules-test--problems 'unloaded)
+    (setq +config-modules-test--problems (+config-modules-test--load-all)))
+  +config-modules-test--problems)
+
+(defun +config-modules-test--definitions ()
+  "Return a table of function names defined by any library on `load-path'."
+  (let ((table (make-hash-table :test #'eq)))
+    (dolist (directory load-path table)
+      (when (file-directory-p directory)
+        (dolist (file (directory-files directory t "\\.el\\'"))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (while (re-search-forward
+                    "^\\s-*(\\(?:[^ ()\n]*def[^ ()\n]*\\) '?\\([^ ()\n]+\\)" nil t)
+              (puthash (intern (match-string 1)) t table))))))))
+
+(defun +config-modules-test--leader-commands ()
+  "Return commands bound under the leader map or sharp-quoted in its module."
+  (let (commands)
+    (cl-labels ((walk (map)
+                  (map-keymap (lambda (_event binding)
+                                (cond ((keymapp binding) (walk binding))
+                                      ((and binding (symbolp binding))
+                                       (push binding commands))))
+                              map)))
+      (walk (symbol-function '+leader-key)))
+    (with-temp-buffer
+      (insert-file-contents
+       (expand-file-name "modules/mod-keybindings.el" +config-test-root))
+      (while (re-search-forward "#'\\([^ ()\n]+\\)" nil t)
+        (push (intern (match-string 1)) commands)))
+    (delete-dups commands)))
+
 (ert-deftest +config-modules-test-every-module-loads-cleanly ()
   (should (>= (length (+config-modules-test--init-modules)) 20))
-  (should-not (+config-modules-test--load-all)))
+  (should-not (+config-modules-test--ensure-loaded)))
+
+(ert-deftest +config-modules-test-leader-commands-exist ()
+  (+config-modules-test--ensure-loaded)
+  (let ((definitions (+config-modules-test--definitions)))
+    (should-not (seq-remove (lambda (command)
+                              (or (fboundp command) (gethash command definitions)))
+                            (+config-modules-test--leader-commands)))))
 
 (ert-deftest +config-modules-test-theme-follows-dark-system ()
   (require '+theme)
