@@ -19,7 +19,9 @@
 (cl-defgeneric +system-theme-query (system-type))
 
 (cl-defmethod +system-theme-query ((_ (eql 'darwin)))
-  (shell-command-to-string "defaults read -g AppleInterfaceStyle"))
+  (if (boundp 'ns-system-appearance)
+      (symbol-name ns-system-appearance)
+    (shell-command-to-string "defaults read -g AppleInterfaceStyle")))
 
 (cl-defmethod +system-theme-query ((_ (eql 'gnu/linux)))
   (shell-command-to-string "gsettings get org.gnome.desktop.interface gtk-theme"))

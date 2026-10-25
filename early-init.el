@@ -37,13 +37,12 @@
 ;; Theme + fonts
 
 (require '+theme)
-(setq +theme-light 'batppuccin-latte)
+(setq +theme-light 'batppuccin-latte
+      +theme-dark 'batppuccin-mocha)
 
 (set-face-attribute 'default nil :family "JetBrainsMono Nerd Font")
 (set-face-attribute 'default nil :height 190)
 (set-face-attribute 'variable-pitch nil :family "Helvetica Neue")
-
-(ignore-errors (+theme-update))
 
 ;; Make the window-borders appear as padding instead. Not sure if this is really
 ;; usable yet, but it sure looks pretty.

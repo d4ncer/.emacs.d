@@ -5,7 +5,7 @@
 
 ;;; Commentary:
 ;; This module contains all UI-related configuration including:
-;; - Theme system (modus themes via +theme.el)
+;; - Theme system (batppuccin via +theme.el, following the system appearance)
 ;; - Font configuration (JetBrainsMono, Helvetica Neue)
 ;; - Frame parameters and visual settings
 ;; - Visual enhancements (ligatures, modeline, pulsar, hl-todo)
@@ -23,7 +23,10 @@
                              :main "batppuccin.el")
   :demand t
   :config
-  (+theme-update))
+  (+theme-update)
+  (when (boundp 'ns-system-appearance-change-functions)
+    (add-hook 'ns-system-appearance-change-functions
+              (lambda (_) (+theme-update)))))
 
 ;;; Custom faces
 
