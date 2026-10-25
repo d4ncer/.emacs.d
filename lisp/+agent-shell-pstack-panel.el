@@ -107,7 +107,7 @@ arena's :judge ends its judge's prompt."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 4
+(defconst +agent-shell-pstack-panel--schema 5
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -131,9 +131,13 @@ PHASE moves through the shape's phases and ends at `finished'; see
 STATE starts at `pending' (waiting for its phase) or `starting' (shell
 initializing), moves to `waiting' (initialized, brief unsent) and `running'
 (brief sent), then settles once as `done', `error' or `timeout'.  KIND
-says which phase runs the member.  A candidate has a SANDBOX."
+says which phase runs the member.
+
+A candidate has a SANDBOX.  Once settled, its CAPTURE moves from
+`stopping' to `capturing', then ends as `captured' or `failed'.  RESULT
+then holds :commit, :ref, :changed, :stat and :checkout, or :error."
   role agent focus shell (state 'starting) text error report (kind 'member)
-  sandbox)
+  sandbox capture result)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -455,9 +459,61 @@ Task:\n%s\n"
         focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
       ('judge (+agent-shell-pstack-panel--judge-brief panel)))))
 
-(defun +agent-shell-pstack-panel--judge-brief (_panel)
+(defun +agent-shell-pstack-panel--label (panel candidate)
+  "Return CANDIDATE's letter among PANEL's candidates."
+  (string (+ ?A (seq-position (+agent-shell-pstack-panel--kind-members
+                               panel 'candidate)
+                              candidate #'eq))))
+
+(defun +agent-shell-pstack-panel--outcome (candidate)
+  "Return a phrase saying how CANDIDATE's turn ended."
+  (pcase (+agent-shell-pstack-panel-member-state candidate)
+    ('done "finished its turn")
+    ('timeout "timed out; its work was captured as it stood")
+    (_ (format "ended early; its work was captured as it stood: %s"
+               (+agent-shell-pstack-panel-member-error candidate)))))
+
+(defun +agent-shell-pstack-panel--rationale (candidate)
+  "Return CANDIDATE's final text, or a note that it left none."
+  (let ((text (+agent-shell-pstack-panel-member-text candidate)))
+    (if (and text (not (string-blank-p text))) (string-trim text)
+      "(none)")))
+
+(defun +agent-shell-pstack-panel--judge-brief (panel)
   "Return the prompt that briefs the judge of arena PANEL."
-  "")
+  (let* ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate))
+         (usable (seq-filter #'+agent-shell-pstack-panel--usable-p candidates))
+         (unusable (seq-remove #'+agent-shell-pstack-panel--usable-p
+                               candidates)))
+    (concat
+     "You are the judge of a pstack arena that Emacs runs for another \
+agent.  You are read-only: Emacs refuses edits and commands that change \
+state.  Each candidate below worked on the same task from the same base \
+commit, alone in a sandbox.\n\nTask:\n"
+     (+agent-shell-pstack-panel-brief panel)
+     "\n\nRubric:\n"
+     (mapconcat #'identity
+                (seq-map-indexed (lambda (criterion index)
+                                   (format "%d. %s" (1+ index) criterion))
+                                 (+agent-shell-pstack-panel-rubric panel))
+                "\n")
+     "\n"
+     (mapconcat
+      (lambda (candidate)
+        (let ((result (+agent-shell-pstack-panel-member-result candidate)))
+          (format "\n## Candidate %s\nIt %s.\nCheckout: %s\nDiff against \
+the base:\n%s\nRationale:\n%s\n"
+                  (+agent-shell-pstack-panel--label panel candidate)
+                  (+agent-shell-pstack-panel--outcome candidate)
+                  (plist-get result :checkout) (plist-get result :stat)
+                  (+agent-shell-pstack-panel--rationale candidate))))
+      usable "")
+     (when unusable
+       (format "\nNot judged, because they left no usable change: %s.\n"
+               (mapconcat (lambda (candidate)
+                            (+agent-shell-pstack-panel--label panel candidate))
+                          unusable ", ")))
+     "\n" (+agent-shell-pstack-panel--shape panel :judge))))
 
 (defun +agent-shell-pstack-panel-followup-text (panel)
   "Return the prompt that hands PANEL's results to its lead."
@@ -590,7 +646,49 @@ Safe to call after any change: a phase that is not over stays."
       ('candidates
        (when (funcall settled (+agent-shell-pstack-panel--kind-members
                                panel 'candidate))
+         (+agent-shell-pstack-panel--disarm panel)
+         (setf (+agent-shell-pstack-panel-phase panel) 'capturing)
+         (+agent-shell-pstack-panel--advance panel)))
+      ('capturing
+       (let ((candidates (+agent-shell-pstack-panel--kind-members
+                          panel 'candidate))
+             (judge (car (+agent-shell-pstack-panel--kind-members
+                          panel 'judge))))
+         (when (seq-every-p (lambda (member)
+                              (memq (+agent-shell-pstack-panel-member-capture
+                                     member)
+                                    '(captured failed)))
+                            candidates)
+           (cond
+            ((not (eq 'pending (+agent-shell-pstack-panel-member-state judge)))
+             (+agent-shell-pstack-panel--finish panel))
+            ((seq-some #'+agent-shell-pstack-panel--usable-p candidates)
+             (+agent-shell-pstack-panel--judge panel judge))
+            (t
+             (setf (+agent-shell-pstack-panel-member-state judge) 'error
+                   (+agent-shell-pstack-panel-member-error judge)
+                   "No candidate changed the base, so there was nothing to \
+judge.")
+             (+agent-shell-pstack-panel--finish panel))))))
+      ('judging
+       (when (funcall settled (+agent-shell-pstack-panel--kind-members
+                               panel 'judge))
          (+agent-shell-pstack-panel--finish panel))))))
+
+(defun +agent-shell-pstack-panel--usable-p (candidate)
+  "Return whether CANDIDATE's captured result changed the base."
+  (and (eq (+agent-shell-pstack-panel-member-capture candidate) 'captured)
+       (plist-get (+agent-shell-pstack-panel-member-result candidate)
+                  :changed)))
+
+(defun +agent-shell-pstack-panel--judge (panel judge)
+  "Start PANEL's JUDGE, read-only, with its own timer."
+  (setf (+agent-shell-pstack-panel-phase panel) 'judging)
+  (+agent-shell-pstack-panel--arm
+   panel (+agent-shell-pstack-panel-judge-timeout panel))
+  (+agent-shell-pstack-panel--start-member panel judge)
+  (+agent-shell-pstack-panel--advance panel)
+  (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--write (panel member)
   "Write MEMBER's text as its report under PANEL's directory."
@@ -642,9 +740,63 @@ Then delete its sandbox's private folders and call CALLBACK."
     (funcall callback)))
 
 (defun +agent-shell-pstack-panel--collect (panel member)
-  "Stop settled candidate MEMBER of PANEL."
-  (+agent-shell-pstack-panel--stop
-   member (lambda () (+agent-shell-pstack-panel--advance panel))))
+  "Stop settled candidate MEMBER of PANEL, then capture what it produced.
+A usable result also gets a checkout of its own for the judge to read."
+  (let ((name (+agent-shell-pstack-panel-member-role member))
+        (manifest (+agent-shell-pstack-panel-arena panel)))
+    (cl-labels
+        ((end (capture result)
+           (setf (+agent-shell-pstack-panel-member-capture member) capture
+                 (+agent-shell-pstack-panel-member-result member) result)
+           (+agent-shell-pstack-panel--advance panel)
+           (+agent-shell-pstack-panels--refresh))
+         (failed (error) (end 'failed (list :error error)))
+         ;; A step that signals would leave the candidate capturing forever.
+         (step (function)
+           (lambda (&rest arguments)
+             (condition-case err (apply function arguments)
+               (error (failed (error-message-string err))))))
+         (capture (role)
+           (setf (+agent-shell-pstack-panel-member-capture member) 'capturing
+                 (+agent-shell-arena-git-role-state role)
+                 (symbol-name (+agent-shell-pstack-panel-member-state member)))
+           (+agent-shell-arena-git-capture
+            manifest name
+            (step (lambda (commit error)
+                    (if (not error)
+                        (compare role commit)
+                      (+agent-shell-arena-git-write-manifest manifest)
+                      (failed error))))))
+         (compare (role commit)
+           (+agent-shell-arena-git-diff
+            manifest name
+            (step (lambda (diff error)
+                    (let ((result (append
+                                   (list :commit commit
+                                         :ref (+agent-shell-arena-git-role-ref
+                                               role))
+                                   diff)))
+                      (cond (error (failed error))
+                            ((plist-get diff :changed) (check-out result))
+                            (t (end 'captured result))))))))
+         (check-out (result)
+           (+agent-shell-arena-git-checkout
+            manifest name
+            (step (lambda (checkout error)
+                    (if error (failed error)
+                      (end 'captured
+                           (append result (list :checkout checkout)))))))))
+      (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
+      (+agent-shell-pstack-panel--stop
+       member
+       (step (lambda ()
+               (if-let* ((role (and manifest
+                                    (+agent-shell-pstack-panel-member-sandbox
+                                     member)
+                                    (+agent-shell-arena-git-role
+                                     manifest name))))
+                   (capture role)
+                 (failed "The candidate never started."))))))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
   "Send MEMBER of PANEL its brief once it is waiting for one."

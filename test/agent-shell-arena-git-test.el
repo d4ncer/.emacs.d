@@ -337,5 +337,68 @@
       (should (file-exists-p (expand-file-name "deps/lib.el" repo)))
       (should-not (+agent-shell-arena-git-arenas)))))
 
+(ert-deftest +agent-shell-arena-git-test-diff-and-checkout ()
+  "Summarize each result against the base and check it out for reading.
+Cleanup removes the checkout with the worktree."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (base (+arena-git-test--base repo))
+           (manifest (+arena-git-test--arena base))
+           (directory (+agent-shell-arena-git-manifest-directory manifest))
+           (opus (+arena-git-test--provision manifest "opus")))
+      (+arena-git-test--provision manifest "codex")
+      (+arena-git-test--write (expand-file-name "b.txt" opus) "b\nc\n")
+      (let ((commit (+arena-git-test--capture manifest "opus")))
+        (+arena-git-test--capture manifest "codex")
+        (should (equal '(:changed t :stat " b.txt | 2 ++\n 1 file changed, \
+2 insertions(+)")
+                       (+arena-git-test--ok
+                        (lambda (done)
+                          (+agent-shell-arena-git-diff manifest "opus" done)))))
+        (should (equal '(:changed nil :stat "")
+                       (+arena-git-test--ok
+                        (lambda (done)
+                          (+agent-shell-arena-git-diff
+                           manifest "codex" done)))))
+        (pcase-let ((`(,result ,error)
+                     (+arena-git-test--wait
+                      (lambda (done)
+                        (+agent-shell-arena-git-diff manifest "gemini" done)))))
+          (should-not result)
+          (should (string-match-p "no result" error)))
+        (let ((checkout (+arena-git-test--ok
+                         (lambda (done)
+                           (+agent-shell-arena-git-checkout
+                            manifest "opus" done)))))
+          (should (equal (expand-file-name "checkouts/opus/" directory)
+                         checkout))
+          (should (equal "b\nc\n" (+arena-git-test--read
+                                   (expand-file-name "b.txt" checkout))))
+          (+arena-git-test--write (expand-file-name "late.txt" opus) "late\n")
+          (should-not (file-exists-p (expand-file-name "late.txt" checkout)))
+          (should (equal commit (+arena-git-test--git checkout "rev-parse"
+                                                      "HEAD")))
+          (should (equal checkout
+                         (+agent-shell-arena-git-role-checkout
+                          (+agent-shell-arena-git-role
+                           (+agent-shell-arena-git-read-manifest directory)
+                           "opus"))))
+          (should-not (+arena-git-test--ok
+                       (lambda (done)
+                         (+agent-shell-arena-git-clean
+                          (+agent-shell-arena-git-read-manifest directory)
+                          done))))
+          (should-not (file-exists-p checkout))
+          (should-not (file-exists-p directory))
+          (should (equal (file-truename repo)
+                         (file-name-as-directory
+                          (substring (+arena-git-test--git
+                                      repo "worktree" "list" "--porcelain")
+                                     (length "worktree ")
+                                     (string-search
+                                      "\n" (+arena-git-test--git
+                                            repo "worktree" "list"
+                                            "--porcelain")))))))))))
+
 (provide 'agent-shell-arena-git-test)
 ;;; agent-shell-arena-git-test.el ends here

@@ -24,7 +24,9 @@ Arena git work is stubbed too: `bases' lists the directories snapshotted,
 the dependency paths each candidate links, `stopped' lists the shells
 stopped (newest first), `swept' the sandboxes swept without a shell, and
 `cleaned' the manifests cleaned.  Each worktree gets a directory under
-`arenas', the arena root."
+`arenas', the arena root.  `captured' lists the roles captured,
+`capture-errors' maps a role to its capture failure, and `unchanged'
+lists the roles whose result equals the base."
   (declare (indent 0))
   `(let* ((directory (make-temp-file "pstack-panels-" t))
           (cwd (file-name-as-directory
@@ -44,6 +46,7 @@ stopped (newest first), `swept' the sandboxes swept without a shell, and
           (start-error nil)
           (bases nil) (base-error nil) (provision-error nil) (shared nil)
           (stopped nil) (swept nil) (cleaned nil)
+          (captured nil) (capture-errors nil) (unchanged nil)
           (+agent-shell-drive-read-only-modes
            '((claude-code . "plan") (codex . "read-only")))
           (+agent-shell-sandbox-agents
@@ -124,7 +127,38 @@ stopped (newest first), `swept' the sandboxes swept without a shell, and
                ((symbol-function '+agent-shell-arena-git-clean)
                 (lambda (manifest callback)
                   (push manifest cleaned)
-                  (run-at-time 0 nil callback nil nil))))
+                  (run-at-time 0 nil callback nil nil)))
+               ((symbol-function '+agent-shell-arena-git-capture)
+                (lambda (manifest name callback)
+                  (push name captured)
+                  (let ((role (+agent-shell-arena-git-role manifest name))
+                        (error (alist-get name capture-errors nil nil #'equal)))
+                    (unless error
+                      (setf (+agent-shell-arena-git-role-ref role)
+                            (concat "refs/pstack-arena/x/" name)
+                            (+agent-shell-arena-git-role-commit role)
+                            (concat "commit-" name)))
+                    (run-at-time 0 nil callback
+                                 (unless error (concat "commit-" name))
+                                 error))))
+               ((symbol-function '+agent-shell-arena-git-diff)
+                (lambda (_manifest name callback)
+                  (run-at-time 0 nil callback
+                               (if (member name unchanged)
+                                   '(:changed nil :stat "")
+                                 (list :changed t
+                                       :stat (format " %s.txt | 1 +" name)))
+                               nil)))
+               ((symbol-function '+agent-shell-arena-git-checkout)
+                (lambda (manifest name callback)
+                  (let ((checkout (expand-file-name
+                                   (concat "checkouts/" name "/")
+                                   (+agent-shell-arena-git-manifest-directory
+                                    manifest))))
+                    (setf (+agent-shell-arena-git-role-checkout
+                           (+agent-shell-arena-git-role manifest name))
+                          checkout)
+                    (run-at-time 0 nil callback checkout nil)))))
        (cl-flet* ((lead-event (&rest event)
                     (funcall (gethash (cons 'pstack-lead lead) handlers)
                              (append event (list :shell lead))))
@@ -1045,6 +1079,215 @@ An arena already on disk is discarded once the step in flight returns."
       (should (equal (list (+agent-shell-pstack-panel-member-sandbox codex))
                      swept))
       (should (= 1 (length stopped))))))
+
+(defmacro +agent-shell-pstack-panel-test--with-arena (&rest body)
+  "Run BODY with an arena whose candidates opus and codex are running.
+BODY sees `panel', the functions of `+agent-shell-pstack-panel-test--with'
+and `finish' (ROLE TEXT), which ends ROLE's turn with TEXT."
+  (declare (indent 0))
+  `(+agent-shell-pstack-panel-test--with
+     (lead-event :kind 'turn-complete :session "s1"
+                 :text (+agent-shell-pstack-panel-test--message
+                        (+agent-shell-pstack-panel-test--arena)))
+     (+agent-shell-pstack-panel-test--drain)
+     (let ((panel (car (+agent-shell-pstack-panel-list))))
+       (member-event "opus" :kind 'init-finished)
+       (member-event "codex" :kind 'init-finished)
+       (cl-flet ((finish (role text)
+                   (member-event role :kind 'turn-complete :text text
+                                 :stop-reason "end_turn")))
+         ,@body))))
+
+(defun +agent-shell-pstack-panel-test--judge (panel)
+  "Return PANEL's judge."
+  (car (last (+agent-shell-pstack-panel-members panel))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-judging ()
+  "Capture every candidate, then judge the results with the rubric.
+The candidates' timeout leaves the pending judge alone, and the judge gets
+a timer of its own."
+  (+agent-shell-pstack-panel-test--with-arena
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel))
+          (id (+agent-shell-pstack-panel-id panel))
+          (manifest (+agent-shell-pstack-panel-arena panel)))
+      (finish "opus" "Rationale A\nRejected a global cache.")
+      (push (cons (nth 1 (nth 1 started)) "Half way") partials)
+      (+agent-shell-pstack-panel--expire id 'candidates)
+      (should (eq 'pending (+agent-shell-pstack-panel-member-state judge)))
+      (should (eq 'capturing (+agent-shell-pstack-panel-phase panel)))
+      (should (= 2 (length started)))
+      (+agent-shell-pstack-panel-test--drain)
+      (should (equal '("codex" "opus") (sort (copy-sequence captured)
+                                             #'string<)))
+      (should (equal '("done" "timeout")
+                     (mapcar #'+agent-shell-arena-git-role-state
+                             (+agent-shell-arena-git-manifest-roles manifest))))
+      (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))
+      (should (equal (list 'codex 'read-only cwd)
+                     (let ((entry (nth 2 started)))
+                       (list (nth 0 entry) (nth 2 entry) (nth 3 entry)))))
+      (should (eq (+agent-shell-pstack-panel-member-shell judge)
+                  (nth 1 (nth 2 started))))
+      (+agent-shell-pstack-panel--expire id 'candidates)
+      (should (eq 'starting (+agent-shell-pstack-panel-member-state judge)))
+      (should (+agent-shell-pstack-panel-timer panel))
+      (member-event "judge" :kind 'init-finished)
+      (let ((brief (cdr (assq (+agent-shell-pstack-panel-member-shell judge)
+                              sent)))
+            (checkouts (expand-file-name
+                        "checkouts/"
+                        (+agent-shell-arena-git-manifest-directory manifest))))
+        (should (string-prefix-p (format "You are the judge of a pstack arena that \
+Emacs runs for another agent.  You are read-only: Emacs refuses edits and \
+commands that change state.  Each candidate below worked on the same task \
+from the same base commit, alone in a sandbox.
+
+Task:
+Add a cache.
+
+Rubric:
+1. RUBRIC-ONE correctness
+2. RUBRIC-TWO simplicity
+3. RUBRIC-THREE tests
+
+## Candidate A
+It finished its turn.
+Checkout: %sopus/
+Diff against the base:
+ opus.txt | 1 +
+Rationale:
+Rationale A
+Rejected a global cache.
+
+## Candidate B
+It timed out; its work was captured as it stood.
+Checkout: %scodex/
+Diff against the base:
+ codex.txt | 1 +
+Rationale:
+Half way
+
+Read every candidate's checkout" checkouts checkouts)
+                                 brief))
+        (should (string-match-p "Score each candidate on each rubric \
+criterion from 1 to 5" brief))
+        (should (string-match-p "recommend one candidate as the base" brief)))
+      (should-not (+agent-shell-pstack-panel-test--followups sent lead))
+      (member-event "judge" :kind 'turn-complete :text "A wins.")
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should-not (+agent-shell-pstack-panel-timer panel))
+      (should (= 1 (length (+agent-shell-pstack-panel-test--followups
+                            sent lead))))
+      (+agent-shell-pstack-panel-test--drain)
+      (should-not (buffer-live-p (+agent-shell-pstack-panel-member-shell
+                                  judge))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-judge-expires ()
+  "Time the judge out on its own timeout."
+  (+agent-shell-pstack-panel-test--with-arena
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
+      (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))
+      (member-event "judge" :kind 'init-finished)
+      (+agent-shell-pstack-panel--expire (+agent-shell-pstack-panel-id panel)
+                                         'judging)
+      (should (eq 'timeout (+agent-shell-pstack-panel-member-state judge)))
+      (should (equal "No report within the 900-second timeout."
+                     (+agent-shell-pstack-panel-member-error judge)))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-lead-killed-candidates ()
+  "Capture what the candidates made when the lead dies, but never judge."
+  (+agent-shell-pstack-panel-test--with-arena
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
+      (finish "opus" "A")
+      (lead-event :kind 'clean-up)
+      (should (equal '(done error error)
+                     (+agent-shell-pstack-panel-test--states panel)))
+      (should (equal "The lead's shell ended."
+                     (+agent-shell-pstack-panel-member-error judge)))
+      (+agent-shell-pstack-panel-test--drain)
+      (should (= 2 (length captured)))
+      (should (equal '(captured captured)
+                     (mapcar #'+agent-shell-pstack-panel-member-capture
+                             (+agent-shell-pstack-panel-test--candidates
+                              panel))))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (= 2 (length started)))
+      (should-not (+agent-shell-pstack-panel-member-shell judge)))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-lead-killed-judging ()
+  "Stop the judge when the lead dies while it runs."
+  (+agent-shell-pstack-panel-test--with-arena
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
+      (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))
+      (lead-event :kind 'clean-up)
+      (should (eq 'error (+agent-shell-pstack-panel-member-state judge)))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (+agent-shell-pstack-panel-test--drain)
+      (should-not (buffer-live-p (+agent-shell-pstack-panel-member-shell
+                                  judge))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-judge-start-fails ()
+  "Finish once when the judge cannot start."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq start-error "No codex here")
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state judge)))
+      (should (equal "No codex here"
+                     (+agent-shell-pstack-panel-member-error judge)))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should-not (+agent-shell-pstack-panel-timer panel))
+      (lead-event :kind 'prompt-ready)
+      (+agent-shell-pstack-panel-test--drain)
+      (should (= 1 (length (+agent-shell-pstack-panel-test--followups
+                            sent lead)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-nothing-usable ()
+  "Finish without a judge when no candidate changed the base."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq unchanged '("opus") capture-errors '(("codex" . "git add: boom")))
+    (finish "opus" "Nothing to do.")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel))
+          (candidates (+agent-shell-pstack-panel-test--candidates panel)))
+      (should (equal '(captured failed)
+                     (mapcar #'+agent-shell-pstack-panel-member-capture
+                             candidates)))
+      (should (equal '(:commit "commit-opus" :ref "refs/pstack-arena/x/opus"
+                               :changed nil :stat "")
+                     (+agent-shell-pstack-panel-member-result (car candidates))))
+      (should (equal '(:error "git add: boom")
+                     (+agent-shell-pstack-panel-member-result
+                      (cadr candidates))))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (= 2 (length started)))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state judge)))
+      (should (string-match-p "No candidate changed the base"
+                              (+agent-shell-pstack-panel-member-error judge))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-judges-usable-only ()
+  "Show the judge only the candidates whose results changed the base."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq unchanged '("codex"))
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "judge" :kind 'init-finished)
+    (let ((brief (cdar sent)))
+      (should (string-match-p "## Candidate A\n" brief))
+      (should-not (string-match-p "## Candidate B" brief))
+      (should (string-match-p "\nNot judged, because they left no usable \
+change: B\\.\n" brief)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-protocol ()
   "Describe arenas only where candidates can run sandboxed."

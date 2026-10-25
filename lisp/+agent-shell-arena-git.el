@@ -47,8 +47,9 @@ Paths are relative to the top level."
 (cl-defstruct (+agent-shell-arena-git-role
                (:constructor +agent-shell-arena-git--role)
                (:copier nil))
-  "A candidate's worktree, the dependency paths it got, and its result."
-  name worktree shared private ref commit state)
+  "A candidate's worktree, the dependency paths it got, and its result.
+CHECKOUT is a separate worktree holding the result for reading."
+  name worktree shared private ref commit state checkout)
 
 (cl-defstruct (+agent-shell-arena-git-manifest
                (:constructor +agent-shell-arena-git--manifest)
@@ -332,7 +333,10 @@ nil, or nil and a message saying why there is no base."
                       (commit
                        . ,(or (+agent-shell-arena-git-role-commit role) :null))
                       (state
-                       . ,(or (+agent-shell-arena-git-role-state role) :null))))
+                       . ,(or (+agent-shell-arena-git-role-state role) :null))
+                      (checkout
+                       . ,(or (+agent-shell-arena-git-role-checkout role)
+                              :null))))
                   (+agent-shell-arena-git-manifest-roles manifest)))))))
     (with-temp-file temporary
       (insert (json-serialize json) "\n"))
@@ -364,7 +368,8 @@ nil, or nil and a message saying why there is no base."
                        :private (alist-get 'private role)
                        :ref (alist-get 'ref role)
                        :commit (alist-get 'commit role)
-                       :state (alist-get 'state role)))
+                       :state (alist-get 'state role)
+                       :checkout (alist-get 'checkout role)))
                     (alist-get 'roles json)))))
 
 (defun +agent-shell-arena-git-arenas ()
@@ -573,10 +578,69 @@ Call CALLBACK with the commit and nil, or nil and a message."
   (format "refs/pstack-arena/%s/%s"
           (+agent-shell-arena-git-manifest-id manifest) name))
 
+(defun +agent-shell-arena-git--captured (manifest name callback)
+  "Return captured role NAME of MANIFEST, or arrange CALLBACK's error."
+  (let ((role (+agent-shell-arena-git-role manifest name)))
+    (if (and role (+agent-shell-arena-git-role-commit role))
+        role
+      (+agent-shell-arena-git--later callback nil
+                                     (format "Arena role %s has no result"
+                                             name))
+      nil)))
+
+(defun +agent-shell-arena-git-diff (manifest name callback)
+  "Compare captured role NAME of MANIFEST with the base.
+Call CALLBACK with (:changed BOOL :stat TEXT) and nil, or nil and a
+message.  :changed says whether the trees differ; :stat is the output of
+git diff --stat."
+  (when-let* ((role (+agent-shell-arena-git--captured manifest name callback)))
+    (let ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+          (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+          (base (+agent-shell-arena-git-manifest-base manifest))
+          (commit (+agent-shell-arena-git-role-commit role))
+          (fail (lambda (message) (funcall callback nil message))))
+      (+agent-shell-arena-git--git
+       git-dir toplevel
+       (list "rev-parse" (concat base "^{tree}") (concat commit "^{tree}"))
+       fail
+       (lambda (trees)
+         (+agent-shell-arena-git--git
+          git-dir toplevel (list "diff" "--stat" base commit) fail
+          (lambda (stat)
+            (funcall callback
+                     (list :changed (let ((trees (split-string trees)))
+                                      (not (equal (car trees) (cadr trees))))
+                           :stat (string-trim-right stat))
+                     nil))))))))
+
+(defun +agent-shell-arena-git-checkout (manifest name callback)
+  "Check captured role NAME of MANIFEST out in a worktree of its own.
+The worktree is detached at the role's result commit, under the arena's
+checkouts/ folder, and recorded in the manifest so cleanup removes it.
+Call CALLBACK with its path and nil, or nil and a message."
+  (when-let* ((role (+agent-shell-arena-git--captured manifest name callback)))
+    (let ((checkout (file-name-as-directory
+                     (expand-file-name
+                      name (expand-file-name
+                            "checkouts"
+                            (+agent-shell-arena-git-manifest-directory
+                             manifest))))))
+      (make-directory (file-name-directory (directory-file-name checkout)) t)
+      ;; Recorded first, so cleanup finds a checkout that failed halfway.
+      (setf (+agent-shell-arena-git-role-checkout role) checkout)
+      (+agent-shell-arena-git-write-manifest manifest)
+      (+agent-shell-arena-git--git
+       (+agent-shell-arena-git-manifest-git-dir manifest)
+       (+agent-shell-arena-git-manifest-toplevel manifest)
+       (list "worktree" "add" "--detach" (directory-file-name checkout)
+             (+agent-shell-arena-git-role-commit role))
+       (lambda (message) (funcall callback nil message))
+       (lambda (_) (funcall callback checkout nil))))))
+
 ;;;; Cleanup
 
 (defun +agent-shell-arena-git-clean (manifest callback)
-  "Remove MANIFEST's worktrees, private clones and result refs.
+  "Remove MANIFEST's worktrees, checkouts, private clones and result refs.
 A worktree the repository does not list, or a ref that no longer points
 at the recorded commit, stays in place.  When no worktree stays, delete
 the arena directory too.  Call CALLBACK with a list of messages naming
@@ -605,24 +669,36 @@ what stayed, and nil; or nil and a message."
                      (+agent-shell-arena-git-manifest-directory manifest) t))
                   (funcall callback (nreverse left) nil)))
               (clean-role (role done)
-                (let ((worktree (+agent-shell-arena-git-role-worktree role)))
-                  (cond
-                   ((member (file-truename worktree) registered)
-                    (remove-private
-                     worktree (+agent-shell-arena-git-role-private role)
-                     (lambda ()
-                       (+agent-shell-arena-git--git
-                        git-dir toplevel
-                        (list "worktree" "remove" "--force"
-                              (directory-file-name worktree))
-                        fail (lambda (_) (clean-ref role done))))))
-                   ((file-exists-p worktree)
-                    (setq worktree-left t)
-                    (push (format "%s is not a registered worktree; left in \
-place" worktree)
-                          left)
-                    (clean-ref role done))
-                   (t (clean-ref role done)))))
+                (remove-trees
+                 (cons (cons (+agent-shell-arena-git-role-worktree role)
+                             (+agent-shell-arena-git-role-private role))
+                       (when-let* ((checkout
+                                    (+agent-shell-arena-git-role-checkout
+                                     role)))
+                         (list (list checkout))))
+                 (lambda () (clean-ref role done))))
+              (remove-trees (trees done)
+                (if (null trees)
+                    (funcall done)
+                  (let ((tree (caar trees))
+                        (next (lambda () (remove-trees (cdr trees) done))))
+                    (cond
+                     ((member (file-truename tree) registered)
+                      (remove-private
+                       tree (cdar trees)
+                       (lambda ()
+                         (+agent-shell-arena-git--git
+                          git-dir toplevel
+                          (list "worktree" "remove" "--force"
+                                (directory-file-name tree))
+                          fail (lambda (_) (funcall next))))))
+                     ((file-exists-p tree)
+                      (setq worktree-left t)
+                      (push (format "%s is not a registered worktree; left \
+in place" tree)
+                            left)
+                      (funcall next))
+                     (t (funcall next))))))
               (remove-private (worktree paths done)
                 (if (null paths)
                     (funcall done)
