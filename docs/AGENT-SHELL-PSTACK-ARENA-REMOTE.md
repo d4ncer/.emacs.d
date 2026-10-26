@@ -246,23 +246,81 @@ A running candidate can read the common git directory, so a second arena's
 candidates could read the first's captured objects. Per-arena object stores
 are a later option.
 
+## Experiment results, 2026-10-26
+
+Run on `example-ws` after revision 2.
+
+**The network namespace.** `bwrap --unshare-net` with `slirp4netns`
+attached failed with `setns(CLONE_NEWNET): Operation not permitted`, even
+with `--userns-path`. This order worked:
+
+1. `unshare --user --map-root-user --net` creates the user and network
+   namespaces.
+2. `slirp4netns --configure --disable-host-loopback <pid> tap0` attaches to
+   that process.
+3. `bwrap` runs inside for the mounts, the PID and IPC namespaces and the
+   cleared environment, with `--unshare-user --uid 1001 --gid 1001` so the
+   agent is not root inside.
+
+`/etc/resolv.conf` is a symlink into `/run/systemd/resolve`, so the
+sandbox gets a `nameserver 10.0.2.3` file at
+`/run/systemd/resolve/stub-resolv.conf` under a private `/run`.
+
+| Check inside the sandbox | Result |
+|---|---|
+| Interface | `tap0` up at 10.0.2.100 |
+| HTTPS to api.anthropic.com and github.com | reached (404 and 200) |
+| Host loopback through 10.0.2.2 | refused |
+| Abstract unix sockets | none visible |
+| `/run/docker.sock` | absent |
+| `~/.ssh` | absent |
+| Environment | 5 variables |
+
+With `--ro-bind / /` instead of the allowlist, `/run/docker.sock` was
+reachable even in its own network namespace, because path sockets are
+files. The allowlist is necessary.
+
+**Credentials without refresh tokens.** The host's Claude Code access
+token had 3.8 hours left. The host's Codex access token is a JWT that lasts
+about 236 hours, and it had been issued 4.1 hours earlier.
+
+- **Claude Code** ran `claude -p` in bypass mode inside the full sandbox,
+  with only `CLAUDE_CODE_OAUTH_TOKEN` set to the host's access token and a
+  private `CLAUDE_CONFIG_DIR`. It wrote a file in its worktree and found
+  `~/.ssh` absent. As root inside the namespace, it refused
+  `--dangerously-skip-permissions`, which the uid mapping above fixes.
+- **Codex**:
+  - It refused `codex login --with-access-token`: "agent identity JWT
+    payload is not valid JSON". That flag takes another kind of token.
+  - A private `auth.json` with `auth_mode` `chatgpt` and the access token,
+    ID token and account id worked. Its `refresh_token` has to be present,
+    so it is the empty string.
+  - `codex exec` with approvals and its own sandbox bypassed then wrote a
+    file and found `~/.ssh` absent.
+- **The host's login files** kept their modification times through every
+  run.
+
+So candidates get only an access token. The runner checks that the token
+outlives the arena's deadline and refreshes the host's own login first if
+it does not.
+
+**Autostop.** The remote host's `coder` CLI is not logged in. The laptop's is,
+and `coder schedule extend example-ws 6h` moved the stop time from 01:46
+to 04:16, six hours from the command. The laptop extends the workspace at
+submission to cover the arena's deadline, so the host needs no Coder token.
+
 ## Open questions to settle by testing
 
-1. **Autostop.** Does `coder schedule extend` work from the runner on the
-   host, with which token? The token must stay hidden from candidates.
-2. **Agents under the Linux sandbox.** Do both adapters start and
-   authenticate with the credentials above, inside a private home, a
-   cleared environment and a slirp4netns network? Does Codex in
-   `agent-full-access` need its own Landlock sandbox, and does that nest
-   inside `bwrap`?
-3. **What the monorepo's build needs from the host.** Does Bazel need the Nix
-   daemon socket, Docker, or anything else outside the allowlist? The
-   trace command, ported to Linux in report mode, would answer it.
-4. **Bazel on the host.** How cold is a candidate's first build in a new
-   worktree, and can candidates share the host's repository cache, as on
-   the laptop?
-5. **Codex access tokens.** How long does an access token last, and does
-   `--with-access-token` accept it for an agent session?
+1. **The ACP adapters** inside the same sandbox, once installed. The
+   agents' CLIs work there, so this is expected to hold.
+2. **What the monorepo's build needs from the host.** Bazel, its private home
+   cache and toolchain paths, and whether it needs the Nix daemon socket or
+   Docker. The trace command, ported to Linux, answers this.
+3. **Bazel on the host.** How cold a candidate's first build is, and
+   whether candidates can share a repository cache.
+4. **Refreshing the host's Claude Code login** without a person: whether a
+   plain `claude -p` on the host refreshes a token near expiry, or a
+   one-year `claude setup-token` should be made once.
 
 ## Tests
 
