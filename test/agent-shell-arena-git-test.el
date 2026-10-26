@@ -245,6 +245,31 @@
       (should (equal (file-symlink-p (expand-file-name "build/x.el" repo))
                      (expand-file-name "build/sources/x.el" repo))))))
 
+(ert-deftest +agent-shell-arena-git-test-system-tools ()
+  "Provision and capture with macOS's cp and find, whatever PATH holds.
+A GNU cp ahead on PATH, as Nix or Homebrew coreutils put there, rejects
+the -c clone flag."
+  (+arena-git-test--with-scratch
+    (let* ((bin (expand-file-name "bin/" +arena-git-test--scratch))
+           (exec-path (cons bin exec-path))
+           (process-environment
+            (cons (concat "PATH=" bin ":" (getenv "PATH"))
+                  process-environment)))
+      (make-directory bin)
+      (dolist (tool '("cp" "find"))
+        (let ((file (expand-file-name tool bin)))
+          (with-temp-file file
+            (insert "#!/bin/sh\necho \"fake " tool "\" >&2\nexit 1\n"))
+          (set-file-modes file #o755)))
+      (let* ((repo (+arena-git-test--dependency-repo))
+             (base (+arena-git-test--base repo))
+             (manifest (+arena-git-test--arena base))
+             (worktree (+arena-git-test--provision manifest "codex")))
+        (should (file-directory-p (expand-file-name "build" worktree)))
+        (should (equal (file-symlink-p
+                        (expand-file-name "build/x.el" worktree))
+                       (expand-file-name "build/sources/x.el" worktree)))))))
+
 (ert-deftest +agent-shell-arena-git-test-profile-matching ()
   "Pick the first profile whose directory or predicate matches."
   (+arena-git-test--with-scratch
