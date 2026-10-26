@@ -12,6 +12,8 @@
 (require 'cl-lib)
 (require '+agent-shell-arena-remote)
 
+(defvar agent-shell-inhibit-system-sleep)
+
 (defmacro +arena-remote-test--with-scratch (&rest body)
   "Run BODY with `scratch', a private git config and a fresh arena root."
   (declare (indent 0))
@@ -523,6 +525,35 @@ and the lead hears once the host has been silent too long."
           (should (equal (emacs-pid) (+agent-shell-arena-remote--lock-owner lock)))
           (+agent-shell-arena-remote--release lock)
           (should-not (file-exists-p lock)))
+      (delete-directory root t))))
+
+(ert-deftest +agent-shell-arena-remote-test-runner-sleep ()
+  "A runner's agent shells never ask the host to stay awake.
+A host's D-Bus refuses a runner, and every busy turn would log it."
+  (let* ((root (file-name-as-directory
+                (file-truename (make-temp-file "arena-remote-runner-" t))))
+         (directory (expand-file-name "jobs/abc-12345678/" root))
+         (seen (expand-file-name "seen" root)))
+    (unwind-protect
+        (let ((agent-shell-inhibit-system-sleep t))
+          (make-directory directory t)
+          (+agent-shell-arena-remote--write-json
+           (expand-file-name "job.json" directory) 'job
+           (+arena-remote-test--job))
+          (+agent-shell-arena-remote--write-json
+           (expand-file-name "status.json" directory) 'status
+           (+agent-shell-arena-remote--make-status
+            :id "abc-12345678" :phase 'finished :heartbeat 1 :results t))
+          (with-temp-file (expand-file-name "runner-init.el" root)
+            (prin1 `(with-temp-file ,seen
+                      (prin1 agent-shell-inhibit-system-sleep (current-buffer)))
+                   (current-buffer)))
+          (should (eql 0 (+agent-shell-arena-remote-runner-main directory)))
+          (should (equal "nil" (with-temp-buffer
+                                 (insert-file-contents seen)
+                                 (buffer-string)))))
+      (advice-remove 'yes-or-no-p #'+agent-shell-arena-remote--refuse)
+      (advice-remove 'y-or-n-p #'+agent-shell-arena-remote--refuse)
       (delete-directory root t))))
 
 ;;;; Re-attaching
