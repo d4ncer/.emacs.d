@@ -83,12 +83,20 @@ so deleting the tree needs owner write permission back first."
                      (+agent-shell-sandbox-deny-reads sandbox))))))
 
 (ert-deftest +agent-shell-sandbox-test-profile ()
-  "Allow writes only to the sandbox's folders and keep reads of others out."
+  "Allow writes only to the sandbox's folders and keep reads of others out.
+Every refusal carries the sandbox's tag."
   (+agent-shell-sandbox-test--with (root denied)
-    (let ((profile (+agent-shell-sandbox-profile sandbox))
-          (quote-path (lambda (path) (concat "\"" path "\""))))
+    (let* ((profile (+agent-shell-sandbox-profile sandbox))
+           (quote-path (lambda (path) (concat "\"" path "\"")))
+           (tag (format "(with message %s)"
+                        (funcall quote-path
+                                 (+agent-shell-sandbox-tag sandbox)))))
+      (should (string-match-p "\\`pa-sandbox-[0-9a-f]\\{8\\}\\'"
+                              (+agent-shell-sandbox-tag sandbox)))
       (should (string-prefix-p
-               "(version 1)\n(allow default)\n(deny file-write*)\n" profile))
+               (format "(version 1)\n(allow default)\n(deny file-write* %s)\n"
+                       tag)
+               profile))
       (should (string-match-p
                (regexp-quote
                 (format "(allow file-write* (subpath %s) (subpath %s) \
@@ -100,15 +108,16 @@ so deleting the tree needs owner write permission back first."
                profile))
       (should (string-match-p
                (regexp-quote
-                (format "(deny file-write* (literal %s))"
+                (format "(deny file-write* %s (literal %s))" tag
                         (funcall quote-path (concat root "/.git"))))
                profile))
       (should (string-match-p
-               (regexp-quote (format "(deny file-read* (subpath %s))"
+               (regexp-quote (format "(deny file-read* %s (subpath %s))" tag
                                      (funcall quote-path denied)))
                profile))
       (should (string-match-p
-               (regexp-quote "(deny network-outbound (remote unix-socket))")
+               (regexp-quote (format "(deny network-outbound %s (remote \
+unix-socket))" tag))
                profile))
       (should (string-suffix-p "(allow network-outbound (remote unix-socket \
 (path-literal \"/private/var/run/mDNSResponder\")))\n" profile)))))

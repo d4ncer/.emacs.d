@@ -306,7 +306,15 @@ the candidate profile would refuse, so trace only commands you would run
 unconfined. The trace buffer groups the reported
 paths by operation, collapses crowded folders, and shows the exit status
 and the output's last lines. `C-c C-k` stops the command, and killing the
-buffer stops it too. Either way the private folders and the worktree are
+buffer stops it too.
+
+With a prefix argument, `C-u M-x +agent-shell-pstack-arena-trace` runs
+the command under the candidate profile itself rather than in trace
+mode, so a refused operation fails as it would in an arena. That proves
+a profile works. The buffer shows the exit status, the output's last
+lines, and what the profile refused, grouped the same way.
+
+Either way the private folders and the worktree are
 removed, even when the command left read-only trees such as Bazel's
 outputs in them. A folder that cannot be removed is reported and the
 rest of the cleanup still runs. The kernel drops

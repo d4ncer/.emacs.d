@@ -163,6 +163,19 @@ so. 110 processes making one write each lost 5 reports, which never
 arrived within 4 seconds, and 30 processes making four writes each lost 1
 of 120.
 
+**Enforcing mode** runs the command under the candidate profile itself,
+with a prefix argument to the same command, to prove a profile works.
+Every sandbox's refusing rules are `(deny OP (with message TAG) ...)`, so
+the kernel logs each refusal as `Sandbox: PROCESS(PID) deny(COUNT) OP
+PATH` followed by a line holding TAG, the same shape as a trace report
+with `deny(COUNT)` in place of `allow`. A probe confirmed it: a `touch`
+refused under such a profile logged `Sandbox: touch(81663) deny(1)
+file-write-create /private/tmp/pa-probe/denied-file` and then the tag.
+The same predicate and probes therefore select this run's refusals and
+no other process's, with no need to filter by process tree or path. The
+tag is `pa-sandbox-<8 hex>`, made when the sandbox is, so real
+candidates' refusals in the system log carry their sandbox's tag too.
+
 **The workspace root** is
 `+agent-shell-pstack-arena-directory`/`<arena-id>`/`<role>`/, outside
 `~/.emacs.d`. The default is `~/.local/state/pstack-arena/`. Claude Code

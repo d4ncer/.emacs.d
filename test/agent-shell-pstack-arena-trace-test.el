@@ -37,6 +37,35 @@ ENDSWITH \"pa-trace-1234\"\""
                                       line "pa-trace-1234"))
                                    +arena-trace-test--lines)))))
 
+(defconst +arena-trace-test--denials
+  '("{\"timezoneName\":\"\",\"messageType\":\"Error\",\"eventType\":\"logEvent\",\"source\":null,\"formatString\":\"%s\",\"userID\":0,\"activityIdentifier\":0,\"subsystem\":\"\",\"category\":\"\",\"threadID\":66965836,\"senderImageUUID\":\"CAB6E5F0-8492-3DED-B04B-66D2CC8E3C61\",\"backtrace\":{\"frames\":[{\"imageOffset\":168600,\"imageUUID\":\"CAB6E5F0-8492-3DED-B04B-66D2CC8E3C61\"}]},\"bootUUID\":\"E7C96E42-5EBE-4E3A-8A6E-A8D7C4B50751\",\"processImagePath\":\"\\/kernel\",\"senderImagePath\":\"\\/System\\/Library\\/Extensions\\/Sandbox.kext\\/Contents\\/MacOS\\/Sandbox\",\"timestamp\":\"2026-10-26 15:09:47.855003+1300\",\"machTimestamp\":37878985972077,\"eventMessage\":\"Sandbox: touch(81663) deny(1) file-write-create \\/private\\/tmp\\/pa-probe\\/denied-file\\npa-probe-tag-1\",\"processImageUUID\":\"D069070E-9313-3103-9083-B78E4737AA20\",\"traceID\":17575040258052,\"processID\":0,\"senderProgramCounter\":168600,\"parentActivityIdentifier\":0}"
+    "{\"eventMessage\":\"Sandbox: bash(81664) deny(1) file-write-create \\/private\\/tmp\\/pa-probe\\/denied-2\\npa-probe-tag-1\",\"processID\":0}"
+    "{\"eventMessage\":\"Sandbox: Python(82489) deny(1) network-outbound \\/private\\/tmp\\/pa-probe\\/t.sock\\npa-probe-tag-2\",\"processID\":0}"
+    "{\"eventMessage\":\"Sandbox: com.apple.WebKit.Networking(46745) deny(1) mach-lookup com.apple.diagnosticd\",\"processID\":0}"
+    "{\"eventMessage\":\"Sandbox: cat(81670) allow file-read-data \\/dev\\/null\\npa-probe-tag-1 done\",\"processID\":0}"
+    "{\"count\":3,\"finished\":1}")
+  "Log lines captured from enforced profiles, with foreign lines mixed in.
+The first is verbatim log show --style ndjson output for a profile whose
+deny rules carried (with message \"pa-probe-tag-1\"), and the next two
+keep only the eventMessage of lines captured the same way.")
+
+(ert-deftest +arena-trace-test-parse-denials ()
+  "Keep only the refusals tagged with this run's tag."
+  (should (equal '(("file-write-create" "/private/tmp/pa-probe/denied-file"
+                    "touch")
+                   ("file-write-create" "/private/tmp/pa-probe/denied-2"
+                    "bash"))
+                 (delq nil (mapcar (lambda (line)
+                                     (+agent-shell-pstack-arena-trace-parse
+                                      line "pa-probe-tag-1"))
+                                   +arena-trace-test--denials))))
+  (should (equal '(("network-outbound" "/private/tmp/pa-probe/t.sock"
+                    "Python"))
+                 (delq nil (mapcar (lambda (line)
+                                     (+agent-shell-pstack-arena-trace-parse
+                                      line "pa-probe-tag-2"))
+                                   +arena-trace-test--denials)))))
+
 (ert-deftest +arena-trace-test-summarize ()
   "Group by operation, count distinct paths, and collapse crowded folders
 other than the home folder and its parents."
@@ -82,9 +111,10 @@ other than the home folder and its parents."
   (with-current-buffer (+agent-shell-pstack-arena-trace-run-buffer run)
     (buffer-string)))
 
-(defun +arena-trace-test--trace (repo command)
-  "Trace COMMAND in a candidate of REPO; return the run once cleaned up."
-  (let ((run (+agent-shell-pstack-arena-trace repo command)))
+(defun +arena-trace-test--trace (repo command &optional enforce)
+  "Trace COMMAND in a candidate of REPO; return the run once cleaned up.
+With ENFORCE, run it under the candidate profile instead."
+  (let ((run (+agent-shell-pstack-arena-trace repo command enforce)))
     (+arena-trace-test--wait
      (lambda () (string-match-p "^\\(Removed the throwaway worktree\\|Cleanup\\)"
                                 (+arena-trace-test--text run))))
@@ -148,6 +178,36 @@ for name in 'xyz': open(os.path.join('%s', name), 'w')\" && cat %s && exit 3"
             (should (string-match-p "^Output:\na\nb\nc$" text))
             (should (+arena-trace-test--cleaned-p repo)))
         (delete-directory outside t)
+        (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
+
+(ert-deftest +arena-trace-test-enforced-refusals ()
+  "Under the candidate profile, refuse a write outside the sandbox and
+report it, but not the writes the profile allows."
+  (+arena-trace-test--on-macos
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (outside (format "/private/tmp/pa-enforce-test-%08x"
+                            (random #x100000000)))
+           (run (+arena-trace-test--trace
+                 repo (format "touch inside.txt \"$TMPDIR/t\"; for i in 1 2 3; \
+do touch %s; done; echo after" outside)
+                 t))
+           (text (+arena-trace-test--text run))
+           (reports (substring text (or (string-search "What the" text) 0))))
+      (unwind-protect
+          (progn
+            (should (string-prefix-p "Enforced arena run of" text))
+            (should-not (file-exists-p outside))
+            (should (string-match-p "^Exit status 0\\.$" text))
+            (should (string-search "What the candidate profile refused, by \
+operation." text))
+            (should (string-match-p
+                     (format "^file-write-create\n\\(  .*\n\\)*  %s  (touch)"
+                             (regexp-quote outside))
+                     reports))
+            (should-not (string-search "inside.txt" reports))
+            (should (string-match-p "Operation not permitted\nafter$" text))
+            (should (+arena-trace-test--cleaned-p repo)))
+        (when (file-exists-p outside) (delete-file outside))
         (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
 
 (defconst +arena-trace-test--lock

@@ -8,8 +8,9 @@
 ;; `+agent-shell-sandbox-client-maker' wraps an agent config's client maker
 ;; so the adapter starts under that profile with the agent's private
 ;; environment from `+agent-shell-sandbox-agents' and the defaults from
-;; `+agent-shell-sandbox-environment'.  A sandbox in trace mode reports
-;; what its profile would refuse instead of refusing it.
+;; `+agent-shell-sandbox-environment'.  The kernel logs each refusal with
+;; the sandbox's tag, and a sandbox in trace mode reports what its profile
+;; would refuse instead of refusing it.
 ;;
 ;; Stopping takes three steps, in order: `+agent-shell-sandbox-kill-tree'
 ;; while the adapter lives, `+agent-shell-sandbox-sweep' once it is gone,
@@ -77,8 +78,10 @@ write.")
        :documentation "Environment entries ahead of the defaults.")
   (allow-connects nil :read-only t
                   :documentation "Unix sockets it may connect to.")
+  (tag nil :read-only t
+       :documentation "Message the kernel's log of each refusal carries.")
   (trace nil :read-only t
-         :documentation "Tag of a trace-mode profile's reports, or nil."))
+         :documentation "Whether the profile reports instead of refusing."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -262,12 +265,13 @@ instead be a function called with the new sandbox, whose root and private
 folders exist, returning one path, pattern or entry or a list of them.
 
 With TRACE non-nil, the profile reports what it would refuse rather than
-refusing it; see `+agent-shell-sandbox-profile'."
+refusing it; see `+agent-shell-sandbox-profile'.  Either way the kernel
+logs each report or refusal with the sandbox's tag as its message."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
          (own-config (not config))
-         (tag (and trace (format "pa-trace-%08x" (random #x100000000))))
+         (tag (format "pa-sandbox-%08x" (random #x100000000)))
          (config (+agent-shell-sandbox--path
                   (if config (progn (make-directory config t) config)
                     (make-temp-file "pa-config-" t))))
@@ -279,7 +283,7 @@ refusing it; see `+agent-shell-sandbox-profile'."
                                             deny-reads)
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
-                        :trace tag resolved)))
+                        :tag tag :trace (and trace t) resolved)))
          (provisional (funcall make))
          (allowances
           (lambda (items kind)
@@ -396,15 +400,17 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
 
 (defun +agent-shell-sandbox-profile (sandbox)
   "Return the sandbox-exec profile text for SANDBOX.
-In trace mode every rule that would refuse an operation allows it with a
-report tagged with SANDBOX's trace tag instead."
-  (let* ((tag (+agent-shell-sandbox-trace sandbox))
+Every rule that refuses an operation tags the kernel's log of it with
+SANDBOX's tag.  In trace mode each such rule allows the operation with a
+report instead."
+  (let* ((tag (+agent-shell-sandbox--string (+agent-shell-sandbox-tag
+                                              sandbox)))
          (refuse (lambda (operation filters)
-                   (if tag
+                   (if (+agent-shell-sandbox-trace sandbox)
                        (format "(allow %s (with report) (with message %s)%s)\n"
-                               operation (+agent-shell-sandbox--string tag)
-                               filters)
-                     (format "(deny %s%s)\n" operation filters)))))
+                               operation tag filters)
+                     (format "(deny %s (with message %s)%s)\n"
+                             operation tag filters)))))
     (concat
      "(version 1)\n(allow default)\n" (funcall refuse "file-write*" "")
      (format "(allow file-write*%s)\n"

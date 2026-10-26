@@ -5,7 +5,9 @@
 ;; worktree exactly as an arena would, runs a shell command in it under a
 ;; trace-mode sandbox, and summarizes the kernel's reports.  A trace-mode
 ;; profile allows and reports what the candidate profile would refuse, so
-;; one run lists every path a repository's arena profile may need.
+;; one run lists every path a repository's arena profile may need.  With a
+;; prefix argument the command runs under the candidate profile itself,
+;; which proves a profile works, and the summary lists what it refused.
 ;;
 ;; A run moves through preparing, running, collecting and finished.
 ;; Whatever happens, finishing kills what the command left running and
@@ -36,9 +38,10 @@
                (:constructor +agent-shell-pstack-arena-trace--run)
                (:copier nil))
   "One trace.  PHASE is preparing, running, collecting or finished.
-STOP, once set, ends a run still preparing at its next step."
+STOP, once set, ends a run still preparing at its next step.  ENFORCE
+runs the command under the candidate profile rather than trace mode."
   directory command buffer (phase 'preparing) stop manifest sandbox log
-  process output status)
+  process output status enforce)
 
 (defvar-local +agent-shell-pstack-arena-trace--current nil
   "The trace run this buffer shows.")
@@ -47,8 +50,10 @@ STOP, once set, ends a run still preparing at its next step."
 
 (defun +agent-shell-pstack-arena-trace-parse (line tag)
   "Return the report in LINE as (OPERATION PATH PROCESS), or nil.
-LINE is one line of log stream --style ndjson output; only sandbox
-reports tagged TAG count."
+LINE is one line of log stream --style ndjson output.  Only the
+kernel's sandbox lines whose message is TAG count, whether they report
+an operation a trace-mode profile allowed, as allow, or one the
+candidate profile refused, as deny(COUNT)."
   (when-let* (((string-prefix-p "{" line))
               (event (ignore-errors
                        (json-parse-string line :object-type 'alist)))
@@ -56,7 +61,8 @@ reports tagged TAG count."
               ((stringp message))
               ((string-match
                 (concat "\\`\\(?:[0-9]+ duplicate reports for \\)?Sandbox: "
-                        "\\(.+?\\)([0-9]+) allow \\([^ \n]+\\) \\([^\n]*\\)\n"
+                        "\\(.+?\\)([0-9]+) \\(?:allow\\|deny([0-9]+)\\) "
+                        "\\([^ \n]+\\) \\([^\n]*\\)\n"
                         (regexp-quote tag) "\\'")
                 message)))
     (list (match-string 2 message) (match-string 3 message)
@@ -145,14 +151,22 @@ killing the buffer stops it and cleans up.")
   "Return the text reporting RUN's SUMMARY, exit status and output tail."
   (let* ((output (+agent-shell-pstack-arena-trace-run-output run))
          (lines (split-string (string-trim-right output) "\n"))
-         (tail (last lines +agent-shell-pstack-arena-trace--tail)))
+         (tail (last lines +agent-shell-pstack-arena-trace--tail))
+         (enforce (+agent-shell-pstack-arena-trace-run-enforce run)))
     (concat
      (format "\n%s\n" (+agent-shell-pstack-arena-trace-run-status run))
-     (if (null summary)
-         "\nNothing outside the candidate's sandbox was reported.\n"
+     (cond
+      ((and (null summary) enforce)
+       "\nThe candidate profile refused nothing.\n")
+      ((null summary)
+       "\nNothing outside the candidate's sandbox was reported.\n")
+      (t
        (concat
-        "\nWhat the candidate profile would refuse, by operation.  The \
-kernel\ndrops the odd report, so trace again before trusting an absence.\n"
+        (if enforce
+            "\nWhat the candidate profile refused, by operation.  The kernel \
+drops\nthe odd report, so run again before trusting an absence.\n"
+          "\nWhat the candidate profile would refuse, by operation.  The \
+kernel\ndrops the odd report, so trace again before trusting an absence.\n")
         (mapconcat
          (pcase-lambda (`(,operation . ,entries))
            (concat
@@ -163,7 +177,7 @@ kernel\ndrops the odd report, so trace again before trusting an absence.\n"
                        (if (> count 1) (format "%d paths; " count) "")
                        (string-join processes ", ")))
              entries "")))
-         summary "")))
+         summary ""))))
      (if (string-empty-p (string-trim output))
          "\nThe command printed nothing.\n"
        (format "\nOutput%s:\n%s\n"
@@ -238,7 +252,7 @@ remove the throwaway worktree.  Safe to call more than once."
 (defun +agent-shell-pstack-arena-trace--collect (run)
   "Read RUN's reports once the log has caught up, summarize, then finish."
   (let* ((log (+agent-shell-pstack-arena-trace-run-log run))
-         (tag (+agent-shell-sandbox-trace
+         (tag (+agent-shell-sandbox-tag
                (+agent-shell-pstack-arena-trace-run-sandbox run)))
          (text (with-current-buffer (process-buffer log) (buffer-string))))
     (delete-process log)
@@ -261,7 +275,7 @@ remove the throwaway worktree.  Safe to call more than once."
         (insert "(version 1)\n(allow default)\n(allow file-read-data \
 (with report) (with message "
                 (+agent-shell-sandbox--string
-                 (concat (+agent-shell-sandbox-trace sandbox) " " word))
+                 (concat (+agent-shell-sandbox-tag sandbox) " " word))
                 ") (literal \"/dev/null\"))\n")))
     file))
 
@@ -271,7 +285,7 @@ Call DONE with nil after TIMEOUT seconds instead.  Each probe reads
 /dev/null under a profile that reports it, so the log has caught up with
 everything reported before the report appears."
   (let* ((log (+agent-shell-pstack-arena-trace-run-log run))
-         (needle (concat (+agent-shell-sandbox-trace
+         (needle (concat (+agent-shell-sandbox-tag
                           (+agent-shell-pstack-arena-trace-run-sandbox run))
                          " " word))
          (profile (+agent-shell-pstack-arena-trace--probe-profile run word))
@@ -316,7 +330,7 @@ everything reported before the report appears."
                  run (error-message-string err))))))))
 
 (defun +agent-shell-pstack-arena-trace--command (run directory)
-  "Start RUN's command in DIRECTORY under its trace-mode sandbox."
+  "Start RUN's command in DIRECTORY under its sandbox's profile."
   (let* ((sandbox (+agent-shell-pstack-arena-trace-run-sandbox run))
          (profile (expand-file-name "trace.sb"
                                     (+agent-shell-sandbox-config sandbox)))
@@ -342,10 +356,12 @@ everything reported before the report appears."
       (process-send-eof process))))
 
 (defun +agent-shell-pstack-arena-trace--start (run directory)
-  "Build RUN's trace-mode sandbox, start the log, then the command.
+  "Build RUN's sandbox, start the log, then the command.
 DIRECTORY is the candidate's working directory."
   (let* ((manifest (+agent-shell-pstack-arena-trace-run-manifest run))
-         (sandbox (+agent-shell-pstack-arena-sandbox manifest "trace" t))
+         (sandbox (+agent-shell-pstack-arena-sandbox
+                   manifest "trace"
+                   (not (+agent-shell-pstack-arena-trace-run-enforce run))))
          (default-directory "/"))
     (setf (+agent-shell-pstack-arena-trace-run-sandbox run) sandbox)
     (setf (+agent-shell-pstack-arena-trace-run-log run)
@@ -355,7 +371,7 @@ DIRECTORY is the candidate's working directory."
            :command (list "/usr/bin/log" "stream" "--style" "ndjson"
                           "--predicate"
                           (format "sender == \"Sandbox\" AND eventMessage \
-CONTAINS \"%s\"" (+agent-shell-sandbox-trace sandbox)))
+CONTAINS \"%s\"" (+agent-shell-sandbox-tag sandbox)))
            :sentinel #'ignore))
     ;; log stream prints its filter before it receives events.
     (+agent-shell-pstack-arena-trace--await
@@ -370,16 +386,23 @@ CONTAINS \"%s\"" (+agent-shell-sandbox-trace sandbox)))
           run "log stream never started."))))))
 
 ;;;###autoload
-(defun +agent-shell-pstack-arena-trace (directory command)
+(defun +agent-shell-pstack-arena-trace (directory command &optional enforce)
   "Trace what COMMAND needs beyond an arena candidate's sandbox.
 Provision one throwaway candidate of the repository at DIRECTORY with its
 arena profile, run COMMAND there with the candidate's environment under a
 profile that reports instead of refusing, and show what it reported.
-Return the run."
+With ENFORCE, interactively a prefix argument, run COMMAND under the
+candidate profile itself, so what it needs is refused, and show what was
+refused.  That proves a profile works.  Return the run."
   (interactive
-   (list (read-directory-name "Trace an arena candidate of repository: "
-                              nil nil t)
-         (read-shell-command "Command to trace: ")))
+   (let ((enforce current-prefix-arg))
+     (list (read-directory-name
+            (if enforce "Run an enforced arena candidate of repository: "
+              "Trace an arena candidate of repository: ")
+            nil nil t)
+           (read-shell-command (if enforce "Command to run: "
+                                 "Command to trace: "))
+           enforce)))
   (unless (and (eq system-type 'darwin)
                (file-executable-p "/usr/bin/sandbox-exec")
                (file-executable-p "/usr/bin/log"))
@@ -387,14 +410,17 @@ Return the run."
   (let* ((buffer (generate-new-buffer "*pstack arena trace*"))
          (run (+agent-shell-pstack-arena-trace--run
                :directory (expand-file-name directory) :command command
-               :buffer buffer)))
+               :buffer buffer :enforce (and enforce t))))
     (with-current-buffer buffer
       (+agent-shell-pstack-arena-trace-mode)
       (setq +agent-shell-pstack-arena-trace--current run)
       (add-hook 'kill-buffer-hook #'+agent-shell-pstack-arena-trace--killed
                 nil t))
     (+agent-shell-pstack-arena-trace--say
-     run (format "Arena trace of `%s' in %s" command directory) ""
+     run (format (if enforce "Enforced arena run of `%s' in %s"
+                   "Arena trace of `%s' in %s")
+                 command directory)
+     ""
      "Capturing a base and provisioning a candidate...")
     (when (called-interactively-p 'any) (pop-to-buffer buffer))
     (+agent-shell-arena-git-capture-base
