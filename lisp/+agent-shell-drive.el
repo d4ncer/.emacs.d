@@ -23,9 +23,9 @@
 ;; them.
 ;;
 ;; A shell whose policy is a `+agent-shell-sandbox' runs its adapter under
-;; sandbox-exec in the agent's full-access mode, rejects every permission
-;; request and keeps no transcript.  Stop it with `+agent-shell-drive-stop',
-;; which also ends every process it started.
+;; sandbox-exec, or bwrap on Linux, in the agent's full-access mode,
+;; rejects every permission request and keeps no transcript.  Stop it with
+;; `+agent-shell-drive-stop', which also ends every process it started.
 
 ;;; Code:
 
@@ -42,8 +42,7 @@
 (declare-function agent-shell--resolve-path "agent-shell")
 (declare-function agent-shell-start "agent-shell")
 (declare-function agent-shell-cwd "agent-shell-project")
-(declare-function agent-shell--current-mode-id "agent-shell-config")
-(declare-function agent-shell-status "agent-shell")
+(declare-function agent-shell--current-mode-id "agent-shell-config")(declare-function agent-shell-status "agent-shell")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-insert "agent-shell")
 (declare-function agent-shell-interrupt "agent-shell")
@@ -293,13 +292,18 @@ transcript is kept.  A shell with a policy is hidden from
                                   shell reason)))))
     shell))
 
-(defun +agent-shell-drive--adapter (shell)
-  "Return the pid of live SHELL's agent adapter, or nil."
+(defun +agent-shell-drive--adapter-process (shell)
+  "Return live SHELL's agent adapter process while it runs, or nil."
   (when-let* (((buffer-live-p shell))
               (process (map-nested-elt
                         (buffer-local-value 'agent-shell--state shell)
                         '(:client :process)))
               ((process-live-p process)))
+    process))
+
+(defun +agent-shell-drive--adapter (shell)
+  "Return the pid of live SHELL's agent adapter, or nil."
+  (when-let* ((process (+agent-shell-drive--adapter-process shell)))
     (process-id process)))
 
 (defun +agent-shell-drive-stop (shell &optional reason callback)
@@ -307,20 +311,32 @@ transcript is kept.  A shell with a policy is hidden from
 Kill the adapter's descendants, kill SHELL as `+agent-shell-drive-kill'
 does with REASON, sweep processes working in the sandbox, and finish its
 agent's credentials.  CALLBACK gets the pids that survived the sweep.  The
-work runs from a timer, so SHELL's own event callbacks may call this."
+work runs from a timer, so SHELL's own event callbacks may call this.
+
+On Linux the adapter's launcher ends its PID namespace by
+`+agent-shell-sandbox-terminate' before SHELL is killed, so no walk or
+sweep is needed, and CALLBACK gets the launcher's pid only when it had
+to be killed outright."
   (let ((sandbox (+agent-shell-drive-policy shell)))
     (unless (+agent-shell-sandbox-p sandbox)
       (error "Shell %s is not sandboxed" shell))
     (run-at-time
      0 nil
      (lambda ()
-       (when-let* ((pid (+agent-shell-drive--adapter shell)))
-         (+agent-shell-sandbox-kill-tree pid))
-       (+agent-shell-drive-kill shell reason)
-       (+agent-shell-sandbox-sweep
-        sandbox (lambda (survivors)
-                  (+agent-shell-sandbox-finish sandbox)
-                  (when callback (funcall callback survivors))))))))
+       (let ((finish (lambda (survivors)
+                       (+agent-shell-sandbox-finish sandbox)
+                       (when callback (funcall callback survivors)))))
+         (if (eq +agent-shell-sandbox-backend 'bwrap)
+             (let ((process (+agent-shell-drive--adapter-process shell))
+                   (kill (lambda (survivors)
+                           (+agent-shell-drive-kill shell reason)
+                           (funcall finish survivors))))
+               (if process (+agent-shell-sandbox-terminate process kill)
+                 (funcall kill nil)))
+           (when-let* ((pid (+agent-shell-drive--adapter shell)))
+             (+agent-shell-sandbox-kill-tree pid))
+           (+agent-shell-drive-kill shell reason)
+           (+agent-shell-sandbox-sweep sandbox finish)))))))
 
 (defun +agent-shell-drive-pinned-p (shell directory)
   "Return whether live SHELL works in DIRECTORY."

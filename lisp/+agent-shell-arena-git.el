@@ -664,7 +664,9 @@ the candidate gets the same sparse checkout."
 (defun +agent-shell-arena-git--clone (toplevel worktree paths fail done)
   "Clone each of PATHS from TOPLEVEL into WORKTREE, then call DONE.
 Symlinks in a clone that point into TOPLEVEL are rewritten to point at
-the same path in WORKTREE.  Call FAIL with a message on failure."
+the same path in WORKTREE.  Call FAIL with a message on failure.  A
+clone shares blocks where the filesystem can: macOS's cp -c always, and
+GNU cp --reflink=auto on Linux, which copies where it cannot."
   (if (null paths)
       (funcall done)
     (let ((source (directory-file-name
@@ -673,7 +675,12 @@ the same path in WORKTREE.  Call FAIL with a message on failure."
                    (expand-file-name (car paths) worktree))))
       (make-directory (file-name-directory target) t)
       (+agent-shell-arena-git--run
-       (list "/bin/cp" "-c" "-R" source target) worktree nil fail
+       (append (list "/bin/cp")
+               (if (eq +agent-shell-sandbox-backend 'bwrap)
+                   '("--reflink=auto" "-R")
+                 '("-c" "-R"))
+               (list source target))
+       worktree nil fail
        (lambda (_)
          (+agent-shell-arena-git--run
           (list "/usr/bin/find" target "-type" "l" "-print0") worktree nil fail

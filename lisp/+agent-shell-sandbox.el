@@ -20,6 +20,21 @@
 ;; then `+agent-shell-sandbox-finish'.  `+agent-shell-drive-stop' runs them
 ;; around killing the shell.  `+agent-shell-sandbox-discard' then deletes
 ;; the private folders, whatever modes the agent's tools left in them.
+;;
+;; On GNU/Linux, `+agent-shell-sandbox-backend' is `bwrap' and the same
+;; sandbox shows an allowlist instead of hiding a denylist.
+;; `+agent-shell-sandbox-linux-mounts' lists what the agent sees: the
+;; system folders read-only, its root, private temp and config folders
+;; writable, a private home in its temp folder, and the allowances as
+;; binds of existing paths.  The adapter runs through
+;; +agent-shell-sandbox-launch.sh, which gives it its own user, network,
+;; PID and IPC namespaces with slirp4netns as its only route out, and an
+;; environment holding only `+agent-shell-sandbox-linux-environment'.
+;; The same mounts decide what `+agent-shell-sandbox-readable-p' allows.
+;; Agents sign in with an access token copied from the host's login and no
+;; refresh token, so nothing is copied back, and stopping is
+;; `+agent-shell-sandbox-terminate', since the PID namespace takes every
+;; process with it.
 
 ;;; Code:
 
@@ -32,6 +47,29 @@
 (defgroup +agent-shell-sandbox nil
   "Confine agent shells with sandbox-exec."
   :group 'agent-shell)
+
+(defvar +agent-shell-sandbox-backend
+  (pcase system-type ('darwin 'sandbox-exec) ('gnu/linux 'bwrap))
+  "How sandboxes confine agents here: `sandbox-exec', `bwrap' or nil.
+nil means this system has no sandbox, and creating one signals.")
+
+(defcustom +agent-shell-sandbox-linux-system
+  '("/usr" "/etc" "/nix" "/opt" "/bin" "/sbin" "/lib" "/lib64" "/lib32"
+    "/libx32")
+  "System paths every Linux sandbox shows read-only.
+A symlink, such as /bin on a merged /usr, is made the same symlink
+inside.  A missing path is skipped."
+  :type '(repeat directory))
+
+(defcustom +agent-shell-sandbox-linux-masks '("/nix/var/nix/daemon-socket")
+  "Folders inside the system paths every Linux sandbox shows empty.
+A unix socket accepts connections even on a read-only mount, so each
+folder holding one is covered.  The default holds the Nix daemon's."
+  :type '(repeat directory))
+
+(defcustom +agent-shell-sandbox-claude-credentials "~/.claude/.credentials.json"
+  "Claude Code login whose access token Linux sandboxes sign in with."
+  :type 'file)
 
 (defcustom +agent-shell-sandbox-agents
   '((claude-code :mode "bypassPermissions"
@@ -101,7 +139,10 @@ write.")
   (tag nil :read-only t
        :documentation "Message the kernel's log of each refusal carries.")
   (trace nil :read-only t
-         :documentation "Whether the profile reports instead of refusing."))
+         :documentation "Whether the profile reports instead of refusing.")
+  (deadline nil :read-only t
+            :documentation "Time the agent's login must outlast on Linux, \
+or nil for now."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -281,14 +322,19 @@ folder, compared by true name, so no agent can drive this Emacs."
   "Return nil when VALUE is a read or write allowance, else what it must be.
 An allowance is an absolute path or a (regexp . RE) pattern; see
 `+agent-shell-sandbox-create'."
-  (cond ((+agent-shell-sandbox-pattern-p value)
+  (cond ((and (+agent-shell-sandbox-pattern-p value)
+              (eq +agent-shell-sandbox-backend 'bwrap))
+         "an absolute path, since a Linux sandbox mounts each allowance \
+and a (regexp . RE) pattern names no path")
+        ((+agent-shell-sandbox-pattern-p value)
          (+agent-shell-sandbox--pattern-error (cdr value)))
         ((not (and (stringp value) (file-name-absolute-p value)))
          "an absolute path or a (regexp . RE) pattern")))
 
 (cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
                                              allow-metadata allow-writes
-                                             allow-connects env trace)
+                                             allow-connects env trace
+                                             deadline)
   "Return a sandbox writing to ROOT, creating its private folders.
 DENY-READS lists folders the agent may not read, to which the sandbox
 adds `+agent-shell-sandbox-secret-reads'.  It cannot read any sandbox's
@@ -318,7 +364,20 @@ folders exist, returning one path, pattern or entry or a list of them.
 
 With TRACE non-nil, the profile reports what it would refuse rather than
 refusing it; see `+agent-shell-sandbox-profile'.  Either way the kernel
-logs each report or refusal with the sandbox's tag as its message."
+logs each report or refusal with the sandbox's tag as its message.
+
+On Linux the sandbox shows only `+agent-shell-sandbox-linux-mounts', so
+DENY-READS and ALLOW-METADATA change nothing there.  ALLOW-READS and
+ALLOW-WRITES are read-only and writable binds of the paths that exist,
+patterns are refused, each of ALLOW-CONNECTS must be an existing socket,
+and TRACE is refused.  The agent's login must outlast DEADLINE, a time
+value, or the present when it is nil."
+  (unless +agent-shell-sandbox-backend
+    (user-error "No sandbox on %s: agents run confined only on macOS and \
+GNU/Linux" system-type))
+  (when (and trace (eq +agent-shell-sandbox-backend 'bwrap))
+    (user-error "Sandbox trace mode needs macOS's sandbox-exec; it is not \
+available on Linux"))
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
@@ -338,7 +397,8 @@ logs each report or refusal with the sandbox's tag as its message."
                                              (+agent-shell-sandbox--secrets)))
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
-                        :tag tag :trace (and trace t) resolved)))
+                        :tag tag :trace (and trace t) :deadline deadline
+                        resolved)))
          (provisional (funcall make))
          (allowances
           (lambda (items kind)
@@ -353,11 +413,18 @@ logs each report or refusal with the sandbox's tag as its message."
                  :allow-reads (funcall allowances allow-reads "read allowance")
                  :allow-writes (funcall allowances allow-writes
                                         "write allowance")
-                 :allow-connects (mapcar #'+agent-shell-sandbox--path
-                                         (+agent-shell-sandbox--resolve
-                                          provisional allow-connects
-                                          #'+agent-shell-sandbox-socket-error
-                                          "socket allowance"))
+                 :allow-connects
+                 (mapcar (lambda (socket)
+                           (let ((path (+agent-shell-sandbox--path socket)))
+                             (when (and (eq +agent-shell-sandbox-backend 'bwrap)
+                                        (not (file-exists-p path)))
+                               (user-error "Sandbox socket %s does not exist; \
+a Linux sandbox can only bind an existing one" socket))
+                             path))
+                         (+agent-shell-sandbox--resolve
+                          provisional allow-connects
+                          #'+agent-shell-sandbox-socket-error
+                          "socket allowance"))
                  :env (+agent-shell-sandbox--resolve
                        provisional env
                        (lambda (entry)
@@ -475,19 +542,23 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
 This applies the profile's read rules in Emacs, erring towards refusal:
 a denying pattern refuses every path starting with its literal prefix,
 and an allowing pattern opens nothing, so only a path allowance reopens
-a denied path."
+a denied path.  On Linux it allows only what the agent sees inside its
+namespace, by `+agent-shell-sandbox-linux-visible-p'."
   (let ((path (+agent-shell-sandbox--path path)))
-    (or (not (seq-some
-              (lambda (denial)
-                (if (+agent-shell-sandbox-pattern-p denial)
-                    (string-prefix-p (+agent-shell-sandbox--pattern-prefix
-                                      (cdr denial))
-                                     path)
-                  (+agent-shell-sandbox--under-p path (list denial))))
-              (+agent-shell-sandbox--read-denials sandbox)))
-        (+agent-shell-sandbox--under-p
-         path (seq-remove #'+agent-shell-sandbox-pattern-p
-                          (+agent-shell-sandbox--read-allowances sandbox))))))
+    (if (eq +agent-shell-sandbox-backend 'bwrap)
+        (+agent-shell-sandbox-linux-visible-p
+         path (+agent-shell-sandbox-linux-mounts sandbox))
+      (or (not (seq-some
+                (lambda (denial)
+                  (if (+agent-shell-sandbox-pattern-p denial)
+                      (string-prefix-p (+agent-shell-sandbox--pattern-prefix
+                                        (cdr denial))
+                                       path)
+                    (+agent-shell-sandbox--under-p path (list denial))))
+                (+agent-shell-sandbox--read-denials sandbox)))
+          (+agent-shell-sandbox--under-p
+           path (seq-remove #'+agent-shell-sandbox-pattern-p
+                            (+agent-shell-sandbox--read-allowances sandbox)))))))
 
 (defun +agent-shell-sandbox-profile (sandbox)
   "Return the sandbox-exec profile text for SANDBOX.
@@ -578,29 +649,32 @@ write."
   "Prepare SANDBOX for AGENT and return CLIENT-MAKER confined to it.
 The returned maker runs the client's command under sandbox-exec with the
 prepared environment, then `+agent-shell-sandbox-environment', ahead of
-the client's own."
-  (let* ((entry (+agent-shell-sandbox-entry agent))
-         (profile (expand-file-name "sandbox.sb"
-                                    (+agent-shell-sandbox-config sandbox)))
-         (environment (progn
-                        (setf (+agent-shell-sandbox-agent sandbox) agent)
-                        (append (funcall (plist-get entry :prepare) sandbox)
-                                (+agent-shell-sandbox-environment
-                                 sandbox)))))
-    (with-temp-file profile (insert (+agent-shell-sandbox-profile sandbox)))
-    (lambda (buffer)
-      (when-let* ((client (funcall client-maker buffer)))
-        (let* ((client (copy-alist client))
-               (command (alist-get :command client)))
-          (setf (alist-get :command client) "/usr/bin/sandbox-exec"
-                (alist-get :command-params client)
-                (append (list "-f" profile
-                              (or (executable-find command) command))
-                        (alist-get :command-params client))
-                (alist-get :environment-variables client)
-                (append environment
-                        (alist-get :environment-variables client)))
-          client)))))
+the client's own.  On Linux it runs the command as
+`+agent-shell-sandbox-linux-client-maker' does."
+  (if (eq +agent-shell-sandbox-backend 'bwrap)
+      (+agent-shell-sandbox-linux-client-maker sandbox agent client-maker)
+    (let* ((entry (+agent-shell-sandbox-entry agent))
+           (profile (expand-file-name "sandbox.sb"
+                                      (+agent-shell-sandbox-config sandbox)))
+           (environment (progn
+                          (setf (+agent-shell-sandbox-agent sandbox) agent)
+                          (append (funcall (plist-get entry :prepare) sandbox)
+                                  (+agent-shell-sandbox-environment
+                                   sandbox)))))
+      (with-temp-file profile (insert (+agent-shell-sandbox-profile sandbox)))
+      (lambda (buffer)
+        (when-let* ((client (funcall client-maker buffer)))
+          (let* ((client (copy-alist client))
+                 (command (alist-get :command client)))
+            (setf (alist-get :command client) "/usr/bin/sandbox-exec"
+                  (alist-get :command-params client)
+                  (append (list "-f" profile
+                                (or (executable-find command) command))
+                          (alist-get :command-params client))
+                  (alist-get :environment-variables client)
+                  (append environment
+                          (alist-get :environment-variables client)))
+            client))))))
 
 (defun +agent-shell-sandbox--keychain (service)
   "Return the password of Keychain item SERVICE, or signal a user error."
@@ -612,11 +686,16 @@ the client's own."
 with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
 
 (defun +agent-shell-sandbox-prepare-claude (sandbox)
-  "Return Claude Code's environment for SANDBOX, signing in by token."
+  "Return Claude Code's environment for SANDBOX, signing in by token.
+On macOS the token is a `claude setup-token' token from the Keychain.  On
+Linux it is the access token of `+agent-shell-sandbox-claude-credentials',
+which must outlast SANDBOX's deadline."
   (let ((tmp (+agent-shell-sandbox-tmp sandbox)))
     (list (concat "CLAUDE_CODE_OAUTH_TOKEN="
-                  (+agent-shell-sandbox--keychain
-                   +agent-shell-sandbox-claude-token-service))
+                  (if (eq +agent-shell-sandbox-backend 'bwrap)
+                      (+agent-shell-sandbox--claude-access-token sandbox)
+                    (+agent-shell-sandbox--keychain
+                     +agent-shell-sandbox-claude-token-service)))
           "ANTHROPIC_API_KEY="
           (concat "CLAUDE_CONFIG_DIR=" (+agent-shell-sandbox-config sandbox))
           (concat "CLAUDE_CODE_TMPDIR=" tmp))))
@@ -634,7 +713,10 @@ with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
   (file-attribute-modification-time (file-attributes file)))
 
 (defun +agent-shell-sandbox-prepare-codex (sandbox)
-  "Copy the Codex login into SANDBOX and return Codex's environment."
+  "Copy the Codex login into SANDBOX and return Codex's environment.
+On Linux the copy holds the access and ID tokens but no refresh token,
+the access token must outlast SANDBOX's deadline, and nothing is copied
+back."
   (let* ((home (expand-file-name +agent-shell-sandbox-codex-home))
          (config (+agent-shell-sandbox-config sandbox))
          (real (expand-file-name "auth.json" home))
@@ -642,14 +724,18 @@ with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
          (settings (expand-file-name "config.toml" home)))
     (unless (file-readable-p real)
       (user-error "No Codex login at %s; run codex login" real))
-    (copy-file real copy t)
-    (set-file-modes copy #o600)
+    (if (eq +agent-shell-sandbox-backend 'bwrap)
+        (let ((login (+agent-shell-sandbox--codex-access-login real sandbox)))
+          (with-file-modes #o600
+            (with-temp-file copy (insert login))))
+      (copy-file real copy t)
+      (set-file-modes copy #o600)
+      (setf (+agent-shell-sandbox-credentials sandbox)
+            (list :real real :copy copy
+                  :real-hash (+agent-shell-sandbox--hash real)
+                  :copied (+agent-shell-sandbox--mtime copy))))
     (when (file-readable-p settings)
       (copy-file settings (expand-file-name "config.toml" config) t))
-    (setf (+agent-shell-sandbox-credentials sandbox)
-          (list :real real :copy copy
-                :real-hash (+agent-shell-sandbox--hash real)
-                :copied (+agent-shell-sandbox--mtime copy)))
     (list (concat "CODEX_HOME=" config))))
 
 (defun +agent-shell-sandbox-finish-codex (sandbox)
@@ -743,6 +829,242 @@ CALLBACK with the pids that survived."
       (+agent-shell-sandbox--kill pids)
       (run-at-time 0.2 nil #'+agent-shell-sandbox-sweep
                    sandbox callback (1- rounds)))))
+
+;;;; Linux
+
+(defun +agent-shell-sandbox--home (sandbox)
+  "Return SANDBOX's private home folder on Linux, inside its temp folder."
+  (concat (+agent-shell-sandbox-tmp sandbox) "/home"))
+
+(defun +agent-shell-sandbox--resolver (sandbox)
+  "Return the resolver file SANDBOX's agent reads on Linux."
+  (concat (+agent-shell-sandbox-config sandbox) "/resolv.conf"))
+
+(defun +agent-shell-sandbox-linux-mounts (sandbox &optional reads)
+  "Return the mounts SANDBOX's agent sees on Linux, in bwrap's order.
+Each is (KIND DEST SOURCE).  KIND `ro' or `rw' binds SOURCE at DEST,
+`symlink' makes DEST a link to SOURCE, and `tmpfs', `proc' and `dev'
+make a fresh DEST.  A parent comes before what it holds, so the deeper
+mount wins, as it does in the kernel.
+
+The agent sees `+agent-shell-sandbox-linux-system' read-only with
+`+agent-shell-sandbox-linux-masks' empty, and fresh /proc, /dev, /tmp
+and /run.  Where /etc/resolv.conf leads it finds a file naming
+slirp4netns's DNS server.  Its root, temp and config folders are
+writable but for ROOT/.git, its read and write allowances that exist and
+READS, more paths, are read-only and writable binds, and its sockets are
+bound in."
+  (let ((root (+agent-shell-sandbox-root sandbox))
+        (binds (lambda (kind paths)
+                 (mapcar (lambda (path) (list kind path path))
+                         (seq-filter #'file-exists-p paths)))))
+    (sort
+     (append
+      (mapcan (lambda (path)
+                (cond ((file-symlink-p path)
+                       (list (list 'symlink path (file-symlink-p path))))
+                      ((file-directory-p path) (list (list 'ro path path)))))
+              +agent-shell-sandbox-linux-system)
+      '((proc "/proc") (dev "/dev") (tmpfs "/tmp") (tmpfs "/run"))
+      (mapcar (lambda (path) (list 'tmpfs path))
+              (seq-filter #'file-directory-p +agent-shell-sandbox-linux-masks))
+      (when (file-exists-p "/etc/resolv.conf")
+        (list (list 'ro (file-truename "/etc/resolv.conf")
+                    (+agent-shell-sandbox--resolver sandbox))))
+      (funcall binds 'ro (append (+agent-shell-sandbox-allow-reads sandbox)
+                                 reads))
+      (funcall binds 'rw (list root (+agent-shell-sandbox-tmp sandbox)
+                               (+agent-shell-sandbox-config sandbox)))
+      (funcall binds 'ro (list (concat root "/.git")))
+      (funcall binds 'rw (+agent-shell-sandbox-allow-writes sandbox))
+      (mapcar (lambda (socket) (list 'rw socket socket))
+              (+agent-shell-sandbox-allow-connects sandbox)))
+     :key (lambda (mount) (length (split-string (cadr mount) "/" t))))))
+
+(defun +agent-shell-sandbox-linux-visible-p (path mounts)
+  "Return non-nil if true name PATH reads the same inside MOUNTS as here.
+That holds when the deepest of MOUNTS holding PATH binds it in place."
+  (pcase (car (last (seq-filter (lambda (mount)
+                                  (+agent-shell-sandbox--under-p
+                                   path (list (cadr mount))))
+                                mounts)))
+    (`(,(or 'ro 'rw) ,dest ,source) (equal dest source))))
+
+(defun +agent-shell-sandbox-linux-environment (sandbox mounts)
+  "Return the entries a Linux sandbox adds for SANDBOX with MOUNTS.
+PATH keeps the folders of this Emacs's PATH that MOUNTS show, HOME is
+the private home, and LANG and TERM come from this Emacs, defaulting to
+C.UTF-8 and dumb."
+  (list (concat "PATH="
+                (string-join
+                 (seq-uniq
+                  (seq-filter (lambda (folder)
+                                (and (file-directory-p folder)
+                                     (+agent-shell-sandbox-linux-visible-p
+                                      (+agent-shell-sandbox--path folder)
+                                      mounts)))
+                              (split-string (or (getenv "PATH") "") ":" t)))
+                 ":"))
+        (concat "HOME=" (+agent-shell-sandbox--home sandbox))
+        (concat "LANG=" (or (getenv "LANG") "C.UTF-8"))
+        (concat "TERM=" (or (getenv "TERM") "dumb"))))
+
+(defun +agent-shell-sandbox-linux-arguments (mounts command)
+  "Return bwrap's arguments running COMMAND, a list, inside MOUNTS.
+The agent runs as this user in its own user, IPC and PID namespaces and
+session, and dies with its launcher."
+  (append (list "--unshare-user" "--uid" (number-to-string (user-uid))
+                "--gid" (number-to-string (group-gid))
+                "--unshare-ipc" "--unshare-pid" "--die-with-parent"
+                "--new-session")
+          (mapcan (pcase-lambda (`(,kind ,dest ,source))
+                    (pcase kind
+                      ('ro (list "--ro-bind" source dest))
+                      ('rw (list "--bind" source dest))
+                      ('symlink (list "--symlink" source dest))
+                      (_ (list (format "--%s" kind) dest))))
+                  mounts)
+          (cons "--" command)))
+
+(defun +agent-shell-sandbox--launcher ()
+  "Return the launcher script's file name."
+  (or (locate-file "+agent-shell-sandbox-launch.sh" load-path)
+      (error "No +agent-shell-sandbox-launch.sh on `load-path'")))
+
+(defun +agent-shell-sandbox--install (program)
+  "Return the folder PROGRAM needs to run: its npm node_modules or its own."
+  (let ((true (file-truename program)))
+    (if (string-match "\\`\\(.*?/node_modules\\)/" true)
+        (match-string 1 true)
+      (directory-file-name (file-name-directory true)))))
+
+(defun +agent-shell-sandbox-linux-client-maker (sandbox agent client-maker)
+  "Prepare SANDBOX for AGENT and return CLIENT-MAKER confined to it on Linux.
+The returned maker runs the client's command through
++agent-shell-sandbox-launch.sh inside SANDBOX's mounts, with the folder
+it runs from, such as its npm install, added read-only.  Its environment
+holds only the prepared entries, then `+agent-shell-sandbox-environment'
+and `+agent-shell-sandbox-linux-environment'.  The client's own entries
+are dropped, since they may hold this Emacs's whole environment."
+  (let ((prepared (progn
+                    (setf (+agent-shell-sandbox-agent sandbox) agent)
+                    (funcall (plist-get (+agent-shell-sandbox-entry agent)
+                                        :prepare)
+                             sandbox))))
+    (make-directory (+agent-shell-sandbox--home sandbox) t)
+    (with-temp-file (+agent-shell-sandbox--resolver sandbox)
+      (insert "nameserver 10.0.2.3\n"))
+    (lambda (buffer)
+      (when-let* ((client (funcall client-maker buffer)))
+        (let* ((client (copy-alist client))
+               (command (alist-get :command client))
+               (program (or (executable-find command) command))
+               (install (+agent-shell-sandbox--install program))
+               (mounts (+agent-shell-sandbox-linux-mounts
+                        sandbox
+                        (unless (+agent-shell-sandbox-linux-visible-p
+                                 install
+                                 (+agent-shell-sandbox-linux-mounts sandbox))
+                          (list install))))
+               (environment
+                (seq-uniq (append prepared
+                                  (+agent-shell-sandbox-environment sandbox)
+                                  (+agent-shell-sandbox-linux-environment
+                                   sandbox mounts))
+                          (lambda (a b)
+                            (equal (car (split-string a "="))
+                                   (car (split-string b "=")))))))
+          (setf (alist-get :command client) "/bin/bash"
+                (alist-get :command-params client)
+                (append (list (+agent-shell-sandbox--launcher)
+                              (mapconcat (lambda (entry)
+                                           (car (split-string entry "=")))
+                                         environment " "))
+                        (+agent-shell-sandbox-linux-arguments
+                         mounts (cons program
+                                      (alist-get :command-params client))))
+                (alist-get :environment-variables client) environment)
+          client)))))
+
+(defun +agent-shell-sandbox--json (file)
+  "Return FILE's JSON as alists, with null as nil."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (json-parse-buffer :object-type 'alist :null-object nil)))
+
+(defun +agent-shell-sandbox--outlast (sandbox agent expiry)
+  "Signal unless AGENT's token, expiring at time EXPIRY, outlasts SANDBOX.
+That is its deadline, or the present when it has none."
+  (let ((deadline (or (+agent-shell-sandbox-deadline sandbox) (current-time))))
+    (unless (time-less-p deadline expiry)
+      (user-error "%s's access token expires at %s, before the sandbox's \
+deadline %s; refresh this host's login first" agent
+                  (format-time-string "%F %T %Z" expiry)
+                  (format-time-string "%F %T %Z" deadline)))))
+
+(defun +agent-shell-sandbox--claude-access-token (sandbox)
+  "Return the host's Claude Code access token if it outlasts SANDBOX."
+  (let* ((file (expand-file-name +agent-shell-sandbox-claude-credentials))
+         (oauth (and (file-readable-p file)
+                     (alist-get 'claudeAiOauth
+                                (+agent-shell-sandbox--json file))))
+         (token (alist-get 'accessToken oauth))
+         (expires (alist-get 'expiresAt oauth)))
+    (unless (and (stringp token) (numberp expires))
+      (user-error "No Claude Code login at %s; run claude and log in" file))
+    (+agent-shell-sandbox--outlast sandbox "Claude Code" (/ expires 1000.0))
+    token))
+
+(defun +agent-shell-sandbox--jwt-expiry (token)
+  "Return the exp claim of JSON web token TOKEN, or nil."
+  (when-let* ((payload (nth 1 (split-string token "\\."))))
+    (condition-case nil
+        (alist-get 'exp (json-parse-string
+                         (decode-coding-string
+                          (base64-decode-string payload t) 'utf-8)
+                         :object-type 'alist))
+      (error nil))))
+
+(defun +agent-shell-sandbox--codex-access-login (real sandbox)
+  "Return a Codex auth.json signing in with REAL's access token alone.
+It keeps the ID token and account id, which Codex needs, and its refresh
+token is empty, so the agent cannot rotate the host's login.  Signal
+unless the access token outlasts SANDBOX."
+  (let* ((login (+agent-shell-sandbox--json real))
+         (tokens (alist-get 'tokens login))
+         (access (alist-get 'access_token tokens))
+         (expiry (and (stringp access)
+                      (+agent-shell-sandbox--jwt-expiry access))))
+    (unless (and (numberp expiry) (alist-get 'id_token tokens)
+                 (alist-get 'account_id tokens))
+      (user-error "No ChatGPT login for Codex at %s; run codex login" real))
+    (+agent-shell-sandbox--outlast sandbox "Codex" expiry)
+    (json-serialize
+     `((auth_mode . "chatgpt")
+       (OPENAI_API_KEY . :null)
+       (tokens (id_token . ,(alist-get 'id_token tokens))
+               (access_token . ,access)
+               (refresh_token . "")
+               (account_id . ,(alist-get 'account_id tokens)))
+       ,@(when-let* ((refreshed (alist-get 'last_refresh login)))
+           `((last_refresh . ,refreshed)))))))
+
+(defun +agent-shell-sandbox-terminate (process callback &optional seconds)
+  "Stop PROCESS, a Linux sandbox's launcher, then call CALLBACK.
+On SIGTERM the launcher kills its PID namespace and exits once every
+process in it has.  CALLBACK gets nil, or PROCESS's pid in a list when
+it still ran after SECONDS, 10 by default, and was killed outright."
+  (let ((deadline (+ (float-time) (or seconds 10)))
+        (pid (process-id process)))
+    (when (process-live-p process)
+      (signal-process process 'SIGTERM))
+    (cl-labels ((poll ()
+                  (cond ((not (process-live-p process)) (funcall callback nil))
+                        ((> (float-time) deadline)
+                         (signal-process process 'SIGKILL)
+                         (funcall callback (list pid)))
+                        (t (run-at-time 0.05 nil #'poll)))))
+      (poll))))
 
 (provide '+agent-shell-sandbox)
 ;;; +agent-shell-sandbox.el ends here

@@ -2,8 +2,8 @@
 
 ;;; Commentary:
 ;; A sandboxed agent shell talks ACP to
-;; test/fixtures/agent-shell-projects-agent.py under sandbox-exec, then
-;; stops with every process it started.  macOS only.
+;; test/fixtures/agent-shell-projects-agent.py under sandbox-exec, or
+;; bwrap on Linux, then stops with every process it started.
 
 ;;; Code:
 
@@ -46,14 +46,21 @@
 The fixture writes inside and outside its root, reads a denied folder, and
 starts two delayed writers: a child working outside the root and an orphan
 working inside it."
-  (skip-unless (and (eq system-type 'darwin)
-                    (file-executable-p "/usr/bin/sandbox-exec")
+  (skip-unless (and (pcase +agent-shell-sandbox-backend
+                      ('sandbox-exec
+                       (file-executable-p "/usr/bin/sandbox-exec"))
+                      ('bwrap (and (executable-find "bwrap")
+                                   (executable-find "unshare")
+                                   (executable-find "slirp4netns"))))
                     (executable-find "python3")))
   (let* ((root (file-truename (make-temp-file "pa-root-" t)))
          (outside (make-temp-file "pa-outside-" t))
          (denied (make-temp-file "pa-denied-" t))
          (secret (expand-file-name "secret" denied))
-         (sandbox (+agent-shell-sandbox-create root :deny-reads (list denied)))
+         (sandbox (+agent-shell-sandbox-create
+                   root :deny-reads (list denied)
+                   :allow-reads (list (file-name-directory
+                                       +agent-shell-sandbox-acp-test--fixture))))
          (tmp (+agent-shell-sandbox-tmp sandbox))
          (finished nil)
          (+agent-shell-sandbox-agents
