@@ -30,15 +30,33 @@
   "Directory holding one subdirectory per arena."
   :type 'directory)
 
-(defcustom +agent-shell-pstack-arena-dependencies nil
-  "Dependency paths per repository, keyed by its top-level directory.
-Each value is a plist.  :shared lists paths symlinked from the lead into
-each candidate; :private lists paths cloned into each candidate, with
-symlinks into the lead's checkout rewritten to the candidate's copy.
-Paths are relative to the top level."
-  :type '(alist :key-type directory
-                :value-type (plist :options ((:shared (repeat string))
-                                             (:private (repeat string))))))
+(defcustom +agent-shell-pstack-arena-profiles nil
+  "How arena candidates get set up in each repository.
+Each entry is (MATCHER . PROFILE).  MATCHER is a directory, matching the
+repository whose top level has the same true name, or a function called
+with the top level, a true name ending in a slash.  The first entry that
+matches applies.  PROFILE is a plist with any of these keys:
+
+:shared   Paths symlinked from the lead into each candidate, readable
+          but not writable.
+:private  Paths cloned into each candidate with symlinks into the
+          lead's checkout rewritten to the candidate's copy.
+:copy     Ignored or untracked paths cloned like :private and left out
+          of the candidate's result, such as generated config.
+:files    An alist of (PATH . FUNCTION).  Before the agent starts, each
+          FUNCTION is called with the candidate's `+agent-shell-sandbox'
+          and returns the text written to PATH.  Left out of the result.
+:write    Extra paths the candidate may write.
+:read     Extra paths inside a read-denied folder the candidate may read.
+:env      Extra NAME=VALUE environment entries, or a function of the
+          sandbox returning them.  They win over the sandbox defaults.
+
+Paths in :shared, :private, :copy and :files are relative to the top
+level and stay inside it.  Each element of :write and :read is an
+absolute path or a function of the sandbox returning a path or a list
+of them."
+  :type '(alist :key-type (choice directory function)
+                :value-type (plist :key-type symbol :value-type sexp)))
 
 (cl-defstruct (+agent-shell-arena-git-base
                (:constructor +agent-shell-arena-git--base)
@@ -51,8 +69,9 @@ Paths are relative to the top level."
                (:copier nil))
   "A candidate's worktree, the dependency paths it got, and its result.
 GIT-DIR is the worktree's own git directory, which holds its index.
-CHECKOUT is a separate worktree holding the result for reading."
-  name worktree git-dir shared private ref commit state checkout)
+CHECKOUT is a separate worktree holding the result for reading.
+GENERATED lists the paths its profile's :copy and :files wrote."
+  name worktree git-dir shared private ref commit state checkout generated)
 
 (cl-defstruct (+agent-shell-arena-git-manifest
                (:constructor +agent-shell-arena-git--manifest)
@@ -156,11 +175,14 @@ Only for reads that stay fast however large the repository is."
 ;;;; Snapshots
 
 (defun +agent-shell-arena-git--snapshot (git-dir work-tree seed excludes
-                                                 fail done)
+                                                 restore fail done)
   "Call DONE with WORK-TREE's tree once two consecutive snapshots match.
 Each snapshot fills a fresh temporary index by calling SEED with the index
 file, FAIL and a continuation, then adds every file except EXCLUDES
-pathspecs.  FAIL gets a message after three snapshots that differ.
+pathspecs.  RESTORE, when non-nil, is (COMMIT . PATHS): those paths then
+take COMMIT's content, or leave the tree if COMMIT lacks them.  Unlike
+an exclude, a restored path may be ignored.  FAIL gets a message after
+three snapshots that differ.
 
 In a sparse checkout, skip-worktree entries keep their index content, and
 files on disk outside the sparse patterns are added like any other."
@@ -180,17 +202,29 @@ files on disk outside the sparse patterns are added like any other."
                                          excludes)
                fail
                (lambda (_)
-                 (+agent-shell-arena-git--git
-                  git-dir work-tree '("write-tree") fail
-                  (lambda (output)
-                    (delete-directory directory t)
-                    (let ((tree (string-trim output)))
-                      (cond ((equal tree previous) (funcall done tree))
-                            ((< count 3) (attempt tree (1+ count)))
-                            (t (funcall fail "The files kept changing during \
-capture; retry once they settle")))))
-                  env))
-               env))))))
+                 (reset
+                  env fail
+                  (lambda ()
+                    (+agent-shell-arena-git--git
+                     git-dir work-tree '("write-tree") fail
+                     (lambda (output)
+                       (delete-directory directory t)
+                       (let ((tree (string-trim output)))
+                         (cond ((equal tree previous) (funcall done tree))
+                               ((< count 3) (attempt tree (1+ count)))
+                               (t (funcall fail "The files kept changing \
+during capture; retry once they settle")))))
+                     env))))
+               env)))))
+       (reset (env fail done)
+         (if (null (cdr restore))
+             (funcall done)
+           (+agent-shell-arena-git--git
+            git-dir work-tree
+            (append (list "reset" "-q" (car restore) "--")
+                    (mapcar (lambda (path) (concat ":(literal)" path))
+                            (cdr restore)))
+            fail (lambda (_) (funcall done)) env))))
     (attempt nil 1)))
 
 (defun +agent-shell-arena-git--commit (git-dir work-tree tree parent message
@@ -268,7 +302,7 @@ nil, or nil and a message saying why there is no base."
                    git-dir toplevel (list "read-tree" head) fail
                    (lambda (_) (funcall done))
                    (list (concat "GIT_INDEX_FILE=" index)))))
-              (list +agent-shell-arena-git--agent-shell-exclude)
+              (list +agent-shell-arena-git--agent-shell-exclude) nil
               fail
               (lambda (tree)
                 (+agent-shell-arena-git--commit
@@ -315,7 +349,10 @@ nil, or nil and a message saying why there is no base."
                        . ,(or (+agent-shell-arena-git-role-state role) :null))
                       (checkout
                        . ,(or (+agent-shell-arena-git-role-checkout role)
-                              :null))))
+                              :null))
+                      (generated
+                       . ,(vconcat
+                           (+agent-shell-arena-git-role-generated role)))))
                   (+agent-shell-arena-git-manifest-roles manifest)))))))
     (with-temp-file temporary
       (insert (json-serialize json) "\n"))
@@ -349,7 +386,8 @@ nil, or nil and a message saying why there is no base."
                        :ref (alist-get 'ref role)
                        :commit (alist-get 'commit role)
                        :state (alist-get 'state role)
-                       :checkout (alist-get 'checkout role)))
+                       :checkout (alist-get 'checkout role)
+                       :generated (alist-get 'generated role)))
                     (alist-get 'roles json)))))
 
 (defun +agent-shell-arena-git-arenas ()
@@ -400,21 +438,97 @@ suffix, so a repeated request never meets an earlier arena's leftovers."
       :prefix (+agent-shell-arena-git-base-prefix base)
       :base (+agent-shell-arena-git-base-commit base)))))
 
-(defun +agent-shell-arena-git--dependencies (toplevel)
-  "Return the dependency plist configured for TOPLEVEL.
-Signal an error for a path that is absolute or leaves the top level."
-  (let* ((key (file-truename (file-name-as-directory toplevel)))
+(defun +agent-shell-arena-git--matches-p (matcher toplevel)
+  "Return whether profile MATCHER selects the repository at TOPLEVEL."
+  (cond ((stringp matcher)
+         (equal (file-truename (file-name-as-directory matcher)) toplevel))
+        ((functionp matcher) (funcall matcher toplevel))
+        (t (user-error "Arena profile matcher must be a directory or a \
+function, not %S" matcher))))
+
+(defun +agent-shell-arena-git--check-profile (toplevel profile)
+  "Return PROFILE, the arena profile for TOPLEVEL, with :env as a list.
+Signal `user-error' naming the key of any malformed value."
+  (let ((fail (lambda (key expected value)
+                (user-error "Arena profile for %s: %s must be %s, not %S"
+                            toplevel key expected value)))
+        (relative-p (lambda (path)
+                      (and (stringp path) (not (string-empty-p path))
+                           (not (file-name-absolute-p path))
+                           (not (member ".." (split-string path "/"))))))
+        (under-p (lambda (path parent)
+                   (or (equal path parent)
+                       (string-prefix-p (file-name-as-directory parent)
+                                        path)))))
+    (unless (and (proper-list-p profile) (cl-evenp (length profile)))
+      (funcall fail "the profile" "a plist" profile))
+    (cl-loop for (key value) on profile by #'cddr
+             do (pcase key
+                  ((or :shared :private :copy)
+                   (unless (and (proper-list-p value)
+                                (seq-every-p relative-p value))
+                     (funcall fail key "a list of paths inside the top level"
+                              value)))
+                  (:files
+                   (unless (and (proper-list-p value)
+                                (seq-every-p
+                                 (lambda (entry)
+                                   (and (consp entry)
+                                        (funcall relative-p (car entry))
+                                        (functionp (cdr entry))))
+                                 value))
+                     (funcall fail key "an alist of paths inside the top \
+level to functions" value)))
+                  ((or :write :read)
+                   (unless (and (proper-list-p value)
+                                (seq-every-p (lambda (path)
+                                               (or (functionp path)
+                                                   (and (stringp path)
+                                                        (file-name-absolute-p
+                                                         path))))
+                                             value))
+                     (funcall fail key "a list of absolute paths or \
+functions" value)))
+                  (:env
+                   (unless (or (functionp value)
+                               (and (proper-list-p value)
+                                    (seq-every-p #'stringp value)))
+                     (funcall fail key "a list of NAME=VALUE strings or a \
+function" value)))
+                  (_ (user-error "Arena profile for %s: unknown key %S"
+                                 toplevel key))))
+    (dolist (path (append (plist-get profile :copy)
+                          (mapcar #'car (plist-get profile :files))))
+      (dolist (shared (plist-get profile :shared))
+        (when (funcall under-p path shared)
+          (funcall fail ":copy and :files" "outside :shared paths" path))))
+    (let ((env (plist-get profile :env)))
+      (if (functionp env)
+          (plist-put (copy-sequence profile) :env (list env))
+        profile))))
+
+(defun +agent-shell-arena-git-profile (toplevel)
+  "Return the validated arena profile for the repository at TOPLEVEL.
+See `+agent-shell-pstack-arena-profiles'; nil when no entry matches."
+  (let* ((toplevel (file-truename (file-name-as-directory toplevel)))
          (entry (seq-find (lambda (entry)
-                            (equal (file-truename
-                                    (file-name-as-directory (car entry)))
-                                   key))
-                          +agent-shell-pstack-arena-dependencies))
-         (plist (cdr entry)))
-    (dolist (path (append (plist-get plist :shared) (plist-get plist :private)))
-      (when (or (file-name-absolute-p path)
-                (member ".." (split-string path "/")))
-        (error "Arena dependency path must stay inside %s: %s" toplevel path)))
-    plist))
+                            (+agent-shell-arena-git--matches-p (car entry)
+                                                               toplevel))
+                          +agent-shell-pstack-arena-profiles)))
+    (when entry
+      (+agent-shell-arena-git--check-profile toplevel (cdr entry)))))
+
+(defun +agent-shell-arena-git-write-files (worktree files sandbox)
+  "Write each of FILES, a profile's :files, into WORKTREE for SANDBOX."
+  (pcase-dolist (`(,path . ,function) files)
+    (let ((text (funcall function sandbox))
+          (file (expand-file-name path worktree)))
+      (unless (stringp text)
+        (user-error "Arena profile :files function for %s returned %S, not \
+a string" path text))
+      (make-directory (file-name-directory file) t)
+      (let ((coding-system-for-write 'utf-8-unix))
+        (write-region text nil file nil 'silent)))))
 
 (defun +agent-shell-arena-git-directory (manifest role)
   "Return ROLE's working directory in MANIFEST: its worktree plus the prefix."
@@ -431,19 +545,20 @@ Signal an error for a path that is absolute or leaves the top level."
 
 (defun +agent-shell-arena-git--add-role (manifest name)
   "Add role NAME to MANIFEST, write the manifest and return the role.
-The role lists the configured dependency paths present in the lead."
+The role lists the profile's paths present in the lead and the paths its
+:files will write."
   (unless (string-match-p +agent-shell-arena-git--name-regexp name)
     (error "Invalid arena role name: %S" name))
   (when (+agent-shell-arena-git-role manifest name)
     (error "Arena %s already has a role %s"
            (+agent-shell-arena-git-manifest-id manifest) name))
   (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
-         (dependencies (+agent-shell-arena-git--dependencies toplevel))
+         (profile (+agent-shell-arena-git-profile toplevel))
          (present (lambda (key)
                     (seq-filter (lambda (path)
                                   (file-exists-p
                                    (expand-file-name path toplevel)))
-                                (plist-get dependencies key))))
+                                (plist-get profile key))))
          (role (+agent-shell-arena-git--role
                 :name name
                 :worktree (file-name-as-directory
@@ -452,7 +567,10 @@ The role lists the configured dependency paths present in the lead."
                             (+agent-shell-arena-git-manifest-directory
                              manifest)))
                 :shared (funcall present :shared)
-                :private (funcall present :private))))
+                :private (funcall present :private)
+                :generated (append (funcall present :copy)
+                                   (mapcar #'car (plist-get profile
+                                                            :files))))))
     (setf (+agent-shell-arena-git-manifest-roles manifest)
           (append (+agent-shell-arena-git-manifest-roles manifest)
                   (list role)))
@@ -461,8 +579,9 @@ The role lists the configured dependency paths present in the lead."
 
 (defun +agent-shell-arena-git-provision (manifest name callback)
   "Add candidate NAME to MANIFEST's arena: a worktree at the base commit.
-Link and clone its dependency paths, then call CALLBACK with the
-candidate's working directory and nil, or nil and a message.
+Link and clone its dependency paths and clone the generated paths the
+lead has and the worktree lacks, then call CALLBACK with the candidate's
+working directory and nil, or nil and a message.
 
 Run from the lead's git directory, git worktree add copies the lead's
 sparse-checkout patterns and per-worktree config before it checks out, so
@@ -497,7 +616,15 @@ the candidate gets the same sparse checkout."
                         link)))
                    (+agent-shell-arena-git--clone
                     toplevel worktree
-                    (+agent-shell-arena-git-role-private role) fail
+                    (append
+                     (+agent-shell-arena-git-role-private role)
+                     (seq-filter
+                      (lambda (path)
+                        (and (file-exists-p (expand-file-name path toplevel))
+                             (not (file-exists-p
+                                   (expand-file-name path worktree)))))
+                      (+agent-shell-arena-git-role-generated role)))
+                    fail
                     (lambda ()
                       (let ((directory (+agent-shell-arena-git-directory
                                         manifest role)))
@@ -534,7 +661,8 @@ the same path in WORKTREE.  Call FAIL with a message on failure."
 
 (defun +agent-shell-arena-git-capture (manifest name callback)
   "Commit candidate NAME's worktree in MANIFEST as a child of the base.
-Leave out agent-shell transcripts and the shared dependency links.  Point
+Leave out agent-shell transcripts, the shared dependency links and the
+paths its profile generated, which keep their base content.  Point
 refs/pstack-arena/ID/NAME at the commit and record it in the manifest.
 Call CALLBACK with the commit and nil, or nil and a message.
 
@@ -568,6 +696,7 @@ worktree's own index, so it hashes only files changed since checkout."
          (cons +agent-shell-arena-git--agent-shell-exclude
                (mapcar (lambda (path) (concat ":(exclude,literal)" path))
                        (+agent-shell-arena-git-role-shared role)))
+         (cons base (+agent-shell-arena-git-role-generated role))
          fail
          (lambda (tree)
            (+agent-shell-arena-git--commit

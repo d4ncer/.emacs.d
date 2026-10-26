@@ -50,7 +50,7 @@
                                           "GIT_CONFIG_NOSYSTEM=1")
                                     process-environment))
        (+agent-shell-pstack-arena-directory (expand-file-name "arenas/" scratch))
-       (+agent-shell-pstack-arena-dependencies nil))
+       (+agent-shell-pstack-arena-profiles nil))
   (unwind-protect
       (progn
         (with-temp-file config

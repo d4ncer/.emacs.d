@@ -63,7 +63,11 @@ Paths are true names without a trailing slash."
   (allow-reads nil :read-only t
                :documentation "Folders inside DENY-READS the agent may read.")
   (allow-metadata nil :read-only t
-                  :documentation "Paths whose metadata alone it may read."))
+                  :documentation "Paths whose metadata alone it may read.")
+  (allow-writes nil :read-only t
+                :documentation "Folders beyond its own it may write.")
+  (env nil :read-only t
+       :documentation "Environment entries ahead of the defaults."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -81,26 +85,74 @@ Claude Code needs it under about 30 bytes to hold AF_UNIX socket paths."
           (file-already-exists nil))))
     (error "Could not create a private temp folder in /tmp")))
 
+(defun +agent-shell-sandbox--resolve (sandbox items valid-p kind)
+  "Return ITEMS with each function called with SANDBOX, flattened.
+A function returns one value or a list.  Signal `user-error' for a value
+VALID-P rejects, naming KIND."
+  (mapcan (lambda (item)
+            (let ((values (if (functionp item) (funcall item sandbox) item)))
+              (mapcar (lambda (value)
+                        (unless (funcall valid-p value)
+                          (user-error "Sandbox %s must be %s, not %S"
+                                      (car kind) (cdr kind) value))
+                        value)
+                      (if (listp values) values (list values)))))
+          items))
+
 (cl-defun +agent-shell-sandbox-create (root &key config deny-reads
-                                             allow-reads allow-metadata)
+                                             allow-reads allow-metadata
+                                             allow-writes env)
   "Return a sandbox writing to ROOT, creating its private folders.
 CONFIG is the private agent config folder, a new temporary one by default.
 DENY-READS lists folders the agent may not read, and ALLOW-READS folders
 inside them it may read anyway.  A read is checked against the path a
 symlink resolves to, so a link into a denied folder needs an allowance.
 ALLOW-METADATA lists paths, each exactly, whose metadata the agent may
-read even inside DENY-READS, such as a folder git must stat."
+read even inside DENY-READS, such as a folder git must stat.
+ALLOW-WRITES lists more folders the agent may write, and ENV NAME=VALUE
+entries that win over `+agent-shell-sandbox-environment's defaults.
+
+Each element of ALLOW-READS, ALLOW-WRITES and ENV may instead be a
+function called with the new sandbox, whose root and private folders
+exist, returning one path or entry or a list of them."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
-  (+agent-shell-sandbox--make
-   :root (+agent-shell-sandbox--path root)
-   :tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp))
-   :config (+agent-shell-sandbox--path
-            (if config (progn (make-directory config t) config)
-              (make-temp-file "pa-config-" t)))
-   :deny-reads (mapcar #'+agent-shell-sandbox--path deny-reads)
-   :allow-reads (mapcar #'+agent-shell-sandbox--path allow-reads)
-   :allow-metadata (mapcar #'+agent-shell-sandbox--path allow-metadata)))
+  (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
+         (own-config (not config))
+         (config (+agent-shell-sandbox--path
+                  (if config (progn (make-directory config t) config)
+                    (make-temp-file "pa-config-" t))))
+         (make (lambda (&rest resolved)
+                 (apply #'+agent-shell-sandbox--make
+                        :root (+agent-shell-sandbox--path root)
+                        :tmp tmp :config config
+                        :deny-reads (mapcar #'+agent-shell-sandbox--path
+                                            deny-reads)
+                        :allow-metadata (mapcar #'+agent-shell-sandbox--path
+                                                allow-metadata)
+                        resolved)))
+         (provisional (funcall make))
+         (path-p (lambda (path) (and (stringp path)
+                                     (file-name-absolute-p path))))
+         (paths (lambda (items kind)
+                  (mapcar #'+agent-shell-sandbox--path
+                          (+agent-shell-sandbox--resolve
+                           provisional items path-p
+                           (cons kind "an absolute path"))))))
+    (condition-case err
+        (funcall make
+                 :allow-reads (funcall paths allow-reads "read allowance")
+                 :allow-writes (funcall paths allow-writes "write allowance")
+                 :env (+agent-shell-sandbox--resolve
+                       provisional env
+                       (lambda (entry)
+                         (and (stringp entry)
+                              (string-match-p "\\`[A-Za-z_][A-Za-z0-9_]*="
+                                              entry)))
+                       '("environment entry" . "a NAME=VALUE string")))
+      (error (delete-directory tmp t)
+             (when own-config (delete-directory config t))
+             (signal (car err) (cdr err))))))
 
 (defun +agent-shell-sandbox--string (path)
   "Return PATH as an SBPL string literal."
@@ -116,10 +168,12 @@ read even inside DENY-READS, such as a folder git must stat."
     (concat
      "(version 1)\n(allow default)\n(deny file-write*)\n"
      (format "(allow file-write*%s)\n"
-             (funcall subpaths (list (+agent-shell-sandbox-root sandbox)
-                                     (+agent-shell-sandbox-tmp sandbox)
-                                     (+agent-shell-sandbox-config sandbox)
-                                     "/dev")))
+             (funcall subpaths (append
+                                (list (+agent-shell-sandbox-root sandbox)
+                                      (+agent-shell-sandbox-tmp sandbox)
+                                      (+agent-shell-sandbox-config sandbox)
+                                      "/dev")
+                                (+agent-shell-sandbox-allow-writes sandbox))))
      ;; A worktree's .git file points git at the lead's repository.
      (format "(deny file-write* (literal %s))\n"
              (+agent-shell-sandbox--string
@@ -150,8 +204,9 @@ read even inside DENY-READS, such as a folder git must stat."
 
 (defun +agent-shell-sandbox-environment (sandbox)
   "Return the environment every process confined to SANDBOX gets.
-TMPDIR points most tools at the private temp folder.  GOTMPDIR does the
-same for the Go toolchain's work folders, which it would put in /tmp.
+That is SANDBOX's own entries, then these defaults.  TMPDIR points most
+tools at the private temp folder.  GOTMPDIR does the same for the Go
+toolchain's work folders, which it would put in /tmp.
 JAVA_TOOL_OPTIONS gains -Djava.io.tmpdir, since the JVM ignores TMPDIR on
 macOS and extracts native libraries into the default temp folder.
 GIT_OPTIONAL_LOCKS=0 keeps read-only commands such as git status from
@@ -159,12 +214,14 @@ refreshing the index, which lives in a git directory the agent cannot
 write."
   (let ((tmp (+agent-shell-sandbox-tmp sandbox))
         (java (getenv "JAVA_TOOL_OPTIONS")))
-    (list (concat "TMPDIR=" tmp)
-          (concat "GOTMPDIR=" tmp)
-          (concat "JAVA_TOOL_OPTIONS="
-                  (and java (not (string-empty-p java)) (concat java " "))
-                  "-Djava.io.tmpdir=" tmp)
-          "GIT_OPTIONAL_LOCKS=0")))
+    (append (+agent-shell-sandbox-env sandbox)
+            (list (concat "TMPDIR=" tmp)
+                  (concat "GOTMPDIR=" tmp)
+                  (concat "JAVA_TOOL_OPTIONS="
+                          (and java (not (string-empty-p java))
+                               (concat java " "))
+                          "-Djava.io.tmpdir=" tmp)
+                  "GIT_OPTIONAL_LOCKS=0"))))
 
 (defun +agent-shell-sandbox-client-maker (sandbox agent client-maker)
   "Prepare SANDBOX for AGENT and return CLIENT-MAKER confined to it.

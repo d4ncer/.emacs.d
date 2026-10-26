@@ -81,5 +81,82 @@ The lead's git directory stays unwritable."
                                                  "escape")))))
             (+arena-sandbox-test--discard sandbox)))))))
 
+(ert-deftest +arena-sandbox-test-profile ()
+  "Apply a repository's profile: generated files, allowances and
+environment, with the generated files left out of the result."
+  (+arena-sandbox-test--on-macos
+    (+arena-git-test--with-scratch
+      (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "tools/t" "tool\n"))
+             (cache (expand-file-name "cache" +arena-git-test--scratch))
+             (other (expand-file-name "other" +arena-git-test--scratch))
+             (+agent-shell-pstack-arena-profiles
+              `((,repo
+                 :read (,(expand-file-name "tools" repo))
+                 :write (,(lambda (_) cache))
+                 :env ,(lambda (sandbox)
+                         (list "GOTMPDIR=/profile"
+                               (concat "PA_PROFILE="
+                                       (+agent-shell-sandbox-tmp sandbox))))
+                 :files (("conf/tool.cfg"
+                          . ,(lambda (sandbox)
+                               (concat "cache="
+                                       (+agent-shell-sandbox-tmp sandbox)
+                                       "\n"))))))))
+        (make-directory cache)
+        (make-directory other)
+        (pcase-let ((`(,manifest ,worktree ,sandbox)
+                     (+arena-sandbox-test--candidate repo "opus")))
+          (unwind-protect
+              (let ((run (lambda (&rest command)
+                           (apply #'+arena-sandbox-test--run sandbox worktree
+                                  command)))
+                    (tmp (+agent-shell-sandbox-tmp sandbox)))
+                (should (equal (concat "cache=" tmp "\n")
+                               (+arena-git-test--read
+                                (expand-file-name "conf/tool.cfg" worktree))))
+                (should (equal (cons 0 (concat "/profile " tmp "\n"))
+                               (funcall run "/bin/sh" "-c"
+                                        "echo $GOTMPDIR $PA_PROFILE")))
+                (should (eql 0 (car (funcall run "/usr/bin/touch"
+                                             (expand-file-name "x" cache)))))
+                (should-not (eql 0 (car (funcall run "/usr/bin/touch"
+                                                 (expand-file-name "x"
+                                                                   other)))))
+                (should (equal '(0 . "tool\n")
+                               (funcall run "/bin/cat"
+                                        (expand-file-name "tools/t" repo))))
+                (should-not (eql 0 (car (funcall run "/bin/cat"
+                                                 (expand-file-name "a.txt"
+                                                                   repo)))))
+                (should (eql 0 (car (funcall run "/bin/sh" "-c"
+                                             "echo b > b.txt"))))
+                (should (equal "b.txt"
+                               (+arena-git-test--git
+                                repo "diff" "--name-only"
+                                (+agent-shell-arena-git-manifest-base manifest)
+                                (+arena-git-test--capture manifest "opus")))))
+            (+arena-sandbox-test--discard sandbox)))))))
+
+(ert-deftest +arena-sandbox-test-profile-results-checked ()
+  "Reject what a profile's functions return when it is malformed, and
+leave no private folders behind."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n"))
+          (made nil))
+      (advice-add '+agent-shell-sandbox--make-tmp :filter-return
+                  (lambda (tmp) (push tmp made) tmp)
+                  '((name . pa-test-record)))
+      (unwind-protect
+          (dolist (profile `((:write (,(lambda (_) "relative")))
+                             (:env ,(lambda (_) '("no equals sign")))
+                             (:files (("x.cfg" . ,(lambda (_) 42))))))
+            (let ((+agent-shell-pstack-arena-profiles
+                   (list (cons repo profile))))
+              (should-error (+arena-sandbox-test--candidate repo "opus")
+                            :type 'user-error)))
+        (advice-remove '+agent-shell-sandbox--make-tmp 'pa-test-record))
+      (should (= 3 (length made)))
+      (should-not (seq-some #'file-exists-p made)))))
+
 (provide 'agent-shell-pstack-arena-sandbox-test)
 ;;; agent-shell-pstack-arena-sandbox-test.el ends here

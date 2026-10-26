@@ -73,7 +73,7 @@
                                       process-environment))
          (+agent-shell-pstack-arena-directory
           (expand-file-name "arenas/" scratch))
-         (+agent-shell-pstack-arena-dependencies nil)
+         (+agent-shell-pstack-arena-profiles nil)
          (+agent-shell-pstack-panel-directory
           (expand-file-name "reports/" scratch))
          (agent-shell-show-welcome-message nil)

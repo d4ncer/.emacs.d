@@ -25,7 +25,7 @@
                    process-environment))
           (+agent-shell-pstack-arena-directory
            (expand-file-name "arenas/" +arena-git-test--scratch))
-          (+agent-shell-pstack-arena-dependencies nil))
+          (+agent-shell-pstack-arena-profiles nil))
      (with-temp-file config
        (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
                "[init]\n\tdefaultBranch = main\n"))
@@ -219,7 +219,7 @@
     (make-symbolic-link (expand-file-name "build/sources/x.el" repo)
                         (expand-file-name "build/x.el" repo))
     (make-symbolic-link "sources/x.el" (expand-file-name "build/rel.el" repo))
-    (setq +agent-shell-pstack-arena-dependencies
+    (setq +agent-shell-pstack-arena-profiles
           `((,repo :shared ("deps") :private ("build"))))
     repo))
 
@@ -241,6 +241,101 @@
                      "sources/x.el"))
       (should (equal (file-symlink-p (expand-file-name "build/x.el" repo))
                      (expand-file-name "build/sources/x.el" repo))))))
+
+(ert-deftest +agent-shell-arena-git-test-profile-matching ()
+  "Pick the first profile whose directory or predicate matches."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (link (expand-file-name "link" +arena-git-test--scratch))
+           (seen nil))
+      (make-symbolic-link (directory-file-name repo) link)
+      (setq +agent-shell-pstack-arena-profiles
+            `((,(expand-file-name "elsewhere/" +arena-git-test--scratch)
+               :shared ("no"))
+              (,(lambda (toplevel) (push toplevel seen) nil) :shared ("no"))
+              (,link :shared ("deps"))
+              (,(lambda (_) t) :shared ("late"))))
+      (should (equal '(:shared ("deps"))
+                     (+agent-shell-arena-git-profile repo)))
+      (should (equal (list repo) seen))
+      (setq +agent-shell-pstack-arena-profiles
+            `((,(lambda (toplevel) (string-suffix-p "/" toplevel))
+               :env ,(lambda (_) '("A=1")))))
+      (should (functionp (car (plist-get (+agent-shell-arena-git-profile repo)
+                                         :env))))
+      (setq +agent-shell-pstack-arena-profiles nil)
+      (should-not (+agent-shell-arena-git-profile repo)))))
+
+(ert-deftest +agent-shell-arena-git-test-profile-validation ()
+  "Reject a malformed profile with an error naming the key."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
+      (pcase-dolist (`(,profile ,key)
+                     '(((:shared ("/abs")) ":shared")
+                       ((:private ("a/../../x")) ":private")
+                       ((:copy "gen") ":copy")
+                       ((:files (("gen.cfg" . "text"))) ":files")
+                       ((:files (("/gen.cfg" . ignore))) ":files")
+                       ((:write ("relative")) ":write")
+                       ((:read (42)) ":read")
+                       ((:env (A=1 "B=2")) ":env")
+                       ((:shared ("deps") :copy ("deps/gen")) ":copy")
+                       ((:shared ("deps") :files (("deps/x" . ignore)))
+                        ":files")
+                       ((:bogus t) ":bogus")
+                       ((:shared) "plist")))
+        (setq +agent-shell-pstack-arena-profiles (list (cons repo profile)))
+        (let ((err (should-error (+agent-shell-arena-git-profile repo)
+                                 :type 'user-error)))
+          (should (string-search key (cadr err)))))
+      (setq +agent-shell-pstack-arena-profiles '((42 :shared ("x"))))
+      (should-error (+agent-shell-arena-git-profile repo) :type 'user-error))))
+
+(ert-deftest +agent-shell-arena-git-test-generated-paths ()
+  "Copy :copy paths into a candidate and leave them and :files out of the
+result."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo ".gitignore" "gen/\n"
+                                        "src/a.txt" "a\n"))
+           (_ (progn
+                (+arena-git-test--write (expand-file-name "gen/cfg" repo)
+                                        "lead config\n")
+                (+arena-git-test--write (expand-file-name "local.cfg" repo)
+                                        "untracked config\n")
+                (setq +agent-shell-pstack-arena-profiles
+                      `((,repo :copy ("gen" "local.cfg" "missing")
+                               :files (("tool.cfg" . ignore)))))))
+           (base (+arena-git-test--base repo))
+           (manifest (+arena-git-test--arena base))
+           (worktree (+arena-git-test--provision manifest "opus"))
+           (role (+agent-shell-arena-git-role
+                  (+agent-shell-arena-git-read-manifest
+                   (+agent-shell-arena-git-manifest-directory manifest))
+                  "opus")))
+      (should (equal '("gen" "local.cfg" "tool.cfg")
+                     (+agent-shell-arena-git-role-generated role)))
+      (should (equal "lead config\n"
+                     (+arena-git-test--read (expand-file-name "gen/cfg"
+                                                              worktree))))
+      (should-not (file-symlink-p (expand-file-name "gen" worktree)))
+      (+agent-shell-arena-git-write-files
+       worktree `(("tool.cfg" . ,(lambda (spec) (format "tmp=%s\n" spec))))
+       "/tmp/pa-x")
+      (should (equal "tmp=/tmp/pa-x\n"
+                     (+arena-git-test--read (expand-file-name "tool.cfg"
+                                                              worktree))))
+      (should-error (+agent-shell-arena-git-write-files
+                     worktree '(("bad.cfg" . ignore)) nil)
+                    :type 'user-error)
+      (+arena-git-test--write (expand-file-name "local.cfg" worktree)
+                              "candidate edit\n")
+      (+arena-git-test--write (expand-file-name "src/new.txt" worktree)
+                              "new\n")
+      (let ((commit (+arena-git-test--capture manifest "opus")))
+        (should (equal (+arena-git-test--git
+                        repo "diff" "--name-status"
+                        (+agent-shell-arena-git-base-commit base) commit)
+                       "A\tsrc/new.txt"))))))
 
 (ert-deftest +agent-shell-arena-git-test-capture-candidate ()
   (+arena-git-test--with-scratch

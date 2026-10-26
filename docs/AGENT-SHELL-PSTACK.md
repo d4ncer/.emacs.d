@@ -194,10 +194,12 @@ lead's mode-line help:
    with a `+agent-shell-sandbox` rooted at its worktree. The sandbox
    refuses writes outside the worktree and refuses reads of the lead's
    checkout, `+agent-shell-pstack-panel-directory`, `~/.claude`, `~/.codex`
-   and the other candidates' worktrees. Shared dependency links from
-   `+agent-shell-pstack-arena-dependencies` stay readable, and so does the
-   lead's git directory, so candidates can run read-only git. The
-   candidates' timer starts here.
+   and the other candidates' worktrees. The repository's profile, below,
+   can add shared links, which stay readable. The lead's git directory
+   stays readable too, so candidates can run read-only git. Every
+   candidate gets `TMPDIR`, `GOTMPDIR` and `-Djava.io.tmpdir` in
+   `JAVA_TOOL_OPTIONS` pointing at its private temp folder, and
+   `GIT_OPTIONAL_LOCKS=0`. The candidates' timer starts here.
 4. `capturing`: Emacs stops each settled candidate with every process it
    started, commits its tree under `refs/pstack-arena/<arena-id>/<role>`,
    and checks a result that differs from the base out in a separate
@@ -221,6 +223,53 @@ run `M-x +agent-shell-pstack-arena-clean` to choose from every arena on
 disk. Either asks first, then removes the worktrees, checkouts, result
 refs and the arena's folder through `+agent-shell-arena-git-clean`, which
 trusts only the arena's manifest.
+
+#### Repository profiles
+
+Arenas need no setup in an ordinary repository. A repository whose tools
+need more registers a profile in `+agent-shell-pstack-arena-profiles`,
+from private config rather than this one. Each entry maps a matcher, a
+directory compared by true name with the top level or a predicate called
+with the top level, to a plist. The first match applies. These are the
+keys:
+
+- `:shared` lists paths symlinked from the lead, readable but not
+  writable.
+- `:private` lists paths cloned into each candidate, with symlinks into
+  the lead rewritten to the clone.
+- `:copy` lists ignored or untracked paths cloned from the lead, such as
+  generated config.
+- `:files` maps a path to a function of the candidate's
+  `+agent-shell-sandbox` returning the text written there before the agent
+  starts.
+- `:write` and `:read` add sandbox allowances. Each element is an
+  absolute path or a function of the sandbox returning paths.
+- `:env` lists `NAME=VALUE` entries, or is a function of the sandbox
+  returning them. They win over the defaults.
+
+Paths in `:shared`, `:private`, `:copy` and `:files` are relative to the
+top level. Copied and generated files never reach a candidate's result.
+Emacs checks the profile when a candidate is provisioned, and what its
+functions return when the sandbox is built. A malformed value rejects the
+arena with an error naming the key.
+
+This hypothetical repository shares its vendored packages, copies its
+generated `local.env`, points its build tool's cache at each candidate's
+private temp folder, and lets its language server write its own cache:
+
+```elisp
+(add-to-list
+ '+agent-shell-pstack-arena-profiles
+ `("~/src/widget/"
+   :shared ("vendor")
+   :copy ("local.env")
+   :files ((".widgetrc"
+            . ,(lambda (sandbox)
+                 (format "cache_dir = %s/widget-cache\n"
+                         (+agent-shell-sandbox-tmp sandbox)))))
+   :write ("~/.cache/widget-lsp")
+   :env ("WIDGET_TELEMETRY=0")))
+```
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and

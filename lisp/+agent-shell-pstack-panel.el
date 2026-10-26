@@ -1094,22 +1094,39 @@ Then start the candidates."
   "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
 It cannot read the lead's checkout, other than the shared dependencies
 and the git directory, the panel reports, the agents' own config, or any
-other candidate.  It may stat the lead's top level, which git resolves."
+other candidate.  It may stat the lead's top level, which git resolves.
+The repository's arena profile adds allowances and environment entries,
+and its :files are written into the worktree for the new sandbox."
   (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (profile (+agent-shell-arena-git-profile toplevel))
          (role (+agent-shell-arena-git-role manifest name))
-         (worktree (+agent-shell-arena-git-role-worktree role)))
-    (+agent-shell-sandbox-create
-     worktree
-     :deny-reads
-     (append (list toplevel +agent-shell-pstack-panel-directory
-                   "~/.claude" "~/.codex")
-             (delete worktree
-                     (mapcar #'+agent-shell-arena-git-role-worktree
-                             (+agent-shell-arena-git-manifest-roles manifest))))
-     :allow-reads (cons (+agent-shell-arena-git-common-dir manifest)
-                        (mapcar (lambda (path) (expand-file-name path toplevel))
-                                (+agent-shell-arena-git-role-shared role)))
-     :allow-metadata (list toplevel))))
+         (worktree (+agent-shell-arena-git-role-worktree role))
+         (sandbox
+          (+agent-shell-sandbox-create
+           worktree
+           :deny-reads
+           (append (list toplevel +agent-shell-pstack-panel-directory
+                         "~/.claude" "~/.codex")
+                   (delete worktree
+                           (mapcar #'+agent-shell-arena-git-role-worktree
+                                   (+agent-shell-arena-git-manifest-roles
+                                    manifest))))
+           :allow-reads (append
+                         (list (+agent-shell-arena-git-common-dir manifest))
+                         (mapcar (lambda (path)
+                                   (expand-file-name path toplevel))
+                                 (+agent-shell-arena-git-role-shared role))
+                         (plist-get profile :read))
+           :allow-metadata (list toplevel)
+           :allow-writes (plist-get profile :write)
+           :env (plist-get profile :env))))
+    (condition-case err
+        (+agent-shell-arena-git-write-files
+         worktree (plist-get profile :files) sandbox)
+      (error (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+             (delete-directory (+agent-shell-sandbox-config sandbox) t)
+             (signal (car err) (cdr err))))
+    sandbox))
 
 (defun +agent-shell-pstack-panel--launch (panel)
   "Start PANEL's candidates in their sandboxes and their timer."

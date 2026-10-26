@@ -105,8 +105,9 @@ design.
 - **Allow outbound TCP**, which the agent's own API needs. Exfiltration over
   the network stays possible, and v1 accepts that.
 
-**Dependencies** come in two kinds, configured per project in
-`+agent-shell-pstack-arena-dependencies`:
+**Repository profiles** in `+agent-shell-pstack-arena-profiles` supply
+everything specific to one repository. Arenas need none in a small or
+medium repository. A profile names its paths in these kinds:
 
 - **Shared** paths, such as `elpaca`, are symlinked into ROOT from the lead.
   The profile makes them read-only, so a candidate can load them but not
@@ -115,6 +116,18 @@ design.
   symlink in the clone that points into the lead's checkout is rewritten to
   the clone's own copy. A private path needs this because candidates write
   build output into it.
+- **Copied** paths, such as generated config the lead's tools wrote, are
+  cloned like private ones and left out of the result.
+- **Generated files** are written into ROOT before the agent starts, by
+  functions of the candidate's sandbox, so their content can point tools
+  at the private temp and config folders. They are left out of the result
+  too.
+- **Allowances** add write and read paths to the profile, and
+  **environment** entries take precedence over the defaults.
+
+Capture restores copied and generated paths to the base with `git reset`
+after `git add`, rather than excluding them with a pathspec, because
+`git add` fails when an exclude pathspec names an ignored path.
 
 **The workspace root** is
 `+agent-shell-pstack-arena-directory`/`<arena-id>`/`<role>`/, outside
