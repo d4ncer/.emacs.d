@@ -275,8 +275,9 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
   shared git directory, so a result captured while another candidate ran
   would reach that candidate.
 - **Judging.** The judge reads an immutable checkout of each result commit,
-  made outside every candidate's root, never the live worktree. Its timer
-  is `judge_timeout`.
+  made outside every candidate's root, never the live worktree. The
+  checkout holds only the files the result changed, so a large repository
+  is not checked out a second time. Its timer is `judge_timeout`.
 - **Transitions are idempotent.** Each one sets the phase before starting
   the next member and arms the timer before that member can fail. A member
   that fails to start can't re-enter a finished panel.
@@ -358,7 +359,9 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   - the task;
   - the rubric;
   - for each candidate, its label, final state, immutable checkout path,
-    `git diff --stat <base> <result>`, and rationale.
+    `git diff --stat <base> <result>`, and rationale;
+  - where to read the files a candidate left unchanged: `git show
+    <base>:PATH`.
 
   The judge scores each criterion for each candidate and recommends a base.
   It runs read-only.
@@ -572,6 +575,16 @@ None. Every probe above was run on this machine.
   under the arena's `checkouts/` folder, recorded as the role's `checkout`
   in the manifest, so `+agent-shell-arena-git-clean` removes it like a
   candidate worktree.
+- **Checkouts hold the changed files.** A judge checkout is a sparse
+  worktree whose non-cone patterns name each path the result changed. On
+  the hundreds of thousands of-file monorepo checkout one took 2.8 s and 288 MB, where a full
+  checkout took 53 s and charged 14.1 GB of page cache, inode slab and
+  git's own memory to its cgroup. Non-cone patterns cost time in
+  proportion to their number times the repository's files: 5,000 of them
+  took 61 s there. A result that changes more than
+  `+agent-shell-arena-git-checkout-limit` paths, 1,000, gets a full
+  checkout. Making the sparse checkout turns on `extensions.worktreeConfig`
+  in the lead's repository, as any sparse linked worktree does.
 - **Labels hide the agent.** The judge sees candidates as A, B, C and D,
   not by role, so a role named after a model does not tell the judge the
   vendor. The follow-up maps each label to its role and agent.

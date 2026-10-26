@@ -274,7 +274,7 @@ field, such as `status.members[0].agent`.
   the code hash, and the runner's deadline in seconds.
 - **The status**, `status.json`: the runner's phase (`queued`, then the
   panel's), its pid, heartbeat and deadline, the host's arena id, each
-  member's state and capture, and whether results are written.
+  member's state, capture and error, and whether results are written.
 - **The report**, `report.json`: each member's state, capture, text,
   error, result commit, diff stat and capture failure, and any rejection.
 - **The laptop's record**, `remote.json` in the laptop's arena folder:
@@ -298,7 +298,10 @@ format, version 1, with no `kind`. `emacs` is required, and `written_at`,
 ```
 
 A submission refuses a host without the file, with an unknown version or
-a malformed tool, or with an Emacs older than 30. It starts the runner
+a malformed tool, with an Emacs older than 30, or with a file written
+before the host last booted. Setup deletes the file on every boot, so an
+older one means setup has not finished since. Both times are compared as
+epoch seconds, so the host's time zone does not matter. It starts the runner
 with that Emacs. The job carries the file as the laptop read it. The
 runner reads it again, puts `adapters_bin` on its `PATH` for
 `runner-init.el`, and copies it into the report. The follow-up's host
@@ -350,7 +353,7 @@ this code installed:
 
 | Script | Arguments | Does |
 |---|---|---|
-| probe | checkout, code hash, readiness file | Reports the checkout's top level, its `origin/HEAD` tip (or `HEAD`), whether the code is there, and the readiness file's absolute name and contents. |
+| probe | checkout, code hash, readiness file | Reports the checkout's top level, its `origin/HEAD` tip (or `HEAD`), whether the code is there, the readiness file's absolute name, the boot time from `/proc/stat`, and the readiness file's contents. |
 | submit | id, checkout, Emacs, launcher | Unpacks the upload on standard input into `jobs/<id>/`. Installs the code under `code/<hash>/` if new. Verifies the bundle, fetching the prerequisite from `origin` if missing. Fetches the base into `refs/pstack-arena/<id>/base`. Starts the runner. Answers `started`, `missing`, `code` or `failed`. A started job answers `started` again. |
 | poll | id, cancel, reason | Writes the cancel marker when asked, then reports whether the runner lives, whether a marker exists, and the status. |
 | resume | id, Emacs, launcher | Starts the runner again unless it runs. |
@@ -358,7 +361,9 @@ this code installed:
 | clean | id, Emacs | Waits up to 20 s for a finished runner to exit. Then removes the host's arena through its manifest, the base ref and the job folder, unless the runner still runs. |
 
 The runner starts through `systemd-run --user` on an SSH host and through
-`nohup` on a local one, so it outlives the call either way.
+`nohup` on a local one, so it outlives the call either way. Its systemd
+unit has `MemoryMax=50%` and `OOMPolicy=continue`; see [the first monorepo
+run](#the-first-monorepo-run-2026-10-27).
 
 ### Base and code
 
@@ -411,7 +416,9 @@ Then the runner:
 7. When the panel finishes, bundles every result ref against the base,
    writes `report.json`, and only then writes the final status.
 
-It never prompts. A runner that finds an earlier, unfinished status from
+It never prompts and never asks the host to stay awake: it binds
+`agent-shell-inhibit-system-sleep` to nil, since the host's D-Bus refuses
+a runner. A runner that finds an earlier, unfinished status from
 a runner that died captures each candidate's worktree as `timeout`,
 marks the judge as stopped, and reports. One that died while preparing
 reports a rejection and removes the partial arena.
@@ -440,9 +447,21 @@ served in order.
 ### The laptop
 
 When a profile names `:host`, the panel's preparation snapshots the base
-and hands the panel to `+agent-shell-arena-remote-launch`. The laptop
-extends a Coder workspace's stop time from the laptop, with `coder
-schedule extend`, before the upload. It does so again whenever the
+and hands the panel to `+agent-shell-arena-remote-launch`.
+
+Submission first waits until the host is ready. For a Coder workspace it
+reads `coder list -o json`. A stopped workspace is started with `coder
+start --yes NAME`. A workspace that is starting, or running with its
+agent not yet connected, is checked again every 10 seconds. The wait
+then probes the host over SSH until it answers with a readiness file
+written since it booted. A host that booted less than
+`+agent-shell-arena-remote-wake-timeout` seconds ago, 600, also gets the
+wait, whatever its kind. A host that is still not ready after that
+timeout is rejected with what was last wrong, and a cancel ends the wait.
+A running host that fails its first probe is rejected at once, as before.
+
+The laptop extends a Coder workspace's stop time from the laptop, with
+`coder schedule extend`, before the upload. It does so again whenever the
 runner reports a deadline past the last extension, which a wait in the
 queue causes.
 
@@ -613,24 +632,77 @@ absent, answered, and stopped with no survivors: Claude Code in 11.3 s
 and Codex in 12.4 s. The host's login files kept their modification
 times.
 
+## The first monorepo run, 2026-10-27
+
+A remote arena from the laptop's `~/src/big-repo`, with a Claude Code and a
+Codex candidate on `example-ws`, hit five faults.
+
+- **A stopped workspace.** The workspace had stopped itself, so the
+  submission's SSH probe timed out during the banner exchange and the
+  arena was rejected. That probe woke the workspace, which ran 85 s
+  later. Submission now starts and waits for it, as above.
+- **A refusal without a reason.** The host's Claude Code access token had
+  expired 6.8 hours earlier, so the Linux backend refused that candidate.
+  The status carried no member errors, so it showed only `state error`,
+  and a restarted runner lost the reason. A status member now carries its
+  error, the laptop's panel mirrors it, and recovery restores it.
+- **A sweep with macOS tools.** A candidate whose adapter was already gone
+  was swept with `/usr/sbin/lsof`, which Linux lacks. The halt signalled
+  from its timer, the candidate stayed `stopping`, and the arena stalled
+  at the capture barrier. On Linux the sweep now finds nothing, since an
+  agent's processes end with its PID namespace. A stop that signals fails
+  the candidate's capture with the error, so the others go on.
+- **Runner memory.** The first runner's unit reached 38.8 GB while its
+  candidates ran, and a restarted one went from 0.6 GB to 15.4 GB in
+  about 40 s. Measured on monorepo under a capped scope, the runner's Emacs
+  stayed between 70 MB and 77 MB throughout, with 6 garbage collections.
+  The rest was the unit's children and the kernel memory charged to it:
+  - Provisioning two candidates peaked at 28.8 GB: 24.6 GB of page cache
+    and 3.6 GB of inode slab for two new hundreds of thousands of-file worktrees, with
+    git's own memory under 2.8 GB. Under an 8 GB cap it took the same
+    time, 147 s against 151 s, since the kernel reclaims that cache.
+  - The restarted runner's recovery made the judge checkout of the changed
+    candidate, a full `git worktree add`: 53 s and 14.1 GB alone, 11.8 GB
+    of it page cache. With the sparse judge checkout, the whole recovery
+    took 15.7 s and peaked at 968 MB, against 86 s and the full 8 GB cap
+    before.
+  - The other 10 GB of the first runner was most likely the Codex
+    candidate's Bazel server. the monorepo's `.bazelrc` gives it
+    `MaxRAMPercentage=50.0`, and inside the sandbox, which has no
+    `/sys/fs/cgroup`, it sees the whole host. This share is inferred, not
+    measured.
+
+  `MemoryMax=50%` on the runner's unit is defence in depth: 62 GiB on this
+  host. At that limit the kernel reclaims page cache first. The limit
+  still leaves half the host to the user's own work, whose Bazel server
+  also takes up to half. Past it the kernel kills the largest process,
+  a build rather than the runner, and `OOMPolicy=continue` keeps systemd
+  from stopping the runner with it.
+- **Sleep-inhibit lines.** The runner's journal had 475 lines of `Sleep
+  inhibit unavailable`, one per busy turn, since the host's D-Bus refuses
+  a runner. The runner no longer asks.
+
 ## Open questions to settle by testing
 
 1. **Settled: the ACP adapters** run inside the same sandbox; see the
    smoke run above.
-2. **What the monorepo's build needs from the host.** Bazel, its private home
+2. **Bazel inside the sandbox sizes its heap from the whole host.** The
+   sandbox has no `/sys/fs/cgroup`, so the JVM cannot see the runner's
+   memory limit. A read-only bind of the runner's cgroup would let it.
+3. **What the monorepo's build needs from the host.** Bazel, its private home
    cache and toolchain paths, and whether it needs the Nix daemon socket or
    Docker. The trace command, ported to Linux, answers this.
-3. **Bazel on the host.** How cold a candidate's first build is, and
+4. **Bazel on the host.** How cold a candidate's first build is, and
    whether candidates can share a repository cache.
-4. **Refreshing the host's Claude Code login** without a person: whether a
+5. **Refreshing the host's Claude Code login** without a person: whether a
    plain `claude -p` on the host refreshes a token near expiry, or a
    one-year `claude setup-token` should be made once.
-5. **Cleaning host worktrees after the fetch.** A monorepo worktree is 11 GB,
+6. **Cleaning host worktrees after the fetch.** A monorepo worktree is 11 GB,
    and nothing on the host needs it once the laptop holds the results.
-6. **The SSH and systemd paths on a real host.** The tests cover the
+7. **The SSH and systemd paths on a real host.** The tests cover the
    remote command's quoting through a local shell, not `ssh`,
    `systemd-run` or `coder schedule extend` themselves.
-7. **Which adapter versions to require.** The submission checks the
+8. **Which adapter versions to require.** The submission checks the
    readiness file and Emacs's version, and records the rest without
    comparing them with the laptop's.
 
