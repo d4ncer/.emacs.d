@@ -174,9 +174,9 @@ runner last wrote it, and DEADLINE when it gives up."
                (:constructor +agent-shell-arena-remote--make-member)
                (:copier nil))
   "A member as a status or report gives it.
-A status gives only ROLE, AGENT, KIND, STATE and CAPTURE.  A report adds
-the member's TEXT and ERROR, the COMMIT that holds its result, its diff
-STAT, and why its capture failed, FAILURE."
+A status gives only ROLE, AGENT, KIND, STATE, CAPTURE and ERROR, why it
+settled as an error.  A report adds the member's TEXT, the COMMIT that
+holds its result, its diff STAT, and why its capture failed, FAILURE."
   role agent kind state capture text error commit stat failure)
 
 (cl-defstruct (+agent-shell-arena-remote-report
@@ -268,7 +268,8 @@ The slots after ERROR are not saved."
                   (state "state" (enum pending starting waiting running done
                                        error timeout))
                   (capture "capture" (opt (enum stopping stopped capturing
-                                                captured failed))))
+                                                captured failed)))
+                  (error "error" (opt text)))
     (report +agent-shell-arena-remote-report
             +agent-shell-arena-remote--make-report
             (id "id" id) (arena "arena" (opt id)) (base "base" sha)
@@ -1736,7 +1737,9 @@ the runner reports."
         (setf (+agent-shell-pstack-panel-member-state member)
               (+agent-shell-arena-remote-member-state state)
               (+agent-shell-pstack-panel-member-capture member)
-              (+agent-shell-arena-remote-member-capture state))))
+              (+agent-shell-arena-remote-member-capture state)
+              (+agent-shell-pstack-panel-member-error member)
+              (+agent-shell-arena-remote-member-error state))))
     (let ((file (expand-file-name "status.json"
                                   (+agent-shell-arena-remote-directory remote))))
       (+agent-shell-arena-remote--write-json file 'status status))))
@@ -2214,7 +2217,8 @@ PREVIOUS is the status an earlier runner left unfinished."
                  :agent (+agent-shell-pstack-panel-member-agent member)
                  :kind (+agent-shell-pstack-panel-member-kind member)
                  :state (+agent-shell-pstack-panel-member-state member)
-                 :capture (+agent-shell-pstack-panel-member-capture member)))
+                 :capture (+agent-shell-pstack-panel-member-capture member)
+                 :error (+agent-shell-pstack-panel-member-error member)))
               (+agent-shell-pstack-panel-members panel))
     (mapcar (lambda (member)
               (+agent-shell-arena-remote--make-member
@@ -2405,7 +2409,9 @@ candidate ran.  Request the arena again."))
           (setf (+agent-shell-pstack-panel-member-text member)
                 (+agent-shell-arena-remote--report-text reports role))
           (cond
-           (settled (setf (+agent-shell-pstack-panel-member-state member) state))
+           (settled (setf (+agent-shell-pstack-panel-member-state member) state
+                          (+agent-shell-pstack-panel-member-error member)
+                          (+agent-shell-arena-remote-member-error old)))
            (candidate
             (setf (+agent-shell-pstack-panel-member-state member) 'timeout
                   (+agent-shell-pstack-panel-member-error member)
