@@ -104,6 +104,9 @@ def handle_pstack_prompt(message, text, state):
     if candidate:
         role = candidate[1]
         Path(state["cwd"], role + ".txt").write_text(role + "\n")
+        if "HANG" in text:
+            chunk(session_id, f"PARTIAL role={role}")
+            return False
         rubric = "seen" if "RUBRIC-" in text else "unseen"
         lead = "none"
         if os.environ.get("PA_LEAD"):

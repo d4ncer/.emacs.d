@@ -113,7 +113,7 @@ arena's :judge ends its judge's prompt."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 5
+(defconst +agent-shell-pstack-panel--schema 6
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -123,11 +123,28 @@ Slots are only appended.  Bump this whenever either struct gains one.")
                                          (:copier nil))
   "A panel request and its progress.
 PHASE moves through the shape's phases and ends at `finished'; see
-`+agent-shell-pstack-panel--advance'."
+`+agent-shell-pstack-panel--advance'.  A panel with a SINK has no lead:
+once finished, the SINK is called with the panel in place of delivery.
+REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
-  rubric judge-timeout arena)
+  rubric judge-timeout arena sink remote)
+
+(defvar +agent-shell-pstack-panel-change-hook nil
+  "Hook run after any panel changes, with no arguments.")
+
+(defvar +agent-shell-pstack-arena-extra-deny-reads nil
+  "More folders no arena candidate may read, such as a runner's records.")
+
+(declare-function +agent-shell-arena-remote-launch "+agent-shell-arena-remote")
+(declare-function +agent-shell-arena-remote-cancel "+agent-shell-arena-remote")
+(declare-function +agent-shell-arena-remote-abandon "+agent-shell-arena-remote")
+(declare-function +agent-shell-arena-remote-describe
+                  "+agent-shell-arena-remote")
+(declare-function +agent-shell-arena-remote-clean "+agent-shell-arena-remote")
+(declare-function +agent-shell-arena-remote-recorded-p
+                  "+agent-shell-arena-remote")
 
 (cl-defstruct (+agent-shell-pstack-panel-member
                (:constructor nil)
@@ -328,6 +345,8 @@ candidates; this Emacs runs on %s" system-type))
              :shape shape :brief brief :timeout timeout :members members)
           (when (member "judge" roles)
             (user-error "Role judge is reserved for the arena's judge"))
+          (when (member "base" roles)
+            (user-error "Role base is reserved for the arena's base"))
           (let ((rubric (+agent-shell-pstack-panel--parse-rubric
                          (map-elt request 'rubric)))
                 (judge (+agent-shell-pstack-panel--parse-judge
@@ -611,8 +630,12 @@ not meant to change.\n"
         (when-let* ((paths (plist-get result :lfs)))
           (format "Git LFS files: %s.  The diff changes their pointers, so \
 applying it needs git-lfs, and git apply --3way cannot merge a conflict in \
-one; graft such a file by hand.\n"
-                  (string-join paths ", "))))))
+one; graft such a file by hand.%s\n"
+                  (string-join paths ", ")
+                  (if (+agent-shell-pstack-panel-remote panel)
+                      "  The bundle carried only the pointers, so their \
+contents are still on the host."
+                    ""))))))
      (format "Rationale:\n%s\n"
              (+agent-shell-pstack-panel--rationale candidate)))))
 
@@ -639,6 +662,9 @@ directory: %s\n"
                 (+agent-shell-arena-git-manifest-toplevel manifest))
                (directory-file-name
                 (+agent-shell-arena-git-manifest-directory manifest)))
+       (when-let* ((remote (+agent-shell-pstack-panel-remote panel)))
+         (format "It ran on %s.\n"
+                 (+agent-shell-arena-remote-describe remote)))
        (mapconcat (lambda (candidate)
                     (+agent-shell-pstack-panel--candidate-text panel candidate))
                   candidates "")
@@ -700,14 +726,17 @@ in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean."))))
                      (+agent-shell-pstack-panel-phase panel))))
 
 (defun +agent-shell-pstack-panel--finish (panel)
-  "End PANEL, compose its follow-up and deliver it, once."
+  "End PANEL, compose its follow-up and deliver it, once.
+A panel with a sink hands itself to the sink instead."
   (unless (eq (+agent-shell-pstack-panel-phase panel) 'finished)
     (+agent-shell-pstack-panel--disarm panel)
     (setf (+agent-shell-pstack-panel-phase panel) 'finished
           (+agent-shell-pstack-panel-followup panel)
           (+agent-shell-pstack-panel-followup-text panel))
-    (+agent-shell-pstack-panel--deliver-to
-     (+agent-shell-pstack-panel-lead panel))))
+    (if-let* ((sink (+agent-shell-pstack-panel-sink panel)))
+        (funcall sink panel)
+      (+agent-shell-pstack-panel--deliver-to
+       (+agent-shell-pstack-panel-lead panel)))))
 
 (defun +agent-shell-pstack-panel--kind-members (panel kind)
   "Return PANEL's members of KIND."
@@ -1091,7 +1120,8 @@ A preparation the lead abandoned discards its arena."
 
 (defun +agent-shell-pstack-panel--prepare (panel)
   "Snapshot the lead's tree as PANEL's base and give each candidate a worktree.
-Then start the candidates."
+Then start the candidates.  When the repository's profile names a host,
+the arena runs there instead; see `+agent-shell-arena-remote-launch'."
   (setf (+agent-shell-pstack-panel-phase panel) 'preparing)
   (+agent-shell-arena-git-capture-base
    (+agent-shell-pstack-panel-cwd panel)
@@ -1099,23 +1129,33 @@ Then start the candidates."
      (+agent-shell-pstack-panel--preparing
       panel error
       (lambda ()
-        (let ((manifest (+agent-shell-arena-git-create
-                         base (+agent-shell-pstack-panel-id panel))))
-          (setf (+agent-shell-pstack-panel-arena panel) manifest)
-          (cl-labels
-              ((provision (members)
-                 (if (null members)
-                     (+agent-shell-pstack-panel--launch panel)
-                   (+agent-shell-arena-git-provision
-                    manifest
-                    (+agent-shell-pstack-panel-member-role (car members))
-                    (lambda (_directory error)
-                      (+agent-shell-pstack-panel--preparing
-                       panel error
-                       (lambda () (provision (cdr members)))))))))
-            (provision (+agent-shell-pstack-panel--kind-members
-                        panel 'candidate))))))))
+        (let ((profile (+agent-shell-arena-git-profile
+                        (+agent-shell-arena-git-base-toplevel base))))
+          (if (plist-get profile :host)
+              (progn (require '+agent-shell-arena-remote)
+                     (+agent-shell-arena-remote-launch panel base profile))
+            (+agent-shell-pstack-panel--provision panel base)))))))
   (+agent-shell-pstack-panels--refresh))
+
+(defun +agent-shell-pstack-panel--provision (panel base)
+  "Create PANEL's arena over BASE and give each candidate a worktree.
+Then start the candidates.  PANEL is preparing."
+  (let ((manifest (+agent-shell-arena-git-create
+                   base (+agent-shell-pstack-panel-id panel))))
+    (setf (+agent-shell-pstack-panel-arena panel) manifest)
+    (cl-labels
+        ((provision (members)
+           (if (null members)
+               (+agent-shell-pstack-panel--launch panel)
+             (+agent-shell-arena-git-provision
+              manifest
+              (+agent-shell-pstack-panel-member-role (car members))
+              (lambda (_directory error)
+                (+agent-shell-pstack-panel--preparing
+                 panel error
+                 (lambda () (provision (cdr members)))))))))
+      (provision (+agent-shell-pstack-panel--kind-members panel 'candidate)))
+    (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-arena-sandbox (manifest name &optional trace)
   "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
@@ -1137,6 +1177,7 @@ and its :files are written into the worktree for the new sandbox."
            :deny-reads
            (append (list toplevel +agent-shell-pstack-panel-directory
                          "~/.claude" "~/.codex")
+                   +agent-shell-pstack-arena-extra-deny-reads
                    (delete worktree
                            (mapcar #'+agent-shell-arena-git-role-worktree
                                    (+agent-shell-arena-git-manifest-roles
@@ -1182,18 +1223,34 @@ and its :files are written into the worktree for the new sandbox."
                (eq (+agent-shell-pstack-panel-phase panel) 'interrupting))
       (+agent-shell-pstack-panel--prepare panel))))
 
+(defun +agent-shell-pstack-panel-cancel (panel reason &optional state)
+  "Stop PANEL, settling its unfinished members as STATE because of REASON.
+Settle the current phase's members and every pending member, which can
+no longer start, as `error' unless STATE says otherwise.  An arena still
+captures what its candidates made and never starts its judge.  An arena
+on a host gets a cancel instead; see `+agent-shell-arena-remote-cancel'."
+  (if (+agent-shell-pstack-panel-remote panel)
+      (+agent-shell-arena-remote-cancel panel reason)
+    (dolist (member (+agent-shell-pstack-panel-members panel))
+      (when (or (memq member (+agent-shell-pstack-panel--phase-members panel))
+                (eq 'pending (+agent-shell-pstack-panel-member-state member)))
+        (+agent-shell-pstack-panel--settle
+         panel member (or state 'error)
+         (when-let* (((eq state 'timeout))
+                     (shell (+agent-shell-pstack-panel-member-shell member)))
+           (+agent-shell-drive-partial-text shell))
+         reason))))
+  (+agent-shell-pstack-panels--refresh))
+
 (defun +agent-shell-pstack-panel--abandon (lead)
   "Stop the unfinished panels of LEAD, whose shell has ended.
-Settle the current phase's members and every pending member, which can
-no longer start."
+An arena on a host decides for itself; see
+`+agent-shell-arena-remote-abandon'."
   (dolist (panel (+agent-shell-pstack-panel-list))
     (when (eq lead (+agent-shell-pstack-panel-lead panel))
-      (dolist (member (+agent-shell-pstack-panel-members panel))
-        (when (or (memq member (+agent-shell-pstack-panel--phase-members
-                                panel))
-                  (eq 'pending (+agent-shell-pstack-panel-member-state member)))
-          (+agent-shell-pstack-panel--settle panel member 'error nil
-                                             "The lead's shell ended.")))))
+      (if (+agent-shell-pstack-panel-remote panel)
+          (+agent-shell-arena-remote-abandon panel)
+        (+agent-shell-pstack-panel-cancel panel "The lead's shell ended."))))
   (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--lead-event (event)
@@ -1225,13 +1282,15 @@ no longer start."
 (defvar-keymap +agent-shell-pstack-panels-mode-map
   :doc "Keymap for `+agent-shell-pstack-panels-mode'."
   "RET" #'+agent-shell-pstack-panels-visit
-  "x" #'+agent-shell-pstack-panels-clean)
+  "x" #'+agent-shell-pstack-panels-clean
+  "k" #'+agent-shell-pstack-panels-cancel)
 
 (define-derived-mode +agent-shell-pstack-panels-mode special-mode
   "pstack panels"
   "List pstack panels, their members and reports.
 \\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line.
-\\[+agent-shell-pstack-panels-clean] cleans up the finished arena on the line."
+\\[+agent-shell-pstack-panels-clean] cleans up the finished arena on the line.
+\\[+agent-shell-pstack-panels-cancel] cancels the unfinished panel on the line."
   (setq-local revert-buffer-function
               (lambda (&rest _) (+agent-shell-pstack-panels--render))
               truncate-lines t))
@@ -1282,7 +1341,11 @@ message with a pstack-panel block.\n"))
             (+agent-shell-pstack-panels--line
              directory "  Arena: " (abbreviate-file-name directory)
              (if (eq (+agent-shell-pstack-panel-phase panel) 'finished)
-                 "  (x cleans it up)" ""))))
+                 "  (x cleans it up)" ""))
+            (when-let* ((remote (+agent-shell-pstack-panel-remote panel)))
+              (+agent-shell-pstack-panels--line
+               directory "  Host: "
+               (+agent-shell-arena-remote-describe remote)))))
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (let ((report (+agent-shell-pstack-panel-member-report member))
                 (shell (+agent-shell-pstack-panel-member-shell member))
@@ -1370,8 +1433,10 @@ message with a pstack-panel block.\n"))
             (force-mode-line-update)))))))
 
 (defun +agent-shell-pstack-panels--refresh ()
-  "Redraw the panels buffer if it exists, and the leads' mode lines."
+  "Redraw the panels buffer if it exists, and the leads' mode lines.
+Then run `+agent-shell-pstack-panel-change-hook'."
   (+agent-shell-pstack-panel--update-mode-lines)
+  (run-hooks '+agent-shell-pstack-panel-change-hook)
   (when-let* ((buffer (get-buffer +agent-shell-pstack-panels--buffer)))
     (with-current-buffer buffer (+agent-shell-pstack-panels--render))))
 
@@ -1394,16 +1459,35 @@ message with a pstack-panel block.\n"))
     ((and (pred buffer-live-p) buffer) (pop-to-buffer buffer))
     (_ (user-error "Nothing to visit on this line"))))
 
+(defun +agent-shell-pstack-panels-cancel ()
+  "Cancel the unfinished panel on the current line, after confirmation.
+An arena captures what its candidates made and skips its judge."
+  (interactive)
+  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel)))
+    (cond
+     ((null panel) (user-error "No panel on this line"))
+     ((+agent-shell-pstack-panel-followup panel)
+      (user-error "Panel %s has finished" (+agent-shell-pstack-panel-id panel)))
+     ((yes-or-no-p (format "Cancel panel %s? "
+                           (+agent-shell-pstack-panel-id panel)))
+      (+agent-shell-pstack-panel-cancel panel "You cancelled the panel.")))))
+
 (defun +agent-shell-pstack-arena--clean (manifest)
-  "Clean MANIFEST's arena after confirmation, forgetting it in its panel."
-  (let ((id (+agent-shell-arena-git-manifest-id manifest)))
+  "Clean MANIFEST's arena after confirmation, forgetting it in its panel.
+An arena that ran on a host is cleaned there too."
+  (let ((id (+agent-shell-arena-git-manifest-id manifest))
+        (remote (and (featurep '+agent-shell-arena-remote)
+                     (+agent-shell-arena-remote-recorded-p manifest))))
     (when (yes-or-no-p (format "Remove arena %s's worktrees, checkouts and \
-result refs from %s? " id (+agent-shell-arena-git-manifest-toplevel manifest)))
+result refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
+                               (if remote " and its host" "")))
       (dolist (panel (+agent-shell-pstack-panel-list))
         (when-let* ((held (+agent-shell-pstack-panel-arena panel))
                     ((equal id (+agent-shell-arena-git-manifest-id held))))
           (setf (+agent-shell-pstack-panel-arena panel) nil)))
-      (+agent-shell-arena-git-clean
+      (funcall
+       (if remote #'+agent-shell-arena-remote-clean
+         #'+agent-shell-arena-git-clean)
        manifest
        (lambda (left error)
          (cond (error (message "Arena %s: cleanup failed: %s" id error))
