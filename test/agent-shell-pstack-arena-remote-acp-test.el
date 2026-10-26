@@ -233,10 +233,10 @@ record, and `delivered', which waits for a panel's follow-up."
      (make-directory host-root t)
      (with-temp-file (expand-file-name "ready.json" host-root)
        (insert (json-serialize
-                `((version . 1) (kind . "ready")
-                  (emacs . ,(expand-file-name invocation-name
-                                              invocation-directory))
-                  (emacs_version . ,emacs-version)))))
+                `((version . 1)
+                  (emacs (path . ,(expand-file-name invocation-name
+                                                    invocation-directory))
+                         (version . ,emacs-version))))))
      (+agent-shell-pstack-arena-remote-acp-test--runner-init
       (expand-file-name "runner-init.el" host-root))
      (unwind-protect
@@ -386,9 +386,11 @@ The follow-up matches the one the same arena gives when run locally."
                      (+agent-shell-pstack-arena-remote-acp-test--normalize
                       followup (list +agent-shell-pstack-arena-directory
                                      (expand-file-name "arenas/" host-root)))))
-            (should (string-search (format "It ran on local host %s.\n"
+            (should (string-search (format "It ran on local host %s \
+(Emacs %s).\n"
                                            (abbreviate-file-name
-                                            (directory-file-name host-root)))
+                                            (directory-file-name host-root))
+                                           emacs-version)
                                    followup))
             (+agent-shell-pstack-arena-remote-acp-test--wait-for
              (lambda () (with-current-buffer lead

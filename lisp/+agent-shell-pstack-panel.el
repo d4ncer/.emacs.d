@@ -137,6 +137,10 @@ REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
 (defvar +agent-shell-pstack-arena-extra-deny-reads nil
   "More folders no arena candidate may read, such as a runner's records.")
 
+(defvar +agent-shell-pstack-arena-deadline nil
+  "Time each arena candidate's login must outlast, or nil for now.
+A remote arena's runner sets it to its deadline.")
+
 (declare-function +agent-shell-arena-remote-launch "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-cancel "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-abandon "+agent-shell-arena-remote")
@@ -316,9 +320,9 @@ LEAD-AGENT is the requesting lead's agent identifier."
     (unless shape
       (user-error "Shape %S is unknown; shapes: %s" (map-elt request 'shape)
                   (+agent-shell-pstack-panel--names shapes)))
-    (when (and arena (not (eq system-type 'darwin)))
-      (user-error "Arena panels need macOS, whose sandbox-exec confines the \
-candidates; this Emacs runs on %s" system-type))
+    (when (and arena (not +agent-shell-sandbox-backend))
+      (user-error "Arena panels need a sandbox to confine the candidates, \
+macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s" system-type))
     (unless (and (stringp brief) (not (string-blank-p brief)))
       (user-error "Brief must be a non-empty string"))
     (let ((timeout (+agent-shell-pstack-panel--seconds
@@ -364,10 +368,10 @@ candidates; this Emacs runs on %s" system-type))
 
 (defun +agent-shell-pstack-panel--shapes ()
   "Return the entries of the shapes a lead may request here.
-An arena needs macOS and an agent that can run sandboxed."
+An arena needs a sandbox backend and an agent that can run sandboxed."
   (seq-remove (lambda (shape)
                 (and (eq (car shape) 'arena)
-                     (not (and (eq system-type 'darwin)
+                     (not (and +agent-shell-sandbox-backend
                                (+agent-shell-pstack-panel--candidate-agents)))))
               +agent-shell-pstack-panel-shapes))
 
@@ -1192,7 +1196,7 @@ and its :files are written into the worktree for the new sandbox."
            :allow-writes (plist-get profile :write)
            :allow-connects (plist-get profile :connect)
            :env (plist-get profile :env)
-           :trace trace)))
+           :trace trace :deadline +agent-shell-pstack-arena-deadline)))
     (condition-case err
         (+agent-shell-arena-git-write-files
          worktree (plist-get profile :files) sandbox)

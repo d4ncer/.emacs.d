@@ -122,12 +122,16 @@
                            :members (list member)))
                (record . ,(+arena-remote-test--record host))
                (ready . ,(+agent-shell-arena-remote--make-ready
-                          :emacs "/nix/bin/emacs" :emacs-version "31.1"))))
+                          :emacs (+agent-shell-arena-remote--make-tool
+                                  :path "/nix/bin/emacs" :version "31.1")))))
       (let* ((kind (car case))
              (json (+agent-shell-arena-remote-to-json kind (cdr case)))
              (back (+agent-shell-arena-remote-from-json kind json)))
         (should (equal (+agent-shell-arena-remote-to-json kind back) json))
-        (should (string-match-p (format "\"kind\":\"%s\"" kind) json))))
+        (should (eq (not (eq kind 'ready))
+                    (and (string-match-p (format "\"kind\":\"%s\"" kind)
+                                         json)
+                         t)))))
     (let ((back (+agent-shell-arena-remote-from-json
                  'job (+agent-shell-arena-remote-to-json
                        'job (+arena-remote-test--job)))))
@@ -207,6 +211,64 @@ turns placeholders back into functions of its own sandbox."
                            (plist-get host :write))))
     (should (equal '("T=/w/opus") (funcall (plist-get host :env) sandbox)))
     (should (+agent-shell-arena-git--check-profile "/r/" host))))
+
+(defconst +arena-remote-test--ready
+  "{
+  \"version\": 1,
+  \"written_at\": \"2026-10-26T10:29:45.684Z\",
+  \"emacs\": {\"path\": \"/nix/store/0wx9-emacs-nox-31.1/bin/emacs\", \"version\": \"31.1\"},
+  \"adapters_bin\": \"/home/user/.local/share/pstack-arena/adapters/node_modules/.bin\",
+  \"claude_agent_acp\": {\"path\": \"/a/claude-agent-acp/dist/index.js\", \"version\": \"0.95.0\"},
+  \"codex_acp\": {\"path\": \"/a/codex-acp/dist/index.js\", \"version\": \"2.2.2\"},
+  \"node\": {\"path\": \"/usr/bin/node\", \"version\": \"v24.22.1\"},
+  \"bwrap\": {\"path\": \"/usr/bin/bwrap\", \"version\": \"bubblewrap 0.6.1\"},
+  \"unshare\": {\"path\": \"/usr/bin/unshare\", \"version\": \"unshare 2.37.2\"},
+  \"slirp4netns\": {\"path\": \"/usr/bin/slirp4netns\", \"version\": \"slirp4netns version 1.0.1\"}
+}"
+  "The remote host's readiness file, as its setup wrote it.")
+
+(ert-deftest +agent-shell-arena-remote-test-ready ()
+  "The host's readiness file is read strictly and names what ran."
+  (let ((ready (+agent-shell-arena-remote-from-json
+                'ready +arena-remote-test--ready)))
+    (should (equal "/nix/store/0wx9-emacs-nox-31.1/bin/emacs"
+                   (+agent-shell-arena-remote-tool-path
+                    (+agent-shell-arena-remote-ready-emacs ready))))
+    (should (equal "Emacs 31.1, claude-agent-acp 0.95.0, codex-acp 2.2.2"
+                   (+agent-shell-arena-remote--ready-text ready)))
+    (should (equal "/home/user/.local/share/pstack-arena/adapters/node_modules/.bin"
+                   (+agent-shell-arena-remote-ready-adapters-bin ready)))
+    (should (string-match-p
+             "its Emacs is 29.4, older than 30"
+             (+agent-shell-arena-remote--ready-error
+              (list :toplevel "/r"
+                    :ready (+agent-shell-arena-remote--make-ready
+                            :emacs (+agent-shell-arena-remote--make-tool
+                                    :path "/e" :version "29.4")))
+              "/r")))
+    (should-not (+agent-shell-arena-remote--ready-error
+                 (list :toplevel "/r" :ready ready) "/r")))
+  (dolist (case '(("\"version\": 1" "\"version\": 2" "version 2, but this Emacs reads up to 1")
+                  ("{\"path\": \"/usr/bin/node\", \"version\": \"v24.22.1\"}"
+                   "{\"path\": \"/usr/bin/node\"}" "ready\\.node\\.version must be present")
+                  ("{\"path\": \"/nix/store/0wx9-emacs-nox-31.1/bin/emacs\", \"version\": \"31.1\"}"
+                   "\"/nix/bin/emacs\"" "ready\\.emacs must be an object")))
+    (let ((err (should-error
+                (+agent-shell-arena-remote-from-json
+                 'ready (string-replace (nth 0 case) (nth 1 case)
+                                        +arena-remote-test--ready))
+                :type '+agent-shell-arena-remote-wire)))
+      (should (string-match-p (nth 2 case) (cadr err))))))
+
+(ert-deftest +agent-shell-arena-remote-test-code-files ()
+  "The runner's code holds the libraries, the packages and the launcher."
+  (let ((names (mapcar #'car (+agent-shell-arena-remote--code-files))))
+    (dolist (name '("+agent-shell-arena-remote.el" "+agent-shell-sandbox.el"
+                    "+agent-shell-sandbox-launch.sh" "agent-shell.el" "acp.el"
+                    "shell-maker.el"))
+      (should (member name names)))
+    (should-not (seq-some (lambda (name) (string-match-p "autoloads" name))
+                          names))))
 
 ;;;; Phases
 

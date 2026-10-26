@@ -50,6 +50,19 @@ Return (STATUS . OUTPUT)."
   (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
   (delete-directory (+agent-shell-sandbox-config sandbox) t))
 
+(ert-deftest +arena-sandbox-test-deadline ()
+  "A candidate's sandbox carries the deadline its login must outlast."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
+      (dolist (deadline (list nil (+ (float-time) 3600)))
+        (pcase-let* ((+agent-shell-pstack-arena-deadline deadline)
+                     (`(,_ ,_ ,sandbox)
+                      (+arena-sandbox-test--candidate
+                       repo (if deadline "later" "now"))))
+          (unwind-protect
+              (should (equal deadline (+agent-shell-sandbox-deadline sandbox)))
+            (+arena-sandbox-test--discard sandbox)))))))
+
 (ert-deftest +arena-sandbox-test-read-only-git ()
   "Run git status and git diff in a candidate, never the lead's files.
 The lead's git directory stays unwritable."

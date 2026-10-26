@@ -283,10 +283,27 @@ field, such as `status.members[0].agent`.
   follow-up delivered, the last heartbeat and when it changed, the
   restarts, the host's arena id and Emacs.
 
-The host also has `ready.json`, which its setup writes once its smoke
-check passes: `{"version":1,"kind":"ready","emacs":"/path/to/emacs",
-"emacs_version":"31.1"}`. A submission refuses a host without one or
-with an Emacs older than 30.
+The host's setup writes `~/.local/share/pstack-arena/ready.json` once its
+smoke check passes, and deletes it on every boot first. It has its own
+format, version 1, with no `kind`. `emacs` is required, and `written_at`,
+`adapters_bin`, `claude_agent_acp`, `codex_acp`, `node`, `bwrap`,
+`unshare` and `slirp4netns` are optional. Each tool is an object with
+`path` and `version`:
+
+```json
+{"version":1,"written_at":"2026-10-26T10:29:45.684Z",
+ "emacs":{"path":"/nix/store/...-emacs-nox-31.1/bin/emacs","version":"31.1"},
+ "adapters_bin":"/home/user/.local/share/pstack-arena/adapters/node_modules/.bin",
+ "codex_acp":{"path":".../codex-acp/dist/index.js","version":"2.2.2"}}
+```
+
+A submission refuses a host without the file, with an unknown version or
+a malformed tool, or with an Emacs older than 30. It starts the runner
+with that Emacs. The job carries the file as the laptop read it. The
+runner reads it again, puts `adapters_bin` on its `PATH` for
+`runner-init.el`, and copies it into the report. The follow-up's host
+line then names the Emacs and adapter versions that ran. A local host's
+file is `ready.json` in its state folder.
 
 ### Phases on the laptop
 
@@ -333,7 +350,7 @@ this code installed:
 
 | Script | Arguments | Does |
 |---|---|---|
-| probe | checkout, code hash | Reports the checkout's top level, its `origin/HEAD` tip (or `HEAD`), whether the code is there, and `ready.json`. |
+| probe | checkout, code hash, readiness file | Reports the checkout's top level, its `origin/HEAD` tip (or `HEAD`), whether the code is there, and the readiness file's absolute name and contents. |
 | submit | id, checkout, Emacs, launcher | Unpacks the upload on standard input into `jobs/<id>/`. Installs the code under `code/<hash>/` if new. Verifies the bundle, fetching the prerequisite from `origin` if missing. Fetches the base into `refs/pstack-arena/<id>/base`. Starts the runner. Answers `started`, `missing`, `code` or `failed`. A started job answers `started` again. |
 | poll | id, cancel, reason | Writes the cancel marker when asked, then reports whether the runner lives, whether a marker exists, and the status. |
 | resume | id, Emacs, launcher | Starts the runner again unless it runs. |
@@ -401,7 +418,7 @@ reports a rejection and removes the partial arena.
 
 The host keeps its state under `~/.local/state/pstack-arena-remote/`:
 
-- `ready.json` and `runner-init.el`;
+- `runner-init.el`;
 - `code/<hash>/`, the runner's code;
 - `jobs/<id>/`, each job's files and reports;
 - `arenas/`, the arenas' worktrees and checkouts;
@@ -478,6 +495,13 @@ not cancel. Ending the lead's shell otherwise cancels, as locally.
   slots, schema 6. `+agent-shell-pstack-panel-cancel`, bound to `c` in
   the panels view, cancels any unfinished panel. `+agent-shell-pstack-arena-extra-deny-reads`
   hides the runner's records from candidates.
+- **The Linux backend plugs in unchanged.** Arenas are gated on
+  `+agent-shell-sandbox-backend` rather than macOS, so a runner on Linux
+  accepts them. Each candidate's sandbox gets the runner's deadline, plus
+  its two minutes' grace, as `:deadline`, through
+  `+agent-shell-pstack-arena-deadline`. The runner's code ships
+  `+agent-shell-sandbox-launch.sh`, which the backend finds on
+  `load-path`.
 - **Results stay on the host until cleaned.** This is as designed, but it
   keeps every candidate's worktree there; see the open questions.
 
@@ -606,8 +630,9 @@ times.
 6. **The SSH and systemd paths on a real host.** The tests cover the
    remote command's quoting through a local shell, not `ssh`,
    `systemd-run` or `coder schedule extend` themselves.
-7. **The adapters' versions in `ready.json`.** The submission checks only
-   that the file exists and Emacs's version.
+7. **Which adapter versions to require.** The submission checks the
+   readiness file and Emacs's version, and records the rest without
+   comparing them with the laptop's.
 
 ## Tests
 

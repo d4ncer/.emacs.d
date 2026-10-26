@@ -909,13 +909,18 @@ seconds from 1 to 3600")
         (should (string-prefix-p
                  (concat "Emacs rejected your pstack-panel request: " reason)
                  (cdar sent)))))
-    (let ((system-type 'gnu/linux))
+    (let ((system-type 'windows-nt) (+agent-shell-sandbox-backend nil))
       (lead-event :kind 'turn-complete :session "s2"
                   :text (+agent-shell-pstack-panel-test--message
                          (+agent-shell-pstack-panel-test--arena)))
       (should (string-prefix-p "Emacs rejected your pstack-panel request: \
-Arena panels need macOS, whose sandbox-exec confines the candidates; this \
-Emacs runs on gnu/linux" (cdar sent))))
+Arena panels need a sandbox to confine the candidates, macOS's sandbox-exec \
+or Linux's bwrap; this Emacs runs on windows-nt"
+                               (string-replace "’" "'" (cdar sent)))))
+    (let ((system-type 'gnu/linux) (+agent-shell-sandbox-backend 'bwrap))
+      (should (eq 'arena (+agent-shell-pstack-panel-shape
+                          (+agent-shell-pstack-panel--parse
+                           (+agent-shell-pstack-panel-test--arena))))))
     (let ((+agent-shell-sandbox-agents nil))
       (lead-event :kind 'turn-complete :session "s3"
                   :text (+agent-shell-pstack-panel-test--message
@@ -1617,7 +1622,7 @@ sees" protocol))
       (should (string-match-p "\"judge_timeout\", 900 seconds" protocol))
       (should (string-match-p "^Request how, interrogate and arena panels"
                               (+agent-shell-pstack-panel--reminder))))
-    (dolist (binding '((system-type . gnu/linux)
+    (dolist (binding '((+agent-shell-sandbox-backend . nil)
                        (+agent-shell-sandbox-agents . nil)))
       (cl-progv (list (car binding)) (list (cdr binding))
         (let ((protocol (+agent-shell-pstack-panel--protocol)))

@@ -152,8 +152,8 @@ than letting a changed struct break them.
 ### Run an arena
 
 An arena runs arena's Fan out and Cross-judge phases; the lead keeps Frame,
-Pick, Graft and Verify. It needs macOS and a lead inside a git repository
-with a commit and no submodules. A sparse checkout carries over. Each
+Pick, Graft and Verify. It needs a sandbox backend, macOS's or Linux's, and
+a lead inside a git repository with a commit and no submodules. A sparse checkout carries over. Each
 candidate's worktree gets the lead's patterns, and the follow-up names any
 file a candidate changed outside them. Git LFS files are captured as
 pointers, and the follow-up flags a candidate that changed one. The
@@ -346,9 +346,10 @@ tests. `:host-directory` names the repository's checkout on the host:
 The rest of the profile travels with each job as plain data. Its
 functions are called on the laptop against a stand-in sandbox whose
 folders are `@ROOT@`, `@TMP@` and `@CONFIG@`, and the host fills in its
-own. The host needs `ready.json` and `runner-init.el` in
-`~/.local/state/pstack-arena-remote/`, which its setup writes. The first
-names the host's Emacs, and the second configures its agents.
+own. The host's setup writes `~/.local/share/pstack-arena/ready.json`,
+which names its Emacs and adapters, and
+`~/.local/state/pstack-arena-remote/runner-init.el`, which configures its
+agents. A host without the first is refused.
 
 The lead's request is the same, and so is its follow-up. The follow-up
 adds one line naming the host. The panel moves through `preparing`,

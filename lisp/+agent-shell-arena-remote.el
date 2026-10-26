@@ -85,6 +85,12 @@ whose connection died."
   "The runner's state folder on an SSH host, relative to its home folder."
   :type 'string)
 
+(defcustom +agent-shell-arena-remote-ready-file
+  "~/.local/share/pstack-arena/ready.json"
+  "The readiness file an SSH host's setup writes once its smoke check passes.
+A local host's is ready.json in its state folder."
+  :type 'string)
+
 (defcustom +agent-shell-arena-remote-coder "coder"
   "The Coder CLI, which extends a workspace's stop time from the laptop."
   :type 'string)
@@ -94,6 +100,10 @@ whose connection died."
     +agent-shell-drive +agent-shell-sandbox +agent-shell-arena-git)
   "Local libraries a runner loads, shipped to the host with each job."
   :type '(repeat symbol))
+
+(defcustom +agent-shell-arena-remote-files '("+agent-shell-sandbox-launch.sh")
+  "Other files on `load-path' a runner needs, such as the Linux launcher."
+  :type '(repeat string))
 
 (defcustom +agent-shell-arena-remote-packages '(agent-shell acp shell-maker)
   "Packages whose Elisp sources a runner loads, shipped as this Emacs has them."
@@ -133,9 +143,10 @@ PREREQUISITE the commit its bundle is cut against, nil for a whole
 history.  SPARSE holds the lead's sparse-checkout patterns and PROFILE
 the repository profile as plain data.  CODE names the runner's code by
 content hash.  DEADLINE is how many seconds the runner may take once it
-starts."
+starts.  READY is the host's readiness file as the laptop saw it, and
+READY-FILE where the host keeps it."
   id panel brief rubric timeout judge-timeout candidates judge prefix base
-  prerequisite sparse profile repository code deadline)
+  prerequisite sparse profile repository code deadline ready-file ready)
 
 (cl-defstruct (+agent-shell-arena-remote-candidate
                (:constructor +agent-shell-arena-remote--make-candidate)
@@ -171,15 +182,25 @@ STAT, and why its capture failed, FAILURE."
                (:constructor +agent-shell-arena-remote--make-report)
                (:copier nil))
   "A runner's results.  ARENA is the host's arena id, whose refs the
-results bundle holds; REJECTION says why the arena never ran."
-  id arena base rejection members)
+results bundle holds; REJECTION says why the arena never ran.  READY is
+the host's readiness file as the runner read it, naming what ran."
+  id arena base rejection members ready)
+
+(cl-defstruct (+agent-shell-arena-remote-tool
+               (:constructor +agent-shell-arena-remote--make-tool)
+               (:copier nil))
+  "A program a host's setup installed: its PATH and VERSION."
+  path version)
 
 (cl-defstruct (+agent-shell-arena-remote-ready
                (:constructor +agent-shell-arena-remote--make-ready)
                (:copier nil))
   "A host's readiness file, written once its setup passed a smoke check.
-EMACS is the Emacs a runner runs on and EMACS-VERSION its version."
-  emacs emacs-version)
+EMACS is the Emacs a runner runs on.  ADAPTERS-BIN is the folder holding
+the ACP adapters' launchers, and the other slots the tools the Linux
+sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'."
+  written-at emacs adapters-bin claude-agent-acp codex-acp node bwrap unshare
+  slirp4netns)
 
 (cl-defstruct (+agent-shell-arena-remote-host
                (:constructor +agent-shell-arena-remote--make-host)
@@ -204,7 +225,7 @@ is the host's arena id and EMACS the host's Emacs.
 The slots after ERROR are not saved."
   id panel session host phase (cancel-state 'none) submitted fetched delivered
   deadline extended heartbeat seen (restarts 0) arena emacs error
-  directory timer (failures 0) runner-phase)
+  directory timer (failures 0) runner-phase ready)
 
 (defconst +agent-shell-arena-remote--agent-regexp
   "\\`[a-z0-9][a-z0-9-]*\\'"
@@ -220,7 +241,9 @@ The slots after ERROR are not saved."
          (prerequisite "prerequisite" (opt sha))
          (sparse "sparse" (opt (record sparse)))
          (profile "profile" (opt profile)) (repository "repository" text)
-         (code "code" sha) (deadline "deadline" natnum))
+         (code "code" sha) (deadline "deadline" natnum)
+         (ready-file "ready_file" (opt text))
+         (ready "ready" (opt (record ready))))
     (candidate +agent-shell-arena-remote-candidate
                +agent-shell-arena-remote--make-candidate
                (role "role" id) (agent "agent" agent) (focus "focus" (opt text)))
@@ -249,7 +272,8 @@ The slots after ERROR are not saved."
             +agent-shell-arena-remote--make-report
             (id "id" id) (arena "arena" (opt id)) (base "base" sha)
             (rejection "rejection" (opt text))
-            (members "members" (list member-report)))
+            (members "members" (list member-report))
+            (ready "ready" (opt (record ready))))
     (member-report +agent-shell-arena-remote-member
                    +agent-shell-arena-remote--make-member
                    (role "role" id) (agent "agent" agent)
@@ -261,9 +285,17 @@ The slots after ERROR are not saved."
                    (text "text" (opt text)) (error "error" (opt text))
                    (commit "commit" (opt sha)) (stat "stat" (opt text))
                    (failure "failure" (opt text)))
+    (tool +agent-shell-arena-remote-tool +agent-shell-arena-remote--make-tool
+          (path "path" text) (version "version" text))
     (ready +agent-shell-arena-remote-ready
            +agent-shell-arena-remote--make-ready
-           (emacs "emacs" text) (emacs-version "emacs_version" text))
+           (written-at "written_at" (opt text)) (emacs "emacs" (record tool))
+           (adapters-bin "adapters_bin" (opt text))
+           (claude-agent-acp "claude_agent_acp" (opt (record tool)))
+           (codex-acp "codex_acp" (opt (record tool)))
+           (node "node" (opt (record tool))) (bwrap "bwrap" (opt (record tool)))
+           (unshare "unshare" (opt (record tool)))
+           (slirp4netns "slirp4netns" (opt (record tool))))
     (host +agent-shell-arena-remote-host +agent-shell-arena-remote--make-host
           (kind "kind" (enum coder ssh local)) (name "name" text))
     (record +agent-shell-arena-remote +agent-shell-arena-remote--make
@@ -286,8 +318,12 @@ SYMBOL...); (strings); (list KIND) or (record KIND) of another kind;
 `profile', a repository profile as plain data; or (opt TYPE), which may be
 absent or null.")
 
-(defconst +agent-shell-arena-remote--top-kinds '(job status report ready record)
-  "Kinds stored as a file of their own, with a version and kind.")
+(defconst +agent-shell-arena-remote--top-kinds
+  '((job t) (status t) (report t) (record t) (ready nil 1))
+  "Kinds stored as a file of their own, each (KIND LABELLED VERSION).
+Every such file has a version, up to VERSION or else
+`+agent-shell-arena-remote-wire-version'; a LABELLED one also names its
+kind.  The host's setup writes ready.json in a format of its own.")
 
 (defun +agent-shell-arena-remote--kind (kind)
   "Return the registry entry of record KIND."
@@ -361,20 +397,21 @@ kind; fields it does not know are ignored."
                (path (or path (symbol-name kind))))
     (unless (and (listp json) (consp (car-safe json)))
       (+agent-shell-arena-remote--bad path "an object" json))
-    (when (memq kind +agent-shell-arena-remote--top-kinds)
+    (when-let* ((top (assq kind +agent-shell-arena-remote--top-kinds)))
       (let ((version (alist-get 'version json))
-            (written (alist-get 'kind json)))
-        (unless (equal written (symbol-name kind))
+            (written (alist-get 'kind json))
+            (newest (or (nth 2 top) +agent-shell-arena-remote-wire-version)))
+        (unless (or (not (nth 1 top)) (equal written (symbol-name kind)))
           (+agent-shell-arena-remote--bad (concat path ".kind")
                                           (format "%S" (symbol-name kind))
                                           written))
         (unless (natnump version)
           (+agent-shell-arena-remote--bad (concat path ".version")
                                           "a whole number" version))
-        (unless (<= 1 version +agent-shell-arena-remote-wire-version)
+        (unless (<= 1 version newest)
           (signal '+agent-shell-arena-remote-wire
                   (list (format "%s has version %d, but this Emacs reads up \
-to %d; update it" path version +agent-shell-arena-remote-wire-version))))))
+to %d; update it" path version newest))))))
     (apply constructor
            (mapcan (pcase-lambda (`(,slot ,key ,type))
                      (let ((value (alist-get (intern key) json))
@@ -410,9 +447,9 @@ to %d; update it" path version +agent-shell-arena-remote-wire-version))))))
   "Return RECORD of KIND as `json-serialize' takes it."
   (pcase-let ((`(,_ ,type ,_ . ,fields) (+agent-shell-arena-remote--kind kind)))
     (append
-     (when (memq kind +agent-shell-arena-remote--top-kinds)
-       `((version . ,+agent-shell-arena-remote-wire-version)
-         (kind . ,(symbol-name kind))))
+     (when-let* ((top (assq kind +agent-shell-arena-remote--top-kinds)))
+       `((version . ,(or (nth 2 top) +agent-shell-arena-remote-wire-version))
+         ,@(when (nth 1 top) `((kind . ,(symbol-name kind))))))
      (mapcar (pcase-lambda (`(,slot ,key ,field-type))
                (cons (intern key)
                      (+agent-shell-arena-remote--encode-value
@@ -849,11 +886,14 @@ if [ -n \"$top\" ]; then
 2>/dev/null) || tip=
 fi
 code=0; [ -d \"code/$2\" ] && code=1
-printf 'pstack-arena-probe 1\\ntoplevel %s\\ntip %s\\ncode %s\\n' \"$top\" \"$tip\" \"$code\"
-cat ready.json 2>/dev/null || true
+ready=$3; case $ready in \"~/\"*) ready=$HOME/${ready#\"~/\"};; esac
+printf 'pstack-arena-probe 1\\ntoplevel %s\\ntip %s\\ncode %s\\nready %s\\n' \
+\"$top\" \"$tip\" \"$code\" \"$ready\"
+cat \"$ready\" 2>/dev/null || true
 ")
   "Report the checkout's top level, its upstream tip, whether the code with
-hash $2 is there, and the readiness file.")
+hash $2 is there, and the readiness file $3, by its absolute name and
+contents.")
 
 (defconst +agent-shell-arena-remote--launch
   "hash=$(cat \"$job/code-hash\")
@@ -1016,10 +1056,14 @@ allows.  The panel's own `finished' is left to
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-arena-remote-describe (remote &optional detail)
-  "Return where REMOTE runs; with DETAIL, its host's phase and heartbeat."
+  "Return where REMOTE runs and what ran it, once its report says.
+With DETAIL, add its host's phase, last heartbeat and last error."
   (concat
    (+agent-shell-arena-remote--host-label (+agent-shell-arena-remote-host
                                            remote))
+   (let ((ran (+agent-shell-arena-remote--ready-text
+               (+agent-shell-arena-remote-ready remote))))
+     (unless (string-empty-p ran) (format " (%s)" ran)))
    (when detail
      (concat
       (when-let* ((phase (+agent-shell-arena-remote-runner-phase remote)))
@@ -1138,6 +1182,11 @@ the arena locally." (string-join lfs ", "))))
                               (error "No source for %s" feature))))
                 (cons (file-name-nondirectory file) (file-truename file))))
             +agent-shell-arena-remote-libraries)
+    (mapcar (lambda (name)
+              (cons name (file-truename
+                          (or (locate-file name load-path)
+                              (error "No %s on `load-path'" name)))))
+            +agent-shell-arena-remote-files)
     (mapcan (lambda (package)
               (let ((directory
                      (file-name-directory
@@ -1292,13 +1341,15 @@ Its panel gets the rejection follow-up and its laptop arena is removed."
 
 (defun +agent-shell-arena-remote--probe (remote job callback)
   "Ask REMOTE's host about JOB's checkout; call CALLBACK with a plist.
-The plist holds :toplevel, :tip, :code and :ready, or CALLBACK gets nil
-and a message."
+The plist holds :toplevel, :tip, :code, :ready-file and :ready, or
+CALLBACK gets nil and a message."
   (+agent-shell-arena-remote--call
    (+agent-shell-arena-remote-host remote)
    +agent-shell-arena-remote--probe-script
    (list (+agent-shell-arena-remote-job-repository job)
-         (+agent-shell-arena-remote-job-code job))
+         (+agent-shell-arena-remote-job-code job)
+         (+agent-shell-arena-remote--ready-file
+          (+agent-shell-arena-remote-host remote)))
    :timeout 120
    :callback
    (lambda (output error)
@@ -1310,9 +1361,9 @@ and a message."
                                           (lambda (line)
                                             (string-prefix-p (concat name " ")
                                                              line))
-                                          (seq-take lines 4))))
+                                          (seq-take lines 5))))
                          (string-trim (substring line (1+ (length name)))))))
-              (ready (string-trim (string-join (nthcdr 4 lines) "\n"))))
+              (ready (string-trim (string-join (nthcdr 5 lines) "\n"))))
          (if (null start)
              (funcall callback nil (format "unexpected answer: %s" output))
            (condition-case err
@@ -1320,6 +1371,7 @@ and a message."
                         (list :toplevel (funcall field "toplevel")
                               :tip (funcall field "tip")
                               :code (equal (funcall field "code") "1")
+                              :ready-file (funcall field "ready")
                               :ready (unless (string-empty-p ready)
                                        (+agent-shell-arena-remote-from-json
                                         'ready ready)))
@@ -1328,20 +1380,40 @@ and a message."
               (funcall callback nil (format "its readiness file is \
 malformed: %s" (cadr err)))))))))))
 
+(defun +agent-shell-arena-remote--ready-file (host)
+  "Return where HOST's setup writes its readiness file."
+  (if (eq (+agent-shell-arena-remote-host-kind host) 'local)
+      (expand-file-name "ready.json" (+agent-shell-arena-remote-host-name host))
+    +agent-shell-arena-remote-ready-file))
+
+(defun +agent-shell-arena-remote--version (ready tool)
+  "Return the version READY gives for TOOL, a slot such as `emacs', or nil."
+  (when-let* ((entry (and ready (cl-struct-slot-value
+                                 '+agent-shell-arena-remote-ready tool ready))))
+    (+agent-shell-arena-remote-tool-version entry)))
+
+(defun +agent-shell-arena-remote--ready-text (ready)
+  "Return what READY says ran, such as \"Emacs 31.1, codex-acp 2.2.2\"."
+  (string-join
+   (seq-keep (pcase-lambda (`(,tool . ,name))
+               (when-let* ((version (+agent-shell-arena-remote--version
+                                     ready tool)))
+                 (format "%s %s" name version)))
+             '((emacs . "Emacs") (claude-agent-acp . "claude-agent-acp")
+               (codex-acp . "codex-acp")))
+   ", "))
+
 (defun +agent-shell-arena-remote--ready-error (probe repository)
   "Return why PROBE says the host cannot run a job for REPOSITORY, or nil."
   (let ((ready (plist-get probe :ready)))
     (cond
      ((null ready)
-      "it has no readiness file, ready.json, so its setup has not passed \
-its smoke check")
-     ((< (or (ignore-errors
-               (string-to-number
-                (+agent-shell-arena-remote-ready-emacs-version ready)))
-             0)
+      (format "it has no readiness file at %s, so its setup has not passed \
+its smoke check" (plist-get probe :ready-file)))
+     ((< (string-to-number (+agent-shell-arena-remote--version ready 'emacs))
          +agent-shell-arena-remote-minimum-emacs)
       (format "its Emacs is %s, older than %d"
-              (+agent-shell-arena-remote-ready-emacs-version ready)
+              (+agent-shell-arena-remote--version ready 'emacs)
               +agent-shell-arena-remote-minimum-emacs))
      ((string-empty-p (or (plist-get probe :toplevel) ""))
       (format "it has no git checkout at %s" repository)))))
@@ -1362,7 +1434,11 @@ a bundle against one."
                 probe (+agent-shell-arena-remote-job-repository job))))
       (t
        (setf (+agent-shell-arena-remote-emacs remote)
-             (+agent-shell-arena-remote-ready-emacs (plist-get probe :ready)))
+             (+agent-shell-arena-remote-tool-path
+              (+agent-shell-arena-remote-ready-emacs (plist-get probe :ready)))
+             (+agent-shell-arena-remote-job-ready-file job)
+             (plist-get probe :ready-file)
+             (+agent-shell-arena-remote-job-ready job) (plist-get probe :ready))
        (+agent-shell-arena-remote--save remote)
        (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
          (+agent-shell-arena-remote-prerequisites
@@ -1846,7 +1922,9 @@ The follow-up is composed as a local arena's is."
                                         reported)))
                     (list :error failure))))
         (+agent-shell-pstack-panel--write panel member)))
-    (setf (+agent-shell-arena-remote-fetched remote) t)
+    (setf (+agent-shell-arena-remote-fetched remote) t
+          (+agent-shell-arena-remote-ready remote)
+          (+agent-shell-arena-remote-report-ready report))
     (unless (eq (+agent-shell-arena-remote-phase remote) 'finished)
       (+agent-shell-arena-remote--move remote 'finished))
     (+agent-shell-pstack-panel--finish panel)
@@ -2120,7 +2198,7 @@ DIRECTORY is the job's folder and ROOT the host's state folder.  PHASE
 is `queued' until it holds LOCK, the host repository's, then the panel's.
 PREVIOUS is the status an earlier runner left unfinished."
   job directory root panel (phase 'queued) lock deadline previous done
-  cancelled expired (written "") (beat 0) error)
+  cancelled expired (written "") (beat 0) error ready)
 
 (defun +agent-shell-arena-remote--runner-file (runner name)
   "Return file NAME in RUNNER's job folder."
@@ -2259,7 +2337,10 @@ renamed aside first, so only one waiter can win it."
   (let ((job (+agent-shell-arena-remote--runner-job runner)))
     (setf (+agent-shell-arena-remote--runner-deadline runner)
           (+ (float-time) (+agent-shell-arena-remote-job-deadline job))
-          (+agent-shell-arena-remote--runner-phase runner) 'preparing)
+          (+agent-shell-arena-remote--runner-phase runner) 'preparing
+          +agent-shell-pstack-arena-deadline
+          (+ (+agent-shell-arena-remote--runner-deadline runner)
+             +agent-shell-arena-remote-grace))
     (let ((panel (+agent-shell-arena-remote--runner-panel-for runner))
           (previous (+agent-shell-arena-remote--runner-previous runner)))
       (condition-case err
@@ -2374,6 +2455,7 @@ is nil."
      :base (+agent-shell-arena-remote-job-base job)
      :rejection (or (and panel (+agent-shell-pstack-panel-rejection panel))
                     (+agent-shell-arena-remote--runner-error runner))
+     :ready (+agent-shell-arena-remote--runner-ready runner)
      :members
      (if panel
          (mapcar
@@ -2505,17 +2587,27 @@ recovers a job an earlier runner left unfinished."
           (mapcar (lambda (name) (expand-file-name name root))
                   '("jobs/" "locks/" "runner-init.el")))
          (agent-shell-transcript-file-path-function nil)
-         (shell-maker-prompt-before-killing-buffer nil))
+         (shell-maker-prompt-before-killing-buffer nil)
+         (+agent-shell-pstack-arena-deadline nil)
+         (job (+agent-shell-arena-remote--read-json
+               (expand-file-name "job.json" directory) 'job))
+         (ready (or (when-let* ((file (+agent-shell-arena-remote-job-ready-file
+                                       job)))
+                      (ignore-errors
+                        (+agent-shell-arena-remote--read-json file 'ready)))
+                    (+agent-shell-arena-remote-job-ready job))))
     (advice-add 'yes-or-no-p :override #'+agent-shell-arena-remote--refuse)
     (advice-add 'y-or-n-p :override #'+agent-shell-arena-remote--refuse)
+    (when-let* ((bin (and ready (+agent-shell-arena-remote-ready-adapters-bin
+                                 ready))))
+      (push bin exec-path)
+      (setenv "PATH" (concat bin path-separator (getenv "PATH"))))
     (when (file-exists-p init) (load init nil t))
-    (let* ((job (+agent-shell-arena-remote--read-json
-                 (expand-file-name "job.json" directory) 'job))
-           (previous (ignore-errors
+    (let* ((previous (ignore-errors
                        (+agent-shell-arena-remote--read-json
                         (expand-file-name "status.json" directory) 'status)))
            (runner (+agent-shell-arena-remote--make-runner
-                    :job job :directory directory :root root
+                    :job job :directory directory :root root :ready ready
                     :lock (+agent-shell-arena-remote--lock-file
                            root (+agent-shell-arena-remote--repository job))
                     :previous (and previous
