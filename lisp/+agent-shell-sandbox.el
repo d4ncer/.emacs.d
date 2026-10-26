@@ -61,7 +61,9 @@ Paths are true names without a trailing slash."
   (agent nil :documentation "Agent identifier, set when prepared.")
   (credentials nil :documentation "Plist the agent's :finish reads.")
   (allow-reads nil :read-only t
-               :documentation "Folders inside DENY-READS the agent may read."))
+               :documentation "Folders inside DENY-READS the agent may read.")
+  (allow-metadata nil :read-only t
+                  :documentation "Paths whose metadata alone it may read."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -80,12 +82,14 @@ Claude Code needs it under about 30 bytes to hold AF_UNIX socket paths."
     (error "Could not create a private temp folder in /tmp")))
 
 (cl-defun +agent-shell-sandbox-create (root &key config deny-reads
-                                             allow-reads)
+                                             allow-reads allow-metadata)
   "Return a sandbox writing to ROOT, creating its private folders.
 CONFIG is the private agent config folder, a new temporary one by default.
 DENY-READS lists folders the agent may not read, and ALLOW-READS folders
 inside them it may read anyway.  A read is checked against the path a
-symlink resolves to, so a link into a denied folder needs an allowance."
+symlink resolves to, so a link into a denied folder needs an allowance.
+ALLOW-METADATA lists paths, each exactly, whose metadata the agent may
+read even inside DENY-READS, such as a folder git must stat."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (+agent-shell-sandbox--make
@@ -95,7 +99,8 @@ symlink resolves to, so a link into a denied folder needs an allowance."
             (if config (progn (make-directory config t) config)
               (make-temp-file "pa-config-" t)))
    :deny-reads (mapcar #'+agent-shell-sandbox--path deny-reads)
-   :allow-reads (mapcar #'+agent-shell-sandbox--path allow-reads)))
+   :allow-reads (mapcar #'+agent-shell-sandbox--path allow-reads)
+   :allow-metadata (mapcar #'+agent-shell-sandbox--path allow-metadata)))
 
 (defun +agent-shell-sandbox--string (path)
   "Return PATH as an SBPL string literal."
@@ -124,6 +129,12 @@ symlink resolves to, so a link into a denied folder needs an allowance."
      ;; A later rule overrides an earlier one.
      (when-let* ((allowed (+agent-shell-sandbox-allow-reads sandbox)))
        (format "(allow file-read*%s)\n" (funcall subpaths allowed)))
+     (when-let* ((stat (+agent-shell-sandbox-allow-metadata sandbox)))
+       (format "(allow file-read-metadata%s)\n"
+               (mapconcat (lambda (path)
+                            (format " (literal %s)"
+                                    (+agent-shell-sandbox--string path)))
+                          stat "")))
      "(deny network-outbound (remote unix-socket))\n"
      "(allow network-outbound (remote unix-socket (path-literal "
      "\"/private/var/run/mDNSResponder\")))\n")))
@@ -137,16 +148,26 @@ symlink resolves to, so a link into a denied folder needs an allowance."
   "Return AGENT's full-access session mode."
   (plist-get (+agent-shell-sandbox-entry agent) :mode))
 
+(defun +agent-shell-sandbox-environment (_sandbox)
+  "Return the environment every process confined to SANDBOX gets.
+GIT_OPTIONAL_LOCKS=0 keeps read-only commands such as git status from
+refreshing the index, which lives in a git directory the agent cannot
+write."
+  (list "GIT_OPTIONAL_LOCKS=0"))
+
 (defun +agent-shell-sandbox-client-maker (sandbox agent client-maker)
   "Prepare SANDBOX for AGENT and return CLIENT-MAKER confined to it.
 The returned maker runs the client's command under sandbox-exec with the
-prepared environment ahead of the client's own."
+prepared environment, then `+agent-shell-sandbox-environment', ahead of
+the client's own."
   (let* ((entry (+agent-shell-sandbox-entry agent))
          (profile (expand-file-name "sandbox.sb"
                                     (+agent-shell-sandbox-config sandbox)))
          (environment (progn
                         (setf (+agent-shell-sandbox-agent sandbox) agent)
-                        (funcall (plist-get entry :prepare) sandbox))))
+                        (append (funcall (plist-get entry :prepare) sandbox)
+                                (+agent-shell-sandbox-environment
+                                 sandbox)))))
     (with-temp-file profile (insert (+agent-shell-sandbox-profile sandbox)))
     (lambda (buffer)
       (when-let* ((client (funcall client-maker buffer)))

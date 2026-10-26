@@ -1090,14 +1090,13 @@ Then start the candidates."
                         panel 'candidate))))))))
   (+agent-shell-pstack-panels--refresh))
 
-(defun +agent-shell-pstack-panel--sandbox (panel member)
-  "Return a sandbox confining candidate MEMBER of PANEL to its worktree.
-It cannot read the lead's checkout, other than the shared dependencies,
-the panel reports, the agents' own config, or any other candidate."
-  (let* ((manifest (+agent-shell-pstack-panel-arena panel))
-         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
-         (role (+agent-shell-arena-git-role
-                manifest (+agent-shell-pstack-panel-member-role member)))
+(defun +agent-shell-pstack-arena-sandbox (manifest name)
+  "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
+It cannot read the lead's checkout, other than the shared dependencies
+and the git directory, the panel reports, the agents' own config, or any
+other candidate.  It may stat the lead's top level, which git resolves."
+  (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (role (+agent-shell-arena-git-role manifest name))
          (worktree (+agent-shell-arena-git-role-worktree role)))
     (+agent-shell-sandbox-create
      worktree
@@ -1107,15 +1106,19 @@ the panel reports, the agents' own config, or any other candidate."
              (delete worktree
                      (mapcar #'+agent-shell-arena-git-role-worktree
                              (+agent-shell-arena-git-manifest-roles manifest))))
-     :allow-reads (mapcar (lambda (path) (expand-file-name path toplevel))
-                          (+agent-shell-arena-git-role-shared role)))))
+     :allow-reads (cons (+agent-shell-arena-git-common-dir manifest)
+                        (mapcar (lambda (path) (expand-file-name path toplevel))
+                                (+agent-shell-arena-git-role-shared role)))
+     :allow-metadata (list toplevel))))
 
 (defun +agent-shell-pstack-panel--launch (panel)
   "Start PANEL's candidates in their sandboxes and their timer."
-  (let ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate)))
+  (let ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate))
+        (manifest (+agent-shell-pstack-panel-arena panel)))
     (dolist (member candidates)
       (setf (+agent-shell-pstack-panel-member-sandbox member)
-            (+agent-shell-pstack-panel--sandbox panel member)))
+            (+agent-shell-pstack-arena-sandbox
+             manifest (+agent-shell-pstack-panel-member-role member))))
     (setf (+agent-shell-pstack-panel-phase panel) 'candidates)
     (+agent-shell-pstack-panel--arm panel (+agent-shell-pstack-panel-timeout
                                            panel))

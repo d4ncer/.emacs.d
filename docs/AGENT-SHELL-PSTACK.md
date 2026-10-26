@@ -195,8 +195,9 @@ lead's mode-line help:
    refuses writes outside the worktree and refuses reads of the lead's
    checkout, `+agent-shell-pstack-panel-directory`, `~/.claude`, `~/.codex`
    and the other candidates' worktrees. Shared dependency links from
-   `+agent-shell-pstack-arena-dependencies` stay readable. The candidates'
-   timer starts here.
+   `+agent-shell-pstack-arena-dependencies` stay readable, and so does the
+   lead's git directory, so candidates can run read-only git. The
+   candidates' timer starts here.
 4. `capturing`: Emacs stops each settled candidate with every process it
    started, commits its tree under `refs/pstack-arena/<arena-id>/<role>`,
    and checks a result that differs from the base out in a separate

@@ -104,7 +104,7 @@ second when given."
       (should (equal "/usr/bin/sandbox-exec" (alist-get :command client)))
       (should (equal (list "-f" profile (executable-find "sh") "-c" "true")
                      (alist-get :command-params client)))
-      (should (equal '("PA_ENV=sandbox" "PA_ENV=client")
+      (should (equal '("PA_ENV=sandbox" "GIT_OPTIONAL_LOCKS=0" "PA_ENV=client")
                      (alist-get :environment-variables client)))
       (should (eq 'buffer (alist-get :context-buffer client)))
       (should (equal (+agent-shell-sandbox-profile sandbox)

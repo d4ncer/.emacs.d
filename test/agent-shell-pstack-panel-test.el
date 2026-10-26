@@ -125,6 +125,8 @@ lists the roles whose result equals the base."
                     (run-at-time 0 nil callback
                                  (unless provision-error worktree)
                                  provision-error))))
+               ((symbol-function '+agent-shell-arena-git-common-dir)
+                (lambda (_manifest) (expand-file-name ".git" cwd)))
                ((symbol-function '+agent-shell-arena-git-clean)
                 (lambda (manifest callback)
                   (push manifest cleaned)
@@ -952,8 +954,11 @@ Their timer starts then too, and the judge stays pending."
                               (file-truename (expand-file-name path)))
                              denied)))
            (should-not (member (directory-file-name worktree) denied)))
-         (should (equal (list (expand-file-name "elpaca" cwd))
-                        (+agent-shell-sandbox-allow-reads sandbox))))))))
+         (should (equal (list (expand-file-name ".git" cwd)
+                              (expand-file-name "elpaca" cwd))
+                        (+agent-shell-sandbox-allow-reads sandbox)))
+         (should (equal (list (directory-file-name cwd))
+                        (+agent-shell-sandbox-allow-metadata sandbox))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-candidate-brief ()
   "Brief each candidate with the task, its focus and the contract, never

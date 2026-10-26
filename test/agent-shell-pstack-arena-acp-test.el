@@ -165,7 +165,7 @@
                                                              :checkout)))))
                 (should (string-prefix-p
                          (format "RATIONALE role=%s mode=agent-full-access \
-rubric=unseen lead=denied." role)
+rubric=unseen lead=denied git=ok." role)
                          (+agent-shell-pstack-panel-member-text candidate)))
                 (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
                 (should (string-match-p

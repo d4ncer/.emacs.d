@@ -112,8 +112,13 @@ def handle_pstack_prompt(message, text, state):
                 lead = "readable"
             except OSError:
                 lead = "denied"
+        status = subprocess.run(["git", "status", "--porcelain"],
+                                cwd=state["cwd"], capture_output=True,
+                                text=True)
+        git = ("ok" if status.returncode == 0
+               and f"?? {role}.txt" in status.stdout else "failed")
         return (f"RATIONALE role={role} mode={state['mode']} rubric={rubric}"
-                f" lead={lead}."
+                f" lead={lead} git={git}."
                 " Considered editing in place; rejected it for a new file.")
     if "judge of a pstack arena" in text:
         return "SCORES mode=" + state["mode"] + "\n" + text

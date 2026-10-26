@@ -421,6 +421,14 @@ Signal an error for a path that is absolute or leaves the top level."
   (expand-file-name (+agent-shell-arena-git-manifest-prefix manifest)
                     (+agent-shell-arena-git-role-worktree role)))
 
+(defun +agent-shell-arena-git-common-dir (manifest)
+  "Return the git directory MANIFEST's worktrees share, or signal."
+  (let ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest)))
+    (or (+agent-shell-arena-git--read-in
+         git-dir (+agent-shell-arena-git-manifest-toplevel manifest)
+         "rev-parse" "--path-format=absolute" "--git-common-dir")
+        (error "No common git directory for %s" git-dir))))
+
 (defun +agent-shell-arena-git--add-role (manifest name)
   "Add role NAME to MANIFEST, write the manifest and return the role.
 The role lists the configured dependency paths present in the lead."

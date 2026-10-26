@@ -85,13 +85,19 @@ design.
 - **Deny writes to `ROOT/.git`**, the worktree's pointer file, so the
   candidate cannot redirect Emacs's later git commands.
 - **Deny reads** of:
-  - the lead's checkout, except the shared dependency paths;
+  - the lead's checkout, except the shared dependency paths and the git
+    directory the worktrees share;
   - `+agent-shell-pstack-panel-directory`;
   - every other candidate's root.
 
   This keeps the rubric in the lead's transcript and the other candidates'
   work out of reach, so withholding the rubric is enforced, not just a
   convention.
+- **Allow metadata reads** of the lead's top level itself, which git stats
+  when it resolves the main worktree. With the git directory readable, a
+  candidate runs read-only git such as `git status` and `git diff`. The
+  git directory stays unwritable, so every candidate gets
+  `GIT_OPTIONAL_LOCKS=0` and status never tries to refresh the index.
 - **Deny unix-socket connections** except `/private/var/run/mDNSResponder`.
   This blocks `emacsclient` and other local daemons.
 - **Allow outbound TCP**, which the agent's own API needs. Exfiltration over
@@ -472,6 +478,14 @@ None. Every probe above was run on this machine.
   spec gained `:allow-reads`, emitted after the denials, and each candidate
   allows its shared paths. The profile also denies reads of `~/.claude`
   and `~/.codex`, as experiment 1 did.
+- **Candidates read the lead's git directory.** A worktree's `.git` file
+  points into the lead's git directory, so with the lead's checkout denied
+  git failed with "gitfile does not point to a valid repository". Then it
+  failed with "Invalid path" when it resolved the main worktree. The
+  profile now allows reads of the common git directory and metadata reads
+  of the literal top level. This exposes the repository's objects and
+  refs, including another candidate's result once it is captured, but no
+  working file of the lead.
 - **A missing Claude Code token fails the candidate, not the request.** The
   Keychain lookup happens when the candidate starts. That candidate settles
   as `error` with the `security add-generic-password` hint, and the others
