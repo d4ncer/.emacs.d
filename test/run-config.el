@@ -35,13 +35,24 @@
                         (directory-files-recursively "test" "\\.el\\'")))
     (with-temp-buffer (insert-file-contents file) (emacs-lisp-mode) (check-parens)))
   (princ "Elisp syntax: PASS\n")
+  (load (expand-file-name "lisp/+bootstrap" +config-check-root) nil t)
+  (load (expand-file-name "test/config-denylist" +config-check-root) nil t)
+  (pcase (+config-denylist-check
+          +config-check-root
+          (expand-file-name "public-repo-denylist" +private-config-directory))
+    ('(skipped) (princ "Public repository denylist: PASS (skipped, no denylist)\n"))
+    ('(pass) (princ "Public repository denylist: PASS\n"))
+    (`(fail . ,locations)
+     (princ (format "Denylisted text in tracked files:\n  %s\n"
+                    (string-join locations "\n  ")))
+     (error "Public repository denylist failed")))
   (+config-check-process
    "Core, activation, caching, compatibility and lifecycle"
    "-l" "config-test-support" "-l" "config-core-test"
    "-l" "config-profile-test" "-l" "config-loader-test"
    "-l" "config-modeline-test" "-l" "config-activation-test"
    "-l" "config-compat-test" "-l" "config-grep-test"
-   "-l" "config-verify-packages-test"
+   "-l" "config-verify-packages-test" "-l" "config-denylist-test"
    "-l" "agent-shell-projects-lifecycle-test" "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
