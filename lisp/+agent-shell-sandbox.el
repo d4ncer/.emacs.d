@@ -263,8 +263,10 @@ report tagged with SANDBOX's trace tag instead."
   "Return the environment every process confined to SANDBOX gets.
 That is SANDBOX's own entries, then these defaults.  TMPDIR points most
 tools at the private temp folder.  GOTMPDIR does the same for the Go
-toolchain's work folders, which it would put in /tmp, and GOTELEMETRY=off
-stops Go tools writing telemetry under ~/Library.
+toolchain's work folders, which it would put in /tmp.  GOCACHE gives each
+sandbox its own Go build cache: the shared one under ~/Library/Caches is
+outside the sandbox, and an entry written there would feed the user's own
+builds.  GOTELEMETRY=off stops Go tools writing telemetry under ~/Library.
 JAVA_TOOL_OPTIONS gains -Djava.io.tmpdir, since the JVM ignores TMPDIR on
 macOS and extracts native libraries into the default temp folder.
 GIT_OPTIONAL_LOCKS=0 keeps read-only commands such as git status from
@@ -275,6 +277,7 @@ write."
     (append (+agent-shell-sandbox-env sandbox)
             (list (concat "TMPDIR=" tmp)
                   (concat "GOTMPDIR=" tmp)
+                  (concat "GOCACHE=" tmp "/go-build")
                   "GOTELEMETRY=off"
                   (concat "JAVA_TOOL_OPTIONS="
                           (and java (not (string-empty-p java))
