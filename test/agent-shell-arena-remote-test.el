@@ -664,7 +664,9 @@ A host's D-Bus refuses a runner, and every busy turn would log it."
          (directory (expand-file-name "jobs/abc-12345678/" root))
          (seen (expand-file-name "seen" root)))
     (unwind-protect
-        (let ((agent-shell-inhibit-system-sleep t))
+        (let ((agent-shell-inhibit-system-sleep t)
+              (+agent-shell-pstack-panel-change-hook nil)
+              (+agent-shell-arena-remote--runner nil))
           (make-directory directory t)
           (+agent-shell-arena-remote--write-json
            (expand-file-name "job.json" directory) 'job
