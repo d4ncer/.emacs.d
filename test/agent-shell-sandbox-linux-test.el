@@ -12,6 +12,7 @@
 (require '+agent-shell-sandbox)
 (require '+agent-shell-drive)
 (require '+agent-shell-arena-git)
+(require '+agent-shell-pstack-panel)
 
 (defun +agent-shell-sandbox-linux-test-available-p ()
   "Return whether this host can start Linux sandboxes."
@@ -469,6 +470,60 @@ Links stay links."
                                  (buffer-string))))
         (should (equal "out.txt" (file-symlink-p
                                   (expand-file-name "build/link" worktree))))))))
+
+(defmacro +agent-shell-sandbox-linux-test--without-lsof (&rest body)
+  "Run BODY as on a Linux host, which has no /usr/sbin/lsof."
+  (declare (indent 0))
+  `(let ((call (symbol-function 'call-process)))
+     (cl-letf (((symbol-function 'call-process)
+                (lambda (program &rest arguments)
+                  (if (equal program "/usr/sbin/lsof")
+                      (signal 'file-missing
+                              (list "Searching for program"
+                                    "No such file or directory" program))
+                    (apply call program arguments)))))
+       ,@body)))
+
+(defun +agent-shell-sandbox-linux-test--halt (sandbox root)
+  "Halt a settled candidate in SANDBOX at ROOT whose adapter never started.
+Return the candidate once its capture leaves `stopping', or after 10 s."
+  (let* ((member (+agent-shell-pstack-panel--make-member
+                  :role "opus" :agent 'claude-code :kind 'candidate
+                  :state 'error :sandbox sandbox))
+         (panel (+agent-shell-pstack-panel--make
+                 :id "p1" :shape 'arena :phase 'finished :members (list member)
+                 :arena (+agent-shell-arena-git--manifest
+                         :roles (list (+agent-shell-arena-git--role
+                                       :name "opus" :worktree root)))))
+         (deadline (+ (float-time) 10)))
+    (+agent-shell-pstack-panel--halt panel member)
+    (while (and (memq (+agent-shell-pstack-panel-member-capture member)
+                      '(nil stopping))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.05))
+    member))
+
+(ert-deftest +agent-shell-sandbox-linux-test-halt-without-adapter ()
+  "Stop a Linux candidate whose adapter is gone without macOS's tools.
+Its PID namespace ended with its adapter, so its capture goes on."
+  (+agent-shell-sandbox-linux-test--with (root) nil
+    (+agent-shell-sandbox-linux-test--without-lsof
+      (let ((member (+agent-shell-sandbox-linux-test--halt sandbox root)))
+        (should (eq 'stopped (+agent-shell-pstack-panel-member-capture
+                              member)))))))
+
+(ert-deftest +agent-shell-sandbox-linux-test-halt-signals ()
+  "Fail the capture of a candidate whose stop signals, rather than stall."
+  (+agent-shell-sandbox-linux-test--with (root) nil
+    (let ((+agent-shell-sandbox-backend 'sandbox-exec))
+      (+agent-shell-sandbox-linux-test--without-lsof
+        (let ((member (+agent-shell-sandbox-linux-test--halt sandbox root)))
+          (should (eq 'failed (+agent-shell-pstack-panel-member-capture
+                               member)))
+          (should (string-match-p
+                   "lsof" (plist-get (+agent-shell-pstack-panel-member-result
+                                      member)
+                                     :error))))))))
 
 (provide 'agent-shell-sandbox-linux-test)
 ;;; agent-shell-sandbox-linux-test.el ends here
