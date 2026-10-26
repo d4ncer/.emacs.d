@@ -18,6 +18,8 @@
 
 (require 'cl-lib)
 
+;; The shared finder may have older bytecode beside an edited source.
+(setq load-prefer-newer t)
 (add-to-list 'load-path
              (expand-file-name "../lisp" (file-name-directory load-file-name)))
 (require '+compile-local)
