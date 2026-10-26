@@ -556,6 +556,80 @@ A host's D-Bus refuses a runner, and every busy turn would log it."
       (advice-remove 'y-or-n-p #'+agent-shell-arena-remote--refuse)
       (delete-directory root t))))
 
+(ert-deftest +agent-shell-arena-remote-test-refusal-reason ()
+  "Why a host refused a candidate reaches its status, the laptop's panel
+and, after the runner restarts, the follow-up."
+  (+arena-remote-test--with-scratch
+    (let* ((reason "Claude Code's access token expires at 2026-10-27 \
+00:03:00 AEDT, before the sandbox's deadline; refresh this host's login first")
+           (repo (expand-file-name "repo/" scratch))
+           (directory (expand-file-name "jobs/abc-12345678/" scratch))
+           (members
+            (lambda ()
+              (list (+agent-shell-pstack-panel--make-member
+                     :role "opus" :agent 'claude-code :kind 'candidate
+                     :state 'pending)
+                    (+agent-shell-pstack-panel--make-member
+                     :role "judge" :agent 'codex :kind 'judge :state 'pending))))
+           (finished nil))
+      (make-directory directory t)
+      (+arena-remote-test--git scratch "init" "-q" repo)
+      (+arena-remote-test--commit repo "a" "a\n")
+      (let* ((manifest (+arena-remote-test--manifest repo))
+             (panel (+agent-shell-pstack-panel--make
+                     :id "abc" :shape 'arena :phase 'candidates
+                     :members (funcall members) :arena manifest))
+             (runner (+agent-shell-arena-remote--make-runner
+                      :job (+arena-remote-test--job) :directory directory
+                      :root scratch :panel panel)))
+        (should (car (+arena-remote-test--wait
+                      (lambda (done)
+                        (+agent-shell-arena-git-provision
+                         manifest "opus" done)))))
+        (setf (+agent-shell-pstack-panel-member-state
+               (car (+agent-shell-pstack-panel-members panel)))
+              'error
+              (+agent-shell-pstack-panel-member-error
+               (car (+agent-shell-pstack-panel-members panel)))
+              reason
+              (+agent-shell-pstack-panel-member-capture
+               (car (+agent-shell-pstack-panel-members panel)))
+              'stopping)
+        (+agent-shell-arena-remote--runner-status runner)
+        (let* ((status (+agent-shell-arena-remote--read-json
+                        (expand-file-name "status.json" directory) 'status))
+               (laptop (+agent-shell-pstack-panel--make
+                        :id "abc" :shape 'arena :phase 'remote
+                        :members (funcall members)))
+               (remote (+arena-remote-test--record
+                        (+agent-shell-arena-remote--make-host
+                         :kind 'ssh :name "box"))))
+          (should (equal reason (+agent-shell-arena-remote-member-error
+                                 (car (+agent-shell-arena-remote-status-members
+                                       status)))))
+          (setf (+agent-shell-arena-remote-directory remote) scratch)
+          (puthash "abc" laptop +agent-shell-pstack-panel--panels)
+          (+agent-shell-arena-remote--mirror remote status)
+          (should (equal reason (+agent-shell-pstack-panel-member-error
+                                 (car (+agent-shell-pstack-panel-members
+                                       laptop)))))
+          (let ((recovered (+agent-shell-pstack-panel--make
+                            :id "abc" :shape 'arena :phase 'preparing
+                            :members (funcall members)
+                            :sink (lambda (panel) (setq finished panel)))))
+            (+agent-shell-arena-remote--recover recovered status)
+            (+arena-remote-test--wait
+             (lambda (done)
+               (let ((timer nil))
+                 (setq timer
+                       (run-at-time 0 0.02
+                                    (lambda ()
+                                      (when finished
+                                        (cancel-timer timer)
+                                        (funcall done))))))))
+            (should (string-search
+                     reason (+agent-shell-pstack-panel-followup finished)))))))))
+
 ;;;; Re-attaching
 
 (ert-deftest +agent-shell-arena-remote-test-reattach ()
