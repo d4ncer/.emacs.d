@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-arena-git)
+(require 'agent-shell-sandbox-test)
 
 (defvar +arena-git-test--scratch nil)
 
@@ -30,6 +31,7 @@
        (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
                "[init]\n\tdefaultBranch = main\n"))
      (unwind-protect (progn ,@body)
+       (+agent-shell-sandbox-test-unlock +arena-git-test--scratch)
        (delete-directory +arena-git-test--scratch t))))
 
 (defun +arena-git-test--git (directory &rest args)
@@ -638,6 +640,57 @@ untouched LFS files stay out of the diff."
       (should (file-exists-p (expand-file-name "build/x.el" repo)))
       (should (file-exists-p (expand-file-name "deps/lib.el" repo)))
       (should-not (+agent-shell-arena-git-arenas)))))
+
+(ert-deftest +agent-shell-arena-git-test-clean-read-only-trees ()
+  "Remove worktrees and private clones that hold read-only trees, such as
+Go's module cache, and leave the lead's own copy alone."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--dependency-repo))
+           (lead-tree (+agent-shell-sandbox-test-read-only-tree
+                       (expand-file-name "build" repo)))
+           (base (+arena-git-test--base repo))
+           (manifest (+arena-git-test--arena base))
+           (directory (+agent-shell-arena-git-manifest-directory manifest))
+           (opus (+arena-git-test--provision manifest "opus")))
+      (should (= #o555 (file-modes (expand-file-name "build/locked" opus))))
+      (+agent-shell-sandbox-test-read-only-tree opus)
+      (+arena-git-test--capture manifest "opus")
+      (should-not (+arena-git-test--ok
+                   (lambda (done)
+                     (+agent-shell-arena-git-clean manifest done))))
+      (should-not (file-exists-p opus))
+      (should-not (file-exists-p directory))
+      (should-not (string-match-p
+                   "arenas" (+arena-git-test--git repo "worktree" "list")))
+      (should (= #o555 (file-modes lead-tree)))
+      (should (file-exists-p (expand-file-name "inner/file" lead-tree))))))
+
+(ert-deftest +agent-shell-arena-git-test-clean-continues-past-failures ()
+  "Report a step that fails and still run the rest of the cleanup.
+A worktree that cannot go keeps the arena folder for a later cleanup."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--dependency-repo))
+           (base (+arena-git-test--base repo))
+           (manifest (+arena-git-test--arena base))
+           (directory (+agent-shell-arena-git-manifest-directory manifest))
+           (opus (+arena-git-test--provision manifest "opus"))
+           (codex (+arena-git-test--provision manifest "codex")))
+      (+arena-git-test--capture manifest "opus")
+      (+arena-git-test--capture manifest "codex")
+      (+agent-shell-sandbox-test-immutable
+       (expand-file-name "build/pinned" opus))
+      (pcase-let ((`(,left ,error)
+                   (+arena-git-test--wait
+                    (lambda (done)
+                      (+agent-shell-arena-git-clean manifest done)))))
+        (should-not left)
+        (should (string-search "pinned" error)))
+      (should (file-exists-p (expand-file-name "build/pinned" opus)))
+      (should-not (file-exists-p codex))
+      (should (string-empty-p
+               (+arena-git-test--git repo "for-each-ref"
+                                     "refs/pstack-arena/")))
+      (should (file-exists-p directory)))))
 
 (ert-deftest +agent-shell-arena-git-test-diff-and-checkout ()
   "Summarize each result against the base and check it out for reading.

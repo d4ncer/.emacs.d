@@ -214,9 +214,14 @@ remove the throwaway worktree.  Safe to call more than once."
              (when survivors
                (+agent-shell-pstack-arena-trace--say
                 run (format "Processes %s outlived the sweep." survivors)))
-             (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-             (delete-directory (+agent-shell-sandbox-config sandbox) t)
-             (clean))))))))
+             (+agent-shell-sandbox-discard
+              sandbox
+              (lambda (error)
+                (when error
+                  (+agent-shell-pstack-arena-trace--say
+                   run (format "Could not delete the private folders: %s"
+                               error)))
+                (clean))))))))))
 
 (defun +agent-shell-pstack-arena-trace--step (run error next)
   "Continue preparing RUN by calling NEXT, unless ERROR or it should stop."

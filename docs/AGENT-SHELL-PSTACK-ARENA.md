@@ -215,9 +215,14 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
      whatever its process group, then the adapter.
   3. Emacs sweeps processes whose working directory lies under ROOT or the
      private temp folder, and repeats until none remain.
+  4. Emacs deletes the private temp and config folders in the background
+     with `+agent-shell-sandbox-delete`, which gives the owner write
+     permission back first. Bazel's outputs and Go's module cache are
+     read-only trees, and a plain delete of one fails. A folder that still
+     cannot go is reported, and the stop goes on.
 
-  Experiment 2 shows why both steps are needed. A process that escapes
-  both can still write to ROOT, but the capture and the judge below don't
+  Experiment 2 shows why steps 2 and 3 are both needed. A process that
+  escapes both can still write to ROOT, but the capture and the judge below don't
   depend on ROOT after this point.
 - **Capturing** records each candidate's result commit (see Snapshots),
   but only once every candidate has stopped. A candidate can read the
@@ -335,6 +340,14 @@ commit. Cleanup then deletes the private directories and the
 `refs/pstack-arena/<arena-id>/` refs. A ref that no longer points at the
 manifest's commit is left alone and reported. Nothing is removed
 automatically, because grafting can take days.
+
+Private clones and the arena folder go through `+agent-shell-sandbox-delete`,
+which restores owner write permission before it deletes and never follows
+a symlink. When `git worktree remove` fails on a read-only tree, git has
+already dropped the worktree's registration, so cleanup deletes what it
+left the same way. A step that fails is recorded and the remaining steps
+still run. The callback then gets every failure. A worktree that stays
+keeps the arena folder and its manifest for a later cleanup.
 
 ## Experiment 1 results
 

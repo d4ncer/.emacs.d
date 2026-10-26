@@ -26,7 +26,40 @@ second when given."
        (dolist (directory (list ,@bindings
                                 (+agent-shell-sandbox-tmp sandbox)
                                 (+agent-shell-sandbox-config sandbox)))
+         (+agent-shell-sandbox-test-unlock directory)
          (delete-directory directory t)))))
+
+(defun +agent-shell-sandbox-test-read-only-tree (folder)
+  "Make in FOLDER a tree like Bazel's outputs and return its top.
+The top and the folder in it are mode 0555 and the file in that 0444,
+so deleting the tree needs owner write permission back first."
+  (let* ((top (expand-file-name "locked" folder))
+         (inner (expand-file-name "inner" top))
+         (file (expand-file-name "file" inner)))
+    (make-directory inner t)
+    (with-temp-file file (insert "output"))
+    (set-file-modes file #o444)
+    (set-file-modes inner #o555)
+    (set-file-modes top #o555)
+    top))
+
+(defun +agent-shell-sandbox-test-immutable (file)
+  "Create FILE flagged immutable, so no deletion can remove it."
+  (with-temp-file file (insert "immutable"))
+  (should (eql 0 (call-process "chflags" nil nil nil "uchg" file))))
+
+(defun +agent-shell-sandbox-test-unlock (folder)
+  "Make everything under FOLDER deletable again, if it exists."
+  (when (file-exists-p folder)
+    (call-process "chflags" nil nil nil "-R" "nouchg" folder)
+    (call-process "chmod" nil nil nil "-R" "u+rwX" folder)))
+
+(defun +agent-shell-sandbox-test-wait (predicate)
+  "Wait up to 30 seconds for PREDICATE, then assert it."
+  (let ((deadline (+ (float-time) 30)))
+    (while (and (not (funcall predicate)) (< (float-time) deadline))
+      (accept-process-output nil 0.02)))
+  (should (funcall predicate)))
 
 (defun +agent-shell-sandbox-test--write (file text)
   "Write TEXT to FILE."
@@ -216,6 +249,54 @@ BODY sees `real' and `copy', the real and copied auth.json, and `env'."
       (should (equal before (file-attribute-modification-time
                              (file-attributes real))))
       (should (equal "login-1" (+agent-shell-sandbox-test--read real))))))
+
+(ert-deftest +agent-shell-sandbox-test-finish-failure ()
+  "Report a :finish step that fails instead of signaling."
+  (+agent-shell-sandbox-test--with (root)
+    (let ((+agent-shell-sandbox-agents
+           '((fixture :finish (lambda (_) (error "Login copy failed")))))
+          (messages nil))
+      (setf (+agent-shell-sandbox-agent sandbox) 'fixture)
+      (cl-letf (((symbol-function 'message)
+                 (lambda (format &rest arguments)
+                   (push (apply #'format-message format arguments) messages))))
+        (+agent-shell-sandbox-finish sandbox))
+      (should (string-search "Login copy failed" (car messages))))))
+
+(ert-deftest +agent-shell-sandbox-test-delete-read-only ()
+  "Delete read-only trees without following a symlink out of them."
+  (+agent-shell-sandbox-test--with (root outside)
+    (let* ((victim (expand-file-name "victim" root))
+           (kept (+agent-shell-sandbox-test-read-only-tree outside))
+           (outcome 'pending))
+      (make-directory victim)
+      (make-symbolic-link kept (expand-file-name "link" victim))
+      (+agent-shell-sandbox-test-read-only-tree victim)
+      (set-file-modes victim #o555)
+      (+agent-shell-sandbox-delete (list victim)
+                                   (lambda (error) (setq outcome error)))
+      (should (eq 'pending outcome))
+      (+agent-shell-sandbox-test-wait (lambda () (not (eq 'pending outcome))))
+      (should-not outcome)
+      (should-not (file-exists-p victim))
+      (should (= #o555 (file-modes kept)))
+      (should (file-exists-p (expand-file-name "inner/file" kept))))))
+
+(ert-deftest +agent-shell-sandbox-test-delete-failure ()
+  "Delete what it can and report what it cannot."
+  (+agent-shell-sandbox-test--with (root)
+    (let ((stuck (expand-file-name "stuck" root))
+          (gone (expand-file-name "gone" root))
+          (outcome 'pending))
+      (make-directory stuck)
+      (+agent-shell-sandbox-test-immutable (expand-file-name "pinned" stuck))
+      (make-directory gone)
+      (+agent-shell-sandbox-test-read-only-tree gone)
+      (+agent-shell-sandbox-delete (list stuck gone)
+                                   (lambda (error) (setq outcome error)))
+      (+agent-shell-sandbox-test-wait (lambda () (not (eq 'pending outcome))))
+      (should (string-search "pinned" outcome))
+      (should-not (file-exists-p gone)))))
 
 (ert-deftest +agent-shell-sandbox-test-descendants ()
   "Find every descendant of a pid, however deep."

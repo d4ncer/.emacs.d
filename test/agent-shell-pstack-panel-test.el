@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-pstack-panel nil t)
+(require 'agent-shell-sandbox-test)
 
 (defmacro +agent-shell-pstack-panel-test--with (&rest body)
   "Run BODY with a pstack lead, stubbed drive functions and fresh panels.
@@ -189,8 +190,10 @@ lists the roles whose result equals the base."
              (dolist (member (+agent-shell-pstack-panel-members panel))
                (when-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox
                                      member)))
-                 (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-                 (delete-directory (+agent-shell-sandbox-config sandbox) t))))
+                 (dolist (folder (list (+agent-shell-sandbox-tmp sandbox)
+                                       (+agent-shell-sandbox-config sandbox)))
+                   (+agent-shell-sandbox-test-unlock folder)
+                   (delete-directory folder t)))))
            (dolist (entry started)
              (when (buffer-live-p (cadr entry)) (kill-buffer (cadr entry))))
            (kill-buffer lead)
@@ -1068,7 +1071,9 @@ An arena already on disk is discarded once the step in flight returns."
     (should-not started)))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-stops-candidates ()
-  "Stop a settled candidate with every process it started."
+  "Stop a settled candidate with every process it started.
+Its private folders go even when they hold read-only trees, and a
+folder that cannot go is reported without stalling the stop."
   (+agent-shell-pstack-panel-test--with
     (lead-event :kind 'turn-complete :session "s1"
                 :text (+agent-shell-pstack-panel-test--message
@@ -1077,21 +1082,45 @@ An arena already on disk is discarded once the step in flight returns."
     (let* ((panel (car (+agent-shell-pstack-panel-list)))
            (opus (car (+agent-shell-pstack-panel-test--candidates panel)))
            (codex (cadr (+agent-shell-pstack-panel-test--candidates panel)))
-           (sandbox (+agent-shell-pstack-panel-member-sandbox opus)))
+           (sandbox (+agent-shell-pstack-panel-member-sandbox opus))
+           (stuck (+agent-shell-pstack-panel-member-sandbox codex))
+           (messages nil))
+      (+agent-shell-sandbox-test-read-only-tree
+       (+agent-shell-sandbox-tmp sandbox))
+      (+agent-shell-sandbox-test-read-only-tree
+       (+agent-shell-sandbox-config sandbox))
+      (+agent-shell-sandbox-test-immutable
+       (expand-file-name "pinned" (+agent-shell-sandbox-tmp stuck)))
       (member-event "opus" :kind 'init-finished)
       (member-event "opus" :kind 'turn-complete :text "Rationale")
       (should-not stopped)
-      (+agent-shell-pstack-panel-test--drain)
+      (+agent-shell-sandbox-test-wait
+       (lambda () (eq 'stopped (+agent-shell-pstack-panel-member-capture
+                                opus))))
       (should (equal (list (+agent-shell-pstack-panel-member-shell opus))
                      stopped))
-      (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
-      (should-not (file-exists-p (+agent-shell-sandbox-config sandbox)))
+      (+agent-shell-sandbox-test-wait
+       (lambda ()
+         (not (or (file-exists-p (+agent-shell-sandbox-tmp sandbox))
+                  (file-exists-p (+agent-shell-sandbox-config sandbox))))))
       (kill-buffer (+agent-shell-pstack-panel-member-shell codex))
-      (member-event "codex" :kind 'clean-up :reason "Adapter crashed")
-      (+agent-shell-pstack-panel-test--drain)
-      (should (equal (list (+agent-shell-pstack-panel-member-sandbox codex))
-                     swept))
-      (should (= 1 (length stopped))))))
+      (cl-letf (((symbol-function 'message)
+                 (lambda (format &rest arguments)
+                   (push (apply #'format-message format arguments)
+                         messages))))
+        (member-event "codex" :kind 'clean-up :reason "Adapter crashed")
+        (+agent-shell-sandbox-test-wait
+         (lambda () (not (memq (+agent-shell-pstack-panel-member-capture
+                                codex)
+                               '(nil stopping)))))
+        (+agent-shell-sandbox-test-wait
+         (lambda () (seq-some (lambda (message)
+                                (and (string-search "codex" message)
+                                     (string-search "pinned" message)))
+                              messages))))
+      (should (equal (list stuck) swept))
+      (should (= 1 (length stopped)))
+      (should-not (file-exists-p (+agent-shell-sandbox-config stuck))))))
 
 (defmacro +agent-shell-pstack-panel-test--with-arena (&rest body)
   "Run BODY with an arena whose candidates opus and codex are running.

@@ -20,6 +20,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
+(require '+agent-shell-sandbox)
 
 (defgroup +agent-shell-pstack-arena nil
   "Candidate workspaces for pstack arena panels."
@@ -819,16 +820,22 @@ Call CALLBACK with its path and nil, or nil and a message."
 (defun +agent-shell-arena-git-clean (manifest callback)
   "Remove MANIFEST's worktrees, checkouts, private clones and result refs.
 A worktree the repository does not list, or a ref that no longer points
-at the recorded commit, stays in place.  When no worktree stays, delete
-the arena directory too.  Call CALLBACK with a list of messages naming
-what stayed, and nil; or nil and a message."
+at the recorded commit, stays in place.  A step that fails is recorded
+and the rest still run.  When no worktree stays, delete the arena
+directory too.  Call CALLBACK with a list of messages naming what
+stayed, and nil; or, when a step failed, nil and a message naming each
+failure and then what stayed.
+
+Trees go as `+agent-shell-sandbox-delete' deletes them, so read-only
+folders a candidate's tools made do not stop the cleanup."
   (let* ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
          (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
-         (fail (lambda (message) (funcall callback nil message)))
          (left nil)
+         (failures nil)
          (worktree-left nil))
     (+agent-shell-arena-git--git
-     git-dir toplevel '("worktree" "list" "--porcelain" "-z") fail
+     git-dir toplevel '("worktree" "list" "--porcelain" "-z")
+     (lambda (message) (funcall callback nil message))
      (lambda (output)
        (let ((registered
               (delq nil (mapcar (lambda (field)
@@ -838,13 +845,26 @@ what stayed, and nil; or nil and a message."
                                       (substring field (length "worktree "))))))
                                 (split-string output "\0" t)))))
          (cl-labels
-             ((next (roles)
-                (if roles
-                    (clean-role (car roles) (lambda () (next (cdr roles))))
-                  (unless worktree-left
-                    (delete-directory
-                     (+agent-shell-arena-git-manifest-directory manifest) t))
-                  (funcall callback (nreverse left) nil)))
+             ((record (message) (push message failures))
+              (finish ()
+                (let ((left (nreverse left)))
+                  (if failures
+                      (funcall callback nil
+                               (string-join (append (nreverse failures) left)
+                                            "; "))
+                    (funcall callback left nil))))
+              (next (roles)
+                (cond
+                 (roles
+                  (clean-role (car roles) (lambda () (next (cdr roles)))))
+                 (worktree-left (finish))
+                 (t (+agent-shell-sandbox-delete
+                     (list (directory-file-name
+                            (+agent-shell-arena-git-manifest-directory
+                             manifest)))
+                     (lambda (error)
+                       (when error (record error))
+                       (finish))))))
               (clean-role (role done)
                 (remove-trees
                  (cons (cons (+agent-shell-arena-git-role-worktree role)
@@ -863,12 +883,7 @@ what stayed, and nil; or nil and a message."
                      ((member (file-truename tree) registered)
                       (remove-private
                        tree (cdar trees)
-                       (lambda ()
-                         (+agent-shell-arena-git--git
-                          git-dir toplevel
-                          (list "worktree" "remove" "--force"
-                                (directory-file-name tree))
-                          fail (lambda (_) (funcall next))))))
+                       (lambda () (remove-worktree tree next))))
                      ((file-exists-p tree)
                       (setq worktree-left t)
                       (push (format "%s is not a registered worktree; left \
@@ -879,12 +894,30 @@ in place" tree)
               (remove-private (worktree paths done)
                 (if (null paths)
                     (funcall done)
-                  (+agent-shell-arena-git--run
-                   (append '("rm" "-rf" "--")
-                           (mapcar (lambda (path)
-                                     (expand-file-name path worktree))
-                                   paths))
-                   toplevel nil fail (lambda (_) (funcall done)))))
+                  (+agent-shell-sandbox-delete
+                   (mapcar (lambda (path)
+                             (directory-file-name
+                              (expand-file-name path worktree)))
+                           paths)
+                   (lambda (error)
+                     (when error (record error))
+                     (funcall done)))))
+              ;; A removal git gives up on still drops the registration,
+              ;; so what it left is deleted like any other tree.
+              (remove-worktree (tree done)
+                (+agent-shell-arena-git--git
+                 git-dir toplevel
+                 (list "worktree" "remove" "--force"
+                       (directory-file-name tree))
+                 (lambda (_)
+                   (+agent-shell-sandbox-delete
+                    (list (directory-file-name tree))
+                    (lambda (error)
+                      (when error
+                        (setq worktree-left t)
+                        (record error))
+                      (funcall done))))
+                 (lambda (_) (funcall done))))
               (clean-ref (role done)
                 (let* ((ref (+agent-shell-arena-git--ref
                              manifest (+agent-shell-arena-git-role-name role)))
@@ -896,7 +929,8 @@ in place" tree)
                    ((null current) (funcall done))
                    ((equal current commit)
                     (+agent-shell-arena-git--git
-                     git-dir toplevel (list "update-ref" "-d" ref commit) fail
+                     git-dir toplevel (list "update-ref" "-d" ref commit)
+                     (lambda (message) (record message) (funcall done))
                      (lambda (_) (funcall done))))
                    (t
                     (push (format "%s points at %s, not the recorded %s; left \

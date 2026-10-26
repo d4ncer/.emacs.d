@@ -150,6 +150,50 @@ for name in 'xyz': open(os.path.join('%s', name), 'w')\" && cat %s && exit 3"
         (delete-directory outside t)
         (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
 
+(defconst +arena-trace-test--lock
+  "lock() { mkdir -p \"$1/locked/inner\" && touch \"$1/locked/inner/file\" \
+&& chmod 444 \"$1/locked/inner/file\" \
+&& chmod 555 \"$1/locked/inner\" \"$1/locked\"; }; "
+  "Shell function making a read-only tree, like Bazel's outputs, in $1.")
+
+(ert-deftest +arena-trace-test-cleans-read-only-trees ()
+  "Remove read-only trees the command left in its private temp folder and
+its worktree."
+  (+arena-trace-test--on-macos
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (run (+arena-trace-test--trace
+                 repo (concat +arena-trace-test--lock
+                              "lock \"$TMPDIR\" && lock .")))
+           (text (+arena-trace-test--text run))
+           (sandbox (+agent-shell-pstack-arena-trace-run-sandbox run)))
+      (unwind-protect
+          (progn
+            (should (string-match-p "^Exit status 0\\.$" text))
+            (should (string-search "Removed the throwaway worktree." text))
+            (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
+            (should (+arena-trace-test--cleaned-p repo)))
+        (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
+
+(ert-deftest +arena-trace-test-cleanup-continues ()
+  "Remove the worktree even when a private folder cannot be deleted, and
+say why the folder stayed."
+  (+arena-trace-test--on-macos
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (run (+arena-trace-test--trace
+                 repo "touch \"$TMPDIR/pinned\" && chflags uchg \"$TMPDIR/pinned\""))
+           (text (+arena-trace-test--text run))
+           (tmp (+agent-shell-sandbox-tmp
+                 (+agent-shell-pstack-arena-trace-run-sandbox run))))
+      (unwind-protect
+          (progn
+            (should (string-match-p "^Exit status 0\\.$" text))
+            (should (string-match-p "^Could not delete .*pinned" text))
+            (should (string-search "Removed the throwaway worktree." text))
+            (should (+arena-trace-test--cleaned-p repo)))
+        (+agent-shell-sandbox-test-unlock tmp)
+        (delete-directory tmp t)
+        (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
+
 (ert-deftest +arena-trace-test-read-only-git ()
   "Run git status in a candidate without touching the lead's git directory."
   (+arena-trace-test--on-macos

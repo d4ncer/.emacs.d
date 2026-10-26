@@ -14,7 +14,8 @@
 ;; Stopping takes three steps, in order: `+agent-shell-sandbox-kill-tree'
 ;; while the adapter lives, `+agent-shell-sandbox-sweep' once it is gone,
 ;; then `+agent-shell-sandbox-finish'.  `+agent-shell-drive-stop' runs them
-;; around killing the shell.
+;; around killing the shell.  `+agent-shell-sandbox-discard' then deletes
+;; the private folders, whatever modes the agent's tools left in them.
 
 ;;; Code:
 
@@ -158,9 +159,49 @@ refusing it; see `+agent-shell-sandbox-profile'."
                               (string-match-p "\\`[A-Za-z_][A-Za-z0-9_]*="
                                               entry)))
                        '("environment entry" . "a NAME=VALUE string")))
-      (error (delete-directory tmp t)
-             (when own-config (delete-directory config t))
+      (error (+agent-shell-sandbox-delete
+              (cons tmp (and own-config (list config))))
              (signal (car err) (cdr err))))))
+
+(defun +agent-shell-sandbox-delete (paths &optional callback)
+  "Delete PATHS, files or folder trees, then call CALLBACK.
+CALLBACK gets nil, or a message naming what could not be deleted; it
+never runs before this returns.  Without it a failure is reported with
+`message'.  Owner write permission comes back first, since some tools
+make their trees read-only, such as Bazel's outputs and Go's module
+cache.  A symlink is removed, never followed.  What can go goes even
+when some path cannot."
+  (unless (seq-every-p #'file-name-absolute-p paths)
+    (error "Sandbox deletion needs absolute paths, not %S" paths))
+  (let ((default-directory "/")
+        (buffer (generate-new-buffer " *pstack-sandbox-delete*" t)))
+    (make-process
+     :name "pstack-sandbox-delete" :buffer buffer :noquery t
+     :connection-type 'pipe
+     :command (append (list "/bin/sh" "-c" "/bin/chmod -R u+rwX -- \"$@\" \
+2>/dev/null; exec /bin/rm -rf -- \"$@\"" "sh")
+                      paths)
+     :sentinel
+     (lambda (process _event)
+       (unless (process-live-p process)
+         (let* ((output (with-current-buffer buffer
+                          (string-trim (buffer-string))))
+                (error (unless (eql 0 (process-exit-status process))
+                         (if (string-empty-p output)
+                             (format "rm exited with status %s"
+                                     (process-exit-status process))
+                           output))))
+           (kill-buffer buffer)
+           (cond (callback (funcall callback error))
+                 (error (message "Could not delete %s: %s"
+                                 (string-join paths ", ") error)))))))))
+
+(defun +agent-shell-sandbox-discard (sandbox &optional callback)
+  "Delete SANDBOX's private folders as `+agent-shell-sandbox-delete' does.
+CALLBACK gets nil or a message saying what stayed."
+  (+agent-shell-sandbox-delete (list (+agent-shell-sandbox-tmp sandbox)
+                                     (+agent-shell-sandbox-config sandbox))
+                               callback))
 
 (defun +agent-shell-sandbox--string (path)
   "Return PATH as an SBPL string literal."
@@ -379,10 +420,15 @@ Only when the copy changed after it was made and the real login did not."
         (rename-file temporary real t)))))
 
 (defun +agent-shell-sandbox-finish (sandbox)
-  "Run the :finish step of SANDBOX's agent, if it has one."
+  "Run the :finish step of SANDBOX's agent, if it has one.
+A failure is reported with `message' rather than signaled, so the rest
+of a stop still runs."
   (when-let* ((agent (+agent-shell-sandbox-agent sandbox))
               (finish (plist-get (+agent-shell-sandbox-entry agent) :finish)))
-    (funcall finish sandbox)))
+    (condition-case err (funcall finish sandbox)
+      (error (message "Finishing the %s sandbox at %s failed: %s" agent
+                      (+agent-shell-sandbox-root sandbox)
+                      (error-message-string err))))))
 
 (defun +agent-shell-sandbox--lines (program &rest arguments)
   "Return the output lines of PROGRAM run with ARGUMENTS."

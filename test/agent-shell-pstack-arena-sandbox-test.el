@@ -156,7 +156,8 @@ leave no private folders behind."
                             :type 'user-error)))
         (advice-remove '+agent-shell-sandbox--make-tmp 'pa-test-record))
       (should (= 3 (length made)))
-      (should-not (seq-some #'file-exists-p made)))))
+      (+agent-shell-sandbox-test-wait
+       (lambda () (not (seq-some #'file-exists-p made)))))))
 
 (provide 'agent-shell-pstack-arena-sandbox-test)
 ;;; agent-shell-pstack-arena-sandbox-test.el ends here

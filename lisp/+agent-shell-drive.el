@@ -327,8 +327,8 @@ work runs from a timer, so SHELL's own event callbacks may call this."
        (+agent-shell-drive-kill shell reason)
        (+agent-shell-sandbox-sweep
         sandbox (lambda (survivors)
-                  (unwind-protect (+agent-shell-sandbox-finish sandbox)
-                    (when callback (funcall callback survivors)))))))))
+                  (+agent-shell-sandbox-finish sandbox)
+                  (when callback (funcall callback survivors))))))))
 
 (defun +agent-shell-drive-pinned-p (shell directory)
   "Return whether live SHELL works in DIRECTORY."

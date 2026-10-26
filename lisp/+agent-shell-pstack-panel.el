@@ -817,23 +817,29 @@ judge.")
 
 (defun +agent-shell-pstack-panel--stop (member callback)
   "Stop settled candidate MEMBER and every process it started.
-Then delete its sandbox's private folders and call CALLBACK."
+Then call CALLBACK while its sandbox's private folders are deleted, a
+failure to delete them reported with `message'."
   (if-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
-      (let ((shell (+agent-shell-pstack-panel-member-shell member))
-            (done (lambda (survivors)
-                    (when survivors
-                      (message "pstack arena: processes %s outlived candidate \
-%s" survivors (+agent-shell-pstack-panel-member-role member)))
-                    (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-                    (delete-directory (+agent-shell-sandbox-config sandbox) t)
-                    (funcall callback))))
+      (let* ((shell (+agent-shell-pstack-panel-member-shell member))
+             (role (+agent-shell-pstack-panel-member-role member))
+             (done (lambda (survivors)
+                     (when survivors
+                       (message "pstack arena: processes %s outlived \
+candidate %s" survivors role))
+                     (+agent-shell-sandbox-discard
+                      sandbox
+                      (lambda (error)
+                        (when error
+                          (message "pstack arena: candidate %s's private \
+folders stayed: %s" role error))))
+                     (funcall callback))))
         (if (buffer-live-p shell)
             (+agent-shell-drive-stop shell nil done)
           ;; Its adapter is gone, so only the sweep can find what it left.
           (+agent-shell-sandbox-sweep
            sandbox (lambda (survivors)
-                     (unwind-protect (+agent-shell-sandbox-finish sandbox)
-                       (funcall done survivors))))))
+                     (+agent-shell-sandbox-finish sandbox)
+                     (funcall done survivors)))))
     (funcall callback)))
 
 (defun +agent-shell-pstack-panel--halt (panel member)
@@ -1146,8 +1152,7 @@ and its :files are written into the worktree for the new sandbox."
     (condition-case err
         (+agent-shell-arena-git-write-files
          worktree (plist-get profile :files) sandbox)
-      (error (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-             (delete-directory (+agent-shell-sandbox-config sandbox) t)
+      (error (+agent-shell-sandbox-discard sandbox)
              (signal (car err) (cdr err))))
     sandbox))
 
