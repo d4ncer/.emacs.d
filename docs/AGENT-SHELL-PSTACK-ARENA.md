@@ -217,7 +217,14 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
 
   The lead's own index never changes.
 - **Candidate result.** Emacs captures the same way from the worktree, with
-  the base as the parent. It records the commit under
+  the base as the parent. The temporary index starts as a copy of the
+  worktree's own index, from its git directory, reset to the base with
+  `git read-tree --reset`. That keeps the stat data of every entry whose
+  content matches the base, so `git add -A` hashes only the files changed
+  since checkout rather than every file in the repository. On a generated
+  50,000-file repository, `test/bench-agent-shell-arena-capture.el` measured
+  a median capture of 47 seconds before and 3 after. It records the commit
+  under
   `refs/pstack-arena/<arena-id>/<role>`. That is outside `refs/heads`, so
   the lead's branch lists stay clean, and the ref keeps the commit from
   garbage collection.
@@ -225,7 +232,8 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   - the repository's git directory;
   - the lead's root and subdirectory;
   - the base commit;
-  - each role's worktree path, result commit and final state.
+  - each role's worktree path, the worktree's own git directory, its result
+    commit and final state.
 
   Cleanup trusts the manifest, not path or ref prefixes.
 

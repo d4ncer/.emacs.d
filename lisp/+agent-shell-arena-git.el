@@ -48,8 +48,9 @@ Paths are relative to the top level."
                (:constructor +agent-shell-arena-git--role)
                (:copier nil))
   "A candidate's worktree, the dependency paths it got, and its result.
+GIT-DIR is the worktree's own git directory, which holds its index.
 CHECKOUT is a separate worktree holding the result for reading."
-  name worktree shared private ref commit state checkout)
+  name worktree git-dir shared private ref commit state checkout)
 
 (cl-defstruct (+agent-shell-arena-git-manifest
                (:constructor +agent-shell-arena-git--manifest)
@@ -325,6 +326,8 @@ nil, or nil and a message saying why there is no base."
                   (lambda (role)
                     `((role . ,(+agent-shell-arena-git-role-name role))
                       (worktree . ,(+agent-shell-arena-git-role-worktree role))
+                      (git_dir
+                       . ,(or (+agent-shell-arena-git-role-git-dir role) :null))
                       (shared
                        . ,(vconcat (+agent-shell-arena-git-role-shared role)))
                       (private
@@ -364,6 +367,7 @@ nil, or nil and a message saying why there is no base."
                       (+agent-shell-arena-git--role
                        :name (alist-get 'role role)
                        :worktree (alist-get 'worktree role)
+                       :git-dir (alist-get 'git_dir role)
                        :shared (alist-get 'shared role)
                        :private (alist-get 'private role)
                        :ref (alist-get 'ref role)
@@ -490,6 +494,12 @@ candidate's working directory and nil, or nil and a message."
            (lambda (_)
              (condition-case err
                  (progn
+                   (setf (+agent-shell-arena-git-role-git-dir role)
+                         (or (+agent-shell-arena-git--read-in
+                              (expand-file-name ".git" worktree) worktree
+                              "rev-parse" "--absolute-git-dir")
+                             (error "No git directory for %s" worktree)))
+                   (+agent-shell-arena-git-write-manifest manifest)
                    (dolist (path (+agent-shell-arena-git-role-shared role))
                      (let ((link (directory-file-name
                                   (expand-file-name path worktree))))
@@ -538,22 +548,35 @@ the same path in WORKTREE.  Call FAIL with a message on failure."
   "Commit candidate NAME's worktree in MANIFEST as a child of the base.
 Leave out agent-shell transcripts and the shared dependency links.  Point
 refs/pstack-arena/ID/NAME at the commit and record it in the manifest.
-Call CALLBACK with the commit and nil, or nil and a message."
+Call CALLBACK with the commit and nil, or nil and a message.
+
+The snapshot starts from the base's tree carrying the stat data of the
+worktree's own index, so it hashes only files changed since checkout."
   (let* ((role (+agent-shell-arena-git-role manifest name))
          (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
          (base (+agent-shell-arena-git-manifest-base manifest))
          (fail (lambda (message) (funcall callback nil message))))
     (if (not role)
         (+agent-shell-arena-git--later fail (format "No arena role %s" name))
-      (let ((worktree (+agent-shell-arena-git-role-worktree role))
-            (ref (+agent-shell-arena-git--ref manifest name)))
+      (let* ((worktree (+agent-shell-arena-git-role-worktree role))
+             (ref (+agent-shell-arena-git--ref manifest name))
+             (git-dir (or (+agent-shell-arena-git-role-git-dir role) git-dir))
+             (own-index (expand-file-name "index" git-dir)))
         (+agent-shell-arena-git--snapshot
          git-dir worktree
          (lambda (index fail done)
-           (+agent-shell-arena-git--git
-            git-dir worktree (list "read-tree" base) fail
-            (lambda (_) (funcall done))
-            (list (concat "GIT_INDEX_FILE=" index))))
+           (let ((read-tree
+                  (lambda (_)
+                    (+agent-shell-arena-git--git
+                     git-dir worktree (list "read-tree" "--reset" base) fail
+                     (lambda (_) (funcall done))
+                     (list (concat "GIT_INDEX_FILE=" index))))))
+             ;; --reset keeps an entry's stat data while its content
+             ;; matches the base, and drops any unmerged entries.
+             (if (file-exists-p own-index)
+                 (+agent-shell-arena-git--run (list "cp" "-p" own-index index)
+                                              worktree nil fail read-tree)
+               (funcall read-tree nil))))
          (cons +agent-shell-arena-git--agent-shell-exclude
                (mapcar (lambda (path) (concat ":(exclude,literal)" path))
                        (+agent-shell-arena-git-role-shared role)))

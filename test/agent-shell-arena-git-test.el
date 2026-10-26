@@ -286,6 +286,90 @@
         (should (equal (+arena-git-test--git repo "cat-file" "-t" commit)
                        "commit"))))))
 
+(defun +arena-git-test--old-capture-tree (manifest role)
+  "Return the tree the old capture made of ROLE in MANIFEST.
+It seeded the snapshot index with the base tree alone."
+  (let* ((role (+agent-shell-arena-git-role manifest role))
+         (worktree (+agent-shell-arena-git-role-worktree role))
+         (index (expand-file-name "old-index" +arena-git-test--scratch))
+         (process-environment (cons (concat "GIT_INDEX_FILE=" index)
+                                    process-environment))
+         (git (lambda (&rest args)
+                (apply #'+arena-git-test--git worktree
+                       "--git-dir"
+                       (+agent-shell-arena-git-manifest-git-dir manifest)
+                       "--work-tree" worktree args))))
+    (funcall git "read-tree" (+agent-shell-arena-git-manifest-base manifest))
+    (apply git "add" "-A" "--" "." ":(exclude,glob)**/.agent-shell/**"
+           (mapcar (lambda (path) (concat ":(exclude,literal)" path))
+                   (+agent-shell-arena-git-role-shared role)))
+    (prog1 (funcall git "write-tree") (delete-file index))))
+
+(ert-deftest +agent-shell-arena-git-test-capture-matches-old-method ()
+  "Seeding from the worktree's index yields the tree a base seed did, even
+after the candidate stages excluded paths and commits in its worktree."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--dependency-repo))
+           (_ (+arena-git-test--write (expand-file-name "src/b.txt" repo) "b\n"))
+           (base (+arena-git-test--base repo))
+           (manifest (+arena-git-test--arena base))
+           (worktree (+arena-git-test--provision manifest "opus"))
+           (role (+agent-shell-arena-git-role manifest "opus")))
+      (should (equal (+agent-shell-arena-git-role-git-dir
+                      (+agent-shell-arena-git-role
+                       (+agent-shell-arena-git-read-manifest
+                        (+agent-shell-arena-git-manifest-directory manifest))
+                       "opus"))
+                     (+arena-git-test--git worktree "rev-parse"
+                                           "--absolute-git-dir")))
+      (should (file-exists-p
+               (expand-file-name "index"
+                                 (+agent-shell-arena-git-role-git-dir role))))
+      (+arena-git-test--write (expand-file-name "src/a.txt" worktree) "edit\n")
+      (delete-file (expand-file-name "src/b.txt" worktree))
+      (+arena-git-test--write (expand-file-name "src/new.txt" worktree) "new\n")
+      (+arena-git-test--write (expand-file-name ".agent-shell/t.md" worktree)
+                              "transcript\n")
+      (+arena-git-test--git worktree "add" "-f" "-A")
+      (+arena-git-test--git worktree "commit" "-q" "-m" "candidate commit")
+      (+arena-git-test--write (expand-file-name "src/late.txt" worktree) "l\n")
+      (let ((commit (+arena-git-test--capture manifest "opus")))
+        (should (equal (+arena-git-test--git repo "rev-parse"
+                                             (concat commit "^{tree}"))
+                       (+arena-git-test--old-capture-tree manifest "opus")))
+        (should (equal (+arena-git-test--git
+                        repo "diff" "--name-status"
+                        (+agent-shell-arena-git-base-commit base) commit)
+                       "M\tsrc/a.txt\nD\tsrc/b.txt\nA\tsrc/late.txt\n\
+A\tsrc/new.txt"))))))
+
+(ert-deftest +agent-shell-arena-git-test-capture-hashes-changed-files-only ()
+  "A capture runs the clean filter only on files changed since checkout.
+Files written in the same second as an index are racily clean and get
+hashed anyway, so the worktree's index is refreshed a second later."
+  (+arena-git-test--with-scratch
+    (let* ((repo (apply #'+arena-git-test--repo
+                        (cl-loop for i below 20
+                                 append (list (format "f%02d.txt" i) "x\n"))))
+           (log (expand-file-name "clean.log" +arena-git-test--scratch)))
+      (+arena-git-test--git
+       repo "config" "filter.count.clean"
+       (format "sh -c 'echo \"$1\" >> %s; cat' clean %%f"
+               (shell-quote-argument log)))
+      (+arena-git-test--write (expand-file-name ".git/info/attributes" repo)
+                              "*.txt filter=count\n")
+      (let* ((base (+arena-git-test--base repo))
+             (manifest (+arena-git-test--arena base))
+             (worktree (+arena-git-test--provision manifest "opus")))
+        (sleep-for 1.1)
+        (+arena-git-test--git worktree "update-index" "-q" "--refresh")
+        (+arena-git-test--write (expand-file-name "f07.txt" worktree) "y\n")
+        (when (file-exists-p log) (delete-file log))
+        (+arena-git-test--capture manifest "opus")
+        (should (equal (delete-dups
+                        (split-string (+arena-git-test--read log) "\n" t))
+                       '("f07.txt")))))))
+
 (ert-deftest +agent-shell-arena-git-test-needs-no-identity-or-key ()
   (+arena-git-test--with-scratch
     (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
