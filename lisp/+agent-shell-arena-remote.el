@@ -24,6 +24,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'iso8601)
 (require 'json)
 (require 'map)
 (require 'seq)
@@ -58,6 +59,15 @@
 (defcustom +agent-shell-arena-remote-unreachable-after 900
   "Seconds without a new heartbeat after which the lead hears of it."
   :type 'number)
+
+(defcustom +agent-shell-arena-remote-wake-timeout 600
+  "Seconds a submission waits for a host that is starting to get ready.
+That covers starting a stopped Coder workspace, its agent connecting and
+its setup writing a readiness file since it booted."
+  :type 'number)
+
+(defvar +agent-shell-arena-remote-wake-interval 10
+  "Seconds between checks while a host gets ready.")
 
 (defcustom +agent-shell-arena-remote-restarts 2
   "Times the laptop restarts a host's runner that stopped unfinished."
@@ -851,25 +861,56 @@ and a message."
                             (format "exit status %s" status)
                           stderr)))))))
 
+(defun +agent-shell-arena-remote--coder (args timeout callback)
+  "Run the Coder CLI with ARGS here, for at most TIMEOUT seconds.
+Call CALLBACK with its output and nil, or nil and a message."
+  (funcall +agent-shell-arena-remote-spawn-function
+           (expand-file-name "~/") (cons +agent-shell-arena-remote-coder args)
+           nil nil timeout
+           (lambda (status stdout stderr)
+             (if (eql status 0) (funcall callback stdout nil)
+               (funcall callback nil
+                        (format "coder %s failed: %s" (string-join args " ")
+                                (cond ((eq status 'timeout)
+                                       (format "no answer within %s seconds"
+                                               timeout))
+                                      ((string-empty-p stderr)
+                                       (format "exit status %s" status))
+                                      (t stderr))))))))
+
 (defun +agent-shell-arena-remote--extend (host seconds callback)
   "Move HOST's stop time to at least SECONDS from now, then call CALLBACK.
 Only a Coder workspace stops by itself; CALLBACK gets nil, or a message
 saying why the extension failed."
   (if (not (eq (+agent-shell-arena-remote-host-kind host) 'coder))
       (run-at-time 0 nil callback nil)
-    (funcall +agent-shell-arena-remote-spawn-function
-             (expand-file-name "~/")
-             (list +agent-shell-arena-remote-coder "schedule" "extend"
-                   (+agent-shell-arena-remote-host-name host)
-                   (format "%dm" (ceiling seconds 60)))
-             nil nil 60
-             (lambda (status _stdout stderr)
-               (funcall callback
-                        (unless (eql status 0)
-                          (format "coder schedule extend failed: %s"
-                                  (if (string-empty-p stderr)
-                                      (format "exit status %s" status)
-                                    stderr))))))))
+    (+agent-shell-arena-remote--coder
+     (list "schedule" "extend" (+agent-shell-arena-remote-host-name host)
+           (format "%dm" (ceiling seconds 60)))
+     60 (lambda (_output error) (funcall callback error)))))
+
+(defun +agent-shell-arena-remote--workspace (output name)
+  "Return (STATUS . AGENT) for workspace NAME in coder list -o json OUTPUT.
+STATUS is its latest build's status, such as \"running\" or \"stopped\",
+and AGENT its first agent's status, such as \"connected\".  Return nil
+when OUTPUT lists no such workspace."
+  (when-let* ((workspace
+               (seq-find (lambda (workspace)
+                           (member name (list (alist-get 'name workspace)
+                                              (format "%s/%s"
+                                                      (alist-get 'owner_name
+                                                                 workspace)
+                                                      (alist-get 'name
+                                                                 workspace)))))
+                         (json-parse-string output :object-type 'alist
+                                            :array-type 'list
+                                            :null-object nil))))
+    (let ((build (alist-get 'latest_build workspace)))
+      (cons (alist-get 'status build)
+            (seq-some (lambda (resource)
+                        (seq-some (lambda (agent) (alist-get 'status agent))
+                                  (alist-get 'agents resource)))
+                      (alist-get 'resources build))))))
 
 ;;;; Host scripts
 
@@ -889,13 +930,14 @@ if [ -n \"$top\" ]; then
 fi
 code=0; [ -d \"code/$2\" ] && code=1
 ready=$3; case $ready in \"~/\"*) ready=$HOME/${ready#\"~/\"};; esac
-printf 'pstack-arena-probe 1\\ntoplevel %s\\ntip %s\\ncode %s\\nready %s\\n' \
-\"$top\" \"$tip\" \"$code\" \"$ready\"
+boot=$(awk '$1 == \"btime\" {print $2}' /proc/stat 2>/dev/null) || boot=
+printf 'pstack-arena-probe 1\\ntoplevel %s\\ntip %s\\ncode %s\\nready %s\\nboot %s\\n' \
+\"$top\" \"$tip\" \"$code\" \"$ready\" \"$boot\"
 cat \"$ready\" 2>/dev/null || true
 ")
   "Report the checkout's top level, its upstream tip, whether the code with
-hash $2 is there, and the readiness file $3, by its absolute name and
-contents.")
+hash $2 is there, the readiness file $3, by its absolute name, when the
+host booted, as /proc/stat says, and the readiness file's contents.")
 
 (defconst +agent-shell-arena-remote--launch
   "hash=$(cat \"$job/code-hash\")
@@ -1343,8 +1385,8 @@ Its panel gets the rejection follow-up and its laptop arena is removed."
 
 (defun +agent-shell-arena-remote--probe (remote job callback)
   "Ask REMOTE's host about JOB's checkout; call CALLBACK with a plist.
-The plist holds :toplevel, :tip, :code, :ready-file and :ready, or
-CALLBACK gets nil and a message."
+The plist holds :toplevel, :tip, :code, :ready-file, :boot, the time the
+host booted or nil, and :ready, or CALLBACK gets nil and a message."
   (+agent-shell-arena-remote--call
    (+agent-shell-arena-remote-host remote)
    +agent-shell-arena-remote--probe-script
@@ -1363,9 +1405,9 @@ CALLBACK gets nil and a message."
                                           (lambda (line)
                                             (string-prefix-p (concat name " ")
                                                              line))
-                                          (seq-take lines 5))))
+                                          (seq-take lines 6))))
                          (string-trim (substring line (1+ (length name)))))))
-              (ready (string-trim (string-join (nthcdr 5 lines) "\n"))))
+              (ready (string-trim (string-join (nthcdr 6 lines) "\n"))))
          (if (null start)
              (funcall callback nil (format "unexpected answer: %s" output))
            (condition-case err
@@ -1374,6 +1416,10 @@ CALLBACK gets nil and a message."
                               :tip (funcall field "tip")
                               :code (equal (funcall field "code") "1")
                               :ready-file (funcall field "ready")
+                              :boot (let ((boot (funcall field "boot")))
+                                      (and boot (string-match-p "\\`[0-9]+\\'"
+                                                                boot)
+                                           (string-to-number boot)))
                               :ready (unless (string-empty-p ready)
                                        (+agent-shell-arena-remote-from-json
                                         'ready ready)))
@@ -1405,13 +1451,28 @@ malformed: %s" (cadr err)))))))))))
                (codex-acp . "codex-acp")))
    ", "))
 
+(defun +agent-shell-arena-remote--written (ready)
+  "Return when READY says it was written, or nil when it does not say."
+  (when-let* ((written (+agent-shell-arena-remote-ready-written-at ready)))
+    (ignore-errors (float-time (encode-time (iso8601-parse written))))))
+
 (defun +agent-shell-arena-remote--ready-error (probe repository)
-  "Return why PROBE says the host cannot run a job for REPOSITORY, or nil."
-  (let ((ready (plist-get probe :ready)))
+  "Return why PROBE says the host cannot run a job for REPOSITORY, or nil.
+A readiness file written before the host last booted is stale: setup
+removes it on every boot before it writes a fresh one."
+  (let* ((ready (plist-get probe :ready))
+         (written (and ready (+agent-shell-arena-remote--written ready)))
+         (boot (plist-get probe :boot)))
     (cond
      ((null ready)
       (format "it has no readiness file at %s, so its setup has not passed \
 its smoke check" (plist-get probe :ready-file)))
+     ((and written boot (< written boot))
+      (format "its readiness file at %s was written at %s, before it booted \
+at %s, so its setup has not finished since"
+              (plist-get probe :ready-file)
+              (format-time-string "%F %T %Z" written)
+              (format-time-string "%F %T %Z" boot)))
      ((< (string-to-number (+agent-shell-arena-remote--version ready 'emacs))
          +agent-shell-arena-remote-minimum-emacs)
       (format "its Emacs is %s, older than %d"
@@ -1420,34 +1481,115 @@ its smoke check" (plist-get probe :ready-file)))
      ((string-empty-p (or (plist-get probe :toplevel) ""))
       (format "it has no git checkout at %s" repository)))))
 
+(defun +agent-shell-arena-remote--await (remote job callback)
+  "Call CALLBACK with a probe of REMOTE's host once it can run JOB.
+A stopped Coder workspace is started first.  A host that was not running,
+or booted less than `+agent-shell-arena-remote-wake-timeout' seconds ago,
+is checked every `+agent-shell-arena-remote-wake-interval' seconds until
+it runs, answers and has a readiness file written since it booted.
+Otherwise, or once that timeout has passed, REMOTE is rejected with what
+was last wrong.  A cancel stops the wait."
+  (let* ((host (+agent-shell-arena-remote-host remote))
+         (name (+agent-shell-arena-remote-host-name host))
+         (deadline (+ (float-time) +agent-shell-arena-remote-wake-timeout))
+         (woke nil)
+         (started nil))
+    (cl-labels
+        ((reject (reason)
+           (+agent-shell-arena-remote--reject
+            remote (if woke
+                       (format "%s, but it was not ready within %s seconds: \
+%s" woke +agent-shell-arena-remote-wake-timeout reason)
+                     reason)))
+         (retry (reason)
+           (if (> (float-time) deadline) (reject reason)
+             (setf (+agent-shell-arena-remote-timer remote)
+                   (run-at-time +agent-shell-arena-remote-wake-interval nil
+                                #'check))))
+         (wait (reason)
+           (unless woke (setq woke (format "it was %s" reason)))
+           (retry (format "it is %s" reason)))
+         (check ()
+           (cond
+            ((not (eq (+agent-shell-arena-remote-phase remote) 'submitting)))
+            ((not (eq (+agent-shell-arena-remote-cancel-state remote) 'none))
+             (+agent-shell-arena-remote--reject
+              remote (+agent-shell-arena-remote--cancel-reason remote)))
+            ((eq (+agent-shell-arena-remote-host-kind host) 'coder) (status))
+            (t (probe))))
+         (status ()
+           (+agent-shell-arena-remote--coder
+            '("list" "-o" "json") 60
+            (lambda (output error)
+              (pcase (and output (condition-case nil
+                                     (list (+agent-shell-arena-remote--workspace
+                                            output name))
+                                   (json-error nil)))
+                ('nil (if woke (retry (or error "coder list is not JSON"))
+                        ;; Without a working Coder CLI, SSH alone decides.
+                        (probe)))
+                ('(nil) (reject (format "coder list shows no workspace %s"
+                                        name)))
+                (`((,"running" . ,(or "connected" 'nil))) (probe))
+                (`((,"running" . ,agent))
+                 (wait (format "running with its agent %s" agent)))
+                (`((,(or "stopped" "canceled") . ,_))
+                 (if started (retry "it is still stopped") (start)))
+                (`((,(and state (or "pending" "starting" "stopping"
+                                    "canceling"))
+                    . ,_))
+                 (wait state))
+                (`((,state . ,_))
+                 (reject (format "its status is %s" state)))))))
+         (start ()
+           (setq started t
+                 woke "it was stopped, so Emacs started it")
+           (message "pstack arena %s: starting Coder workspace %s"
+                    (+agent-shell-arena-remote-id remote) name)
+           (+agent-shell-arena-remote--coder
+            (list "start" "--yes" name) 900
+            (lambda (_output error)
+              (if error (reject error) (check)))))
+         (probe ()
+           (+agent-shell-arena-remote--probe
+            remote job
+            (lambda (probe error)
+              (let ((problem (or error
+                                 (+agent-shell-arena-remote--ready-error
+                                  probe
+                                  (+agent-shell-arena-remote-job-repository
+                                   job))))
+                    (boot (plist-get probe :boot)))
+                (cond
+                 ((not problem) (funcall callback probe))
+                 ((or woke
+                      (and boot
+                           (< (- (float-time) boot)
+                              +agent-shell-arena-remote-wake-timeout)))
+                  (retry problem))
+                 (t (reject problem))))))))
+      (check))))
+
 (defun +agent-shell-arena-remote--submit (remote job)
   "Submit JOB, REMOTE's arena, to its host.
-Probe the host, then try each prerequisite in turn until the host takes
-a bundle against one."
-  (+agent-shell-arena-remote--probe
+Wait until the host is ready, then try each prerequisite in turn until
+the host takes a bundle against one."
+  (+agent-shell-arena-remote--await
    remote job
-   (lambda (probe error)
-     (cond
-      (error (+agent-shell-arena-remote--reject remote error))
-      ((+agent-shell-arena-remote--ready-error
-        probe (+agent-shell-arena-remote-job-repository job))
-       (+agent-shell-arena-remote--reject
-        remote (+agent-shell-arena-remote--ready-error
-                probe (+agent-shell-arena-remote-job-repository job))))
-      (t
-       (setf (+agent-shell-arena-remote-emacs remote)
-             (+agent-shell-arena-remote-tool-path
-              (+agent-shell-arena-remote-ready-emacs (plist-get probe :ready)))
-             (+agent-shell-arena-remote-job-ready-file job)
-             (plist-get probe :ready-file)
-             (+agent-shell-arena-remote-job-ready job) (plist-get probe :ready))
-       (+agent-shell-arena-remote--save remote)
-       (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
-         (+agent-shell-arena-remote-prerequisites
-          (+agent-shell-pstack-panel-arena panel) (plist-get probe :tip)
-          (lambda (ladder)
-            (+agent-shell-arena-remote--offer remote job ladder nil
-                                              (plist-get probe :code))))))))))
+   (lambda (probe)
+     (setf (+agent-shell-arena-remote-emacs remote)
+           (+agent-shell-arena-remote-tool-path
+            (+agent-shell-arena-remote-ready-emacs (plist-get probe :ready)))
+           (+agent-shell-arena-remote-job-ready-file job)
+           (plist-get probe :ready-file)
+           (+agent-shell-arena-remote-job-ready job) (plist-get probe :ready))
+     (+agent-shell-arena-remote--save remote)
+     (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
+       (+agent-shell-arena-remote-prerequisites
+        (+agent-shell-pstack-panel-arena panel) (plist-get probe :tip)
+        (lambda (ladder)
+          (+agent-shell-arena-remote--offer remote job ladder nil
+                                            (plist-get probe :code))))))))
 
 (defun +agent-shell-arena-remote--offer (remote job ladder tried has-code
                                                 &optional attempts)
