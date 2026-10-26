@@ -503,6 +503,135 @@ and the lead hears once the host has been silent too long."
   (should-error (+agent-shell-arena-remote-parse-poll "bash: no such file")
                 :type '+agent-shell-arena-remote-wire))
 
+;;;; Waking a host
+
+(defun +arena-remote-test--workspaces (name status &optional agent)
+  "Return coder list JSON with workspace NAME at STATUS, its agent AGENT."
+  (json-serialize
+   (vector `((name . ,name)
+             (latest_build
+              (status . ,status)
+              (resources . [((agents . [((name . "main")
+                                         (status . ,(or agent "connected")))]))]))))))
+
+(defun +arena-remote-test--probe (boot written)
+  "Return a probe answer from a host booted at BOOT, its readiness file
+written at WRITTEN, an ISO 8601 string, or missing when WRITTEN is nil."
+  (concat "pstack-arena-probe 1\ntoplevel /home/user/work/monorepo\n"
+          "tip " (make-string 40 ?e) "\ncode 0\n"
+          "ready /home/user/.local/share/pstack-arena/ready.json\n"
+          (format "boot %s\n" boot)
+          (if written
+              (format "{\"version\":1,\"written_at\":%S,\
+\"emacs\":{\"path\":\"/nix/bin/emacs\",\"version\":\"31.1\"}}\n" written)
+            "")))
+
+(defmacro +arena-remote-test--with-submission (&rest body)
+  "Run BODY submitting a job to the Coder workspace box.
+BODY sees `remote', `panel', `offered', set once the host was ready, and
+`answer', which answers the newest call, waiting for it to be one whose
+command holds a string matching a regexp."
+  (declare (indent 0))
+  `(+arena-remote-test--with-scratch
+     (+arena-remote-test--with-spawns
+       (let* ((+agent-shell-arena-remote-wake-interval 0.01)
+              (remote (+arena-remote-test--record
+                       (+agent-shell-arena-remote--make-host
+                        :kind 'coder :name "box")))
+              (panel (+agent-shell-pstack-panel--make
+                      :id "abc" :shape 'arena :phase 'submitting
+                      :remote remote))
+              (offered nil))
+         (setf (+agent-shell-arena-remote-phase remote) 'submitting
+               (+agent-shell-arena-remote-directory remote) scratch)
+         (puthash "abc" panel +agent-shell-pstack-panel--panels)
+         (puthash (+agent-shell-arena-remote-id remote) remote
+                  +agent-shell-arena-remote--arenas)
+         (cl-letf (((symbol-function '+agent-shell-arena-remote-prerequisites)
+                    (lambda (_manifest tip _callback) (setq offered tip))))
+           (cl-flet ((answer (regexp status stdout)
+                       (let ((deadline (+ (float-time) 10)) call)
+                         (while (and (not (setq call
+                                                (seq-find
+                                                 (lambda (call)
+                                                   (seq-some
+                                                    (lambda (arg)
+                                                      (string-match-p regexp arg))
+                                                    (nth 1 call)))
+                                                 (list (car spawned)))))
+                                     (< (float-time) deadline))
+                           (accept-process-output nil 0.01))
+                         (should call)
+                         (setq spawned (remq call spawned))
+                         (funcall (nth 2 call) status stdout ""))))
+             (+agent-shell-arena-remote--submit
+              remote (+arena-remote-test--job))
+             ,@body))))))
+
+(ert-deftest +agent-shell-arena-remote-test-wakes-workspace ()
+  "Submitting to a stopped Coder workspace starts it, then waits until it
+runs, its agent answers and its setup has written readiness since boot."
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "stopped"))
+    (answer "\\`start\\'" 0 "")
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "starting"))
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces
+                            "box" "running" "connecting"))
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 255 "")
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    ;; Written at 19:33:35 UTC, before the boot at 19:40:00 UTC.
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             1793043600 "2026-10-26T19:33:35.288Z"))
+    (should-not offered)
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             1793043600 "2026-10-26T19:41:44.010Z"))
+    (should (equal (make-string 40 ?e) offered))
+    (should-not (+agent-shell-pstack-panel-rejection panel))))
+
+(ert-deftest +agent-shell-arena-remote-test-running-workspace ()
+  "A running workspace that answers is probed once, and one whose setup
+never finished is refused at once."
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             (- (float-time) 7200) "2026-10-26T19:41:44.010Z"))
+    (should offered))
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             (- (float-time) 7200) nil))
+    (should-not offered)
+    (should (string-match-p "no readiness file"
+                            (+agent-shell-pstack-panel-rejection panel)))))
+
+(ert-deftest +agent-shell-arena-remote-test-wake-gives-up ()
+  "A workspace that never gets ready is refused after the wake timeout,
+saying what it waited for."
+  (let ((+agent-shell-arena-remote-wake-timeout 0.2))
+    (+arena-remote-test--with-submission
+      (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "stopped"))
+      (answer "\\`start\\'" 0 "")
+      (let ((deadline (+ (float-time) 10)))
+        (while (and (not (+agent-shell-pstack-panel-rejection panel))
+                    (< (float-time) deadline))
+          (when-let* ((call (car spawned)))
+            (setq spawned (cdr spawned))
+            (funcall (nth 2 call) 0
+                     (+arena-remote-test--workspaces "box" "starting") ""))
+          (accept-process-output nil 0.01)))
+      (should-not offered)
+      (should (string-match-p
+               "Coder workspace box: it was stopped.*started it.*not ready \
+within 0\\.2 seconds.*starting"
+               (+agent-shell-pstack-panel-rejection panel)))))
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "stopped"))
+    (answer "\\`start\\'" 1 "")
+    (should (string-match-p "coder start"
+                            (+agent-shell-pstack-panel-rejection panel)))))
+
 ;;;; Runner
 
 (ert-deftest +agent-shell-arena-remote-test-lock ()
