@@ -316,7 +316,7 @@ nil, or nil and a message saying why there is no base."
               (lambda (index fail done)
                 (if (file-exists-p real-index)
                     (+agent-shell-arena-git--run
-                     (list "cp" real-index index) toplevel nil fail
+                     (list "/bin/cp" real-index index) toplevel nil fail
                      (lambda (_) (funcall done)))
                   (+agent-shell-arena-git--git
                    git-dir toplevel (list "read-tree" head) fail
@@ -673,10 +673,10 @@ the same path in WORKTREE.  Call FAIL with a message on failure."
                    (expand-file-name (car paths) worktree))))
       (make-directory (file-name-directory target) t)
       (+agent-shell-arena-git--run
-       (list "cp" "-c" "-R" source target) worktree nil fail
+       (list "/bin/cp" "-c" "-R" source target) worktree nil fail
        (lambda (_)
          (+agent-shell-arena-git--run
-          (list "find" target "-type" "l" "-print0") worktree nil fail
+          (list "/usr/bin/find" target "-type" "l" "-print0") worktree nil fail
           (lambda (output)
             (dolist (link (split-string output "\0" t))
               (let ((destination (file-symlink-p link)))
@@ -718,7 +718,7 @@ worktree's own index, so it hashes only files changed since checkout."
              ;; --reset keeps an entry's stat data while its content
              ;; matches the base, and drops any unmerged entries.
              (if (file-exists-p own-index)
-                 (+agent-shell-arena-git--run (list "cp" "-p" own-index index)
+                 (+agent-shell-arena-git--run (list "/bin/cp" "-p" own-index index)
                                               worktree nil fail read-tree)
                (funcall read-tree nil))))
          (cons +agent-shell-arena-git--agent-shell-exclude
