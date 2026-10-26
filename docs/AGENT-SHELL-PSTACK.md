@@ -193,9 +193,14 @@ lead's mode-line help:
 3. `candidates`: each candidate starts through `+agent-shell-drive-start`
    with a `+agent-shell-sandbox` rooted at its worktree. The sandbox
    refuses writes outside the worktree and refuses reads of the lead's
-   checkout, `+agent-shell-pstack-panel-directory`, `~/.claude`, `~/.codex`
-   and the other candidates' worktrees. The repository's profile, below,
-   can add shared links, which stay readable. The lead's git directory
+   checkout, `+agent-shell-pstack-panel-directory`, `~/.claude`, `~/.codex`,
+   the other candidates' worktrees, every other sandbox's private temp and
+   config folders, and the credential locations in
+   `+agent-shell-sandbox-secret-reads`, such as `~/.ssh`, `~/.aws`,
+   `~/Library/Keychains` and `+private-config-directory`. agent-shell's
+   own file reads for the agent obey the same rules. The repository's
+   profile, below, can add shared links, which stay readable, and its
+   `:read` can reopen a path inside a credential location. The lead's git directory
    stays readable too, so candidates can run read-only git. Every
    candidate gets `TMPDIR`, `GOTMPDIR` and `-Djava.io.tmpdir` in
    `JAVA_TOOL_OPTIONS` pointing at its private temp folder, along with

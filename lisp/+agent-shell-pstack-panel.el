@@ -1122,7 +1122,9 @@ Then start the candidates."
 With TRACE non-nil, its profile reports what it would refuse instead.
 It cannot read the lead's checkout, other than the shared dependencies
 and the git directory, the panel reports, the agents' own config, or any
-other candidate.  It may stat the lead's top level, which git resolves.
+other candidate, nor what every sandbox refuses; see
+`+agent-shell-sandbox-create'.  It may stat the lead's top level, which
+git resolves.
 The repository's arena profile adds allowances and environment entries,
 and its :files are written into the worktree for the new sandbox."
   (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))

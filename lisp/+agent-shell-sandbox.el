@@ -3,8 +3,11 @@
 ;;; Commentary:
 ;; A `+agent-shell-sandbox' describes where a confined agent may write: its
 ;; root, a short private temp folder and a private agent config folder.  It
-;; also lists folders the agent may not read.  `+agent-shell-sandbox-profile'
-;; renders it as a macOS sandbox-exec profile, and
+;; also lists folders the agent may not read, to which every sandbox adds
+;; `+agent-shell-sandbox-secret-reads' and every other sandbox's private
+;; folders.  `+agent-shell-sandbox-profile' renders it as a macOS
+;; sandbox-exec profile, `+agent-shell-sandbox-readable-p' applies the same
+;; read rules in Emacs, and
 ;; `+agent-shell-sandbox-client-maker' wraps an agent config's client maker
 ;; so the adapter starts under that profile with the agent's private
 ;; environment from `+agent-shell-sandbox-agents' and the defaults from
@@ -55,6 +58,20 @@ called with the sandbox once its processes are gone."
   "Codex home whose login and config sandboxed Codex agents copy."
   :type 'directory)
 
+(defcustom +agent-shell-sandbox-secret-reads
+  '("~/.ssh" "~/.gnupg" "~/.aws" "~/.config/gcloud" "~/.azure" "~/.kube"
+    "~/.docker" "~/.netrc" "~/.authinfo" "~/.authinfo.gpg" "~/.config/gh"
+    "~/.config/op" "~/.op" "~/Library/Keychains" +private-config-directory)
+  "Credential locations no sandboxed agent may read.
+Each element is a file or folder, or a variable whose value, when bound
+and non-nil, is one.  The defaults hold SSH and GnuPG keys, the AWS,
+Google Cloud, Azure and Kubernetes logins, Docker registry logins, netrc
+and authinfo passwords, the GitHub and 1Password CLI logins, the macOS
+Keychain files, and the private Emacs config.  A path that does not exist
+is harmless.  A read allowance, such as a repository profile's :read,
+can still open a path inside one."
+  :type '(repeat (choice file variable)))
+
 (defconst +agent-shell-sandbox--sweeps 10
   "Most sweeps a stop makes before giving up on survivors.")
 
@@ -89,6 +106,38 @@ write.")
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
   (directory-file-name (file-truename (expand-file-name path))))
+
+(defvar +agent-shell-sandbox--config-parent nil
+  "True name of the folder every sandbox's config folder is made in.
+Fixed on first use, so one pattern covers every sandbox's.")
+
+(defun +agent-shell-sandbox--config-parent ()
+  "Return the folder sandbox config folders are made in."
+  (or +agent-shell-sandbox--config-parent
+      (setq +agent-shell-sandbox--config-parent
+            (+agent-shell-sandbox--path temporary-file-directory))))
+
+(defun +agent-shell-sandbox--private-patterns ()
+  "Return patterns matching every sandbox's private temp and config folders."
+  ;; sandbox-exec compiles an interval such as [0-9a-f]{8} but never
+  ;; matches it, so the class is repeated.
+  (list (cons 'regexp
+              (concat "^" (+agent-shell-sandbox-regexp-quote
+                           (+agent-shell-sandbox--path "/tmp"))
+                      "/pa-" (apply #'concat (make-list 8 "[0-9a-f]"))
+                      "(/|$)"))
+        (cons 'regexp
+              (concat "^" (+agent-shell-sandbox-regexp-quote
+                           (concat (+agent-shell-sandbox--config-parent)
+                                   "/pa-config-"))))))
+
+(defun +agent-shell-sandbox--secrets ()
+  "Return the paths in `+agent-shell-sandbox-secret-reads'."
+  (delq nil (mapcar (lambda (item)
+                      (if (symbolp item)
+                          (and (boundp item) (symbol-value item))
+                        item))
+                    +agent-shell-sandbox-secret-reads)))
 
 (defun +agent-shell-sandbox--make-tmp ()
   "Create and return a fresh /tmp/pa-HEX folder.
@@ -237,14 +286,14 @@ An allowance is an absolute path or a (regexp . RE) pattern; see
         ((not (and (stringp value) (file-name-absolute-p value)))
          "an absolute path or a (regexp . RE) pattern")))
 
-(cl-defun +agent-shell-sandbox-create (root &key config deny-reads
-                                             allow-reads allow-metadata
-                                             allow-writes allow-connects env
-                                             trace)
+(cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
+                                             allow-metadata allow-writes
+                                             allow-connects env trace)
   "Return a sandbox writing to ROOT, creating its private folders.
-CONFIG is the private agent config folder, a new temporary one by default.
-DENY-READS lists folders the agent may not read, and ALLOW-READS folders
-inside them it may read anyway.  A read is checked against the path a
+DENY-READS lists folders the agent may not read, to which the sandbox
+adds `+agent-shell-sandbox-secret-reads'.  It cannot read any sandbox's
+private temp or config folder but its own.  ALLOW-READS lists folders
+inside these it may read anyway.  A read is checked against the path a
 symlink resolves to, so a link into a denied folder needs an allowance.
 ALLOW-METADATA lists paths, each exactly, whose metadata the agent may
 read even inside DENY-READS, such as a folder git must stat.
@@ -273,17 +322,20 @@ logs each report or refusal with the sandbox's tag as its message."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
-         (own-config (not config))
          (tag (format "pa-sandbox-%08x" (random #x100000000)))
          (config (+agent-shell-sandbox--path
-                  (if config (progn (make-directory config t) config)
-                    (make-temp-file "pa-config-" t))))
+                  (make-temp-file
+                   (expand-file-name "pa-config-"
+                                     (+agent-shell-sandbox--config-parent))
+                   t)))
          (make (lambda (&rest resolved)
                  (apply #'+agent-shell-sandbox--make
                         :root (+agent-shell-sandbox--path root)
                         :tmp tmp :config config
                         :deny-reads (mapcar #'+agent-shell-sandbox--path
-                                            deny-reads)
+                                            (append
+                                             deny-reads
+                                             (+agent-shell-sandbox--secrets)))
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
                         :tag tag :trace (and trace t) resolved)))
@@ -314,8 +366,7 @@ logs each report or refusal with the sandbox's tag as its message."
                                        "\\`[A-Za-z_][A-Za-z0-9_]*=" entry))
                            "a NAME=VALUE string"))
                        "environment entry"))
-      (error (+agent-shell-sandbox-delete
-              (cons tmp (and own-config (list config))))
+      (error (+agent-shell-sandbox-delete (list tmp config))
              (signal (car err) (cdr err))))))
 
 (defun +agent-shell-sandbox-delete (paths &optional callback)
@@ -401,6 +452,43 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
                          (+agent-shell-sandbox--string allowance))))
              allowances ""))
 
+(defun +agent-shell-sandbox--read-denials (sandbox)
+  "Return the paths and patterns SANDBOX's agent may not read."
+  (append (+agent-shell-sandbox-deny-reads sandbox)
+          (+agent-shell-sandbox--private-patterns)))
+
+(defun +agent-shell-sandbox--read-allowances (sandbox)
+  "Return the paths and patterns SANDBOX's agent may read despite denials."
+  (append (list (+agent-shell-sandbox-tmp sandbox)
+                (+agent-shell-sandbox-config sandbox))
+          (+agent-shell-sandbox-allow-reads sandbox)))
+
+(defun +agent-shell-sandbox--under-p (path directories)
+  "Return non-nil if PATH is one of DIRECTORIES or inside one."
+  (seq-some (lambda (directory)
+              (or (equal path directory)
+                  (string-prefix-p (file-name-as-directory directory) path)))
+            directories))
+
+(defun +agent-shell-sandbox-readable-p (sandbox path)
+  "Return non-nil if SANDBOX's profile lets its agent read PATH.
+This applies the profile's read rules in Emacs, erring towards refusal:
+a denying pattern refuses every path starting with its literal prefix,
+and an allowing pattern opens nothing, so only a path allowance reopens
+a denied path."
+  (let ((path (+agent-shell-sandbox--path path)))
+    (or (not (seq-some
+              (lambda (denial)
+                (if (+agent-shell-sandbox-pattern-p denial)
+                    (string-prefix-p (+agent-shell-sandbox--pattern-prefix
+                                      (cdr denial))
+                                     path)
+                  (+agent-shell-sandbox--under-p path (list denial))))
+              (+agent-shell-sandbox--read-denials sandbox)))
+        (+agent-shell-sandbox--under-p
+         path (seq-remove #'+agent-shell-sandbox-pattern-p
+                          (+agent-shell-sandbox--read-allowances sandbox))))))
+
 (defun +agent-shell-sandbox-profile (sandbox)
   "Return the sandbox-exec profile text for SANDBOX.
 Every rule that refuses an operation tags the kernel's log of it with
@@ -429,12 +517,13 @@ report instead."
               (format " (literal %s)"
                       (+agent-shell-sandbox--string
                        (concat (+agent-shell-sandbox-root sandbox) "/.git"))))
-     (when-let* ((denied (+agent-shell-sandbox-deny-reads sandbox)))
-       (funcall refuse "file-read*" (+agent-shell-sandbox--filters denied)))
+     (funcall refuse "file-read*" (+agent-shell-sandbox--filters
+                                   (+agent-shell-sandbox--read-denials
+                                    sandbox)))
      ;; A later rule overrides an earlier one.
-     (when-let* ((allowed (+agent-shell-sandbox-allow-reads sandbox)))
-       (format "(allow file-read*%s)\n"
-               (+agent-shell-sandbox--filters allowed)))
+     (format "(allow file-read*%s)\n"
+             (+agent-shell-sandbox--filters
+              (+agent-shell-sandbox--read-allowances sandbox)))
      (when-let* ((stat (+agent-shell-sandbox-allow-metadata sandbox)))
        (format "(allow file-read-metadata%s)\n"
                (mapconcat (lambda (path)

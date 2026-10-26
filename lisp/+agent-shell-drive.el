@@ -162,13 +162,6 @@ Return nil, leaving the dialog to the user, only when no option fits."
   "Return SHELLS without the shells started with a policy."
   (seq-remove #'+agent-shell-drive-policy shells))
 
-(defun +agent-shell-drive--under-p (path directories)
-  "Return non-nil if PATH is one of DIRECTORIES or inside one."
-  (seq-some (lambda (directory)
-              (or (equal path directory)
-                  (string-prefix-p (file-name-as-directory directory) path)))
-            directories))
-
 (defun +agent-shell-drive--file-allowed-p (policy write path)
   "Return non-nil if POLICY lets the agent read, or with WRITE write, PATH.
 agent-shell serves these requests itself, outside any sandbox-exec profile
@@ -179,14 +172,13 @@ and before any permission prompt, so the policy is enforced here too."
       ('read-only (not write))
       ((pred +agent-shell-sandbox-p)
        (if write
-           (and (+agent-shell-drive--under-p
+           (and (+agent-shell-sandbox--under-p
                  path (list (+agent-shell-sandbox-root policy)
                             (+agent-shell-sandbox-tmp policy)
                             (+agent-shell-sandbox-config policy)))
                 (not (equal path (concat (+agent-shell-sandbox-root policy)
                                          "/.git"))))
-         (not (+agent-shell-drive--under-p
-               path (+agent-shell-sandbox-deny-reads policy)))))
+         (+agent-shell-sandbox-readable-p policy path)))
       (_ nil))))
 
 (defun +agent-shell-drive--file-gate (write)

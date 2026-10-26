@@ -98,11 +98,34 @@ design.
   - the lead's checkout, except the shared dependency paths and the git
     directory the worktrees share;
   - `+agent-shell-pstack-panel-directory`;
-  - every other candidate's root.
+  - every other candidate's root;
+  - every sandbox's private temp and config folders, by two anchored
+    regexes: `/private/tmp/pa-` followed by 8 hex digits, and the true
+    name of `temporary-file-directory` followed by `/pa-config-`. Config
+    folders are always made there, and the folder is fixed on first use.
+    A later rule allows the candidate's own two folders back. The pattern
+    matters because each sandbox's folders are made when it is, so an
+    earlier candidate's profile cannot name a later one's. A config
+    folder holds copied credentials such as Codex's `auth.json`;
+  - the credential locations in `+agent-shell-sandbox-secret-reads`: SSH
+    and GnuPG keys, the AWS, Google Cloud, Azure and Kubernetes logins,
+    Docker's registry logins, `~/.netrc` and `~/.authinfo`, the GitHub
+    and 1Password CLI logins, `~/Library/Keychains`, and
+    `+private-config-directory`. A missing path is harmless. Private
+    config can extend the list, and a repository profile's `:read` can
+    reopen a path inside one.
 
-  This keeps the rubric in the lead's transcript and the other candidates'
-  work out of reach, so withholding the rubric is enforced, not just a
-  convention.
+  This keeps the rubric in the lead's transcript, the other candidates'
+  work and logins, and the user's credentials out of reach, so withholding
+  the rubric is enforced, not just a convention. The network stays open,
+  so what a candidate can read it can send out.
+
+  agent-shell serves the agents' ACP file reads in Emacs, outside the
+  profile. `+agent-shell-drive--file-allowed-p` applies the same rules
+  through `+agent-shell-sandbox-readable-p`, erring towards refusal on
+  patterns: a denying regex refuses every path starting with its literal
+  prefix, and an allowing regex opens nothing there, so only a path
+  allowance reopens a denied path.
 - **Allow metadata reads** of the lead's top level itself, which git stats
   when it resolves the main worktree. With the git directory readable, a
   candidate runs read-only git such as `git status` and `git diff`. The
@@ -446,7 +469,8 @@ another `$TMPDIR`. Candidates therefore get a short private temp folder,
 - **Candidates can read their own credentials.** The token or `auth.json`
   sits inside the sandbox, and the network is open, so a hostile candidate
   could send it out. That's the same exposure any agent session has today,
-  and v1 accepts it.
+  and v1 accepts it. No candidate can read another's copy, since every
+  profile denies every sandbox's config folder but its own.
 - **agent-shell writes into the root.** It created `.agent-shell/`
   (transcripts) inside each root. Candidates start with transcripts off,
   and capture excludes `.agent-shell/` either way.

@@ -79,8 +79,8 @@ so deleting the tree needs owner write permission back first."
       (should (<= (length tmp) 30))
       (should (file-directory-p tmp))
       (should (file-directory-p (+agent-shell-sandbox-config sandbox)))
-      (should (equal (list denied)
-                     (+agent-shell-sandbox-deny-reads sandbox))))))
+      (should (equal denied
+                     (car (+agent-shell-sandbox-deny-reads sandbox)))))))
 
 (ert-deftest +agent-shell-sandbox-test-profile ()
   "Allow writes only to the sandbox's folders and keep reads of others out.
@@ -112,7 +112,7 @@ Every refusal carries the sandbox's tag."
                         (funcall quote-path (concat root "/.git"))))
                profile))
       (should (string-match-p
-               (regexp-quote (format "(deny file-read* %s (subpath %s))" tag
+               (regexp-quote (format "(deny file-read* %s (subpath %s) " tag
                                      (funcall quote-path denied)))
                profile))
       (should (string-match-p
@@ -164,8 +164,10 @@ and reject a bad pattern a function returns."
                    "(regex #\"^/private/tmp/diff\\.\") (regex #\"^/private/tmp/w-\")"
                    profile))
           (should (string-search
-                   "(allow file-read* (subpath \"/private/tmp\") \
-(regex #\"^/private/var/r-\"))"
+                   (format "(allow file-read* (subpath %S) (subpath %S) \
+(subpath \"/private/tmp\") (regex #\"^/private/var/r-\"))"
+                           (+agent-shell-sandbox-tmp sandbox)
+                           (+agent-shell-sandbox-config sandbox))
                    profile))
           (should-error (+agent-shell-sandbox-create
                          root :allow-writes (list (lambda (_)
@@ -369,6 +371,109 @@ BODY sees `real' and `copy', the real and copied auth.json, and `env'."
                             (7 . 6)))
                        #'<))))
 
+;;;; Private folders and secrets
+
+(defvar +private-config-directory)
+
+(defvar +agent-shell-sandbox-test--secret nil
+  "A secret folder `+agent-shell-sandbox-secret-reads' names by variable.")
+
+(defmacro +agent-shell-sandbox-test--with-pair (&rest body)
+  "Run BODY with sandboxes `a' and `b' and a `secret' folder neither reads.
+Each private folder and the secret hold a file named key.  The secret is
+named through a variable, beside a path that does not exist, and `a' may
+read the folder `open' inside it."
+  (declare (indent 0))
+  `(let* ((scratch (file-truename (make-temp-file "pa-test-" t)))
+          (secret (expand-file-name "secret" scratch))
+          (open (expand-file-name "open" secret))
+          (+agent-shell-sandbox-test--secret secret)
+          (+agent-shell-sandbox-secret-reads
+           (list (expand-file-name "missing" scratch)
+                 '+agent-shell-sandbox-test--secret))
+          (a nil) (b nil))
+     (unwind-protect
+         (progn
+           (dolist (folder (list "a" "b" open))
+             (make-directory (expand-file-name folder scratch) t))
+           (setq a (+agent-shell-sandbox-create
+                    (expand-file-name "a" scratch) :allow-reads (list open))
+                 b (+agent-shell-sandbox-create
+                    (expand-file-name "b" scratch)))
+           (dolist (folder (list (+agent-shell-sandbox-tmp a)
+                                 (+agent-shell-sandbox-config a)
+                                 (+agent-shell-sandbox-tmp b)
+                                 (+agent-shell-sandbox-config b)
+                                 secret open))
+             (+agent-shell-sandbox-test--write
+              (expand-file-name "key" folder) folder))
+           ,@body)
+       (dolist (sandbox (delq nil (list a b)))
+         (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+         (delete-directory (+agent-shell-sandbox-config sandbox) t))
+       (delete-directory scratch t))))
+
+(defun +agent-shell-sandbox-test--private-reads (a b secret open)
+  "Return (SANDBOX PATH READABLE) cases for sandboxes A and B.
+SECRET is denied to both, and OPEN inside it is readable by A alone."
+  (let ((key (lambda (folder) (expand-file-name "key" folder))))
+    (list (list a (funcall key (+agent-shell-sandbox-tmp a)) t)
+          (list a (funcall key (+agent-shell-sandbox-config a)) t)
+          (list b (funcall key (+agent-shell-sandbox-tmp b)) t)
+          (list a (funcall key (+agent-shell-sandbox-tmp b)) nil)
+          (list a (funcall key (+agent-shell-sandbox-config b)) nil)
+          (list b (funcall key (+agent-shell-sandbox-tmp a)) nil)
+          (list b (funcall key (+agent-shell-sandbox-config a)) nil)
+          (list a (funcall key secret) nil)
+          (list b (funcall key secret) nil)
+          (list a (funcall key open) t)
+          (list b (funcall key open) nil))))
+
+(ert-deftest +agent-shell-sandbox-test-readable-p ()
+  "Refuse reads of other sandboxes' private folders and of secrets.
+A sandbox reads its own private folders, a path allowance inside a
+secret, and anything else not denied."
+  (+agent-shell-sandbox-test--with-pair
+    (pcase-dolist (`(,sandbox ,path ,readable)
+                   (+agent-shell-sandbox-test--private-reads a b secret open))
+      (should (eq readable (and (+agent-shell-sandbox-readable-p sandbox path)
+                                t))))
+    (should-not (+agent-shell-sandbox-readable-p a (+agent-shell-sandbox-tmp b)))
+    (should (+agent-shell-sandbox-readable-p
+             a (expand-file-name "README" (+agent-shell-sandbox-root b))))))
+
+(ert-deftest +agent-shell-sandbox-test-readable-p-patterns ()
+  "Refuse a path only a pattern allowance opens, erring towards refusal."
+  (let* ((secret (file-truename (make-temp-file "pa-test-" t)))
+         (+agent-shell-sandbox-secret-reads (list secret))
+         (sandbox (+agent-shell-sandbox-create
+                   secret :allow-reads
+                   (list (cons 'regexp
+                               (concat "^" (+agent-shell-sandbox-regexp-quote
+                                            secret)
+                                       "/public-"))))))
+    (unwind-protect
+        (should-not (+agent-shell-sandbox-readable-p
+                     sandbox (expand-file-name "public-notes" secret)))
+      (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+      (delete-directory (+agent-shell-sandbox-config sandbox) t)
+      (delete-directory secret t))))
+
+(ert-deftest +agent-shell-sandbox-test-default-secrets ()
+  "Deny SSH keys and the private Emacs config by default."
+  (let* ((root (file-truename (make-temp-file "pa-test-" t)))
+         (+private-config-directory root)
+         (sandbox (+agent-shell-sandbox-create root)))
+    (unwind-protect
+        (progn
+          (should-not (+agent-shell-sandbox-readable-p
+                       sandbox "~/.ssh/id_ed25519"))
+          (should-not (+agent-shell-sandbox-readable-p
+                       sandbox (expand-file-name "keys.el" root))))
+      (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+      (delete-directory (+agent-shell-sandbox-config sandbox) t)
+      (delete-directory root t))))
+
 ;;;; macOS processes
 
 (defun +agent-shell-sandbox-test--run (sandbox directory &rest command)
@@ -488,6 +593,25 @@ Keep JAVA_TOOL_OPTIONS the user already had."
         (should (eql 0 (call-process "/bin/cat" nil nil nil secret)))
         (should-not (eql 0 (funcall run "/bin/sh" "-c" "echo x > .git")))
         (should-not (file-exists-p (expand-file-name ".git" root)))))))
+
+(ert-deftest +agent-shell-sandbox-test-confines-private-reads ()
+  "Read only a sandbox's own private folders and no secret.
+A read allowance inside a secret opens just that path.  Each outcome
+matches `+agent-shell-sandbox-readable-p'."
+  (+agent-shell-sandbox-test--on-macos
+    (+agent-shell-sandbox-test--with-pair
+      (let ((cases (+agent-shell-sandbox-test--private-reads a b secret open)))
+        (pcase-dolist (`(,sandbox ,path ,readable) cases)
+          (should (equal (list path readable)
+                         (list path
+                               (eql 0 (+agent-shell-sandbox-test--run
+                                       sandbox
+                                       (+agent-shell-sandbox-root sandbox)
+                                       "/bin/cat" path))))))
+        (pcase-dolist (`(,sandbox ,path ,readable) cases)
+          (should (eq readable
+                      (and (+agent-shell-sandbox-readable-p sandbox path)
+                           t))))))))
 
 (ert-deftest +agent-shell-sandbox-test-confines-patterns ()
   "Write and read paths a pattern matches, and nothing that nearly does.

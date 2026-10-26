@@ -566,15 +566,20 @@ mode full")
       (let* ((+agent-shell-sandbox-agents '((codex :mode "full" :prepare ignore)))
              (secret (expand-file-name "secret/" directory))
              (outside (file-name-as-directory (make-temp-file "drive-outside-" t)))
+             (vault (file-truename (make-temp-file "drive-vault-" t)))
+             (+agent-shell-sandbox-secret-reads (list vault))
              (sandbox (progn (make-directory secret)
                              (+agent-shell-sandbox-create
                               directory :deny-reads (list secret))))
+             (other (+agent-shell-sandbox-create directory))
              (plain (+agent-shell-drive-start :config 'gemini :directory directory))
              (read-only (+agent-shell-drive-start :config 'codex :directory directory
                                                   :policy 'read-only))
              (confined (+agent-shell-drive-start :config 'codex :directory directory
                                                  :policy sandbox)))
-        (write-region "s" nil (expand-file-name "key" secret))
+        (dolist (folder (list secret vault (+agent-shell-sandbox-config sandbox)
+                              (+agent-shell-sandbox-config other)))
+          (write-region "s" nil (expand-file-name "key" folder)))
         (unwind-protect
             (cl-flet ((refused-p (shell method path)
                         (let (response)
@@ -601,6 +606,15 @@ mode full")
                 (should (refused-p confined "fs/write_text_file"
                                    (expand-file-name ".git" directory)))
                 (should (refused-p confined "fs/read_text_file" key))
+                (should (refused-p confined "fs/read_text_file"
+                                   (expand-file-name "key" vault)))
+                (should (refused-p confined "fs/read_text_file"
+                                   (expand-file-name
+                                    "key" (+agent-shell-sandbox-config other))))
+                (should-not (refused-p confined "fs/read_text_file"
+                                       (expand-file-name
+                                        "key" (+agent-shell-sandbox-config
+                                               sandbox))))
                 (should-not (refused-p plain "fs/write_text_file" escape))
                 (should-not (refused-p plain "fs/read_text_file" key))
                 (should (file-exists-p inside))
@@ -612,8 +626,10 @@ mode full")
               (kill-buffer buffer)))
           (kill-buffer plain)
           (delete-directory outside t)
-          (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-          (delete-directory (+agent-shell-sandbox-config sandbox) t))))))
+          (delete-directory vault t)
+          (dolist (each (list sandbox other))
+            (delete-directory (+agent-shell-sandbox-tmp each) t)
+            (delete-directory (+agent-shell-sandbox-config each) t)))))))
 
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here
