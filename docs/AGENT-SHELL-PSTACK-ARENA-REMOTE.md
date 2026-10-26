@@ -175,18 +175,62 @@ Credentials live on the host, so nothing is sent per job. Candidates never
 get a refresh token, so there is nothing to rotate and nothing to copy
 back:
 
-- **Claude Code** candidates get a long-lived `CLAUDE_CODE_OAUTH_TOKEN`
-  from `claude setup-token`, run once on the host and kept in a file only
-  the runner reads, as on the laptop.
-- **Codex** candidates get only the current access token, passed with
-  `codex login --with-access-token` into their private `CODEX_HOME`. It
-  expires, so the runner checks its lifetime covers the arena's deadline
-  before starting, and refreshes the host's own login first if it does
-  not. This needs testing.
+- **Claude Code** candidates get the host login's access token as
+  `CLAUDE_CODE_OAUTH_TOKEN` and a private `CLAUDE_CONFIG_DIR`.
+- **Codex** candidates get a private `CODEX_HOME` whose `auth.json` holds
+  the host login's access and ID tokens and an empty refresh token.
+
+As built, both agents' candidates sign in with the access token of the
+host's own login, and that token expires, so the host refreshes its own
+logins and candidates never get a refresh token. Before any candidate or
+judge starts, a runner on a Linux host checks each agent the arena uses:
+
+1. It reads when the host login's access token expires: Claude Code's
+   `claudeAiOauth.expiresAt` in `~/.claude/.credentials.json`, and the
+   `exp` claim of the access token JWT in Codex's `auth.json`. Each agent's
+   reader, refresh command and advice live in its entry in
+   `+agent-shell-sandbox-agents`.
+2. The token must outlast the runner's deadline plus
+   `+agent-shell-arena-remote-login-margin`, 10 minutes by default. If it
+   does not, the runner refreshes the login on the host, outside any
+   sandbox, by running the agent's own CLI once from a scratch folder with
+   no project: `claude -p "Reply with the single word OK."` or `codex exec
+   --skip-git-repo-check` with the same prompt. The run is asynchronous and
+   is stopped after `+agent-shell-arena-remote-refresh-timeout`, 180 s by
+   default. Then the runner reads the login again.
+3. A refresh rotates the refresh token, so two at once are unsafe. A
+   runner refreshes only while it holds `locks/login-AGENT`, a lock for
+   the whole host with the same stale-owner rule as the repository lock,
+   and reads the login again once it holds it. A runner that finds the
+   lock held waits, then reads the login again rather than refreshing it
+   too. A runner does not exit while its refresh still runs.
+4. If the token still falls short, the runner settles that agent's
+   members as errors before provisioning, so they get no worktree. The
+   reason names the expiry, the deadline and why the refresh did not help,
+   and tells the user to log the agent in again on the host. For Codex it
+   says a refresh could not be triggered. The reason reaches the status,
+   the laptop's panel and the follow-up like any member error.
+5. The status's `logins` field records each agent, whether the runner
+   refreshed it, and the seconds its token had left, with no token values.
+   The laptop's host line shows them, as in `logins: claude-code
+   refreshed, 8.0 h left`.
+
+A macOS host, like the laptop, signs Claude Code in with a `claude
+setup-token` token and skips the check.
 
 The copy-back rule is dropped for remote candidates. It could not survive
 two candidates refreshing at once, and it promoted candidate-written data
 into the host's real login.
+
+**Measured on `example-ws`, 2026-10-27.** With `expiresAt` set a minute
+in the past, a fixture remote arena with one Claude Code candidate and a
+Claude Code judge started under the shipped runner. Its status recorded
+`claude-code` as refreshed with 28,795 s left. The host's access token
+then had 7.99 hours left and its refresh token's hash had changed, and
+the candidate and judge both finished. Codex's token lasted about 222
+hours, and `codex exec` did not refresh it when only `last_refresh` was
+old. Whether it refreshes a token near its `exp` is untested, which is
+why its refusal says a refresh could not be triggered.
 
 ### Setting up the host and versions
 
@@ -694,9 +738,9 @@ Codex candidate on `example-ws`, hit five faults.
    Docker. The trace command, ported to Linux, answers this.
 4. **Bazel on the host.** How cold a candidate's first build is, and
    whether candidates can share a repository cache.
-5. **Refreshing the host's Claude Code login** without a person: whether a
-   plain `claude -p` on the host refreshes a token near expiry, or a
-   one-year `claude setup-token` should be made once.
+5. **Settled: refreshing the host's Claude Code login** without a person.
+   A plain `claude -p` refreshes an expired token; see Credentials. Whether
+   `codex exec` refreshes a Codex token near its expiry is still open.
 6. **Cleaning host worktrees after the fetch.** A monorepo worktree is 11 GB,
    and nothing on the host needs it once the laptop holds the results.
 7. **The SSH and systemd paths on a real host.** The tests cover the
@@ -715,7 +759,11 @@ Implemented so far:
   transitions, prerequisite negotiation and bundling against scratch
   clones, LFS refusal, one call per host, timeouts, backoff and
   unreachability with a stubbed process layer, the SSH command's quoting,
-  the runner's lock, and re-attaching from records on disk.
+  the runner's lock, and re-attaching from records on disk. Fake `claude`
+  and `codex` executables cover the host login check: a lasting login is
+  not refreshed, an expired one is refreshed once, a failed or ineffective
+  refresh refuses with its reason, two runners refresh once between them,
+  and a refusal reaches the status and the host line.
 - **`test/agent-shell-arena-git-test.el`**: a base made in another clone,
   given the lead's sparse patterns, and cleaning a fetched role.
 - **`test/agent-shell-pstack-arena-remote-acp-test.el`**, the gate
