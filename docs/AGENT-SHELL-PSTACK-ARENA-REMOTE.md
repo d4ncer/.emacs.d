@@ -309,10 +309,55 @@ and `coder schedule extend example-ws 6h` moved the stop time from 01:46
 to 04:16, six hours from the command. The laptop extends the workspace at
 submission to cover the arena's deadline, so the host needs no Coder token.
 
+## The Linux backend as built, 2026-10-26
+
+**Host setup.** `~/.sync/pstack-arena/tasks.yml`, imported by the startup
+playbook, installs slirp4netns 1.0.1-2 from apt, `emacs-nox` 31.1 from
+nixpkgs `d3b13ad75cc4` as a GC-rooted link at
+`~/.local/share/pstack-arena/emacs`, and the adapters with `npm ci` into
+`~/.local/share/pstack-arena/adapters`. It removes `ready.json` first and
+`ready.sh` writes it back once every tool runs. With everything installed
+`/opt/host/sync.sh startup` takes about 7.2 s, of which 2.1 s is
+`codex-acp --help`.
+
+**Adapters.** `@zed-industries/codex-acp` stopped at 0.16.0. That build
+defaults to `gpt-5.5`, which a ChatGPT login rejects, and newer models
+need a newer Codex. The package is now `@agentclientprotocol/codex-acp`,
+pinned at 2.2.2, the laptop's version, with its full-access mode still
+called `agent-full-access`. `claude-agent-acp` is pinned at 0.95.0 and
+brings its own native Claude Code binary.
+
+**Launching.** On GNU/Linux `+agent-shell-sandbox-backend` is `bwrap`. The
+client runs `/bin/bash lisp/+agent-shell-sandbox-launch.sh NAMES
+BWRAP-ARGUMENTS`. The launcher starts `unshare --user --map-root-user
+--net`, waits until that process has its own network namespace, attaches
+slirp4netns and waits for its ready pipe, and only then lets the process
+become bwrap. bwrap gets `--clearenv` and the named variables through
+`--args` on a pipe, so no token is in a command line. slirp4netns exits
+when the launcher's end of its exit pipe closes. On SIGTERM the launcher
+kills the namespace's first process, named by bwrap's info pipe, and exits
+once bwrap has, which is once every process in the namespace has.
+`+agent-shell-drive-stop` sends that signal and waits.
+
+`+agent-shell-sandbox-linux-mounts` is the one list of what an agent sees.
+It renders bwrap's arguments and decides the ACP read gate, which allows a
+path only when its deepest mount binds it in place. Mounts are ordered by
+depth, so `ROOT/.git` stays read-only inside a writable root. The agent's
+uid and gid are the user's real ones, 1001 and 30003 here. The Nix
+daemon's socket folder is covered by an empty tmpfs, since a socket on a
+read-only mount still accepts connections. The adapter's npm
+`node_modules` is bound read-only so the adapter can run.
+
+**Smoke run.** Each real adapter started in this sandbox through
+`+agent-shell-drive-start`, wrote a file in its root, found `~/.ssh`
+absent, answered, and stopped with no survivors: Claude Code in 11.3 s
+and Codex in 12.4 s. The host's login files kept their modification
+times.
+
 ## Open questions to settle by testing
 
-1. **The ACP adapters** inside the same sandbox, once installed. The
-   agents' CLIs work there, so this is expected to hold.
+1. **Settled: the ACP adapters** run inside the same sandbox; see the
+   smoke run above.
 2. **What the monorepo's build needs from the host.** Bazel, its private home
    cache and toolchain paths, and whether it needs the Nix daemon socket or
    Docker. The trace command, ported to Linux, answers this.
