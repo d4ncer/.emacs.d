@@ -76,8 +76,10 @@ design.
   files.
 - **Deny writes** everywhere except:
   - ROOT;
-  - the candidate's private temp folder, `/tmp/pa-<8 hex>`, set as both
-    `TMPDIR` and `CLAUDE_CODE_TMPDIR`;
+  - the candidate's private temp folder, `/tmp/pa-<8 hex>`, set as
+    `TMPDIR`, `CLAUDE_CODE_TMPDIR` and `GOTMPDIR`, and appended to
+    `JAVA_TOOL_OPTIONS` as `-Djava.io.tmpdir`, because the JVM ignores
+    `TMPDIR` on macOS;
   - the candidate's private agent config directory, set through
     `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, so it cannot plant hooks or
     settings in the user's real config;

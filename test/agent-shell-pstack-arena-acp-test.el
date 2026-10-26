@@ -87,9 +87,8 @@
                 (+agent-shell-pstack-arena-acp-test--config 'fixture-claude)))
          (+agent-shell-drive-read-only-modes
           '((fixture-codex . "read-only") (fixture-claude . "plan")))
-         (prepare (lambda (sandbox)
-                    (list (concat "TMPDIR=" (+agent-shell-sandbox-tmp sandbox))
-                          (concat "PA_LEAD=" (expand-file-name "README"
+         (prepare (lambda (_)
+                    (list (concat "PA_LEAD=" (expand-file-name "README"
                                                                repo)))))
          (+agent-shell-sandbox-agents
           `((fixture-codex :mode "agent-full-access" :prepare ,prepare)

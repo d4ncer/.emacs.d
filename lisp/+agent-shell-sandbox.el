@@ -148,12 +148,23 @@ read even inside DENY-READS, such as a folder git must stat."
   "Return AGENT's full-access session mode."
   (plist-get (+agent-shell-sandbox-entry agent) :mode))
 
-(defun +agent-shell-sandbox-environment (_sandbox)
+(defun +agent-shell-sandbox-environment (sandbox)
   "Return the environment every process confined to SANDBOX gets.
+TMPDIR points most tools at the private temp folder.  GOTMPDIR does the
+same for the Go toolchain's work folders, which it would put in /tmp.
+JAVA_TOOL_OPTIONS gains -Djava.io.tmpdir, since the JVM ignores TMPDIR on
+macOS and extracts native libraries into the default temp folder.
 GIT_OPTIONAL_LOCKS=0 keeps read-only commands such as git status from
 refreshing the index, which lives in a git directory the agent cannot
 write."
-  (list "GIT_OPTIONAL_LOCKS=0"))
+  (let ((tmp (+agent-shell-sandbox-tmp sandbox))
+        (java (getenv "JAVA_TOOL_OPTIONS")))
+    (list (concat "TMPDIR=" tmp)
+          (concat "GOTMPDIR=" tmp)
+          (concat "JAVA_TOOL_OPTIONS="
+                  (and java (not (string-empty-p java)) (concat java " "))
+                  "-Djava.io.tmpdir=" tmp)
+          "GIT_OPTIONAL_LOCKS=0")))
 
 (defun +agent-shell-sandbox-client-maker (sandbox agent client-maker)
   "Prepare SANDBOX for AGENT and return CLIENT-MAKER confined to it.
@@ -200,8 +211,7 @@ with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
                    +agent-shell-sandbox-claude-token-service))
           "ANTHROPIC_API_KEY="
           (concat "CLAUDE_CONFIG_DIR=" (+agent-shell-sandbox-config sandbox))
-          (concat "CLAUDE_CODE_TMPDIR=" tmp)
-          (concat "TMPDIR=" tmp))))
+          (concat "CLAUDE_CODE_TMPDIR=" tmp))))
 
 (defun +agent-shell-sandbox--hash (file)
   "Return FILE's SHA-256, or nil when it is missing."
@@ -232,8 +242,7 @@ with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
           (list :real real :copy copy
                 :real-hash (+agent-shell-sandbox--hash real)
                 :copied (+agent-shell-sandbox--mtime copy)))
-    (list (concat "CODEX_HOME=" config)
-          (concat "TMPDIR=" (+agent-shell-sandbox-tmp sandbox)))))
+    (list (concat "CODEX_HOME=" config))))
 
 (defun +agent-shell-sandbox-finish-codex (sandbox)
   "Copy SANDBOX's Codex login back if the agent refreshed it.

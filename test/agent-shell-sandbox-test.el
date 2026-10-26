@@ -104,7 +104,9 @@ second when given."
       (should (equal "/usr/bin/sandbox-exec" (alist-get :command client)))
       (should (equal (list "-f" profile (executable-find "sh") "-c" "true")
                      (alist-get :command-params client)))
-      (should (equal '("PA_ENV=sandbox" "GIT_OPTIONAL_LOCKS=0" "PA_ENV=client")
+      (should (equal (append '("PA_ENV=sandbox")
+                             (+agent-shell-sandbox-environment sandbox)
+                             '("PA_ENV=client"))
                      (alist-get :environment-variables client)))
       (should (eq 'buffer (alist-get :context-buffer client)))
       (should (equal (+agent-shell-sandbox-profile sandbox)
@@ -143,8 +145,7 @@ the arguments it was called with."
                              "ANTHROPIC_API_KEY="
                              (concat "CLAUDE_CONFIG_DIR="
                                      (+agent-shell-sandbox-config sandbox))
-                             (concat "CLAUDE_CODE_TMPDIR=" tmp)
-                             (concat "TMPDIR=" tmp))
+                             (concat "CLAUDE_CODE_TMPDIR=" tmp))
                        (+agent-shell-sandbox-prepare-claude sandbox)))
         (should (equal '("find-generic-password" "-s" "pa-test-service" "-w")
                        (funcall arguments))))
@@ -179,8 +180,7 @@ BODY sees `real' and `copy', the real and copied auth.json, and `env'."
   "Give Codex private copies of its login and config."
   (+agent-shell-sandbox-test--with-codex
     (should (equal (list (concat "CODEX_HOME="
-                                 (+agent-shell-sandbox-config sandbox))
-                         (concat "TMPDIR=" (+agent-shell-sandbox-tmp sandbox)))
+                                 (+agent-shell-sandbox-config sandbox)))
                    env))
     (should (equal "login-1" (+agent-shell-sandbox-test--read copy)))
     (should (= #o600 (file-modes copy)))
@@ -244,6 +244,56 @@ BODY sees `real' and `copy', the real and copied auth.json, and `env'."
      (skip-unless (and (eq system-type 'darwin)
                        (file-executable-p "/usr/bin/sandbox-exec")))
      ,@body))
+
+(defun +agent-shell-sandbox-test--output (sandbox &rest command)
+  "Run COMMAND under SANDBOX with its environment; return its output."
+  (let ((process-environment (append (+agent-shell-sandbox-environment
+                                      sandbox)
+                                     process-environment)))
+    (with-temp-buffer
+      (let ((profile (make-temp-file "pa-profile-" nil ".sb"
+                                     (+agent-shell-sandbox-profile sandbox)))
+            (default-directory (file-name-as-directory
+                                (+agent-shell-sandbox-root sandbox))))
+        (unwind-protect
+            (apply #'call-process "/usr/bin/sandbox-exec" nil t nil
+                   "-f" profile command)
+          (delete-file profile)))
+      (buffer-string))))
+
+(ert-deftest +agent-shell-sandbox-test-temp-environment ()
+  "Point the generic, Go and Java temp folders at the private one.
+Keep JAVA_TOOL_OPTIONS the user already had."
+  (+agent-shell-sandbox-test--with (root)
+    (let ((tmp (+agent-shell-sandbox-tmp sandbox)))
+      (let ((process-environment (cons "JAVA_TOOL_OPTIONS=-Xss2m"
+                                       process-environment)))
+        (should (equal (list (concat "TMPDIR=" tmp) (concat "GOTMPDIR=" tmp)
+                             (concat "JAVA_TOOL_OPTIONS=-Xss2m -Djava.io.tmpdir="
+                                     tmp)
+                             "GIT_OPTIONAL_LOCKS=0")
+                       (+agent-shell-sandbox-environment sandbox))))
+      (let ((process-environment (cons "JAVA_TOOL_OPTIONS"
+                                       process-environment)))
+        (should (member (concat "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=" tmp)
+                        (+agent-shell-sandbox-environment sandbox)))))))
+
+(ert-deftest +agent-shell-sandbox-test-toolchain-temp ()
+  "Run Java and Go inside the sandbox with their temp folders private."
+  (+agent-shell-sandbox-test--on-macos
+    (skip-unless (and (executable-find "java") (executable-find "go")
+                      (eql 0 (call-process "/usr/libexec/java_home" nil nil
+                                           nil))))
+    (+agent-shell-sandbox-test--with (root)
+      (let ((tmp (+agent-shell-sandbox-tmp sandbox)))
+        (should (string-search
+                 (concat "java.io.tmpdir = " tmp "\n")
+                 (+agent-shell-sandbox-test--output
+                  sandbox (executable-find "java")
+                  "-XshowSettings:properties" "-version")))
+        (should (equal (concat tmp "\n")
+                       (+agent-shell-sandbox-test--output
+                        sandbox (executable-find "go") "env" "GOTMPDIR")))))))
 
 (ert-deftest +agent-shell-sandbox-test-confines-files ()
   "Write inside the root and private folders, but nowhere else."

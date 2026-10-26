@@ -59,10 +59,7 @@ working inside it."
          (+agent-shell-sandbox-agents
           `((fixture-codex
              :mode "agent-full-access"
-             :prepare ,(lambda (sandbox)
-                         (list "PA_ENV=sandbox"
-                               (concat "TMPDIR="
-                                       (+agent-shell-sandbox-tmp sandbox))))
+             :prepare ,(lambda (_) (list "PA_ENV=sandbox"))
              :finish ,(lambda (_) (setq finished t)))))
          (agent-shell-agent-configs
           (list (+agent-shell-sandbox-acp-test--config)))
