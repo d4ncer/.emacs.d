@@ -1212,7 +1212,9 @@ a timer of its own."
                  (format "You are the judge of a pstack arena that \
 Emacs runs for another agent.  You are read-only: Emacs refuses edits and \
 commands that change state.  Each candidate below worked on the same task \
-from the same base commit, alone in a sandbox.
+from the same base commit, alone in a sandbox.  A checkout holds the files \
+its candidate changed, or every file when it changed more than 1000.  Read \
+any other file at the base with git show base:PATH.
 
 Task:
 Add a cache.

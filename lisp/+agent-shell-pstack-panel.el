@@ -521,7 +521,14 @@ Task:\n%s\n"
      "You are the judge of a pstack arena that Emacs runs for another \
 agent.  You are read-only: Emacs refuses edits and commands that change \
 state.  Each candidate below worked on the same task from the same base \
-commit, alone in a sandbox.\n\nTask:\n"
+commit, alone in a sandbox.  "
+     (format "A checkout holds the files its candidate changed, or every \
+file when it changed more than %d.  Read any other file at the base with \
+git show %s:PATH."
+             +agent-shell-arena-git-checkout-limit
+             (+agent-shell-arena-git-manifest-base
+              (+agent-shell-pstack-panel-arena panel)))
+     "\n\nTask:\n"
      (+agent-shell-pstack-panel-brief panel)
      "\n\nRubric:\n"
      (mapconcat #'identity

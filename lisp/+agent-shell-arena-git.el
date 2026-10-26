@@ -969,29 +969,72 @@ sparse.  Call FAIL with a message on failure."
                                       (split-string changed "\0" t)))))
         nil changed)))))
 
+(defvar +agent-shell-arena-git-checkout-limit 1000
+  "Most changed paths a judge checkout holds alone.
+A result changing more gets every file, since sparse patterns cost time
+in proportion to their number times the repository's files.")
+
+(defun +agent-shell-arena-git--exact-pattern (path)
+  "Return a non-cone sparse-checkout pattern matching only PATH."
+  (concat "/" (replace-regexp-in-string "[][*?\\ ]" "\\\\\\&" path)))
+
 (defun +agent-shell-arena-git-checkout (manifest name callback)
   "Check captured role NAME of MANIFEST out in a worktree of its own.
 The worktree is detached at the role's result commit, under the arena's
 checkouts/ folder, and recorded in the manifest so cleanup removes it.
-Call CALLBACK with its path and nil, or nil and a message."
+It holds only the files the result changed from the base, unless there
+are more than `+agent-shell-arena-git-checkout-limit'; the judge reads
+the rest at the base.  A full second checkout of a large repository
+writes every file again.  Call CALLBACK with its path and nil, or nil
+and a message."
   (when-let* ((role (+agent-shell-arena-git--captured manifest name callback)))
-    (let ((checkout (file-name-as-directory
-                     (expand-file-name
-                      name (expand-file-name
-                            "checkouts"
-                            (+agent-shell-arena-git-manifest-directory
-                             manifest))))))
+    (let* ((checkout (file-name-as-directory
+                      (expand-file-name
+                       name (expand-file-name
+                             "checkouts"
+                             (+agent-shell-arena-git-manifest-directory
+                              manifest)))))
+           (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+           (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+           (commit (+agent-shell-arena-git-role-commit role))
+           (fail (lambda (message) (funcall callback nil message)))
+           (done (lambda (_) (funcall callback checkout nil))))
       (make-directory (file-name-directory (directory-file-name checkout)) t)
       ;; Recorded first, so cleanup finds a checkout that failed halfway.
       (setf (+agent-shell-arena-git-role-checkout role) checkout)
       (+agent-shell-arena-git-write-manifest manifest)
       (+agent-shell-arena-git--git
-       (+agent-shell-arena-git-manifest-git-dir manifest)
-       (+agent-shell-arena-git-manifest-toplevel manifest)
-       (list "worktree" "add" "--detach" (directory-file-name checkout)
-             (+agent-shell-arena-git-role-commit role))
-       (lambda (message) (funcall callback nil message))
-       (lambda (_) (funcall callback checkout nil))))))
+       git-dir toplevel
+       (list "diff" "--name-only" "-z" "--no-renames"
+             (+agent-shell-arena-git-manifest-base manifest) commit)
+       fail
+       (lambda (output)
+         (let ((paths (split-string output "\0" t)))
+           (if (> (length paths) +agent-shell-arena-git-checkout-limit)
+               (+agent-shell-arena-git--git
+                git-dir toplevel
+                (list "worktree" "add" "--detach"
+                      (directory-file-name checkout) commit)
+                fail done)
+             (+agent-shell-arena-git--git
+              git-dir toplevel
+              (list "worktree" "add" "--detach" "--no-checkout"
+                    (directory-file-name checkout) commit)
+              fail
+              (lambda (_)
+                (let ((own (expand-file-name ".git" checkout)))
+                  (+agent-shell-arena-git--git
+                   own checkout '("sparse-checkout" "set" "--no-cone" "--stdin")
+                   fail
+                   (lambda (_)
+                     (+agent-shell-arena-git--git
+                      own checkout '("reset" "-q" "--hard") fail done))
+                   nil
+                   (mapconcat (lambda (path)
+                                (concat (+agent-shell-arena-git--exact-pattern
+                                         path)
+                                        "\n"))
+                              paths ""))))))))))))
 
 ;;;; Cleanup
 
