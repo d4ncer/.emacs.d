@@ -49,6 +49,11 @@ matches applies.  PROFILE is a plist with any of these keys:
           and returns the text written to PATH.  Left out of the result.
 :write    Extra paths the candidate may write.
 :read     Extra paths inside a read-denied folder the candidate may read.
+:connect  Unix socket paths the candidate may connect to, such as a
+          build tool's tunnel to its remote cache at
+          /private/tmp/NAME-tunnel.sock.  Every other unix socket but
+          mDNSResponder's is refused, and none may be in the Emacs
+          server's socket folder, `server-socket-dir'.
 :env      Extra NAME=VALUE environment entries, or a function of the
           sandbox returning them.  They win over the sandbox defaults.
 
@@ -65,7 +70,11 @@ RE is a sandbox-exec regex.  It must start with ^ and the literal true
 name of a folder below the root, with no alternative outside
 parentheses, so it can never match / or the whole filesystem.
 `+agent-shell-sandbox-regexp-quote' quotes a path computed in a
-function, such as the per-user temp folder."
+function, such as the per-user temp folder.
+
+Each element of :connect is an absolute socket path or a function of
+the sandbox returning one or a list of them.  The socket need not exist
+yet, and its true name is what the profile allows."
   :type '(alist :key-type (choice directory function)
                 :value-type (plist :key-type symbol :value-type sexp)))
 
@@ -490,14 +499,21 @@ Signal `user-error' naming the key of any malformed value."
                                  value))
                      (funcall fail key "an alist of paths inside the top \
 level to functions" value)))
-                  ((or :write :read)
+                  ((or :write :read :connect)
                    (unless (proper-list-p value)
-                     (funcall fail key "a list of absolute paths, (regexp \
-. RE) patterns or functions" value))
+                     (funcall fail key (if (eq key :connect)
+                                           "a list of socket paths or \
+functions"
+                                         "a list of absolute paths, (regexp \
+. RE) patterns or functions")
+                              value))
                    (dolist (element value)
                      (unless (functionp element)
                        (when-let* ((expected
-                                    (+agent-shell-sandbox-allowance-error
+                                    (funcall
+                                     (if (eq key :connect)
+                                         #'+agent-shell-sandbox-socket-error
+                                       #'+agent-shell-sandbox-allowance-error)
                                      element)))
                          (funcall fail (format "each element of %s" key)
                                   expected element)))))

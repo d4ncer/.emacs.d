@@ -93,6 +93,7 @@ environment, with the generated files left out of the result."
               `((,repo
                  :read (,(expand-file-name "tools" repo))
                  :write (,(lambda (_) cache))
+                 :connect ("/tmp/pa-build-tunnel.sock")
                  :env ,(lambda (sandbox)
                          (list "GOTMPDIR=/profile"
                                (concat "PA_PROFILE="
@@ -111,6 +112,8 @@ environment, with the generated files left out of the result."
                            (apply #'+arena-sandbox-test--run sandbox worktree
                                   command)))
                     (tmp (+agent-shell-sandbox-tmp sandbox)))
+                (should (equal '("/private/tmp/pa-build-tunnel.sock")
+                               (+agent-shell-sandbox-allow-connects sandbox)))
                 (should (equal (concat "cache=" tmp "\n")
                                (+arena-git-test--read
                                 (expand-file-name "conf/tool.cfg" worktree))))

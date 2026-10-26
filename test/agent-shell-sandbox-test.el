@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-sandbox)
+(require 'server)
 
 (defmacro +agent-shell-sandbox-test--with (bindings &rest body)
   "Run BODY with each of BINDINGS bound to a fresh temporary folder.
@@ -609,6 +610,82 @@ socket.socket(socket.AF_UNIX).connect(sys.argv[1])" socket)))
                                         sandbox root connect))))
           (delete-process server)
           (delete-file socket))))))
+
+(ert-deftest +agent-shell-sandbox-test-socket-validation ()
+  "Accept absolute socket paths and refuse the Emacs server's folder,
+however the path reaches it."
+  (let* ((folder (file-truename (make-temp-file "pa-test-" t)))
+         (link (expand-file-name "server-link" folder)))
+    (unwind-protect
+        (progn
+          (make-symbolic-link server-socket-dir link)
+          (should-not (+agent-shell-sandbox-socket-error
+                       "/private/tmp/build-tunnel.sock"))
+          (dolist (value (list "tunnel.sock" 42 server-socket-dir
+                               (expand-file-name "server" server-socket-dir)
+                               (concat server-socket-dir "/")
+                               (expand-file-name "server" link)))
+            (should (stringp (+agent-shell-sandbox-socket-error value))))
+          (should-error (+agent-shell-sandbox-create
+                         folder :allow-connects
+                         (list (lambda (_)
+                                 (expand-file-name "server"
+                                                   server-socket-dir))))
+                        :type 'user-error))
+      (delete-directory folder t))))
+
+(ert-deftest +agent-shell-sandbox-test-allows-listed-sockets ()
+  "Connect to a listed unix socket and to no other."
+  (+agent-shell-sandbox-test--on-macos
+    (skip-unless (executable-find "python3"))
+    (let* ((name (format "/tmp/pa-sock-%08x" (random #x100000000)))
+           (allowed (concat name "-tunnel.sock"))
+           (other (concat name "-other.sock"))
+           (default-directory "/")
+           (listener
+            (make-process
+             :name "pa-test-listener" :noquery t :connection-type 'pipe
+             :buffer (generate-new-buffer " *pa-listener*")
+             :command (list "python3" "-c" "import os, selectors, socket, sys
+selector = selectors.DefaultSelector()
+for path in sys.argv[1:]:
+    server = socket.socket(socket.AF_UNIX)
+    server.bind(path)
+    server.listen()
+    selector.register(server, selectors.EVENT_READ)
+print('ready', flush=True)
+while True:
+    for key, _ in selector.select():
+        key.fileobj.accept()[0].close()" allowed other)))
+           (root (file-truename (make-temp-file "pa-test-" t)))
+           (sandbox (+agent-shell-sandbox-create
+                     root :allow-connects (list (lambda (_) allowed))))
+           (connect (lambda (socket)
+                      (list "python3" "-c" "import socket, sys
+socket.socket(socket.AF_UNIX).connect(sys.argv[1])" socket))))
+      (unwind-protect
+          (progn
+            (+agent-shell-sandbox-test-wait
+             (lambda () (string-search "ready" (with-current-buffer
+                                                   (process-buffer listener)
+                                                 (buffer-string)))))
+            (should (equal (list (file-truename allowed))
+                           (+agent-shell-sandbox-allow-connects sandbox)))
+            (dolist (socket (list allowed other))
+              (should (eql 0 (apply #'call-process
+                                    (car (funcall connect socket)) nil nil nil
+                                    (cdr (funcall connect socket))))))
+            (should (eql 0 (apply #'+agent-shell-sandbox-test--run
+                                  sandbox root (funcall connect allowed))))
+            (should-not (eql 0 (apply #'+agent-shell-sandbox-test--run
+                                      sandbox root (funcall connect other)))))
+        (delete-process listener)
+        (kill-buffer (process-buffer listener))
+        (dolist (socket (list allowed other))
+          (when (file-exists-p socket) (delete-file socket)))
+        (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+        (delete-directory (+agent-shell-sandbox-config sandbox) t)
+        (delete-directory root t)))))
 
 (defun +agent-shell-sandbox-test--gone-p (process)
   "Wait up to 5 seconds for PROCESS to exit; return whether it did."

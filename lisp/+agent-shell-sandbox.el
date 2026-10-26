@@ -23,6 +23,8 @@
 (require 'seq)
 (require 'subr-x)
 
+(defvar server-socket-dir)
+
 (defgroup +agent-shell-sandbox nil
   "Confine agent shells with sandbox-exec."
   :group 'agent-shell)
@@ -73,6 +75,8 @@ agent may read.")
 write.")
   (env nil :read-only t
        :documentation "Environment entries ahead of the defaults.")
+  (allow-connects nil :read-only t
+                  :documentation "Unix sockets it may connect to.")
   (trace nil :read-only t
          :documentation "Tag of a trace-mode profile's reports, or nil."))
 
@@ -203,6 +207,21 @@ whole filesystem, and sandbox-exec compiles it."
             (format "a regex sandbox-exec compiles (%s)"
                     (string-trim (buffer-string))))))))))
 
+(defun +agent-shell-sandbox-socket-error (value)
+  "Return nil when VALUE is a socket allowance, else what it must be.
+A socket allowance is an absolute path outside the Emacs server's socket
+folder, compared by true name, so no agent can drive this Emacs."
+  (require 'server)
+  (let ((server (and server-socket-dir
+                     (file-name-as-directory
+                      (+agent-shell-sandbox--path server-socket-dir)))))
+    (cond ((not (and (stringp value) (file-name-absolute-p value)))
+           "an absolute socket path")
+          ((and server
+                (string-prefix-p server (file-name-as-directory
+                                         (+agent-shell-sandbox--path value))))
+           (format "a socket outside the Emacs server's folder %s" server)))))
+
 (defun +agent-shell-sandbox-allowance-error (value)
   "Return nil when VALUE is a read or write allowance, else what it must be.
 An allowance is an absolute path or a (regexp . RE) pattern; see
@@ -214,7 +233,8 @@ An allowance is an absolute path or a (regexp . RE) pattern; see
 
 (cl-defun +agent-shell-sandbox-create (root &key config deny-reads
                                              allow-reads allow-metadata
-                                             allow-writes env trace)
+                                             allow-writes allow-connects env
+                                             trace)
   "Return a sandbox writing to ROOT, creating its private folders.
 CONFIG is the private agent config folder, a new temporary one by default.
 DENY-READS lists folders the agent may not read, and ALLOW-READS folders
@@ -232,9 +252,14 @@ true names, such as ^/private/tmp/diff\\.; it must start with ^ and a
 literal folder below the root.  `+agent-shell-sandbox-regexp-quote'
 quotes a path for one.
 
-Each element of ALLOW-READS, ALLOW-WRITES and ENV may instead be a
-function called with the new sandbox, whose root and private folders
-exist, returning one path, pattern or entry or a list of them.
+ALLOW-CONNECTS lists unix socket paths the agent may connect to, such as
+a build tool's tunnel to its remote cache.  Every other unix socket is
+refused but mDNSResponder's.  None may be the Emacs server's socket
+folder, `server-socket-dir', or under it.
+
+Each element of ALLOW-READS, ALLOW-WRITES, ALLOW-CONNECTS and ENV may
+instead be a function called with the new sandbox, whose root and private
+folders exist, returning one path, pattern or entry or a list of them.
 
 With TRACE non-nil, the profile reports what it would refuse rather than
 refusing it; see `+agent-shell-sandbox-profile'."
@@ -269,6 +294,11 @@ refusing it; see `+agent-shell-sandbox-profile'."
                  :allow-reads (funcall allowances allow-reads "read allowance")
                  :allow-writes (funcall allowances allow-writes
                                         "write allowance")
+                 :allow-connects (mapcar #'+agent-shell-sandbox--path
+                                         (+agent-shell-sandbox--resolve
+                                          provisional allow-connects
+                                          #'+agent-shell-sandbox-socket-error
+                                          "socket allowance"))
                  :env (+agent-shell-sandbox--resolve
                        provisional env
                        (lambda (entry)
@@ -403,8 +433,13 @@ report tagged with SANDBOX's trace tag instead."
                                     (+agent-shell-sandbox--string path)))
                           stat "")))
      (funcall refuse "network-outbound" " (remote unix-socket)")
-     "(allow network-outbound (remote unix-socket (path-literal "
-     "\"/private/var/run/mDNSResponder\")))\n")))
+     (format "(allow network-outbound%s)\n"
+             (mapconcat (lambda (path)
+                          (format " (remote unix-socket (path-literal %s))"
+                                  (+agent-shell-sandbox--string path)))
+                        (cons "/private/var/run/mDNSResponder"
+                              (+agent-shell-sandbox-allow-connects sandbox))
+                        "")))))
 
 (defun +agent-shell-sandbox-entry (agent)
   "Return AGENT's entry in `+agent-shell-sandbox-agents', or signal."

@@ -108,8 +108,12 @@ design.
   candidate runs read-only git such as `git status` and `git diff`. The
   git directory stays unwritable, so every candidate gets
   `GIT_OPTIONAL_LOCKS=0` and status never tries to refresh the index.
-- **Deny unix-socket connections** except `/private/var/run/mDNSResponder`.
-  This blocks `emacsclient` and other local daemons.
+- **Deny unix-socket connections** except `/private/var/run/mDNSResponder`
+  and the sockets a repository profile lists in `:connect`, such as a
+  build tool's tunnel to its remote cache. This blocks `emacsclient` and
+  other local daemons. The kernel matches a socket's true name, so the
+  profile allows the true name of each listed path. Emacs rejects a
+  listed path in or under `server-socket-dir`.
 - **Allow outbound TCP**, which the agent's own API needs. Exfiltration over
   the network stays possible, and v1 accepts that.
 

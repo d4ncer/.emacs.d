@@ -1147,6 +1147,7 @@ and its :files are written into the worktree for the new sandbox."
                          (plist-get profile :read))
            :allow-metadata (list toplevel)
            :allow-writes (plist-get profile :write)
+           :allow-connects (plist-get profile :connect)
            :env (plist-get profile :env)
            :trace trace)))
     (condition-case err

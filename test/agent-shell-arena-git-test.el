@@ -10,6 +10,7 @@
 (require 'cl-lib)
 (require '+agent-shell-arena-git)
 (require 'agent-shell-sandbox-test)
+(require 'server)
 
 (defvar +arena-git-test--scratch nil)
 
@@ -282,6 +283,8 @@
                        ((:read (42)) ":read")
                        ((:write ((regexp . ".*"))) ":write")
                        ((:read ((regexp . "^/tmp/diff\\."))) ":read")
+                       ((:connect ("tunnel.sock")) ":connect")
+                       ((:connect "/tmp/x.sock") ":connect")
                        ((:env (A=1 "B=2")) ":env")
                        ((:shared ("deps") :copy ("deps/gen")) ":copy")
                        ((:shared ("deps") :files (("deps/x" . ignore)))
@@ -293,7 +296,15 @@
                                  :type 'user-error)))
           (should (string-search key (cadr err)))))
       (setq +agent-shell-pstack-arena-profiles
-            `((,repo :write ((regexp . "^/private/tmp/diff\\.")))))
+            `((,repo :connect (,(expand-file-name "server"
+                                                  server-socket-dir)))))
+      (should (string-search ":connect"
+                             (cadr (should-error
+                                    (+agent-shell-arena-git-profile repo)
+                                    :type 'user-error))))
+      (setq +agent-shell-pstack-arena-profiles
+            `((,repo :write ((regexp . "^/private/tmp/diff\\."))
+                     :connect ("/tmp/tunnel.sock"))))
       (should (+agent-shell-arena-git-profile repo))
       (setq +agent-shell-pstack-arena-profiles '((42 :shared ("x"))))
       (should-error (+agent-shell-arena-git-profile repo) :type 'user-error))))
