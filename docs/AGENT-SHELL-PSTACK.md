@@ -329,8 +329,8 @@ absent.
 
 #### On a remote host
 
-A profile with `:host` runs the whole arena on another machine, a Coder
-remote host in the first use. The candidates, their worktrees and the judge
+A profile with `:host` runs the whole arena on another machine, such as
+a Coder workspace. The candidates, their worktrees and the judge
 stay there. `:host` is `(coder . NAME)` for the workspace reached as `ssh
 coder.NAME`, `(ssh . HOST)` for a plain SSH host, or `(local .
 DIRECTORY)`, which runs the host's side as local processes and serves the
@@ -339,7 +339,7 @@ tests. `:host-directory` names the repository's checkout on the host:
 ```elisp
 (add-to-list
  '+agent-shell-pstack-arena-profiles
- '("~/src/big-repo" :host (coder . "example-ws")
+ '("~/src/big-repo/" :host (coder . "example-ws")
    :host-directory "~/src/big-repo"))
 ```
 

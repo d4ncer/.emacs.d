@@ -248,7 +248,7 @@ normal UI hooks while unrelated buffers are selected. The combined suite has
 Live emacsclient verification also passed for the waiting view, first-capture
 completion, lazy diff expansion and keeping a closed sidebar hidden.
 
-An isolated measurement against the existing Canva workspace returned from
+An isolated measurement against an existing large work repository returned from
 enrolment in 0.7 ms and refresh in 0.09 ms. Capture took 27.4 seconds initially
 and 19.5 seconds on repeat in the child process; the largest 20 ms heartbeat
 gap was 37.3 ms. Git process counts were 7 and 5, respectively, versus 18 and

@@ -517,7 +517,7 @@ and the lead hears once the host has been silent too long."
 (defun +arena-remote-test--probe (boot written)
   "Return a probe answer from a host booted at BOOT, its readiness file
 written at WRITTEN, an ISO 8601 string, or missing when WRITTEN is nil."
-  (concat "pstack-arena-probe 1\ntoplevel /home/user/work/monorepo\n"
+  (concat "pstack-arena-probe 1\ntoplevel /home/user/src/big-repo\n"
           "tip " (make-string 40 ?e) "\ncode 0\n"
           "ready /home/user/.local/share/pstack-arena/ready.json\n"
           (format "boot %s\n" boot)
