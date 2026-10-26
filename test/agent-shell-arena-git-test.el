@@ -162,22 +162,19 @@
                    (expand-file-name "unborn-" +arena-git-test--scratch) t))
           (submodule (+arena-git-test--repo "a.txt" "a\n"))
           (lfs (+arena-git-test--repo
-                "a.txt" "a\n" ".gitattributes" "*.bin filter=lfs diff=lfs\n"))
-          (sparse (+arena-git-test--repo "a.txt" "a\n")))
+                "a.txt" "a\n" ".gitattributes" "*.bin filter=lfs diff=lfs\n")))
       (+arena-git-test--git unborn "init" "-q")
       (+arena-git-test--git
        submodule "update-index" "--add" "--cacheinfo"
        (concat "160000," (+arena-git-test--git submodule "rev-parse" "HEAD")
                ",vendor"))
       (+arena-git-test--git submodule "commit" "-q" "-m" "gitlink")
-      (+arena-git-test--git sparse "config" "core.sparseCheckout" "true")
       (should (string-match-p "not inside a git"
                               (+arena-git-test--rejection outside)))
       (should (string-match-p "unborn" (+arena-git-test--rejection unborn)))
       (should (string-match-p "submodule"
                               (+arena-git-test--rejection submodule)))
-      (should (string-match-p "LFS" (+arena-git-test--rejection lfs)))
-      (should (string-match-p "sparse" (+arena-git-test--rejection sparse))))))
+      (should (string-match-p "LFS" (+arena-git-test--rejection lfs))))))
 
 (ert-deftest +agent-shell-arena-git-test-subdirectory-lead ()
   (+arena-git-test--with-scratch
@@ -370,6 +367,89 @@ hashed anyway, so the worktree's index is refreshed a second later."
                         (split-string (+arena-git-test--read log) "\n" t))
                        '("f07.txt")))))))
 
+(defun +arena-git-test--sparse-repo (&rest arguments)
+  "Return a repository sparsely checked out by `sparse-checkout set' ARGUMENTS."
+  (let ((repo (+arena-git-test--repo
+               "top.txt" "top\n" "src/a.txt" "a\n" "l10n/m.en.xlf" "en\n"
+               "l10n/m.fr.xlf" "fr\n" "docs/d.txt" "d\n")))
+    (apply #'+arena-git-test--git repo "sparse-checkout" "set" arguments)
+    repo))
+
+(defun +arena-git-test--files (directory)
+  "Return the files under DIRECTORY, relative to it, outside .git."
+  (sort (seq-remove (lambda (file) (string-prefix-p ".git" file))
+                    (mapcar (lambda (file) (file-relative-name file directory))
+                            (directory-files-recursively directory "")))
+        #'string<))
+
+(defun +arena-git-test--sparse-capture (repo)
+  "Provision a candidate over sparse REPO, then check what it sees and makes.
+Return the candidate's diff plist after it edits a file, creates one inside
+and one outside the sparse patterns."
+  (let* ((base (+arena-git-test--base repo))
+         (manifest (+arena-git-test--arena base))
+         (worktree (+arena-git-test--provision manifest "opus"))
+         (commit (+agent-shell-arena-git-base-commit base)))
+    (should (equal (+arena-git-test--git worktree "sparse-checkout" "list")
+                   (+arena-git-test--git repo "sparse-checkout" "list")))
+    (dolist (key '("core.sparseCheckout" "core.sparseCheckoutCone"
+                   "index.sparse"))
+      (should (equal (ignore-errors
+                       (+arena-git-test--git worktree "config" "--type=bool"
+                                             key))
+                     (ignore-errors
+                       (+arena-git-test--git repo "config" "--type=bool"
+                                             key)))))
+    (should (equal (+arena-git-test--files worktree)
+                   (+arena-git-test--files repo)))
+    (should (equal (+arena-git-test--git repo "ls-tree" "-r" commit)
+                   (+arena-git-test--git repo "ls-tree" "-r" "HEAD")))
+    (+arena-git-test--write (expand-file-name "src/a.txt" worktree) "edit\n")
+    (+arena-git-test--write (expand-file-name "src/new.txt" worktree) "new\n")
+    (+arena-git-test--write (expand-file-name "l10n/m.de.xlf" worktree) "de\n")
+    (let ((result (+arena-git-test--capture manifest "opus")))
+      (should (equal (+arena-git-test--git repo "diff" "--name-status" commit
+                                           result)
+                     "A\tl10n/m.de.xlf\nM\tsrc/a.txt\nA\tsrc/new.txt"))
+      (+arena-git-test--ok
+       (lambda (done) (+agent-shell-arena-git-diff manifest "opus" done))))))
+
+(ert-deftest +agent-shell-arena-git-test-sparse-non-cone ()
+  "A non-cone sparse lead's candidate gets its patterns and only its files.
+Skip-worktree entries survive the base, and a new file outside the
+patterns is captured and reported."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--sparse-repo
+                 "--no-cone" "/*" "!*.xlf" "*en.xlf" "!/docs/")))
+      (should (equal (+arena-git-test--files repo)
+                     '("l10n/m.en.xlf" "src/a.txt" "top.txt")))
+      (should (equal (plist-get (+arena-git-test--sparse-capture repo)
+                                :outside)
+                     '("l10n/m.de.xlf"))))))
+
+(ert-deftest +agent-shell-arena-git-test-sparse-cone-index ()
+  "A cone-mode lead with a sparse index works like a non-cone one."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--sparse-repo "--cone" "--sparse-index" "src")))
+      (should (equal (+arena-git-test--files repo) '("src/a.txt" "top.txt")))
+      (should (equal (plist-get (+arena-git-test--sparse-capture repo)
+                                :outside)
+                     '("l10n/m.de.xlf"))))))
+
+(ert-deftest +agent-shell-arena-git-test-sparse-common-config ()
+  "A sparse checkout configured in the shared config, without
+extensions.worktreeConfig, reaches the candidate too."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n" "b.txt" "b\n")))
+      (+arena-git-test--git repo "config" "core.sparseCheckout" "true")
+      (+arena-git-test--write (expand-file-name ".git/info/sparse-checkout"
+                                                repo)
+                              "/a.txt\n")
+      (+arena-git-test--git repo "read-tree" "-mu" "HEAD")
+      (let* ((manifest (+arena-git-test--arena (+arena-git-test--base repo)))
+             (worktree (+arena-git-test--provision manifest "opus")))
+        (should (equal (+arena-git-test--files worktree) '("a.txt")))))))
+
 (ert-deftest +agent-shell-arena-git-test-needs-no-identity-or-key ()
   (+arena-git-test--with-scratch
     (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
@@ -435,11 +515,11 @@ Cleanup removes the checkout with the worktree."
       (let ((commit (+arena-git-test--capture manifest "opus")))
         (+arena-git-test--capture manifest "codex")
         (should (equal '(:changed t :stat " b.txt | 2 ++\n 1 file changed, \
-2 insertions(+)")
+2 insertions(+)" :outside nil)
                        (+arena-git-test--ok
                         (lambda (done)
                           (+agent-shell-arena-git-diff manifest "opus" done)))))
-        (should (equal '(:changed nil :stat "")
+        (should (equal '(:changed nil :stat "" :outside nil)
                        (+arena-git-test--ok
                         (lambda (done)
                           (+agent-shell-arena-git-diff

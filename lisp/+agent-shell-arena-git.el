@@ -81,48 +81,53 @@ CHECKOUT is a separate worktree holding the result for reading."
 OBJECT_DIRECTORY\\|NAMESPACE\\)=" entry))
            process-environment)))
 
-(defun +agent-shell-arena-git--run (command directory env fail done)
+(defun +agent-shell-arena-git--run (command directory env fail done
+                                            &optional input)
   "Run COMMAND in DIRECTORY with ENV added to the environment.
-Call DONE with its output on success, otherwise FAIL with a message."
+Send it INPUT, when non-nil, on standard input.  Call DONE with its
+output on success, otherwise FAIL with a message."
   (let* ((default-directory (file-name-as-directory directory))
          (process-environment (+agent-shell-arena-git--environment env))
          (out (generate-new-buffer " *pstack-arena*" t))
          (err (generate-new-buffer " *pstack-arena-stderr*" t))
          (stderr (make-pipe-process :name "pstack-arena-stderr" :buffer err
-                                    :noquery t :sentinel #'ignore)))
-    (process-send-eof
-     (make-process
-      :name "pstack-arena" :buffer out :stderr stderr :command command
-      :coding 'utf-8-unix :connection-type 'pipe :noquery t
-      :sentinel
-      (lambda (process _event)
-        (unless (process-live-p process)
-          (dotimes (_ 50)
-            (when (process-live-p stderr) (accept-process-output stderr 0.01)))
-          (let ((status (process-exit-status process))
-                (output (with-current-buffer out (buffer-string)))
-                (message (with-current-buffer err
-                           (string-trim (buffer-string)))))
-            (delete-process stderr)
-            (kill-buffer out)
-            (kill-buffer err)
-            (if (and (eq (process-status process) 'exit) (zerop status))
-                (funcall done output)
-              (funcall fail (if (string-empty-p message)
-                                (format "exit status %s" status)
-                              message))))))))))
+                                    :noquery t :sentinel #'ignore))
+         (process
+          (make-process
+           :name "pstack-arena" :buffer out :stderr stderr :command command
+           :coding 'utf-8-unix :connection-type 'pipe :noquery t
+           :sentinel
+           (lambda (process _event)
+             (unless (process-live-p process)
+               (dotimes (_ 50)
+                 (when (process-live-p stderr)
+                   (accept-process-output stderr 0.01)))
+               (let ((status (process-exit-status process))
+                     (output (with-current-buffer out (buffer-string)))
+                     (message (with-current-buffer err
+                                (string-trim (buffer-string)))))
+                 (delete-process stderr)
+                 (kill-buffer out)
+                 (kill-buffer err)
+                 (if (and (eq (process-status process) 'exit) (zerop status))
+                     (funcall done output)
+                   (funcall fail (if (string-empty-p message)
+                                     (format "exit status %s" status)
+                                   message)))))))))
+    (when input (process-send-string process input))
+    (process-send-eof process)))
 
 (defun +agent-shell-arena-git--git (git-dir work-tree args fail done
-                                            &optional env)
+                                            &optional env input)
   "Run git ARGS on GIT-DIR and WORK-TREE, then call DONE or FAIL.
-ENV adds environment entries."
+ENV adds environment entries; INPUT goes to standard input."
   (+agent-shell-arena-git--run
    (append (list "git" "--git-dir" git-dir "--work-tree" work-tree
                  "-c" "core.hooksPath=/dev/null" "-c" "core.fsmonitor=false")
            args)
    work-tree env
    (lambda (message) (funcall fail (format "git %s: %s" (car args) message)))
-   done))
+   done input))
 
 (defun +agent-shell-arena-git--read (directory &rest args)
   "Return the output of git ARGS run in DIRECTORY, or nil if it fails.
@@ -153,7 +158,10 @@ Only for reads that stay fast however large the repository is."
   "Call DONE with WORK-TREE's tree once two consecutive snapshots match.
 Each snapshot fills a fresh temporary index by calling SEED with the index
 file, FAIL and a continuation, then adds every file except EXCLUDES
-pathspecs.  FAIL gets a message after three snapshots that differ."
+pathspecs.  FAIL gets a message after three snapshots that differ.
+
+In a sparse checkout, skip-worktree entries keep their index content, and
+files on disk outside the sparse patterns are added like any other."
   (cl-labels
       ((attempt (previous count)
          (let* ((directory (make-temp-file "pstack-arena-index-" t))
@@ -166,7 +174,9 @@ pathspecs.  FAIL gets a message after three snapshots that differ."
             seed index fail
             (lambda ()
               (+agent-shell-arena-git--git
-               git-dir work-tree (append '("add" "-A" "--" ".") excludes) fail
+               git-dir work-tree (append '("add" "-A" "--sparse" "--" ".")
+                                         excludes)
+               fail
                (lambda (_)
                  (+agent-shell-arena-git--git
                   git-dir work-tree '("write-tree") fail
@@ -215,10 +225,6 @@ arena" toplevel))
       (when (file-exists-p (expand-file-name ".gitmodules" toplevel))
         (user-error "%s has submodules, which arenas do not support"
                     toplevel))
-      (when (equal (funcall read "config" "--type=bool" "core.sparseCheckout")
-                   "true")
-        (user-error "%s uses a sparse checkout, which arenas do not support"
-                    toplevel))
       (when (or (file-exists-p (expand-file-name ".lfsconfig" toplevel))
                 (funcall read "config" "--local" "--get-regexp" "^lfs\\.")
                 (+agent-shell-arena-git--lfs-attributes-p
@@ -237,25 +243,22 @@ arena" toplevel))
            (re-search-forward "filter=lfs\\b" nil t)))))
 
 (defun +agent-shell-arena-git--check-index (base fail done)
-  "Call DONE unless BASE's index has gitlinks, sparse entries or LFS files.
+  "Call DONE unless BASE's index has gitlinks or LFS files.
 Otherwise call FAIL with the reason."
   (let ((toplevel (+agent-shell-arena-git-base-toplevel base)))
     (+agent-shell-arena-git--git
      (+agent-shell-arena-git-base-git-dir base) toplevel
-     '("ls-files" "--stage" "-t" "-z") fail
+     '("ls-files" "--stage" "-z") fail
      (lambda (output)
        (let ((reason nil))
          (dolist (entry (split-string output "\0" t))
            (when (and (not reason)
-                      (string-match
-                       "\\`\\(.\\) \\([0-7]+\\) [^\t]*\t\\(.*\\)\\'" entry))
-             (let ((tag (match-string 1 entry))
-                   (mode (match-string 2 entry))
-                   (path (match-string 3 entry)))
+                      (string-match "\\`\\([0-7]+\\) [^\t]*\t\\(.*\\)\\'"
+                                    entry))
+             (let ((mode (match-string 1 entry))
+                   (path (match-string 2 entry)))
                (setq reason
                      (cond ((equal mode "160000") "has submodules")
-                           ((equal tag "S")
-                            "has skip-worktree entries from a sparse checkout")
                            ((and (equal (file-name-nondirectory path)
                                         ".gitattributes")
                                  (+agent-shell-arena-git--lfs-attributes-p
@@ -478,7 +481,11 @@ The role lists the configured dependency paths present in the lead."
 (defun +agent-shell-arena-git-provision (manifest name callback)
   "Add candidate NAME to MANIFEST's arena: a worktree at the base commit.
 Link and clone its dependency paths, then call CALLBACK with the
-candidate's working directory and nil, or nil and a message."
+candidate's working directory and nil, or nil and a message.
+
+Run from the lead's git directory, git worktree add copies the lead's
+sparse-checkout patterns and per-worktree config before it checks out, so
+the candidate gets the same sparse checkout."
   (let ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
         (fail (lambda (message) (funcall callback nil message))))
     (condition-case err
@@ -613,9 +620,10 @@ worktree's own index, so it hashes only files changed since checkout."
 
 (defun +agent-shell-arena-git-diff (manifest name callback)
   "Compare captured role NAME of MANIFEST with the base.
-Call CALLBACK with (:changed BOOL :stat TEXT) and nil, or nil and a
-message.  :changed says whether the trees differ; :stat is the output of
-git diff --stat."
+Call CALLBACK with (:changed BOOL :stat TEXT :outside PATHS) and nil, or
+nil and a message.  :changed says whether the trees differ; :stat is the
+output of git diff --stat; :outside lists the changed paths outside the
+lead's sparse-checkout patterns."
   (when-let* ((role (+agent-shell-arena-git--captured manifest name callback)))
     (let ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
           (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
@@ -630,11 +638,39 @@ git diff --stat."
          (+agent-shell-arena-git--git
           git-dir toplevel (list "diff" "--stat" base commit) fail
           (lambda (stat)
-            (funcall callback
-                     (list :changed (let ((trees (split-string trees)))
-                                      (not (equal (car trees) (cadr trees))))
-                           :stat (string-trim-right stat))
-                     nil))))))))
+            (+agent-shell-arena-git--outside
+             git-dir toplevel base commit fail
+             (lambda (outside)
+               (funcall callback
+                        (list :changed (let ((trees (split-string trees)))
+                                         (not (equal (car trees)
+                                                     (cadr trees))))
+                              :stat (string-trim-right stat)
+                              :outside outside)
+                        nil))))))))))
+
+(defun +agent-shell-arena-git--outside (git-dir toplevel base commit fail
+                                                done)
+  "Call DONE with the paths changed from BASE to COMMIT outside the sparse
+patterns of the checkout at GIT-DIR and TOPLEVEL; nil when it is not
+sparse.  Call FAIL with a message on failure."
+  (if (not (equal (+agent-shell-arena-git--read-in
+                   git-dir toplevel "config" "--type=bool"
+                   "core.sparseCheckout")
+                  "true"))
+      (funcall done nil)
+    (+agent-shell-arena-git--git
+     git-dir toplevel (list "diff" "--name-only" "-z" base commit) fail
+     (lambda (changed)
+       (+agent-shell-arena-git--git
+        git-dir toplevel '("sparse-checkout" "check-rules" "-z") fail
+        (lambda (output)
+          (let ((inside (make-hash-table :test #'equal)))
+            (dolist (path (split-string output "\0" t))
+              (puthash path t inside))
+            (funcall done (seq-remove (lambda (path) (gethash path inside))
+                                      (split-string changed "\0" t)))))
+        nil changed)))))
 
 (defun +agent-shell-arena-git-checkout (manifest name callback)
   "Check captured role NAME of MANIFEST out in a worktree of its own.

@@ -593,13 +593,19 @@ started.  To retry, end a message with a corrected pstack-panel block."
                    (plist-get result :ref))
          "No result.\n"))
       (t
-       (format "Result: %s (%s)\nDiff against the base:\n%s\nApply: (cd %s \
+       (concat
+        (format "Result: %s (%s)\nDiff against the base:\n%s\nApply: (cd %s \
 && git diff --binary %s %s | git apply --3way)\n"
-               commit (plist-get result :ref) (plist-get result :stat)
-               (shell-quote-argument
-                (directory-file-name
-                 (+agent-shell-arena-git-manifest-toplevel manifest)))
-               (+agent-shell-arena-git-manifest-base manifest) commit)))
+                commit (plist-get result :ref) (plist-get result :stat)
+                (shell-quote-argument
+                 (directory-file-name
+                  (+agent-shell-arena-git-manifest-toplevel manifest)))
+                (+agent-shell-arena-git-manifest-base manifest) commit)
+        (when-let* ((paths (plist-get result :outside)))
+          (format "Outside your sparse-checkout patterns: %s.  Applying \
+the diff writes them into your tree anyway; leave them out if they were \
+not meant to change.\n"
+                  (string-join paths ", "))))))
      (format "Rationale:\n%s\n"
              (+agent-shell-pstack-panel--rationale candidate)))))
 

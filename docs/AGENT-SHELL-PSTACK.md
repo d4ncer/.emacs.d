@@ -152,8 +152,9 @@ than letting a changed struct break them.
 
 An arena runs arena's Fan out and Cross-judge phases; the lead keeps Frame,
 Pick, Graft and Verify. It needs macOS and a lead inside a git repository
-with a commit, no submodules, no Git LFS and no sparse checkout. The
-protocol describes arenas only when some configured agent has an entry in
+with a commit, no submodules and no Git LFS. A sparse checkout carries over.
+Each candidate's worktree gets the lead's patterns, and the follow-up names
+any file a candidate changed outside them. The protocol describes arenas only when some configured agent has an entry in
 `+agent-shell-sandbox-agents`. A Claude Code candidate signs in with the
 token in the Keychain item `pstack-arena-claude-token`, made by `claude
 setup-token`; without it that candidate fails to start.

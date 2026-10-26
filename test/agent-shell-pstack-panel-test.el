@@ -47,6 +47,7 @@ lists the roles whose result equals the base."
           (bases nil) (base-error nil) (provision-error nil) (shared nil)
           (stopped nil) (swept nil) (cleaned nil)
           (captured nil) (capture-errors nil) (unchanged nil)
+          (diff-extras nil)
           (+agent-shell-drive-read-only-modes
            '((claude-code . "plan") (codex . "read-only")))
           (+agent-shell-sandbox-agents
@@ -146,8 +147,11 @@ lists the roles whose result equals the base."
                   (run-at-time 0 nil callback
                                (if (member name unchanged)
                                    '(:changed nil :stat "")
-                                 (list :changed t
-                                       :stat (format " %s.txt | 1 +" name)))
+                                 (append
+                                  (list :changed t
+                                        :stat (format " %s.txt | 1 +" name))
+                                  (alist-get name diff-extras nil nil
+                                             #'equal)))
                                nil)))
                ((symbol-function '+agent-shell-arena-git-checkout)
                 (lambda (manifest name callback)
@@ -1347,6 +1351,32 @@ your tree" followup))
         (should-not (string-match-p "checkout [^ ]+ --" followup))
         (should (string-suffix-p "press x on its line in the pstack panels \
 view, or run M-x +agent-shell-pstack-arena-clean." followup))))))
+
+(defun +agent-shell-pstack-panel-test--candidate-section (followup label)
+  "Return candidate LABEL's section of FOLLOWUP."
+  (string-match (format "^## %s: .*\n\\(\\(?:[^#\n].*\n\\|\n\\)*\\)" label)
+                followup)
+  (match-string 1 followup))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-followup-sparse-warning ()
+  "Name the files a candidate changed outside the lead's sparse patterns."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq diff-extras '(("opus" :outside ("l10n/m.de.xlf" "l10n/m.fr.xlf"))))
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "judge" :kind 'init-finished)
+    (member-event "judge" :kind 'turn-complete :text "A wins.")
+    (let ((followup (car (+agent-shell-pstack-panel-test--followups
+                          sent lead))))
+      (should (string-match-p
+               "^Outside your sparse-checkout patterns: l10n/m.de.xlf, \
+l10n/m.fr.xlf\\.  Applying the diff writes them into your tree anyway"
+               (+agent-shell-pstack-panel-test--candidate-section
+                followup "A")))
+      (should-not (string-match-p
+                   "sparse" (+agent-shell-pstack-panel-test--candidate-section
+                             followup "B"))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-view-and-clean ()
   "Show an arena's phase and directory, and clean it with x once finished."

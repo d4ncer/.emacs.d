@@ -139,7 +139,7 @@ The request is a `pstack-panel` block like this:
 - **Rejections.** Emacs rejects an arena, with a reason the lead can act
   on, in any of these cases:
   - the lead is not in a git repository, or `HEAD` is unborn;
-  - the repository has submodules, uses Git LFS, or uses a sparse checkout;
+  - the repository has submodules or uses Git LFS;
   - the platform is not macOS;
   - an agent has no sandboxed launch configuration.
 
@@ -210,7 +210,7 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   1. Resolve `HEAD` once.
   2. Copy the lead's real index to a temporary file, so force-added files
      and the tracked set carry over.
-  3. Run `git add -A` against it through `GIT_INDEX_FILE`.
+  3. Run `git add -A --sparse` against it through `GIT_INDEX_FILE`.
   4. Run `write-tree`, then `commit-tree --no-gpg-sign -p <resolved HEAD>`.
   5. Repeat steps 2 to 4 until two consecutive trees match, up to three
      attempts.
@@ -228,6 +228,14 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   `refs/pstack-arena/<arena-id>/<role>`. That is outside `refs/heads`, so
   the lead's branch lists stay clean, and the ref keeps the commit from
   garbage collection.
+- **Sparse checkouts.** `git worktree add`, run from the lead's git
+  directory, copies the lead's `info/sparse-checkout` and per-worktree
+  config into the new worktree before it checks out. Cone and non-cone
+  patterns, a sparse index, and sparse settings kept in the shared config
+  all carry over without extra steps. Both snapshots keep skip-worktree
+  entries as the index has them. `--sparse` makes `git add` take files a
+  candidate created outside the patterns instead of failing, and the
+  follow-up names them.
 - **Manifest.** `<arena-id>/manifest.json` records:
   - the repository's git directory;
   - the lead's root and subdirectory;
@@ -252,7 +260,8 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   - its result commit and ref;
   - its diff stat and rationale;
   - a ready command, `git diff --binary <base> <result>`, whose output
-    applies to the lead's current tree with `git apply --3way`.
+    applies to the lead's current tree with `git apply --3way`;
+  - the changed files outside the lead's sparse-checkout patterns, if any.
 
   It also includes the judge's report and arena's Pick, Graft and Verify
   instructions. It never suggests `git checkout <ref> -- PATH`, which would
@@ -498,7 +507,7 @@ None. Every probe above was run on this machine.
 | Workspaces under `~/.emacs.d` | low | lifecycle | Fixed. Moved to `~/.local/state/`, and the lead's subdirectory is kept. |
 | `checkout -- PATH` overwrites lead work | high | git | Fixed. Advice is `git diff --binary` with `git apply --3way`. |
 | Submodules lost | high | git | Fixed. Rejected in v1. |
-| Index from `HEAD` loses tracked files | medium | git | Fixed. The temporary index starts from the real index. Sparse checkouts are rejected. |
+| Index from `HEAD` loses tracked files | medium | git | Fixed. The temporary index starts from the real index, so skip-worktree entries in a sparse checkout survive. |
 | Inconsistent base capture | medium | git | Fixed. Resolve once, plus a bounded retry. |
 | Root and subdirectory conflated | medium | git | Fixed. The manifest records both. |
 | Binary and LFS grafts | medium | git | Fixed. `--binary`, with LFS rejected in v1. |
