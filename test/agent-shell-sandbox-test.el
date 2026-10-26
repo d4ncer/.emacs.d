@@ -269,6 +269,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
       (let ((process-environment (cons "JAVA_TOOL_OPTIONS=-Xss2m"
                                        process-environment)))
         (should (equal (list (concat "TMPDIR=" tmp) (concat "GOTMPDIR=" tmp)
+                             (concat "GOCACHE=" tmp "/go-build")
                              "GOTELEMETRY=off"
                              (concat "JAVA_TOOL_OPTIONS=-Xss2m -Djava.io.tmpdir="
                                      tmp)
