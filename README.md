@@ -1,70 +1,68 @@
 # My Emacs configuration
 
-An Emacs 32 configuration with Evil bindings, native tree-sitter syntax support,
-Eglot, and an Org knowledge and task workflow.
+I'm sensing... an Emacs 32 config. Evil keys, native tree-sitter, Eglot, and an
+Org brain that never forgets. Just like me.
 
-The main components are:
+## The vision
 
-- Vertico, Orderless, Consult, and Embark for navigation and contextual actions.
-- Corfu, Cape, Tempel, and eglot-tempel for in-buffer completion and snippets.
-- Apheleia for asynchronous formatting; Magit for Git.
-- Batppuccin themes, Doom Modeline, and Pulsar for presentation.
-- Org, Vulpea, Vulpea Journal, Vulpea UI, and Citar for notes and references.
-- gptel and agent-shell, with local project authoring and annotated review tools.
-- Elpaca with recorded package revisions and native grammar source pins.
+- Vertico, Orderless, Consult, Embark: find anything. I already know where it is.
+- Corfu, Cape, Tempel, eglot-tempel: completion so good it finishes your sentences.
+- Apheleia formats, Magit commits. Magit is the Gus of Git. Reliable. Fancy.
+- Batppuccin, Doom Modeline, Pulsar: latte by day, mocha by night. It follows macOS.
+- Org, Vulpea, Vulpea Journal, Vulpea UI, Citar: notes and references. Case files.
+- gptel and agent-shell, with project authoring, annotated review and pstack panels.
+- Elpaca tracks latest upstream. Grammars too. Living on the edge, son.
 
-## Requirements and setup
+## Setup
 
-Use Emacs 32 or newer. The verified development build is recorded in
-[emacs-build.eld](emacs-build.eld). Git is required for Elpaca; ripgrep and Python 3
-are required for the asynchronous finder for large projects.
+- Emacs 32 or newer. The blessed build lives in [emacs-build.eld](emacs-build.eld).
+- Need Git for Elpaca. Need ripgrep and Python 3 for the big-project finder.
+- Clone to `~/.emacs.d` and start Emacs. Elpaca installs everything first run.
+- Missing grammar? Tree-sitter asks first. Manners.
+- Language servers and formatters are BYO. I'm psychic, not a package manager.
+- Personal bits live in `~/life/elisp/` and an optional `~/private/`.
+- Set `+site-lisp-directory` or `+private-config-directory` before bootstrap to
+  move them. `nil` turns off the private config.
+- The agenda workflow needs the external `+life` library. Don't ask.
+- Native builds, grammars and update steps:
+  [dependency setup and updates](docs/DEPENDENCIES.md).
 
-Clone this repository as `~/.emacs.d`, then start Emacs. Elpaca installs the
-recorded packages on first startup. Tree-sitter asks before installing a missing
-grammar. Language servers and formatters are separate system tools.
+## Getting around
 
-Personal integrations use `~/life/elisp/` and an optional `~/private/` configuration.
-Override `+site-lisp-directory` or `+private-config-directory` before bootstrap to
-change these locations; nil disables the private configuration. The personal
-agenda workflow requires the external `+life` library.
+- `SPC` leads in normal and motion state. `C-SPC` in insert state.
+- `,` is the local leader. Which-key reads your mind so I don't have to.
+- `SPC pf` project files. `SPC /` project search. `SPC gs` Magit.
+- `SPC aP` agent projects. Partner's handbook:
+  [agent project guide](docs/AGENT-SHELL-PROJECTS.md).
 
-See [dependency setup and updates](docs/DEPENDENCIES.md) for native build
-requirements, grammar management, and restore checks.
-
-## Navigation
-
-`SPC` is the leader in normal and motion state; `C-SPC` is the insert-state
-leader. `,` is the mode-specific local leader. Which-key shows available keys.
-
-Useful starting points include `SPC pf` for project files, `SPC /` for project
-search, `SPC gs` for Magit, and `SPC aP` for agent projects. See the
-[agent project guide](docs/AGENT-SHELL-PROJECTS.md).
-
-## Verification
+## Proving it
 
 ```sh
 emacs -Q --batch -l test/run-config.el
 ```
 
-This runs syntax checks, focused compilation, activation checks, and all local
-ERT suites in fresh processes. Mermaid integration checks need `mmdc` and an
-environment where its local Chromium renderer can launch.
+- Syntax, compilation, activation and every ERT suite, each in a fresh process.
+- Mermaid checks want `mmdc` and a Chromium that's allowed to launch.
 
 ```sh
 emacs -Q --batch -L test -l test/restore-config.el
 ```
 
-The opt-in fresh install check needs network access. It copies the
-configuration, clones the latest package sources into a temporary directory,
-builds them, and runs the same gates. On macOS it also opens a disposable GUI Emacs for completion and mode line
-checks, then closes it.
+- Opt-in fresh install. Needs network. Clones latest sources somewhere
+  temporary, builds them, runs the same gates.
+- On macOS it also pops a throwaway GUI Emacs to check completion and the mode
+  line, then closes it. You saw nothing.
 
-[MODULES.md](docs/MODULES.md) describes ownership, dependencies, and activation.
-The [performance changes](docs/superpowers/plans/2026-10-22-config-performance.md)
-and [architecture changes](docs/superpowers/plans/2026-10-22-config-architecture.md)
-record the implementation and verification results.
+## Case files
+
+- [MODULES.md](docs/MODULES.md): who owns what, who needs whom, when it wakes up.
+- [Performance changes](docs/superpowers/plans/2026-10-22-config-performance.md)
+  and [architecture changes](docs/superpowers/plans/2026-10-22-config-architecture.md):
+  what changed and the receipts.
+- Package updates: run `scripts/verify-packages.el` after, or things get slow.
 
 ## Credits
 
-The configuration incorporates helpers adapted from Doom Emacs and
-[Chris Barrett's configuration](https://github.com/chrisbarrett/.emacs.d).
+- Helpers borrowed from Doom Emacs and
+  [Chris Barrett's configuration](https://github.com/chrisbarrett/.emacs.d).
+- I've heard it both ways.
