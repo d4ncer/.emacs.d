@@ -54,8 +54,18 @@ matches applies.  PROFILE is a plist with any of these keys:
 
 Paths in :shared, :private, :copy and :files are relative to the top
 level and stay inside it.  Each element of :write and :read is an
-absolute path or a function of the sandbox returning a path or a list
-of them."
+absolute path, a (regexp . RE) pattern, or a function of the sandbox
+returning one of those or a list of them.  A pattern allows every true
+name RE matches, for tools that make randomly named files in a shared
+folder, such as diff's /private/tmp/diff.XXXXXXXX:
+
+  (regexp . \"^/private/tmp/diff\\\\.[A-Za-z0-9]+$\")
+
+RE is a sandbox-exec regex.  It must start with ^ and the literal true
+name of a folder below the root, with no alternative outside
+parentheses, so it can never match / or the whole filesystem.
+`+agent-shell-sandbox-regexp-quote' quotes a path computed in a
+function, such as the per-user temp folder."
   :type '(alist :key-type (choice directory function)
                 :value-type (plist :key-type symbol :value-type sexp)))
 
@@ -481,15 +491,16 @@ Signal `user-error' naming the key of any malformed value."
                      (funcall fail key "an alist of paths inside the top \
 level to functions" value)))
                   ((or :write :read)
-                   (unless (and (proper-list-p value)
-                                (seq-every-p (lambda (path)
-                                               (or (functionp path)
-                                                   (and (stringp path)
-                                                        (file-name-absolute-p
-                                                         path))))
-                                             value))
-                     (funcall fail key "a list of absolute paths or \
-functions" value)))
+                   (unless (proper-list-p value)
+                     (funcall fail key "a list of absolute paths, (regexp \
+. RE) patterns or functions" value))
+                   (dolist (element value)
+                     (unless (functionp element)
+                       (when-let* ((expected
+                                    (+agent-shell-sandbox-allowance-error
+                                     element)))
+                         (funcall fail (format "each element of %s" key)
+                                  expected element)))))
                   (:env
                    (unless (or (functionp value)
                                (and (proper-list-p value)

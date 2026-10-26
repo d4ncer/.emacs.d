@@ -64,11 +64,13 @@ Paths are true names without a trailing slash."
   (agent nil :documentation "Agent identifier, set when prepared.")
   (credentials nil :documentation "Plist the agent's :finish reads.")
   (allow-reads nil :read-only t
-               :documentation "Folders inside DENY-READS the agent may read.")
+               :documentation "Folders or patterns inside DENY-READS the \
+agent may read.")
   (allow-metadata nil :read-only t
                   :documentation "Paths whose metadata alone it may read.")
   (allow-writes nil :read-only t
-                :documentation "Folders beyond its own it may write.")
+                :documentation "Folders or patterns beyond its own it may \
+write.")
   (env nil :read-only t
        :documentation "Environment entries ahead of the defaults.")
   (trace nil :read-only t
@@ -90,19 +92,125 @@ Claude Code needs it under about 30 bytes to hold AF_UNIX socket paths."
           (file-already-exists nil))))
     (error "Could not create a private temp folder in /tmp")))
 
-(defun +agent-shell-sandbox--resolve (sandbox items valid-p kind)
+(defun +agent-shell-sandbox--resolve (sandbox items check kind)
   "Return ITEMS with each function called with SANDBOX, flattened.
-A function returns one value or a list.  Signal `user-error' for a value
-VALID-P rejects, naming KIND."
+A function returns one value or a list.  CHECK returns nil for a valid
+value and otherwise what it must be; signal `user-error' for an invalid
+value, naming KIND."
   (mapcan (lambda (item)
             (let ((values (if (functionp item) (funcall item sandbox) item)))
               (mapcar (lambda (value)
-                        (unless (funcall valid-p value)
+                        (when-let* ((expected (funcall check value)))
                           (user-error "Sandbox %s must be %s, not %S"
-                                      (car kind) (cdr kind) value))
+                                      kind expected value))
                         value)
-                      (if (listp values) values (list values)))))
+                      (if (or (atom values)
+                              (+agent-shell-sandbox-pattern-p values))
+                          (and values (list values))
+                        values))))
           items))
+
+(defun +agent-shell-sandbox-pattern-p (value)
+  "Return whether VALUE is a (regexp . RE) pattern allowance."
+  (eq (car-safe value) 'regexp))
+
+(defun +agent-shell-sandbox-regexp-quote (string)
+  "Return a sandbox profile regex matching STRING literally."
+  (replace-regexp-in-string "[][.^$*+?(){}|\\]" "\\\\\\&" string))
+
+(defun +agent-shell-sandbox--pattern-prefix (re)
+  "Return the literal text every match of RE starts with, or nil.
+RE is a profile regex.  nil when it is not anchored with ^, or holds an
+alternative outside parentheses, which could match anything."
+  (when (string-prefix-p "^" re)
+    (let ((i 1) (end (length re)) (depth 0) (prefix "") (literal t) (ok t))
+      (while (and ok (< i end))
+        (let ((char (aref re i)))
+          (cond
+           ((eq char ?\\)
+            (let ((next (and (< (1+ i) end) (aref re (1+ i)))))
+              (if (and literal next
+                       (not (string-match-p "[[:alnum:]]" (string next))))
+                  (setq prefix (concat prefix (string next)))
+                (setq literal nil)))
+            (cl-incf i 2))
+           ((eq char ?\[)
+            (setq literal nil
+                  i (+agent-shell-sandbox--bracket-end re (1+ i))))
+           ((memq char '(?* ?+ ?? ?{))
+            (when (and literal (> (length prefix) 0))
+              (setq prefix (substring prefix 0 -1)))
+            (setq literal nil)
+            (cl-incf i))
+           ((eq char ?|)
+            (when (<= depth 0) (setq ok nil))
+            (cl-incf i))
+           ((memq char '(?\( ?\) ?. ?^ ?$))
+            (setq literal nil
+                  depth (+ depth (pcase char (?\( 1) (?\) -1) (_ 0))))
+            (cl-incf i))
+           (t (when literal (setq prefix (concat prefix (string char))))
+              (cl-incf i)))))
+      (and ok prefix))))
+
+(defun +agent-shell-sandbox--bracket-end (re start)
+  "Return the index after the bracket expression of RE opening before START."
+  (let ((i start) (end (length re)))
+    (when (and (< i end) (eq (aref re i) ?^)) (cl-incf i))
+    (when (and (< i end) (eq (aref re i) ?\])) (cl-incf i))
+    (catch 'done
+      (while (< i end)
+        (let ((char (aref re i)))
+          (cond ((eq char ?\]) (throw 'done (1+ i)))
+                ((and (eq char ?\[) (< (1+ i) end)
+                      (memq (aref re (1+ i)) '(?: ?. ?=)))
+                 (setq i (let ((close (string-search
+                                       (string (aref re (1+ i)) ?\])
+                                       re (+ i 2))))
+                           (if close (+ close 2) end))))
+                (t (cl-incf i)))))
+      end)))
+
+(defconst +agent-shell-sandbox--pattern-rule
+  "a (regexp . RE) pattern whose RE starts with ^ and the true name of a \
+folder below the root, as in ^/private/tmp/diff\\."
+  "What a pattern allowance must be.")
+
+(defun +agent-shell-sandbox--pattern-error (re)
+  "Return nil when RE is a safe profile regex, otherwise why it is not.
+A safe one starts with ^, a literal true name of a folder below the root
+and no alternative outside parentheses, so it cannot match / or the
+whole filesystem, and sandbox-exec compiles it."
+  (let ((prefix (and (stringp re) (+agent-shell-sandbox--pattern-prefix re))))
+    (cond
+     ((not (stringp re)) +agent-shell-sandbox--pattern-rule)
+     ((string-search "\"" re)
+      "a (regexp . RE) pattern whose RE holds no double quote")
+     ((not (and prefix (string-match-p "\\`/[^/]+/" prefix)))
+      +agent-shell-sandbox--pattern-rule)
+     ((let ((folder (file-name-directory prefix)))
+        (unless (equal (file-name-as-directory (file-truename folder)) folder)
+          (format "a pattern of true names, here %s rather than %s"
+                  (file-name-as-directory (file-truename folder)) folder))))
+     ((file-executable-p "/usr/bin/sandbox-exec")
+      (with-temp-buffer
+        (let ((default-directory "/"))
+          (unless (eql 0 (call-process
+                          "/usr/bin/sandbox-exec" nil t nil "-p"
+                          (format "(version 1)\n(allow default)\n\
+(allow file-write* (regex #\"%s\"))\n" re)
+                          "/usr/bin/true"))
+            (format "a regex sandbox-exec compiles (%s)"
+                    (string-trim (buffer-string))))))))))
+
+(defun +agent-shell-sandbox-allowance-error (value)
+  "Return nil when VALUE is a read or write allowance, else what it must be.
+An allowance is an absolute path or a (regexp . RE) pattern; see
+`+agent-shell-sandbox-create'."
+  (cond ((+agent-shell-sandbox-pattern-p value)
+         (+agent-shell-sandbox--pattern-error (cdr value)))
+        ((not (and (stringp value) (file-name-absolute-p value)))
+         "an absolute path or a (regexp . RE) pattern")))
 
 (cl-defun +agent-shell-sandbox-create (root &key config deny-reads
                                              allow-reads allow-metadata
@@ -117,9 +225,16 @@ read even inside DENY-READS, such as a folder git must stat.
 ALLOW-WRITES lists more folders the agent may write, and ENV NAME=VALUE
 entries that win over `+agent-shell-sandbox-environment's defaults.
 
+An element of ALLOW-READS or ALLOW-WRITES may instead be (regexp . RE),
+allowing every path RE matches, for tools that make randomly named
+files in a shared folder.  RE is a sandbox-exec regex matched against
+true names, such as ^/private/tmp/diff\\.; it must start with ^ and a
+literal folder below the root.  `+agent-shell-sandbox-regexp-quote'
+quotes a path for one.
+
 Each element of ALLOW-READS, ALLOW-WRITES and ENV may instead be a
 function called with the new sandbox, whose root and private folders
-exist, returning one path or entry or a list of them.
+exist, returning one path, pattern or entry or a list of them.
 
 With TRACE non-nil, the profile reports what it would refuse rather than
 refusing it; see `+agent-shell-sandbox-profile'."
@@ -141,24 +256,27 @@ refusing it; see `+agent-shell-sandbox-profile'."
                                                 allow-metadata)
                         :trace tag resolved)))
          (provisional (funcall make))
-         (path-p (lambda (path) (and (stringp path)
-                                     (file-name-absolute-p path))))
-         (paths (lambda (items kind)
-                  (mapcar #'+agent-shell-sandbox--path
-                          (+agent-shell-sandbox--resolve
-                           provisional items path-p
-                           (cons kind "an absolute path"))))))
+         (allowances
+          (lambda (items kind)
+            (mapcar (lambda (value)
+                      (if (+agent-shell-sandbox-pattern-p value) value
+                        (+agent-shell-sandbox--path value)))
+                    (+agent-shell-sandbox--resolve
+                     provisional items #'+agent-shell-sandbox-allowance-error
+                     kind)))))
     (condition-case err
         (funcall make
-                 :allow-reads (funcall paths allow-reads "read allowance")
-                 :allow-writes (funcall paths allow-writes "write allowance")
+                 :allow-reads (funcall allowances allow-reads "read allowance")
+                 :allow-writes (funcall allowances allow-writes
+                                        "write allowance")
                  :env (+agent-shell-sandbox--resolve
                        provisional env
                        (lambda (entry)
-                         (and (stringp entry)
-                              (string-match-p "\\`[A-Za-z_][A-Za-z0-9_]*="
-                                              entry)))
-                       '("environment entry" . "a NAME=VALUE string")))
+                         (unless (and (stringp entry)
+                                      (string-match-p
+                                       "\\`[A-Za-z_][A-Za-z0-9_]*=" entry))
+                           "a NAME=VALUE string"))
+                       "environment entry"))
       (error (+agent-shell-sandbox-delete
               (cons tmp (and own-config (list config))))
              (signal (car err) (cdr err))))))
@@ -224,35 +342,33 @@ CALLBACK gets nil or a message saying what stayed."
   +agent-shell-sandbox--user-folders)
 
 (defun +agent-shell-sandbox--toolchain-writes ()
-  "Return SBPL filters for per-user folders toolchains write on macOS.
+  "Return the allowances for per-user folders toolchains write on macOS.
 Each is exact, since the temp folder also holds other programs' files,
 such as the Emacs server socket.  TemporaryItems is written by
 xcodebuild, xcrun_db and its siblings by xcrun, hsperfdata_USER by the
 JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
   (when-let* ((folders (+agent-shell-sandbox--user-folders)))
-    (let ((temp (car folders))
-          (subpath (lambda (path)
-                     (format "(subpath %s)" (+agent-shell-sandbox--string
-                                             path)))))
-      (list (funcall subpath (concat temp "/TemporaryItems"))
-            (format "(regex #\"^%s\")"
-                    (replace-regexp-in-string
-                     "[][.^$*+?(){}|\\\"]" "\\\\\\&"
-                     (concat temp "/xcrun_db")))
-            (funcall subpath (concat temp "/hsperfdata_" (user-login-name)))
-            (funcall subpath (concat (cdr folders)
-                                     "/com.apple.DeveloperTools"))))))
+    (let ((temp (car folders)))
+      (list (concat temp "/TemporaryItems")
+            (cons 'regexp (concat "^" (+agent-shell-sandbox-regexp-quote
+                                       (concat temp "/xcrun_db"))))
+            (concat temp "/hsperfdata_" (user-login-name))
+            (concat (cdr folders) "/com.apple.DeveloperTools")))))
+
+(defun +agent-shell-sandbox--filters (allowances)
+  "Return the SBPL filters for ALLOWANCES, paths or patterns, each spaced."
+  (mapconcat (lambda (allowance)
+               (if (+agent-shell-sandbox-pattern-p allowance)
+                   (format " (regex #\"%s\")" (cdr allowance))
+                 (format " (subpath %s)"
+                         (+agent-shell-sandbox--string allowance))))
+             allowances ""))
 
 (defun +agent-shell-sandbox-profile (sandbox)
   "Return the sandbox-exec profile text for SANDBOX.
 In trace mode every rule that would refuse an operation allows it with a
 report tagged with SANDBOX's trace tag instead."
-  (let* ((subpaths (lambda (paths)
-                     (mapconcat (lambda (path)
-                                  (format " (subpath %s)"
-                                          (+agent-shell-sandbox--string path)))
-                                paths "")))
-         (tag (+agent-shell-sandbox-trace sandbox))
+  (let* ((tag (+agent-shell-sandbox-trace sandbox))
          (refuse (lambda (operation filters)
                    (if tag
                        (format "(allow %s (with report) (with message %s)%s)\n"
@@ -262,25 +378,24 @@ report tagged with SANDBOX's trace tag instead."
     (concat
      "(version 1)\n(allow default)\n" (funcall refuse "file-write*" "")
      (format "(allow file-write*%s)\n"
-             (concat
-              (funcall subpaths (append
-                                 (list (+agent-shell-sandbox-root sandbox)
-                                       (+agent-shell-sandbox-tmp sandbox)
-                                       (+agent-shell-sandbox-config sandbox)
-                                       "/dev")
-                                 (+agent-shell-sandbox-allow-writes sandbox)))
-              (mapconcat (lambda (filter) (concat " " filter))
-                         (+agent-shell-sandbox--toolchain-writes) "")))
+             (+agent-shell-sandbox--filters
+              (append (list (+agent-shell-sandbox-root sandbox)
+                            (+agent-shell-sandbox-tmp sandbox)
+                            (+agent-shell-sandbox-config sandbox)
+                            "/dev")
+                      (+agent-shell-sandbox-allow-writes sandbox)
+                      (+agent-shell-sandbox--toolchain-writes))))
      ;; A worktree's .git file points git at the lead's repository.
      (funcall refuse "file-write*"
               (format " (literal %s)"
                       (+agent-shell-sandbox--string
                        (concat (+agent-shell-sandbox-root sandbox) "/.git"))))
      (when-let* ((denied (+agent-shell-sandbox-deny-reads sandbox)))
-       (funcall refuse "file-read*" (funcall subpaths denied)))
+       (funcall refuse "file-read*" (+agent-shell-sandbox--filters denied)))
      ;; A later rule overrides an earlier one.
      (when-let* ((allowed (+agent-shell-sandbox-allow-reads sandbox)))
-       (format "(allow file-read*%s)\n" (funcall subpaths allowed)))
+       (format "(allow file-read*%s)\n"
+               (+agent-shell-sandbox--filters allowed)))
      (when-let* ((stat (+agent-shell-sandbox-allow-metadata sandbox)))
        (format "(allow file-read-metadata%s)\n"
                (mapconcat (lambda (path)

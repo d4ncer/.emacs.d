@@ -250,7 +250,16 @@ keys:
   `+agent-shell-sandbox` returning the text written there before the agent
   starts.
 - `:write` and `:read` add sandbox allowances. Each element is an
-  absolute path or a function of the sandbox returning paths.
+  absolute path, a `(regexp . RE)` pattern, or a function of the sandbox
+  returning paths or patterns. A pattern suits a tool that makes randomly
+  named files in a shared folder, such as `diff`'s
+  `/private/tmp/diff.XXXXXXXX`: `(regexp . "^/private/tmp/diff\\.")`.
+  `RE` is a `sandbox-exec` regex matched against true names, so it says
+  `/private/tmp`, not `/tmp`. It must start with `^` and the literal name
+  of a folder below the root, with no `|` outside parentheses, and
+  `sandbox-exec` must compile it. Emacs rejects anything else, such as
+  `".*"` or `"^/.*"`, which could match the whole filesystem.
+  `+agent-shell-sandbox-regexp-quote` quotes a path a function computes.
 - `:env` lists `NAME=VALUE` entries, or is a function of the sandbox
   returning them. They win over the defaults.
 
@@ -262,7 +271,8 @@ arena with an error naming the key.
 
 This hypothetical repository shares its vendored packages, copies its
 generated `local.env`, points its build tool's cache at each candidate's
-private temp folder, and lets its language server write its own cache:
+private temp folder, lets its language server write its own cache, and
+lets `diff` write its randomly named temp files:
 
 ```elisp
 (add-to-list
@@ -274,7 +284,7 @@ private temp folder, and lets its language server write its own cache:
             . ,(lambda (sandbox)
                  (format "cache_dir = %s/widget-cache\n"
                          (+agent-shell-sandbox-tmp sandbox)))))
-   :write ("~/.cache/widget-lsp")
+   :write ("~/.cache/widget-lsp" (regexp . "^/private/tmp/diff\\."))
    :env ("WIDGET_TELEMETRY=0")))
 ```
 

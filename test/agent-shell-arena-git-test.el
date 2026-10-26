@@ -280,6 +280,8 @@
                        ((:files (("/gen.cfg" . ignore))) ":files")
                        ((:write ("relative")) ":write")
                        ((:read (42)) ":read")
+                       ((:write ((regexp . ".*"))) ":write")
+                       ((:read ((regexp . "^/tmp/diff\\."))) ":read")
                        ((:env (A=1 "B=2")) ":env")
                        ((:shared ("deps") :copy ("deps/gen")) ":copy")
                        ((:shared ("deps") :files (("deps/x" . ignore)))
@@ -290,6 +292,9 @@
         (let ((err (should-error (+agent-shell-arena-git-profile repo)
                                  :type 'user-error)))
           (should (string-search key (cadr err)))))
+      (setq +agent-shell-pstack-arena-profiles
+            `((,repo :write ((regexp . "^/private/tmp/diff\\.")))))
+      (should (+agent-shell-arena-git-profile repo))
       (setq +agent-shell-pstack-arena-profiles '((42 :shared ("x"))))
       (should-error (+agent-shell-arena-git-profile repo) :type 'user-error))))
 

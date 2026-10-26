@@ -131,7 +131,13 @@ medium repository. A profile names its paths in these kinds:
   at the private temp and config folders. They are left out of the result
   too.
 - **Allowances** add write and read paths to the profile, and
-  **environment** entries take precedence over the defaults.
+  **environment** entries take precedence over the defaults. An allowance
+  may be a `(regexp . RE)` pattern, emitted as an SBPL `(regex #"RE")`
+  filter, for files with random names in a shared folder. Emacs checks
+  each pattern at the boundary: `RE` starts with `^` and the literal true
+  name of a folder below the root, has no alternative outside
+  parentheses, holds no double quote, and compiles under `sandbox-exec`.
+  So no pattern can open `/` or the whole filesystem.
 
 Capture restores copied and generated paths to the base with `git reset`
 after `git add`, rather than excluding them with a pathspec, because

@@ -112,6 +112,59 @@ so deleting the tree needs owner write permission back first."
       (should (string-suffix-p "(allow network-outbound (remote unix-socket \
 (path-literal \"/private/var/run/mDNSResponder\")))\n" profile)))))
 
+(ert-deftest +agent-shell-sandbox-test-pattern-validation ()
+  "Accept patterns anchored below a folder under the root, and reject any
+that could match / or the whole filesystem."
+  (dolist (re '("^/private/tmp/diff\\."
+                "^/private/tmp/diff\\.[A-Za-z0-9]+$"
+                "^/private/var/folders/x/T/xcode_locator-[0-9]+\\.o$"
+                "^/private/tmp/(a|b)/"
+                "^/private/tmp/[[:alpha:]|]+$"))
+    (should-not (+agent-shell-sandbox-allowance-error (cons 'regexp re))))
+  (dolist (value '((regexp . "") (regexp . ".*") (regexp . "^/")
+                   (regexp . "^/.*") (regexp . "^/private")
+                   (regexp . "^/private.*/") (regexp . "^/privat?e/tmp/")
+                   (regexp . "^/[a-z]+/tmp/") (regexp . "/private/tmp/x")
+                   (regexp . "^/private/tmp/x|.*")
+                   (regexp . "^/private/tmp/a\"b") (regexp . "^/tmp/diff\\.")
+                   (regexp . 3) (regexp "^/private/tmp/x") "relative" 42))
+    (should (stringp (+agent-shell-sandbox-allowance-error value))))
+  (should-not (+agent-shell-sandbox-allowance-error "/private/tmp")))
+
+(ert-deftest +agent-shell-sandbox-test-pattern-allowances ()
+  "Take patterns from lists and functions, render them as regex filters,
+and reject a bad pattern a function returns."
+  (let* ((root (file-truename (make-temp-file "pa-test-" t)))
+         (pattern '(regexp . "^/private/tmp/diff\\."))
+         (sandbox (+agent-shell-sandbox-create
+                   root
+                   :allow-writes (list pattern
+                                       (lambda (_)
+                                         '(regexp . "^/private/tmp/w-")))
+                   :allow-reads (list (lambda (_)
+                                        (list "/private/tmp"
+                                              '(regexp . "^/private/var/r-")))))))
+    (unwind-protect
+        (let ((profile (+agent-shell-sandbox-profile sandbox)))
+          (should (equal (list pattern '(regexp . "^/private/tmp/w-"))
+                         (+agent-shell-sandbox-allow-writes sandbox)))
+          (should (equal '("/private/tmp" (regexp . "^/private/var/r-"))
+                         (+agent-shell-sandbox-allow-reads sandbox)))
+          (should (string-search
+                   "(regex #\"^/private/tmp/diff\\.\") (regex #\"^/private/tmp/w-\")"
+                   profile))
+          (should (string-search
+                   "(allow file-read* (subpath \"/private/tmp\") \
+(regex #\"^/private/var/r-\"))"
+                   profile))
+          (should-error (+agent-shell-sandbox-create
+                         root :allow-writes (list (lambda (_)
+                                                    '(regexp . "^/.*"))))
+                        :type 'user-error))
+      (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+      (delete-directory (+agent-shell-sandbox-config sandbox) t)
+      (delete-directory root t))))
+
 (ert-deftest +agent-shell-sandbox-test-profile-quoting ()
   "Escape quotes and backslashes in profile paths."
   (should (equal "\"/a \\\"b\\\" \\\\c\""
@@ -425,6 +478,59 @@ Keep JAVA_TOOL_OPTIONS the user already had."
         (should (eql 0 (call-process "/bin/cat" nil nil nil secret)))
         (should-not (eql 0 (funcall run "/bin/sh" "-c" "echo x > .git")))
         (should-not (file-exists-p (expand-file-name ".git" root)))))))
+
+(ert-deftest +agent-shell-sandbox-test-confines-patterns ()
+  "Write and read paths a pattern matches, and nothing that nearly does.
+A pattern sandbox-exec cannot compile is rejected when the sandbox is
+made."
+  (+agent-shell-sandbox-test--on-macos
+    (let* ((shared (format "/private/tmp/pa-pattern-%08x"
+                           (random #x100000000)))
+           (root (file-truename (make-temp-file "pa-test-" t)))
+           (quoted (+agent-shell-sandbox-regexp-quote shared))
+           (secret (concat shared "/secret"))
+           (sandbox (+agent-shell-sandbox-create
+                     root :deny-reads (list secret)
+                     :allow-writes
+                     (list (cons 'regexp
+                                 (concat "^" quoted "/diff\\.[A-Za-z0-9]+$")))
+                     :allow-reads
+                     (list (lambda (_)
+                             (cons 'regexp
+                                   (concat "^" quoted "/secret/public-"))))))
+           (run (lambda (&rest command)
+                  (apply #'+agent-shell-sandbox-test--run sandbox root
+                         command))))
+      (unwind-protect
+          (progn
+            (make-directory secret t)
+            (+agent-shell-sandbox-test--write
+             (expand-file-name "public-notes" secret) "open")
+            (+agent-shell-sandbox-test--write
+             (expand-file-name "private-notes" secret) "closed")
+            (should (eql 0 (funcall run "/usr/bin/touch"
+                                    (concat shared "/diff.a1B2c3D4"))))
+            (should (file-exists-p (concat shared "/diff.a1B2c3D4")))
+            (dolist (near '("/diff.a1B2.bak" "/diff." "/diffX.a1B2" "/xdiff.a1"))
+              (should-not (eql 0 (funcall run "/usr/bin/touch"
+                                          (concat shared near))))
+              (should-not (file-exists-p (concat shared near))))
+            (should (eql 0 (funcall run "/bin/cat"
+                                    (concat secret "/public-notes"))))
+            (should-not (eql 0 (funcall run "/bin/cat"
+                                        (concat secret "/private-notes"))))
+            (should (string-search
+                     "sandbox-exec compiles"
+                     (cadr (should-error
+                            (+agent-shell-sandbox-create
+                             root :allow-writes
+                             (list (cons 'regexp
+                                         (concat "^" quoted "/(unclosed"))))
+                            :type 'user-error)))))
+        (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+        (delete-directory (+agent-shell-sandbox-config sandbox) t)
+        (delete-directory root t)
+        (delete-directory shared t)))))
 
 (ert-deftest +agent-shell-sandbox-test-shared-links ()
   "Read, but never write, a shared folder linked from a denied checkout.
