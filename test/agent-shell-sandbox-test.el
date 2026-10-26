@@ -294,7 +294,10 @@ Keep JAVA_TOOL_OPTIONS the user already had."
                   "-XshowSettings:properties" "-version")))
         (should (equal (concat tmp "\n")
                        (+agent-shell-sandbox-test--output
-                        sandbox (executable-find "go") "env" "GOTMPDIR")))))))
+                        sandbox (executable-find "go") "env" "GOTMPDIR")))
+        (should (equal (concat tmp "/go-build\n")
+                       (+agent-shell-sandbox-test--output
+                        sandbox (executable-find "go") "env" "GOCACHE")))))))
 
 (ert-deftest +agent-shell-sandbox-test-user-folders ()
   "Write the per-user temp files toolchains need, and nothing else there."
