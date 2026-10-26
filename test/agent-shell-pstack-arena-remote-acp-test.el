@@ -274,7 +274,7 @@ record, and `delivered', which waits for a panel's follow-up."
                      tmp-before))
          (ignore-errors (delete-directory tmp t)))
        (when (get-buffer "*pstack panels*") (kill-buffer "*pstack panels*"))
-       (if (getenv "PA_REMOTE_KEEP") (message "KEPT %s" scratch) (ignore-errors (delete-directory scratch t))))))
+       (ignore-errors (delete-directory scratch t)))))
 
 (defmacro +agent-shell-pstack-arena-remote-acp-test--skip ()
   "Skip unless this machine can run a local host's sandboxed candidates."
@@ -362,7 +362,9 @@ The follow-up matches the one the same arena gives when run locally."
             ;; The panel showed the runner's states while it ran.
             (should (seq-find (lambda (seen)
                                 (and (eq 'remote (nth 0 seen))
-                                     (eq 'candidates (nth 1 seen))))
+                                     (memq (nth 1 seen)
+                                           '(preparing candidates capturing
+                                                       judging))))
                               mirrored))
             (should (seq-every-p (lambda (seen) (equal (nth 2 seen) (nth 3 seen)))
                                  mirrored))

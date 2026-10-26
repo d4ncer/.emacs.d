@@ -346,7 +346,7 @@ candidates; this Emacs runs on %s" system-type))
           (when (member "judge" roles)
             (user-error "Role judge is reserved for the arena's judge"))
           (when (member "base" roles)
-            (user-error "Role base is reserved for the arena's base"))
+            (user-error "Role base is reserved for the ref holding the base"))
           (let ((rubric (+agent-shell-pstack-panel--parse-rubric
                          (map-elt request 'rubric)))
                 (judge (+agent-shell-pstack-panel--parse-judge
@@ -1283,7 +1283,7 @@ An arena on a host decides for itself; see
   :doc "Keymap for `+agent-shell-pstack-panels-mode'."
   "RET" #'+agent-shell-pstack-panels-visit
   "x" #'+agent-shell-pstack-panels-clean
-  "k" #'+agent-shell-pstack-panels-cancel)
+  "c" #'+agent-shell-pstack-panels-cancel)
 
 (define-derived-mode +agent-shell-pstack-panels-mode special-mode
   "pstack panels"
@@ -1345,7 +1345,7 @@ message with a pstack-panel block.\n"))
             (when-let* ((remote (+agent-shell-pstack-panel-remote panel)))
               (+agent-shell-pstack-panels--line
                directory "  Host: "
-               (+agent-shell-arena-remote-describe remote)))))
+               (+agent-shell-arena-remote-describe remote t)))))
         (dolist (member (+agent-shell-pstack-panel-members panel))
           (let ((report (+agent-shell-pstack-panel-member-report member))
                 (shell (+agent-shell-pstack-panel-member-shell member))

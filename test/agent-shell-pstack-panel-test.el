@@ -524,6 +524,28 @@ high signal." followup))))))
              (+agent-shell-pstack-panel-members
               (car (+agent-shell-pstack-panel-list)))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-cancel-from-view ()
+  "Cancelling a running panel from the view settles its members once."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--how))
+    (let ((panel (car (+agent-shell-pstack-panel-list))))
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (with-temp-buffer
+          (+agent-shell-pstack-panels-mode)
+          (+agent-shell-pstack-panels--render)
+          (goto-char (point-min))
+          (+agent-shell-pstack-panels-cancel)
+          (should (equal '(error error)
+                         (+agent-shell-pstack-panel-test--states panel)))
+          (should (string-match-p "## data-flow (codex): error\nYou \
+cancelled the panel." (cdar sent)))
+          (+agent-shell-pstack-panels--render)
+          (goto-char (point-min))
+          (should-error (+agent-shell-pstack-panels-cancel)
+                        :type 'user-error))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-protocol ()
   "Explain the protocol on the priming prompt only, naming usable agents."
   (+agent-shell-pstack-panel-test--with
@@ -869,6 +891,8 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
 claude-code")
            ((members . [((role . "judge") (agent . "codex"))])
             "Role judge is reserved")
+           ((members . [((role . "base") (agent . "codex"))])
+            "Role base is reserved for the ref holding the base")
            ((members . [((role . "-a") (agent . "codex"))])
             "Member role \"-a\" must be lowercase")
            ((judge . ((agent . "gemini"))) "Judge must be an object whose \

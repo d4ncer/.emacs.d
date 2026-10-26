@@ -47,6 +47,7 @@
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
    "-l" "agent-shell-sandbox-test" "-l" "agent-shell-sandbox-linux-test"
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-arena-git-test"
+   "-l" "agent-shell-arena-remote-test"
    "-l" "agent-shell-pstack-arena-sandbox-test"
    "-l" "agent-shell-pstack-arena-trace-test"
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"
@@ -66,6 +67,8 @@
                          "-l" "run-agent-shell-sandbox")
   (+config-check-process "pstack arenas over ACP"
                          "-l" "run-agent-shell-pstack-arena")
+  (+config-check-process "Remote pstack arenas over ACP"
+                         "-l" "run-agent-shell-pstack-arena-remote")
   (+config-check-process "agent-shell workarounds over ACP" "-l" "run-agent-shell-perf")
   (+config-check-process "Helper compilation" "-l" "config-compile-test")
   (princ (format "All configuration gates passed; %d ERT tests.\n" +config-check-tests)))

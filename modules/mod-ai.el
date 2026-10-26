@@ -286,10 +286,18 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
    "RET" #'+agent-shell-pstack-panels-visit
    "<return>" #'+agent-shell-pstack-panels-visit
    "x" #'+agent-shell-pstack-panels-clean
+   "c" #'+agent-shell-pstack-panels-cancel
    "gr" #'revert-buffer
    "q" #'quit-window)
   :config
   (+agent-shell-pstack-panel-mode 1))
+
+(use-package +agent-shell-arena-remote
+  :ensure nil
+  :after +agent-shell-pstack-panel
+  :demand t
+  :config
+  (+agent-shell-arena-remote-mode 1))
 
 (use-package +agent-shell-pstack-arena-trace
   :ensure nil

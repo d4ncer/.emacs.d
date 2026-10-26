@@ -217,7 +217,8 @@ The slots after ERROR are not saved."
          (judge-timeout "judge_timeout" natnum)
          (candidates "candidates" (list candidate)) (judge "judge" agent)
          (prefix "prefix" text) (base "base" sha)
-         (prerequisite "prerequisite" (opt sha)) (sparse "sparse" (opt sparse))
+         (prerequisite "prerequisite" (opt sha))
+         (sparse "sparse" (opt (record sparse)))
          (profile "profile" (opt profile)) (repository "repository" text)
          (code "code" sha) (deadline "deadline" natnum))
     (candidate +agent-shell-arena-remote-candidate
@@ -319,8 +320,8 @@ absent or null.")
                value
              (funcall bad "a name of letters, digits, _ and -")))
       ('sha (if (and (stringp value)
-                     (string-match-p "\\`\\(?:[0-9a-f]\\{40\\}\\|[0-9a-f]\\{64\\}\\)\\'"
-                                     value))
+                     (string-match-p
+                      "\\`\\(?:[0-9a-f]\\{40\\}\\|[0-9a-f]\\{64\\}\\)\\'" value))
                 value
               (funcall bad "a full hex object id")))
       ('agent (if (and (stringp value)
@@ -402,7 +403,8 @@ to %d; update it" path version +agent-shell-arena-remote-wire-version))))))
                                        kind element))
                                     value)))
     (`(record ,kind) (+agent-shell-arena-remote--encode kind value))
-    ('profile (+agent-shell-arena-remote--encode-profile value))))
+    ('profile (+agent-shell-arena-remote--encode-profile value))
+    (_ (error "Unknown field type %S" type))))
 
 (defun +agent-shell-arena-remote--encode (kind record)
   "Return RECORD of KIND as `json-serialize' takes it."
@@ -993,7 +995,7 @@ unreachable until the lead re-attaches it.")
 (defun +agent-shell-arena-remote--save (remote)
   "Write REMOTE to its arena folder, if that folder still exists."
   (let ((directory (+agent-shell-arena-remote-directory remote)))
-    (when (file-directory-p directory)
+    (when (and directory (file-directory-p directory))
       (+agent-shell-arena-remote--write-json
        (+agent-shell-arena-remote--record-file directory) 'record remote))))
 
@@ -2149,10 +2151,13 @@ PREVIOUS is the status an earlier runner left unfinished."
 RESULTS says the results are written, which finishes the status."
   (let* ((panel (+agent-shell-arena-remote--runner-panel runner))
          (manifest (and panel (+agent-shell-pstack-panel-arena panel)))
-         (phase (if results 'finished
-                  (let ((phase (if panel (+agent-shell-pstack-panel-phase panel)
-                                 (+agent-shell-arena-remote--runner-phase runner))))
-                    (if (eq phase 'finished) 'judging phase))))
+         (phase (cond (results 'finished)
+                      ;; Finished only once the results are written.
+                      ((null panel)
+                       (+agent-shell-arena-remote--runner-phase runner))
+                      ((eq (+agent-shell-pstack-panel-phase panel) 'finished)
+                       'judging)
+                      (t (+agent-shell-pstack-panel-phase panel))))
          (status (+agent-shell-arena-remote--make-status
                   :id (+agent-shell-arena-remote-job-id
                        (+agent-shell-arena-remote--runner-job runner))
@@ -2167,9 +2172,11 @@ RESULTS says the results are written, which finishes the status."
          (now (float-time)))
     (when (or results
               (and (not (+agent-shell-arena-remote--runner-done runner))
-                   (or (not (equal text (+agent-shell-arena-remote--runner-written runner)))
-              (>= (- now (+agent-shell-arena-remote--runner-beat runner))
-                  +agent-shell-arena-remote-heartbeat))))
+                   (or (not (equal text
+                                   (+agent-shell-arena-remote--runner-written
+                                    runner)))
+                       (>= (- now (+agent-shell-arena-remote--runner-beat runner))
+                           +agent-shell-arena-remote-heartbeat))))
       (setf (+agent-shell-arena-remote-status-heartbeat status) now
             (+agent-shell-arena-remote--runner-written runner) text
             (+agent-shell-arena-remote--runner-beat runner) now)
@@ -2449,7 +2456,8 @@ The results bundle and report land before the status that names them."
                (+agent-shell-arena-remote-job-id
                 (+agent-shell-arena-remote--runner-job runner)))
           (+agent-shell-arena-remote--runner-start runner)))
-       ((and deadline (> (float-time) (+ deadline +agent-shell-arena-remote-grace)))
+       ((and deadline
+             (> (float-time) (+ deadline +agent-shell-arena-remote-grace)))
         (setf (+agent-shell-arena-remote--runner-error runner)
               "The runner gave up on its capture after its deadline.")
         (+agent-shell-pstack-panel--finish panel))
@@ -2536,7 +2544,7 @@ recovers a job an earlier runner left unfinished."
                                        runner))
               (while (not (+agent-shell-arena-remote--runner-done runner))
                 (accept-process-output nil 0.5))
-              ;; Let stops and discards the finish set off run before exit.
+              ;; Let the stops and discards the finish started run first.
               (let ((until (+ (float-time) 3)))
                 (while (< (float-time) until)
                   (accept-process-output nil 0.1)))

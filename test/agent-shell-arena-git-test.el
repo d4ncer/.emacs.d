@@ -571,6 +571,49 @@ patterns is captured and reported."
                                 :outside)
                      '("l10n/m.de.xlf"))))))
 
+(ert-deftest +agent-shell-arena-git-test-sparse-from-elsewhere ()
+  "A base made in another clone gives a full checkout's candidates the
+lead's sparse patterns, and a result fetched without a worktree is
+cleaned by its ref."
+  (+arena-git-test--with-scratch
+    (let* ((lead (+arena-git-test--sparse-repo "--cone" "src"))
+           (sparse (+agent-shell-arena-git-sparse
+                    (+arena-git-test--base lead)))
+           (host (+arena-git-test--repo
+                  "top.txt" "top\n" "src/a.txt" "a\n" "l10n/m.en.xlf" "en\n"
+                  "l10n/m.fr.xlf" "fr\n" "docs/d.txt" "d\n"))
+           (commit (+arena-git-test--git host "rev-parse" "HEAD")))
+      (should (equal '(:cone t :patterns ("/*" "!/*/" "/src/")) sparse))
+      (should-error (+agent-shell-arena-git-base-at host (make-string 40 ?0)
+                                                    "" sparse)
+                    :type 'user-error)
+      (let* ((manifest (+arena-git-test--arena
+                        (+agent-shell-arena-git-base-at host commit "src/"
+                                                        sparse)))
+             (directory (+arena-git-test--provision manifest "opus"))
+             (worktree (file-name-directory (directory-file-name directory))))
+        (should (equal (file-name-as-directory (expand-file-name "src" worktree))
+                       directory))
+        (should (equal '("src/a.txt" "top.txt")
+                       (+arena-git-test--files worktree)))
+        (should (equal "" (+arena-git-test--git worktree "status" "--porcelain")))
+        (should (member "docs/d.txt" (+arena-git-test--files host)))
+        (let ((ref (+agent-shell-arena-git-ref manifest "fetched")))
+          (+arena-git-test--git host "update-ref" ref commit)
+          (+agent-shell-arena-git-record manifest "fetched" commit "done")
+          (should (equal commit
+                         (+agent-shell-arena-git-role-commit
+                          (+agent-shell-arena-git-role
+                           (+agent-shell-arena-git-read-manifest
+                            (+agent-shell-arena-git-manifest-directory manifest))
+                           "fetched"))))
+          (should (equal '(nil nil)
+                         (+arena-git-test--wait
+                          (lambda (done)
+                            (+agent-shell-arena-git-clean manifest done)))))
+          (should (equal "" (+arena-git-test--git host "for-each-ref"
+                                                  "refs/pstack-arena/"))))))))
+
 (ert-deftest +agent-shell-arena-git-test-sparse-common-config ()
   "A sparse checkout configured in the shared config, without
 extensions.worktreeConfig, reaches the candidate too."

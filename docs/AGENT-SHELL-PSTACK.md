@@ -12,7 +12,7 @@ single-harness port cannot, while upstream text stays untouched.
 |---|---|---|
 | 0. Skills in agents | Done | pstack installed in Claude Code and Codex |
 | 1. Sticky mode and guard | Done | `+agent-shell-pstack-mode`, `+agent-shell-pstack-guard-mode` |
-| 2. Cross-vendor panels | Done | `how` and `interrogate` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees |
+| 2. Cross-vendor panels | Done | `how` and `interrogate` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees, here or on a remote host |
 | 3. Views | Partial | Panel status buffer; decision trail and plan views are planned |
 
 ## Layer 0: install the skills
@@ -142,8 +142,9 @@ an unsent draft. Emacs retries on the lead's next `turn-complete` or
 `prompt-ready`, and each follow-up is sent once.
 
 Panels live in memory. Restarting Emacs ends the lead and every member, so an
-interrupted panel does not resume. Killing the lead stops its unfinished
-panels. The panel and member structs only gain slots at the end and carry
+interrupted panel does not resume. An arena on a remote host is the
+exception; see [On a remote host](#on-a-remote-host). Killing the lead
+stops its unfinished panels. The panel and member structs only gain slots at the end and carry
 a schema number, `+agent-shell-pstack-panel--schema`. Loading the library
 again drops in-memory panels from another schema, with a message, rather
 than letting a changed struct break them.
@@ -326,6 +327,56 @@ rest of the cleanup still runs. The kernel drops
 an occasional report, so trace again before trusting that a path is
 absent.
 
+#### On a remote host
+
+A profile with `:host` runs the whole arena on another machine, a Coder
+remote host in the first use. The candidates, their worktrees and the judge
+stay there. `:host` is `(coder . NAME)` for the workspace reached as `ssh
+coder.NAME`, `(ssh . HOST)` for a plain SSH host, or `(local .
+DIRECTORY)`, which runs the host's side as local processes and serves the
+tests. `:host-directory` names the repository's checkout on the host:
+
+```elisp
+(add-to-list
+ '+agent-shell-pstack-arena-profiles
+ '("~/src/big-repo" :host (coder . "example-ws")
+   :host-directory "~/src/big-repo"))
+```
+
+The rest of the profile travels with each job as plain data. Its
+functions are called on the laptop against a stand-in sandbox whose
+folders are `@ROOT@`, `@TMP@` and `@CONFIG@`, and the host fills in its
+own. The host needs `ready.json` and `runner-init.el` in
+`~/.local/state/pstack-arena-remote/`, which its setup writes. The first
+names the host's Emacs, and the second configures its agents.
+
+The lead's request is the same, and so is its follow-up. The follow-up
+adds one line naming the host. The panel moves through `preparing`,
+`submitting`, `remote`, `fetching` and `finished`, and its members show
+the states the host reports. The laptop:
+
+- snapshots the base;
+- keeps it under `refs/pstack-arena/<id>/base`;
+- bundles it against a commit the host already has;
+- extends a Coder workspace's stop time to cover the arena's deadline;
+- uploads the job, polling every 30 seconds after that.
+
+The results land in `refs/pstack-arena/<id>/<role>` in the lead's
+repository, as local ones do. A base that changes Git LFS files is
+refused. Arenas sharing a host checkout run one at a time.
+
+Each remote arena keeps a record on disk. After Emacs restarts, the
+library re-attaches to every arena that has not delivered its results.
+It gives the follow-up to whichever shell resumes the lead's session.
+`c` in the panels view cancels an arena, and so does ending the lead's
+shell. A cancel captures what the candidates made and skips the judge.
+Quitting Emacs leaves the arena running.
+
+A host that stops answering for 15 minutes gets the lead an "unreachable"
+follow-up. `M-x +agent-shell-pstack-arena-reattach` resumes polling it.
+`x` and `M-x +agent-shell-pstack-arena-clean` clean both sides. See
+`docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md`.
+
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
 event watching shared with `agent-shell-projects`.
@@ -335,8 +386,9 @@ event watching shared with `agent-shell-projects`.
 `C-c P` in an agent shell runs `+agent-shell-pstack-panels`. It lists every
 panel since Emacs started, with its id, shape, phase or status and lead, and
 each member's role, agent, state and report. An arena also shows its folder
-and each candidate's capture. `RET` visits the report, the arena folder, or
-the member or lead shell, and `x` cleans up a finished arena. The buffer
+and each candidate's capture, and a remote one its host and the host's
+phase. `RET` visits the report, the arena folder, or the member or lead
+shell, `x` cleans up a finished arena, and `c` cancels an unfinished panel. The buffer
 redraws whenever a panel changes. The decision trail and plan views are
 planned.
 

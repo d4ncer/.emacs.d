@@ -1,6 +1,16 @@
 # pstack arena panels on a remote host: design
 
-Status: proposed, revision 2. Revision 1 was attacked by interrogate
+Status: revision 2, implemented except the Linux sandbox. The transport,
+base transfer, runner and laptop side live in
+`lisp/+agent-shell-arena-remote.el`, with hooks in
+`lisp/+agent-shell-pstack-panel.el` and `lisp/+agent-shell-arena-git.el`.
+They run end to end on a `(local . DIRECTORY)` host, whose runner still
+uses the macOS sandbox. [The implementation](#the-implementation)
+describes them, and [how it departs](#how-the-implementation-departs)
+lists every difference from this design. The Linux sandbox backend is
+separate work in `lisp/+agent-shell-sandbox.el`.
+
+Revision 1 was attacked by interrogate
 panel `6799a86a4a5d` (`var/pstack-panels/6799a86a4a5d/`). Its findings
 and the probes they prompted changed the sandbox, credentials, versioning
 and lifecycle sections below. The triage table at the end maps each
@@ -246,6 +256,231 @@ A running candidate can read the common git directory, so a second arena's
 candidates could read the first's captured objects. Per-arena object stores
 are a later option.
 
+## The implementation
+
+### Records
+
+Four records are versioned JSON, each a kind in
+`+agent-shell-arena-remote--kinds`. Every file carries `version` and
+`kind`. A reader takes versions 1 up to its own, refuses a newer one
+with "update this Emacs", ignores fields it does not know, and checks
+every field's type at the boundary. Ids must be names safe in a path and
+a ref, commits full hex ids, and agents identifiers. An error names the
+field, such as `status.members[0].agent`.
+
+- **The job**, `job.json`: the panel id, brief, rubric, timeouts,
+  candidates, judge, the lead's prefix, the base, its prerequisite, the
+  lead's sparse patterns, the profile as plain data, the host checkout,
+  the code hash, and the runner's deadline in seconds.
+- **The status**, `status.json`: the runner's phase (`queued`, then the
+  panel's), its pid, heartbeat and deadline, the host's arena id, each
+  member's state and capture, and whether results are written.
+- **The report**, `report.json`: each member's state, capture, text,
+  error, result commit, diff stat and capture failure, and any rejection.
+- **The laptop's record**, `remote.json` in the laptop's arena folder:
+  the panel and session ids, the host, the laptop phase, the cancel
+  state, whether the job was submitted, the results fetched and the
+  follow-up delivered, the last heartbeat and when it changed, the
+  restarts, the host's arena id and Emacs.
+
+The host also has `ready.json`, which its setup writes once its smoke
+check passes: `{"version":1,"kind":"ready","emacs":"/path/to/emacs",
+"emacs_version":"31.1"}`. A submission refuses a host without one or
+with an Emacs older than 30.
+
+### Phases on the laptop
+
+```
+preparing ─▶ submitting ─▶ remote ─▶ fetching ─▶ finished
+                  │            │ ▲        │
+                  │            ▼ │        ▼
+                  │        unreachable ◀──┘
+                  └─ rejection ─▶ finished
+```
+
+`+agent-shell-arena-remote--transitions` is the table, and every move
+saves the record. `preparing` snapshots the base as a local arena does.
+`submitting` probes the host, negotiates the prerequisite, bundles,
+uploads and starts the runner. `remote` polls. `fetching` lands the
+results. A host silent for `+agent-shell-arena-remote-unreachable-after`
+(900 s) makes the arena `unreachable`, and only a re-attach moves it
+back to `remote`. A failed fetch goes back to `remote` and is retried.
+The panel shows the phase, and members take the states the status gives
+without the local settle and halt path.
+
+### Transport
+
+Each call runs `sh -c SCRIPT` in the host's state folder: through `ssh
+coder.NAME` or `ssh HOST`, or as a local process for a local host.
+`+agent-shell-arena-remote--call` keeps one call in flight per host, so
+polls never overlap and a submission never races a cancel.
+
+- **SSH options.** Every call shares a `ControlMaster` connection kept 10
+  minutes. It uses `BatchMode`, a 15-second `ConnectTimeout`, and
+  `ServerAliveInterval` 15 with `ServerAliveCountMax` 3.
+- **Timeouts.** Each call has its own timeout: 120 s for a poll, 900 s
+  for a submission or a fetch. A call that outlives it is killed and
+  reported.
+- **Polling.** Polls come every 30 s. After failures the wait doubles,
+  up to 10 minutes.
+- **Files.** Standard input and output can be local files, so the upload
+  and the results each travel in one call.
+- **Tests.** `+agent-shell-arena-remote-spawn-function` is the process
+  layer, which tests stub.
+
+The scripts are constants in the library, so the host needs nothing of
+this code installed:
+
+| Script | Arguments | Does |
+|---|---|---|
+| probe | checkout, code hash | Reports the checkout's top level, its `origin/HEAD` tip (or `HEAD`), whether the code is there, and `ready.json`. |
+| submit | id, checkout, Emacs, launcher | Unpacks the upload on standard input into `jobs/<id>/`. Installs the code under `code/<hash>/` if new. Verifies the bundle, fetching the prerequisite from `origin` if missing. Fetches the base into `refs/pstack-arena/<id>/base`. Starts the runner. Answers `started`, `missing`, `code` or `failed`. A started job answers `started` again. |
+| poll | id, cancel, reason | Writes the cancel marker when asked, then reports whether the runner lives, whether a marker exists, and the status. |
+| resume | id, Emacs, launcher | Starts the runner again unless it runs. |
+| fetch | id | Writes the report and results bundle as a tar stream. |
+| clean | id, Emacs | Waits up to 20 s for a finished runner to exit. Then removes the host's arena through its manifest, the base ref and the job folder, unless the runner still runs. |
+
+The runner starts through `systemd-run --user` on an SSH host and through
+`nohup` on a local one, so it outlives the call either way.
+
+### Base and code
+
+The laptop keeps the base under `refs/pstack-arena/<id>/base`, recorded
+as the manifest's `base` role so cleanup removes it. `base` is therefore
+a reserved role name. `+agent-shell-arena-remote-prerequisites` returns
+the commits to cut the bundle against, in order:
+
+1. The merge base with the host's tip, when the laptop has that commit.
+2. The merge base with the laptop's own `origin/HEAD` or upstream. The
+   host fetches it from `origin` if it lacks it.
+3. Nothing, a bundle of the whole history, when neither exists.
+
+On `missing`, the laptop tries the next rung. When all fail, it rejects
+the arena, naming the commits tried.
+
+A base that changes Git LFS files after the prerequisite is refused,
+since the host would lack their contents. A result that changes one is
+flagged in the follow-up as locally, with a note that the contents stayed
+on the host.
+
+The runner's code is the libraries in `+agent-shell-arena-remote-libraries`
+plus every source file of the packages in
+`+agent-shell-arena-remote-packages` (agent-shell, acp, shell-maker), as
+this Emacs loads them. Its hash is the SHA-256 of their names and
+contents, and the tarball is built once per hash under
+`<arena directory>/code/`.
+
+### The runner
+
+`+agent-shell-arena-remote-runner-batch` runs under `emacs -Q --batch`
+with the shipped code on its load path. Before the job, it loads
+`runner-init.el` from the host's state folder, which configures the
+agents: their configs hold functions, so they cannot travel in a job.
+Then the runner:
+
+1. Writes its pid. If an earlier status is finished, it exits.
+2. Waits in `queued` until it holds the host repository's lock,
+   checking the cancel marker on every tick.
+3. Builds a panel without a lead from the job. The panel's sink writes
+   the results instead of delivering a follow-up. It gives the panel a
+   base at the fetched commit and runs the panel's own provisioning,
+   candidates, capture and judge.
+4. Rewrites `status.json` through a temporary file and a rename,
+   whenever the panel changes and every 10 s as a heartbeat.
+5. On a cancel marker, cancels the panel with the marker's reason. That
+   captures what the candidates made and skips the judge.
+6. At its deadline, settles the running members as timed out. Two
+   minutes later it reports regardless.
+7. When the panel finishes, bundles every result ref against the base,
+   writes `report.json`, and only then writes the final status.
+
+It never prompts. A runner that finds an earlier, unfinished status from
+a runner that died captures each candidate's worktree as `timeout`,
+marks the judge as stopped, and reports. One that died while preparing
+reports a rejection and removes the partial arena.
+
+The host keeps its state under `~/.local/state/pstack-arena-remote/`:
+
+- `ready.json` and `runner-init.el`;
+- `code/<hash>/`, the runner's code;
+- `jobs/<id>/`, each job's files and reports;
+- `arenas/`, the arenas' worktrees and checkouts;
+- `locks/`, one lock per host repository.
+
+Candidates cannot read `jobs/`, `locks/` or `runner-init.el`.
+
+### One arena per host repository
+
+The lock is a folder, `locks/<first 16 hex of the SHA-1 of the
+checkout's true name>`, made with `make-directory`, which fails when it
+exists. An `owner` file inside holds the runner's pid and job. A waiting
+runner retries on every tick and reports `queued`, with its heartbeat
+going. A lock whose owner no longer runs is stale. The runner renames it
+aside before taking it, so only one waiter wins. The lock is released
+once the results and the final status are written. Waiters are not
+served in order.
+
+### The laptop
+
+When a profile names `:host`, the panel's preparation snapshots the base
+and hands the panel to `+agent-shell-arena-remote-launch`. The laptop
+extends a Coder workspace's stop time from the laptop, with `coder
+schedule extend`, before the upload. It does so again whenever the
+runner reports a deadline past the last extension, which a wait in the
+queue causes.
+
+When the runner has stopped unfinished and its heartbeat is older than
+`+agent-shell-arena-remote-stale-after` (120 s), the laptop restarts it,
+at most twice. After fetching, the laptop lands each result in
+`refs/pstack-arena/<id>/<role>` and checks it against the report. It
+takes each diff locally, so `:outside` and `:lfs` use the lead's sparse
+patterns and attributes. Then it composes the follow-up with the local
+arena's code. The only addition is a line naming the host.
+
+`+agent-shell-arena-remote-mode` re-attaches every record on disk that
+has not delivered, and every 5 s it gives arenas without a live lead the
+shell whose session id matches. Turning off panels while Emacs quits does
+not cancel. Ending the lead's shell otherwise cancels, as locally.
+
+## How the implementation departs
+
+- **No older ancestors in the prerequisite ladder.** Revision 2 said to
+  fall back to an older ancestor. The ladder stops after the upstream
+  rung and the whole-history bundle. A host that lacks the merge base
+  with the laptop's upstream lacks its ancestors too, unless it is
+  stale. A stale host's tip is in the laptop's history, so rung 1
+  already covers it.
+- **The laptop extends the workspace, and the runner does not check the
+  time left.** The experiments found the remote host's `coder` logged out, so
+  the runner cannot read or move its stop time.
+- **Profiles cross through placeholders.** Functions in a profile are
+  called on the laptop with a stand-in sandbox whose root, temp and
+  config folders are `@ROOT@`, `@TMP@` and `@CONFIG@`. The host turns
+  each value holding one back into a function of its own sandbox, quoting
+  the folders inside a regex allowance.
+- **Sparse patterns go in as non-cone patterns.** The host gives each
+  worktree the lead's patterns with `git sparse-checkout set --no-cone`.
+  Cone patterns match the same paths that way. A sparse index does not
+  carry over.
+- **Agents are configured on the host.** `runner-init.el` holds them,
+  since agent configs hold functions.
+- **The cancel marker holds the reason**, which the follow-up shows. A
+  cancel before submission stops the arena locally. A cancel during
+  submission travels in the upload or with the first poll.
+- **The host's arena id differs from the laptop's.** The job id is the
+  laptop's arena id. The host's arena folder takes the panel id and a
+  suffix of its own, and the results move from
+  `refs/pstack-arena/<host arena>/<role>` to the laptop's.
+- **The judge runs in the host checkout**, at the lead's subdirectory, or
+  at the top level when the host's commit lacks that folder.
+- **The panel gained a sink, a remote slot, a change hook, a cancel
+  command and a reserved role.** `+agent-shell-pstack-panel` has two new
+  slots, schema 6. `+agent-shell-pstack-panel-cancel`, bound to `c` in
+  the panels view, cancels any unfinished panel. `+agent-shell-pstack-arena-extra-deny-reads`
+  hides the runner's records from candidates.
+- **Results stay on the host until cleaned.** This is as designed, but it
+  keeps every candidate's worktree there; see the open questions.
+
 ## Experiment results, 2026-10-26
 
 Run on `example-ws` after revision 2.
@@ -366,17 +601,47 @@ times.
 4. **Refreshing the host's Claude Code login** without a person: whether a
    plain `claude -p` on the host refreshes a token near expiry, or a
    one-year `claude setup-token` should be made once.
+5. **Cleaning host worktrees after the fetch.** A monorepo worktree is 11 GB,
+   and nothing on the host needs it once the laptop holds the results.
+6. **The SSH and systemd paths on a real host.** The tests cover the
+   remote command's quoting through a local shell, not `ssh`,
+   `systemd-run` or `coder schedule extend` themselves.
+7. **The adapters' versions in `ready.json`.** The submission checks only
+   that the file exists and Emacs's version.
 
 ## Tests
 
-- **Unit tests** for the `bwrap` argument builder from a sandbox spec, the
-  job and status file formats, and the results report parser.
+Implemented so far:
+
+- **`test/agent-shell-arena-remote-test.el`**: round trips and boundary
+  validation of every record, profiles crossing as data, the laptop's
+  transitions, prerequisite negotiation and bundling against scratch
+  clones, LFS refusal, one call per host, timeouts, backoff and
+  unreachability with a stubbed process layer, the SSH command's quoting,
+  the runner's lock, and re-attaching from records on disk.
+- **`test/agent-shell-arena-git-test.el`**: a base made in another clone,
+  given the lead's sparse patterns, and cleaning a fetched role.
+- **`test/agent-shell-pstack-arena-remote-acp-test.el`**, the gate
+  "Remote pstack arenas over ACP": a lead with local commits and an
+  uncommitted edit, and a host clone at a newer upstream commit, on a
+  `(local . DIRECTORY)` host. Fixture candidates run in the macOS sandbox
+  under the shipped runner. The scenarios are:
+  - the bundle requires only the merge base;
+  - the status mirrors into the panel;
+  - the results land with the right content;
+  - the follow-up equals the same arena's local follow-up, apart from ids,
+    paths and the host line;
+  - cleanup clears both sides;
+  - a cancel while queued, and one mid-run;
+  - a killed runner, restarted and recovered;
+  - a laptop restart that forgets every panel, then re-attaches and
+    delivers.
+
+Still planned:
+
+- **Unit tests** for the `bwrap` argument builder from a sandbox spec.
 - **A Linux sandbox test** that runs only on Linux, through `bwrap`, as
   the macOS tests run through `sandbox-exec`.
-- **An ACP fixture test** that runs a fixture arena through the runner in
-  a local scratch "host": a subprocess with its own directories, reached
-  without SSH. It checks the base transfer, status polling and result
-  fetch.
 - **Runner tests on the host.** The fixture arena runs on the remote host
   in batch mode under Emacs 31, with tests for the Linux stop path,
   re-attaching after a laptop restart, a frozen heartbeat, cancel before
