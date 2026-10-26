@@ -273,6 +273,19 @@ private temp folder, and lets its language server write its own cache:
    :env ("WIDGET_TELEMETRY=0")))
 ```
 
+To learn what a profile needs, run `M-x +agent-shell-pstack-arena-trace`
+with the repository and a command such as its build or test. It
+provisions one throwaway candidate with the current profile, as an arena
+would, and runs the command there with the candidate's environment. The
+sandbox runs in trace mode, which allows and reports every write and read
+the candidate profile would refuse, so trace only commands you would run
+unconfined. The trace buffer groups the reported
+paths by operation, collapses crowded folders, and shows the exit status
+and the output's last lines. `C-c C-k` stops the command, and killing the
+buffer stops it too. Either way the worktree is removed. The kernel drops
+an occasional report, so trace again before trusting that a path is
+absent.
+
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
 event watching shared with `agent-shell-projects`.

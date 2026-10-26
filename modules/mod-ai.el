@@ -291,6 +291,15 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-pstack-panel-mode 1))
 
+(use-package +agent-shell-pstack-arena-trace
+  :ensure nil
+  :commands (+agent-shell-pstack-arena-trace)
+  :general
+  (:keymaps '+agent-shell-pstack-arena-trace-mode-map
+   "C-c C-k" '(+agent-shell-pstack-arena-trace-stop :wk "stop trace"))
+  (:states '(normal motion) :keymaps '+agent-shell-pstack-arena-trace-mode-map
+   "q" #'quit-window))
+
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell

@@ -137,6 +137,22 @@ Capture restores copied and generated paths to the base with `git reset`
 after `git add`, rather than excluding them with a pathspec, because
 `git add` fails when an exclude pathspec names an ignored path.
 
+**Trace mode** is a lever for writing profiles.
+`+agent-shell-pstack-arena-trace` provisions one throwaway candidate as an
+arena would and runs a command there under a profile where each refusing
+rule becomes `(allow OP (with report) (with message TAG) ...)`. The
+allowances that follow still override, so only what the candidate profile
+would refuse is reported. `log stream --style ndjson` with the predicate
+`eventMessage CONTAINS TAG` selects this run's kernel reports and no other
+sandboxed process's. Two probes bracket the command. Each one reads
+`/dev/null` under a profile that reports with `TAG ready` or `TAG done`.
+`log stream` prints its filter line before it receives events, so the
+first probe shows the stream is live, and the second shows the log has
+caught up after the command exits. The kernel drops some reports even
+so. 110 processes making one write each lost 5 reports, which never
+arrived within 4 seconds, and 30 processes making four writes each lost 1
+of 120.
+
 **The workspace root** is
 `+agent-shell-pstack-arena-directory`/`<arena-id>`/`<role>`/, outside
 `~/.emacs.d`. The default is `~/.local/state/pstack-arena/`. Claude Code

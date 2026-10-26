@@ -20,6 +20,7 @@
                        "lisp/+agent-shell-drive.el"
                        "lisp/+agent-shell-pstack.el"
                        "lisp/+agent-shell-pstack-panel.el"
+                       "lisp/+agent-shell-pstack-arena-trace.el"
                        "lisp/+agent-shell-arena-git.el"
                        "lisp/+agent-shell-perf.el" "lisp/+compile-local.el"
                        "lisp/compat/+expert-compat.el"

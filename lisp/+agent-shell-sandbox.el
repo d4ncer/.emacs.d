@@ -7,7 +7,9 @@
 ;; renders it as a macOS sandbox-exec profile, and
 ;; `+agent-shell-sandbox-client-maker' wraps an agent config's client maker
 ;; so the adapter starts under that profile with the agent's private
-;; environment from `+agent-shell-sandbox-agents'.
+;; environment from `+agent-shell-sandbox-agents' and the defaults from
+;; `+agent-shell-sandbox-environment'.  A sandbox in trace mode reports
+;; what its profile would refuse instead of refusing it.
 ;;
 ;; Stopping takes three steps, in order: `+agent-shell-sandbox-kill-tree'
 ;; while the adapter lives, `+agent-shell-sandbox-sweep' once it is gone,
@@ -67,7 +69,9 @@ Paths are true names without a trailing slash."
   (allow-writes nil :read-only t
                 :documentation "Folders beyond its own it may write.")
   (env nil :read-only t
-       :documentation "Environment entries ahead of the defaults."))
+       :documentation "Environment entries ahead of the defaults.")
+  (trace nil :read-only t
+         :documentation "Tag of a trace-mode profile's reports, or nil."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -101,7 +105,7 @@ VALID-P rejects, naming KIND."
 
 (cl-defun +agent-shell-sandbox-create (root &key config deny-reads
                                              allow-reads allow-metadata
-                                             allow-writes env)
+                                             allow-writes env trace)
   "Return a sandbox writing to ROOT, creating its private folders.
 CONFIG is the private agent config folder, a new temporary one by default.
 DENY-READS lists folders the agent may not read, and ALLOW-READS folders
@@ -114,11 +118,15 @@ entries that win over `+agent-shell-sandbox-environment's defaults.
 
 Each element of ALLOW-READS, ALLOW-WRITES and ENV may instead be a
 function called with the new sandbox, whose root and private folders
-exist, returning one path or entry or a list of them."
+exist, returning one path or entry or a list of them.
+
+With TRACE non-nil, the profile reports what it would refuse rather than
+refusing it; see `+agent-shell-sandbox-profile'."
   (unless (file-directory-p root)
     (user-error "Sandbox root %s is not a directory" root))
   (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
          (own-config (not config))
+         (tag (and trace (format "pa-trace-%08x" (random #x100000000))))
          (config (+agent-shell-sandbox--path
                   (if config (progn (make-directory config t) config)
                     (make-temp-file "pa-config-" t))))
@@ -130,7 +138,7 @@ exist, returning one path or entry or a list of them."
                                             deny-reads)
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
-                        resolved)))
+                        :trace tag resolved)))
          (provisional (funcall make))
          (path-p (lambda (path) (and (stringp path)
                                      (file-name-absolute-p path))))
@@ -195,14 +203,23 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
                                      "/com.apple.DeveloperTools"))))))
 
 (defun +agent-shell-sandbox-profile (sandbox)
-  "Return the sandbox-exec profile text for SANDBOX."
-  (let ((subpaths (lambda (paths)
-                    (mapconcat (lambda (path)
-                                 (format " (subpath %s)"
-                                         (+agent-shell-sandbox--string path)))
-                               paths ""))))
+  "Return the sandbox-exec profile text for SANDBOX.
+In trace mode every rule that would refuse an operation allows it with a
+report tagged with SANDBOX's trace tag instead."
+  (let* ((subpaths (lambda (paths)
+                     (mapconcat (lambda (path)
+                                  (format " (subpath %s)"
+                                          (+agent-shell-sandbox--string path)))
+                                paths "")))
+         (tag (+agent-shell-sandbox-trace sandbox))
+         (refuse (lambda (operation filters)
+                   (if tag
+                       (format "(allow %s (with report) (with message %s)%s)\n"
+                               operation (+agent-shell-sandbox--string tag)
+                               filters)
+                     (format "(deny %s%s)\n" operation filters)))))
     (concat
-     "(version 1)\n(allow default)\n(deny file-write*)\n"
+     "(version 1)\n(allow default)\n" (funcall refuse "file-write*" "")
      (format "(allow file-write*%s)\n"
              (concat
               (funcall subpaths (append
@@ -214,11 +231,12 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
               (mapconcat (lambda (filter) (concat " " filter))
                          (+agent-shell-sandbox--toolchain-writes) "")))
      ;; A worktree's .git file points git at the lead's repository.
-     (format "(deny file-write* (literal %s))\n"
-             (+agent-shell-sandbox--string
-              (concat (+agent-shell-sandbox-root sandbox) "/.git")))
+     (funcall refuse "file-write*"
+              (format " (literal %s)"
+                      (+agent-shell-sandbox--string
+                       (concat (+agent-shell-sandbox-root sandbox) "/.git"))))
      (when-let* ((denied (+agent-shell-sandbox-deny-reads sandbox)))
-       (format "(deny file-read*%s)\n" (funcall subpaths denied)))
+       (funcall refuse "file-read*" (funcall subpaths denied)))
      ;; A later rule overrides an earlier one.
      (when-let* ((allowed (+agent-shell-sandbox-allow-reads sandbox)))
        (format "(allow file-read*%s)\n" (funcall subpaths allowed)))
@@ -228,7 +246,7 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
                             (format " (literal %s)"
                                     (+agent-shell-sandbox--string path)))
                           stat "")))
-     "(deny network-outbound (remote unix-socket))\n"
+     (funcall refuse "network-outbound" " (remote unix-socket)")
      "(allow network-outbound (remote unix-socket (path-literal "
      "\"/private/var/run/mDNSResponder\")))\n")))
 

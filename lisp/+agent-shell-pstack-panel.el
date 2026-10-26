@@ -1090,8 +1090,9 @@ Then start the candidates."
                         panel 'candidate))))))))
   (+agent-shell-pstack-panels--refresh))
 
-(defun +agent-shell-pstack-arena-sandbox (manifest name)
+(defun +agent-shell-pstack-arena-sandbox (manifest name &optional trace)
   "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
+With TRACE non-nil, its profile reports what it would refuse instead.
 It cannot read the lead's checkout, other than the shared dependencies
 and the git directory, the panel reports, the agents' own config, or any
 other candidate.  It may stat the lead's top level, which git resolves.
@@ -1119,7 +1120,8 @@ and its :files are written into the worktree for the new sandbox."
                          (plist-get profile :read))
            :allow-metadata (list toplevel)
            :allow-writes (plist-get profile :write)
-           :env (plist-get profile :env))))
+           :env (plist-get profile :env)
+           :trace trace)))
     (condition-case err
         (+agent-shell-arena-git-write-files
          worktree (plist-get profile :files) sandbox)

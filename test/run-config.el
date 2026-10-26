@@ -48,6 +48,7 @@
    "-l" "agent-shell-sandbox-test"
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-arena-git-test"
    "-l" "agent-shell-pstack-arena-sandbox-test"
+   "-l" "agent-shell-pstack-arena-trace-test"
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"
    "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Native syntax configuration" "-l" "config-treesit-test"
