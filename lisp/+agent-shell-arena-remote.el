@@ -35,6 +35,7 @@
 (declare-function agent-shell-session-id "agent-shell")
 
 (defvar agent-shell--state)
+(defvar agent-shell-inhibit-system-sleep)
 (defvar agent-shell-transcript-file-path-function)
 (defvar shell-maker-prompt-before-killing-buffer)
 
@@ -2573,8 +2574,9 @@ The results bundle and report land before the status that names them."
 (defun +agent-shell-arena-remote-runner-main (directory)
   "Run the job in DIRECTORY on this host to its end; return an exit code.
 Load runner-init.el from the host's state folder first: it configures the
-agents.  The runner never prompts, rewrites its status as it goes, and
-recovers a job an earlier runner left unfinished."
+agents.  The runner never prompts, never asks the host to stay awake,
+rewrites its status as it goes, and recovers a job an earlier runner left
+unfinished."
   (let* ((directory (file-name-as-directory (expand-file-name directory)))
          (root (file-name-directory
                 (directory-file-name
@@ -2587,6 +2589,7 @@ recovers a job an earlier runner left unfinished."
           (mapcar (lambda (name) (expand-file-name name root))
                   '("jobs/" "locks/" "runner-init.el")))
          (agent-shell-transcript-file-path-function nil)
+         (agent-shell-inhibit-system-sleep nil)
          (shell-maker-prompt-before-killing-buffer nil)
          (+agent-shell-pstack-arena-deadline nil)
          (job (+agent-shell-arena-remote--read-json
