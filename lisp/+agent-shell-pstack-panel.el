@@ -605,6 +605,11 @@ started.  To retry, end a message with a corrected pstack-panel block."
           (format "Outside your sparse-checkout patterns: %s.  Applying \
 the diff writes them into your tree anyway; leave them out if they were \
 not meant to change.\n"
+                  (string-join paths ", ")))
+        (when-let* ((paths (plist-get result :lfs)))
+          (format "Git LFS files: %s.  The diff changes their pointers, so \
+applying it needs git-lfs, and git apply --3way cannot merge a conflict in \
+one; graft such a file by hand.\n"
                   (string-join paths ", "))))))
      (format "Rationale:\n%s\n"
              (+agent-shell-pstack-panel--rationale candidate)))))

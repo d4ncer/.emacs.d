@@ -160,21 +160,18 @@
                     (expand-file-name "plain-" +arena-git-test--scratch) t))
           (unborn (make-temp-file
                    (expand-file-name "unborn-" +arena-git-test--scratch) t))
-          (submodule (+arena-git-test--repo "a.txt" "a\n"))
-          (lfs (+arena-git-test--repo
-                "a.txt" "a\n" ".gitattributes" "*.bin filter=lfs diff=lfs\n")))
+          (submodule (+arena-git-test--repo "a.txt" "a\n" "b.txt" "b\n")))
       (+arena-git-test--git unborn "init" "-q")
       (+arena-git-test--git
        submodule "update-index" "--add" "--cacheinfo"
        (concat "160000," (+arena-git-test--git submodule "rev-parse" "HEAD")
-               ",vendor"))
+               ",sub/vendor"))
       (+arena-git-test--git submodule "commit" "-q" "-m" "gitlink")
       (should (string-match-p "not inside a git"
                               (+arena-git-test--rejection outside)))
       (should (string-match-p "unborn" (+arena-git-test--rejection unborn)))
       (should (string-match-p "submodule"
-                              (+arena-git-test--rejection submodule)))
-      (should (string-match-p "LFS" (+arena-git-test--rejection lfs))))))
+                              (+arena-git-test--rejection submodule))))))
 
 (ert-deftest +agent-shell-arena-git-test-subdirectory-lead ()
   (+arena-git-test--with-scratch
@@ -450,6 +447,52 @@ extensions.worktreeConfig, reaches the candidate too."
              (worktree (+arena-git-test--provision manifest "opus")))
         (should (equal (+arena-git-test--files worktree) '("a.txt")))))))
 
+(ert-deftest +agent-shell-arena-git-test-lfs ()
+  "An LFS edit is captured as a pointer change that the graft applies;
+untouched LFS files stay out of the diff."
+  (skip-unless (eql 0 (ignore-errors
+                        (call-process "git" nil nil nil "lfs" "version"))))
+  (+arena-git-test--with-scratch
+    (+arena-git-test--git +arena-git-test--scratch "lfs" "install"
+                          "--skip-repo")
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
+      (+arena-git-test--git repo "lfs" "track" "*.bin")
+      (+arena-git-test--write (expand-file-name "x.bin" repo) "x binary\n")
+      (+arena-git-test--write (expand-file-name "y.bin" repo) "y binary\n")
+      (+arena-git-test--git repo "add" "-A")
+      (+arena-git-test--git repo "commit" "-q" "-m" "lfs")
+      (let* ((base (+arena-git-test--base repo))
+             (manifest (+arena-git-test--arena base))
+             (worktree (+arena-git-test--provision manifest "opus"))
+             (commit (+agent-shell-arena-git-base-commit base)))
+        (should (equal (+arena-git-test--read
+                        (expand-file-name "x.bin" worktree))
+                       "x binary\n"))
+        (+arena-git-test--write (expand-file-name "x.bin" worktree) "x v2\n")
+        (+arena-git-test--write (expand-file-name "a.txt" worktree) "a2\n")
+        (let ((result (+arena-git-test--capture manifest "opus")))
+          (should (equal (+arena-git-test--git repo "diff" "--name-only"
+                                               commit result)
+                         "a.txt\nx.bin"))
+          (should (string-prefix-p
+                   "version https://git-lfs.github.com/spec/v1\n"
+                   (+arena-git-test--git repo "show"
+                                         (concat result ":x.bin"))))
+          (should (equal (plist-get
+                          (+arena-git-test--ok
+                           (lambda (done)
+                             (+agent-shell-arena-git-diff manifest "opus"
+                                                          done)))
+                          :lfs)
+                         '("x.bin")))
+          (let ((default-directory repo))
+            (should (eql 0 (process-file
+                            "sh" nil nil nil "-c"
+                            (format "git diff --binary %s %s | git apply \
+--3way" commit result)))))
+          (should (equal (+arena-git-test--read (expand-file-name "x.bin" repo))
+                         "x v2\n")))))))
+
 (ert-deftest +agent-shell-arena-git-test-needs-no-identity-or-key ()
   (+arena-git-test--with-scratch
     (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
@@ -515,11 +558,11 @@ Cleanup removes the checkout with the worktree."
       (let ((commit (+arena-git-test--capture manifest "opus")))
         (+arena-git-test--capture manifest "codex")
         (should (equal '(:changed t :stat " b.txt | 2 ++\n 1 file changed, \
-2 insertions(+)" :outside nil)
+2 insertions(+)" :outside nil :lfs nil)
                        (+arena-git-test--ok
                         (lambda (done)
                           (+agent-shell-arena-git-diff manifest "opus" done)))))
-        (should (equal '(:changed nil :stat "" :outside nil)
+        (should (equal '(:changed nil :stat "" :outside nil :lfs nil)
                        (+arena-git-test--ok
                         (lambda (done)
                           (+agent-shell-arena-git-diff

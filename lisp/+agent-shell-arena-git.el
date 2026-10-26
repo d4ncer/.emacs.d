@@ -7,11 +7,13 @@
 ;; manifest it keeps at <arena-dir>/manifest.json.
 ;;
 ;; Every git command after discovery names its git directory and work tree
-;; and runs with hooks and fsmonitor off.  Snapshots go through a temporary
-;; index, so the lead's index and HEAD never change.  Slow work runs in async
-;; processes.  Asynchronous operations take a CALLBACK of (RESULT ERROR):
-;; exactly one is non-nil, and the callback never runs before the operation
-;; returns.
+;; and runs with hooks and fsmonitor off.  Configured clean and smudge
+;; filters, such as Git LFS's, still run, so a snapshot stores what git
+;; add would and a checkout holds what git checkout would.  Snapshots go
+;; through a temporary index, so the lead's index and HEAD never change.
+;; Slow work runs in async processes.  Asynchronous operations take a
+;; CALLBACK of (RESULT ERROR): exactly one is non-nil, and the callback
+;; never runs before the operation returns.
 
 ;;; Code:
 
@@ -225,49 +227,20 @@ arena" toplevel))
       (when (file-exists-p (expand-file-name ".gitmodules" toplevel))
         (user-error "%s has submodules, which arenas do not support"
                     toplevel))
-      (when (or (file-exists-p (expand-file-name ".lfsconfig" toplevel))
-                (funcall read "config" "--local" "--get-regexp" "^lfs\\.")
-                (+agent-shell-arena-git--lfs-attributes-p
-                 (funcall read "rev-parse" "--git-path" "info/attributes")
-                 toplevel))
-        (user-error "%s uses Git LFS, which arenas do not support" toplevel))
       (+agent-shell-arena-git--base
        :git-dir git-dir :toplevel toplevel :prefix (nth 2 lines) :head head))))
 
-(defun +agent-shell-arena-git--lfs-attributes-p (file directory)
-  "Return non-nil when attributes FILE, relative to DIRECTORY, uses LFS."
-  (let ((file (expand-file-name file directory)))
-    (and (file-regular-p file)
-         (with-temp-buffer
-           (insert-file-contents file)
-           (re-search-forward "filter=lfs\\b" nil t)))))
-
 (defun +agent-shell-arena-git--check-index (base fail done)
-  "Call DONE unless BASE's index has gitlinks or LFS files.
-Otherwise call FAIL with the reason."
+  "Call DONE unless BASE's index has gitlinks, else FAIL with the reason."
   (let ((toplevel (+agent-shell-arena-git-base-toplevel base)))
     (+agent-shell-arena-git--git
      (+agent-shell-arena-git-base-git-dir base) toplevel
-     '("ls-files" "--stage" "-z") fail
-     (lambda (output)
-       (let ((reason nil))
-         (dolist (entry (split-string output "\0" t))
-           (when (and (not reason)
-                      (string-match "\\`\\([0-7]+\\) [^\t]*\t\\(.*\\)\\'"
-                                    entry))
-             (let ((mode (match-string 1 entry))
-                   (path (match-string 2 entry)))
-               (setq reason
-                     (cond ((equal mode "160000") "has submodules")
-                           ((and (equal (file-name-nondirectory path)
-                                        ".gitattributes")
-                                 (+agent-shell-arena-git--lfs-attributes-p
-                                  path toplevel))
-                            "uses Git LFS"))))))
-         (if reason
-             (funcall fail (format "%s %s, which arenas do not support"
-                                   (directory-file-name toplevel) reason))
-           (funcall done)))))))
+     '("ls-files" "-z" "--format=%(objectmode)") fail
+     (lambda (modes)
+       (if (string-match-p "\\(?:\\`\\|\0\\)160000\0" modes)
+           (funcall fail (format "%s has submodules, which arenas do not \
+support" (directory-file-name toplevel)))
+         (funcall done))))))
 
 (defun +agent-shell-arena-git-capture-base (directory callback)
   "Snapshot the working tree of the lead at DIRECTORY as a base commit.
@@ -620,10 +593,11 @@ worktree's own index, so it hashes only files changed since checkout."
 
 (defun +agent-shell-arena-git-diff (manifest name callback)
   "Compare captured role NAME of MANIFEST with the base.
-Call CALLBACK with (:changed BOOL :stat TEXT :outside PATHS) and nil, or
-nil and a message.  :changed says whether the trees differ; :stat is the
-output of git diff --stat; :outside lists the changed paths outside the
-lead's sparse-checkout patterns."
+Call CALLBACK with (:changed BOOL :stat TEXT :outside PATHS :lfs PATHS)
+and nil, or nil and a message.  :changed says whether the trees differ;
+:stat is the output of git diff --stat; :outside lists the changed paths
+outside the lead's sparse-checkout patterns, and :lfs those the lead's
+attributes give to Git LFS."
   (when-let* ((role (+agent-shell-arena-git--captured manifest name callback)))
     (let ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
           (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
@@ -641,13 +615,20 @@ lead's sparse-checkout patterns."
             (+agent-shell-arena-git--outside
              git-dir toplevel base commit fail
              (lambda (outside)
-               (funcall callback
-                        (list :changed (let ((trees (split-string trees)))
-                                         (not (equal (car trees)
-                                                     (cadr trees))))
-                              :stat (string-trim-right stat)
-                              :outside outside)
-                        nil))))))))))
+               (+agent-shell-arena-git--git
+                git-dir toplevel
+                (list "diff" "--name-only" "-z" base commit "--"
+                      ":(attr:filter=lfs)")
+                fail
+                (lambda (lfs)
+                  (funcall callback
+                           (list :changed (let ((trees (split-string trees)))
+                                            (not (equal (car trees)
+                                                        (cadr trees))))
+                                 :stat (string-trim-right stat)
+                                 :outside outside
+                                 :lfs (split-string lfs "\0" t))
+                           nil))))))))))))
 
 (defun +agent-shell-arena-git--outside (git-dir toplevel base commit fail
                                                 done)

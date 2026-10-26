@@ -1378,6 +1378,26 @@ l10n/m.fr.xlf\\.  Applying the diff writes them into your tree anyway"
                    "sparse" (+agent-shell-pstack-panel-test--candidate-section
                              followup "B"))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-arena-followup-lfs-warning ()
+  "Name the Git LFS files a candidate changed and how to graft them."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq diff-extras '(("codex" :lfs ("assets/logo.png"))))
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "judge" :kind 'init-finished)
+    (member-event "judge" :kind 'turn-complete :text "B wins.")
+    (let ((followup (car (+agent-shell-pstack-panel-test--followups
+                          sent lead))))
+      (should (string-match-p
+               "^Git LFS files: assets/logo.png\\.  The diff changes their \
+pointers.*graft such a file by hand\\.$"
+               (+agent-shell-pstack-panel-test--candidate-section
+                followup "B")))
+      (should-not (string-match-p
+                   "LFS" (+agent-shell-pstack-panel-test--candidate-section
+                          followup "A"))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-arena-view-and-clean ()
   "Show an arena's phase and directory, and clean it with x once finished."
   (+agent-shell-pstack-panel-test--with-arena

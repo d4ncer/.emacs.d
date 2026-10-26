@@ -139,7 +139,7 @@ The request is a `pstack-panel` block like this:
 - **Rejections.** Emacs rejects an arena, with a reason the lead can act
   on, in any of these cases:
   - the lead is not in a git repository, or `HEAD` is unborn;
-  - the repository has submodules or uses Git LFS;
+  - the repository has submodules;
   - the platform is not macOS;
   - an agent has no sandboxed launch configuration.
 
@@ -236,6 +236,14 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   entries as the index has them. `--sparse` makes `git add` take files a
   candidate created outside the patterns instead of failing, and the
   follow-up names them.
+- **Git LFS.** Hooks stay off, but clean and smudge filters are config, so
+  they still run. A candidate's checkout holds the real files, and `git
+  add` stores an edited LFS file as a new pointer while untouched ones keep
+  their stat data and never reach the filter. With git-lfs installed, `git
+  apply --3way` applies a pointer change to the lead's hydrated file from
+  the shared LFS store. A conflict on an LFS file leaves conflict markers
+  inside the pointer, so the follow-up flags those files for a graft by
+  hand.
 - **Manifest.** `<arena-id>/manifest.json` records:
   - the repository's git directory;
   - the lead's root and subdirectory;
@@ -261,7 +269,9 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   - its diff stat and rationale;
   - a ready command, `git diff --binary <base> <result>`, whose output
     applies to the lead's current tree with `git apply --3way`;
-  - the changed files outside the lead's sparse-checkout patterns, if any.
+  - the changed files outside the lead's sparse-checkout patterns, if any;
+  - the changed Git LFS files, if any, with a note to graft them by hand
+    when `git apply --3way` conflicts on them.
 
   It also includes the judge's report and arena's Pick, Graft and Verify
   instructions. It never suggests `git checkout <ref> -- PATH`, which would
@@ -510,6 +520,6 @@ None. Every probe above was run on this machine.
 | Index from `HEAD` loses tracked files | medium | git | Fixed. The temporary index starts from the real index, so skip-worktree entries in a sparse checkout survive. |
 | Inconsistent base capture | medium | git | Fixed. Resolve once, plus a bounded retry. |
 | Root and subdirectory conflated | medium | git | Fixed. The manifest records both. |
-| Binary and LFS grafts | medium | git | Fixed. `--binary`, with LFS rejected in v1. |
+| Binary and LFS grafts | medium | git | Fixed. `--binary`, and LFS files are captured as pointers and flagged in the follow-up. |
 | Cleanup trusts prefixes | medium | git | Fixed. Manifest-verified cleanup. |
 | Rubric reachable through transcripts | medium | git | Fixed. The profile denies reads of the lead's checkout and the panel reports. |
