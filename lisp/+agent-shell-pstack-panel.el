@@ -877,22 +877,33 @@ folders stayed: %s" role error))))
 
 (defun +agent-shell-pstack-panel--halt (panel member)
   "Stop settled candidate MEMBER of PANEL so its tree stops changing.
-A candidate without a worktree fails, since there is nothing to capture."
+A candidate without a worktree fails, since there is nothing to capture,
+and so does one whose stop signals, which would otherwise stay stopping
+and hold every capture back."
   (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
   (+agent-shell-pstack-panels--refresh)
-  (+agent-shell-pstack-panel--stop
-   member
-   (lambda ()
-     (if-let* ((manifest (+agent-shell-pstack-panel-arena panel))
-               ((+agent-shell-pstack-panel-member-sandbox member))
-               ((+agent-shell-arena-git-role
-                 manifest (+agent-shell-pstack-panel-member-role member))))
-         (setf (+agent-shell-pstack-panel-member-capture member) 'stopped)
-       (setf (+agent-shell-pstack-panel-member-capture member) 'failed
-             (+agent-shell-pstack-panel-member-result member)
-             (list :error "The candidate never started.")))
-     (+agent-shell-pstack-panel--advance panel)
-     (+agent-shell-pstack-panels--refresh))))
+  (cl-flet ((end (capture &optional error)
+              (when (eq (+agent-shell-pstack-panel-member-capture member)
+                        'stopping)
+                (setf (+agent-shell-pstack-panel-member-capture member) capture)
+                (when error
+                  (setf (+agent-shell-pstack-panel-member-result member)
+                        (list :error error)))
+                (+agent-shell-pstack-panel--advance panel)
+                (+agent-shell-pstack-panels--refresh))))
+    (condition-case err
+        (+agent-shell-pstack-panel--stop
+         member
+         (lambda ()
+           (if-let* ((manifest (+agent-shell-pstack-panel-arena panel))
+                     ((+agent-shell-pstack-panel-member-sandbox member))
+                     ((+agent-shell-arena-git-role
+                       manifest (+agent-shell-pstack-panel-member-role
+                                 member))))
+               (end 'stopped)
+             (end 'failed "The candidate never started."))))
+      (error (end 'failed (format "Stopping the candidate failed: %s"
+                                  (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--collect (panel member)
   "Capture what stopped candidate MEMBER of PANEL produced.

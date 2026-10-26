@@ -819,11 +819,14 @@ of a stop still runs."
 (defun +agent-shell-sandbox-sweep (sandbox callback &optional rounds)
   "Kill processes working under SANDBOX's root or temp folder, then call back.
 Repeat from a timer until none remain or ROUNDS sweeps have run, then call
-CALLBACK with the pids that survived."
+CALLBACK with the pids that survived.  On Linux every process an agent
+starts lives in its PID namespace, which ends with its launcher, so
+there is nothing to sweep and CALLBACK gets nil."
   (let ((rounds (or rounds +agent-shell-sandbox--sweeps))
-        (pids (+agent-shell-sandbox--working-in
-               (list (+agent-shell-sandbox-root sandbox)
-                     (+agent-shell-sandbox-tmp sandbox)))))
+        (pids (unless (eq +agent-shell-sandbox-backend 'bwrap)
+                (+agent-shell-sandbox--working-in
+                 (list (+agent-shell-sandbox-root sandbox)
+                       (+agent-shell-sandbox-tmp sandbox))))))
     (if (or (null pids) (<= rounds 0))
         (funcall callback pids)
       (+agent-shell-sandbox--kill pids)
