@@ -947,6 +947,7 @@ set -- \"$emacs\" -Q --batch -L \"$code\" -l \"$code/+agent-shell-arena-remote.e
 case $launcher in
   systemd)
     systemd-run --user --quiet --collect --unit \"pstack-arena-$id-$(date +%s)\" \
+--property=MemoryMax=50% --property=OOMPolicy=continue \
 --working-directory \"$PWD\" --setenv=PATH=\"$PATH\" \"$@\" >\"$job/launch.log\" 2>&1 ||
       { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/launch.log\")\"; exit 0; } ;;
   *) nohup \"$@\" >\"$job/runner.log\" 2>&1 </dev/null & ;;
@@ -954,7 +955,11 @@ esac
 touch \"$job/started\"
 echo \"pstack-arena-submit started\"
 "
-  "Script lines starting the runner for $job with $emacs by $launcher.")
+  "Script lines starting the runner for $job with $emacs by $launcher.
+Under systemd the runner's unit, which holds its candidates too, may use
+half the host's memory.  The kernel reclaims page cache at that limit
+and kills the largest process past it, a candidate's build rather than
+the runner, which goes on to report that candidate as failed.")
 
 (defconst +agent-shell-arena-remote--submit-script
   (concat
