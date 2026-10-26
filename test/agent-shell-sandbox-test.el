@@ -218,7 +218,7 @@ the arguments it was called with."
   (declare (indent 1))
   `(let* ((bin (make-temp-file "pa-bin-" t))
           (log (expand-file-name "arguments" bin))
-          (exec-path (cons bin exec-path))
+          (+agent-shell-sandbox--security (expand-file-name "security" bin))
           (arguments (lambda ()
                        (split-string (+agent-shell-sandbox-test--read log)))))
      (+agent-shell-sandbox-test--write

@@ -43,6 +43,9 @@ that take precedence over the agent's own.  :finish, when present, is
 called with the sandbox once its processes are gone."
   :type '(alist :key-type symbol :value-type plist))
 
+(defvar +agent-shell-sandbox--security "/usr/bin/security"
+  "macOS's Keychain tool, by absolute path so no other one on PATH runs.")
+
 (defcustom +agent-shell-sandbox-claude-token-service
   "pstack-arena-claude-token"
   "Keychain service holding a `claude setup-token' token for candidates."
@@ -368,9 +371,9 @@ CALLBACK gets nil or a message saying what stayed."
     (setq +agent-shell-sandbox--user-folders
           (when-let* (((eq system-type 'darwin))
                       (temp (car (+agent-shell-sandbox--lines
-                                  "getconf" "DARWIN_USER_TEMP_DIR")))
+                                  "/usr/bin/getconf" "DARWIN_USER_TEMP_DIR")))
                       (cache (car (+agent-shell-sandbox--lines
-                                   "getconf" "DARWIN_USER_CACHE_DIR"))))
+                                   "/usr/bin/getconf" "DARWIN_USER_CACHE_DIR"))))
             (cons (+agent-shell-sandbox--path temp)
                   (+agent-shell-sandbox--path cache)))))
   +agent-shell-sandbox--user-folders)
@@ -513,7 +516,7 @@ the client's own."
 (defun +agent-shell-sandbox--keychain (service)
   "Return the password of Keychain item SERVICE, or signal a user error."
   (with-temp-buffer
-    (if (eql 0 (call-process "security" nil '(t nil) nil
+    (if (eql 0 (call-process +agent-shell-sandbox--security nil '(t nil) nil
                              "find-generic-password" "-s" service "-w"))
         (string-trim-right (buffer-string))
       (user-error "No Keychain item %s; store a `claude setup-token' token \
@@ -619,14 +622,14 @@ of a stop still runs."
                   (let ((fields (split-string line)))
                     (cons (string-to-number (car fields))
                           (string-to-number (cadr fields)))))
-                (+agent-shell-sandbox--lines "ps" "-axo" "pid=,ppid=")))))
+                (+agent-shell-sandbox--lines "/bin/ps" "-axo" "pid=,ppid=")))))
 
 (defun +agent-shell-sandbox--working-in (directories)
   "Return the pids of processes whose working directory is under DIRECTORIES."
   ;; Filtering every cwd beats `lsof +D', which walks the whole tree.
   (let ((prefixes (mapcar #'file-name-as-directory directories))
         pid pids)
-    (dolist (line (+agent-shell-sandbox--lines "lsof" "-w" "-n" "-P" "-d" "cwd"
+    (dolist (line (+agent-shell-sandbox--lines "/usr/sbin/lsof" "-w" "-n" "-P" "-d" "cwd"
                                                "-F" "pn"))
       (pcase (aref line 0)
         (?p (setq pid (string-to-number (substring line 1))))
