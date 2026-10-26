@@ -776,6 +776,45 @@ A worktree that cannot go keeps the arena folder for a later cleanup."
                                      "refs/pstack-arena/")))
       (should (file-exists-p directory)))))
 
+(ert-deftest +agent-shell-arena-git-test-checkout-holds-changes ()
+  "A judge checkout holds only the files its result changed, so a large
+repository costs no second full checkout.  Past the limit it holds all."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "d/b.txt" "b\n"
+                                        "d/[odd] *name?" "odd\n"))
+           (manifest (+arena-git-test--arena (+arena-git-test--base repo)))
+           (opus (+arena-git-test--provision manifest "opus"))
+           (codex (+arena-git-test--provision manifest "codex"))
+           (checkout (lambda (role)
+                       (+arena-git-test--ok
+                        (lambda (done)
+                          (+agent-shell-arena-git-checkout
+                           manifest role done))))))
+      (+arena-git-test--write (expand-file-name "d/b.txt" opus) "b\nc\n")
+      (+arena-git-test--write (expand-file-name "d/[odd] *name?" opus) "odd!\n")
+      (+arena-git-test--write (expand-file-name "new.txt" opus) "new\n")
+      (delete-file (expand-file-name "a.txt" codex))
+      (+arena-git-test--write (expand-file-name "d/b.txt" codex) "b\nd\n")
+      (let ((commit (+arena-git-test--capture manifest "opus"))
+            (+agent-shell-arena-git-checkout-limit 3))
+        (+arena-git-test--capture manifest "codex")
+        (let ((opus (funcall checkout "opus")))
+          (should (equal "b\nc\n" (+arena-git-test--read
+                                   (expand-file-name "d/b.txt" opus))))
+          (should (equal "odd!\n" (+arena-git-test--read
+                                   (expand-file-name "d/[odd] *name?" opus))))
+          (should (equal "new\n" (+arena-git-test--read
+                                  (expand-file-name "new.txt" opus))))
+          (should-not (file-exists-p (expand-file-name "a.txt" opus)))
+          (should (equal commit (+arena-git-test--git opus "rev-parse" "HEAD")))
+          (should (equal "" (+arena-git-test--git opus "status" "--porcelain"))))
+        (let* ((+agent-shell-arena-git-checkout-limit 1)
+               (codex (funcall checkout "codex")))
+          (should (equal "b\nd\n" (+arena-git-test--read
+                                   (expand-file-name "d/b.txt" codex))))
+          (should (file-exists-p (expand-file-name "d/[odd] *name?" codex)))
+          (should-not (file-exists-p (expand-file-name "a.txt" codex))))))))
+
 (ert-deftest +agent-shell-arena-git-test-diff-and-checkout ()
   "Summarize each result against the base and check it out for reading.
 Cleanup removes the checkout with the worktree."
