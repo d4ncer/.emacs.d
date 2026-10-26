@@ -73,15 +73,32 @@ folder holding one is covered.  The default holds the Nix daemon's."
 
 (defcustom +agent-shell-sandbox-agents
   '((claude-code :mode "bypassPermissions"
-                 :prepare +agent-shell-sandbox-prepare-claude)
+                 :prepare +agent-shell-sandbox-prepare-claude
+                 :name "Claude Code"
+                 :expiry +agent-shell-sandbox-claude-expiry
+                 :refresh ("claude" "-p" "Reply with the single word OK.")
+                 :relogin "Log Claude Code in again on the host: run claude \
+there and use /login.")
     (codex :mode "agent-full-access"
            :prepare +agent-shell-sandbox-prepare-codex
-           :finish +agent-shell-sandbox-finish-codex))
+           :finish +agent-shell-sandbox-finish-codex
+           :name "Codex"
+           :expiry +agent-shell-sandbox-codex-expiry
+           :refresh ("codex" "exec" "--skip-git-repo-check"
+                     "Reply with the single word OK.")
+           :relogin "A refresh of Codex's login could not be triggered; log \
+Codex in again on the host with codex login."))
   "How each agent runs in a sandbox, by agent config identifier.
 :mode is the full-access session mode.  :prepare is called with the
 sandbox, may record credentials in it, and returns environment entries
 that take precedence over the agent's own.  :finish, when present, is
-called with the sandbox once its processes are gone."
+called with the sandbox once its processes are gone.
+
+The rest serve a Linux host, whose sandboxes sign in with the access
+token of the host's own login.  :name names the agent to people.
+:expiry returns when that token expires, as a float time, or nil without
+a login.  :refresh is a command that makes the agent's CLI refresh the
+login, and :relogin tells a person what to do when that fails."
   :type '(alist :key-type symbol :value-type plist))
 
 (defvar +agent-shell-sandbox--security "/usr/bin/security"
@@ -1005,12 +1022,34 @@ deadline %s; refresh this host's login first" agent
                   (format-time-string "%F %T %Z" expiry)
                   (format-time-string "%F %T %Z" deadline)))))
 
+(defun +agent-shell-sandbox--claude-oauth ()
+  "Return the claudeAiOauth object of the host's Claude Code login, or nil."
+  (let ((file (expand-file-name +agent-shell-sandbox-claude-credentials)))
+    (and (file-readable-p file)
+         (alist-get 'claudeAiOauth (+agent-shell-sandbox--json file)))))
+
+(defun +agent-shell-sandbox-claude-expiry ()
+  "Return when the host's Claude Code access token expires, or nil."
+  (let ((expires (alist-get 'expiresAt
+                            (ignore-errors
+                              (+agent-shell-sandbox--claude-oauth)))))
+    (and (numberp expires) (/ expires 1000.0))))
+
+(defun +agent-shell-sandbox-codex-expiry ()
+  "Return when the host's Codex access token expires, or nil."
+  (let* ((file (expand-file-name "auth.json" +agent-shell-sandbox-codex-home))
+         (access (ignore-errors
+                   (alist-get 'access_token
+                              (alist-get 'tokens
+                                         (+agent-shell-sandbox--json file)))))
+         (expiry (and (stringp access)
+                      (+agent-shell-sandbox--jwt-expiry access))))
+    (and (numberp expiry) (float expiry))))
+
 (defun +agent-shell-sandbox--claude-access-token (sandbox)
   "Return the host's Claude Code access token if it outlasts SANDBOX."
   (let* ((file (expand-file-name +agent-shell-sandbox-claude-credentials))
-         (oauth (and (file-readable-p file)
-                     (alist-get 'claudeAiOauth
-                                (+agent-shell-sandbox--json file))))
+         (oauth (+agent-shell-sandbox--claude-oauth))
          (token (alist-get 'accessToken oauth))
          (expires (alist-get 'expiresAt oauth)))
     (unless (and (stringp token) (numberp expires))

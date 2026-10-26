@@ -1176,8 +1176,14 @@ Then start the candidates.  PANEL is preparing."
                 (+agent-shell-pstack-panel--preparing
                  panel error
                  (lambda () (provision (cdr members)))))))))
-      (provision (+agent-shell-pstack-panel--kind-members panel 'candidate)))
+      (provision (+agent-shell-pstack-panel--unsettled panel 'candidate)))
     (+agent-shell-pstack-panels--refresh)))
+
+(defun +agent-shell-pstack-panel--unsettled (panel kind)
+  "Return PANEL's members of KIND that have not settled.
+A host can refuse a candidate before its arena is provisioned."
+  (seq-remove #'+agent-shell-pstack-panel--settled-p
+              (+agent-shell-pstack-panel--kind-members panel kind)))
 
 (defun +agent-shell-pstack-arena-sandbox (manifest name &optional trace)
   "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
@@ -1224,7 +1230,7 @@ and its :files are written into the worktree for the new sandbox."
 
 (defun +agent-shell-pstack-panel--launch (panel)
   "Start PANEL's candidates in their sandboxes and their timer."
-  (let ((candidates (+agent-shell-pstack-panel--kind-members panel 'candidate))
+  (let ((candidates (+agent-shell-pstack-panel--unsettled panel 'candidate))
         (manifest (+agent-shell-pstack-panel-arena panel)))
     (dolist (member candidates)
       (setf (+agent-shell-pstack-panel-member-sandbox member)

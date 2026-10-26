@@ -81,6 +81,16 @@ its setup writing a readiness file since it booted."
   "Seconds added to a runner's deadline and to a workspace's extension."
   :type 'natnum)
 
+(defcustom +agent-shell-arena-remote-login-margin 600
+  "Seconds a host login's access token must outlast a runner's deadline.
+A runner whose agent's token falls short refreshes the host's login
+first, and refuses that agent's members if it still falls short."
+  :type 'natnum)
+
+(defcustom +agent-shell-arena-remote-refresh-timeout 180
+  "Seconds a runner lets an agent's CLI take to refresh the host's login."
+  :type 'natnum)
+
 (defcustom +agent-shell-arena-remote-ssh-options
   '("-o" "BatchMode=yes" "-o" "ConnectTimeout=15"
     "-o" "ServerAliveInterval=15" "-o" "ServerAliveCountMax=3"
@@ -177,8 +187,18 @@ READY-FILE where the host keeps it."
   "What a runner reports while it runs.
 PHASE is queued until the host's repository is free, then the panel's
 phase.  RESULTS says the results are written.  HEARTBEAT is when the
-runner last wrote it, and DEADLINE when it gives up."
-  id phase pid heartbeat deadline arena members results error)
+runner last wrote it, and DEADLINE when it gives up.  LOGINS says how
+each agent's host login stood before any member started."
+  id phase pid heartbeat deadline arena members results error logins)
+
+(cl-defstruct (+agent-shell-arena-remote-login
+               (:constructor +agent-shell-arena-remote--make-login)
+               (:copier nil))
+  "How AGENT's host login stood before a runner started its members.
+REFRESHED says the runner refreshed it, REMAINING is how many seconds
+its access token had left then, nil without a login, and ERROR why the
+runner refused the agent's members."
+  agent refreshed remaining error)
 
 (cl-defstruct (+agent-shell-arena-remote-member
                (:constructor +agent-shell-arena-remote--make-member)
@@ -236,7 +256,7 @@ is the host's arena id and EMACS the host's Emacs.
 The slots after ERROR are not saved."
   id panel session host phase (cancel-state 'none) submitted fetched delivered
   deadline extended heartbeat seen (restarts 0) arena emacs error
-  directory timer (failures 0) runner-phase ready)
+  directory timer (failures 0) runner-phase ready logins)
 
 (defconst +agent-shell-arena-remote--agent-regexp
   "\\`[a-z0-9][a-z0-9-]*\\'"
@@ -270,7 +290,11 @@ The slots after ERROR are not saved."
             (pid "pid" (opt natnum)) (heartbeat "heartbeat" number)
             (deadline "deadline" (opt number)) (arena "arena" (opt id))
             (members "members" (list member-state))
-            (results "results" boolean) (error "error" (opt text)))
+            (results "results" boolean) (error "error" (opt text))
+            (logins "logins" (list login)))
+    (login +agent-shell-arena-remote-login +agent-shell-arena-remote--make-login
+           (agent "agent" agent) (refreshed "refreshed" boolean)
+           (remaining "remaining" (opt number)) (error "error" (opt text)))
     (member-state +agent-shell-arena-remote-member
                   +agent-shell-arena-remote--make-member
                   (role "role" id) (agent "agent" agent)
@@ -1113,6 +1137,9 @@ With DETAIL, add its host's phase, last heartbeat and last error."
    (let ((ran (+agent-shell-arena-remote--ready-text
                (+agent-shell-arena-remote-ready remote))))
      (unless (string-empty-p ran) (format " (%s)" ran)))
+   (let ((logins (+agent-shell-arena-remote--logins-text
+                  (+agent-shell-arena-remote-logins remote))))
+     (unless (string-empty-p logins) (format ", %s" logins)))
    (when detail
      (concat
       (when-let* ((phase (+agent-shell-arena-remote-runner-phase remote)))
@@ -1455,6 +1482,23 @@ malformed: %s" (cadr err)))))))))))
              '((emacs . "Emacs") (claude-agent-acp . "claude-agent-acp")
                (codex-acp . "codex-acp")))
    ", "))
+
+(defun +agent-shell-arena-remote--logins-text (logins)
+  "Return how LOGINS stood, such as \"logins: claude-code refreshed, 8.0 h
+left\"."
+  (if (null logins) ""
+    (concat
+     "logins: "
+     (mapconcat
+      (lambda (login)
+        (let ((remaining (+agent-shell-arena-remote-login-remaining login)))
+          (concat
+           (symbol-name (+agent-shell-arena-remote-login-agent login))
+           (when (+agent-shell-arena-remote-login-refreshed login) " refreshed")
+           (cond ((+agent-shell-arena-remote-login-error login) " refused")
+                 (remaining (format ", %.1f h left" (/ remaining 3600.0)))
+                 (t ", none")))))
+      logins "; "))))
 
 (defun +agent-shell-arena-remote--written (ready)
   "Return when READY says it was written, or nil when it does not say."
@@ -1876,7 +1920,9 @@ Once its host has been silent too long, tell the lead."
 Members never settle through the local path; they only take the states
 the runner reports."
   (setf (+agent-shell-arena-remote-runner-phase remote)
-        (+agent-shell-arena-remote-status-phase status))
+        (+agent-shell-arena-remote-status-phase status)
+        (+agent-shell-arena-remote-logins remote)
+        (+agent-shell-arena-remote-status-logins status))
   (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
     (dolist (state (+agent-shell-arena-remote-status-members status))
       (when-let* ((member (+agent-shell-pstack-panel--member
@@ -2347,9 +2393,11 @@ arenas that lack one, by session id."
   "A job a batch Emacs runs on the host.
 DIRECTORY is the job's folder and ROOT the host's state folder.  PHASE
 is `queued' until it holds LOCK, the host repository's, then the panel's.
-PREVIOUS is the status an earlier runner left unfinished."
+PREVIOUS is the status an earlier runner left unfinished.  LOGINS are
+its agents' `+agent-shell-arena-remote-login's, and REFRESHES the login
+refreshes it started."
   job directory root panel (phase 'queued) lock deadline previous done
-  cancelled expired (written "") (beat 0) error ready)
+  cancelled expired (written "") (beat 0) error ready logins refreshes)
 
 (defun +agent-shell-arena-remote--runner-file (runner name)
   "Return file NAME in RUNNER's job folder."
@@ -2397,7 +2445,8 @@ RESULTS says the results are written, which finishes the status."
                               (+agent-shell-arena-git-manifest-id manifest))
                   :members (+agent-shell-arena-remote--runner-members runner)
                   :results (and results t)
-                  :error (+agent-shell-arena-remote--runner-error runner)))
+                  :error (+agent-shell-arena-remote--runner-error runner)
+                  :logins (+agent-shell-arena-remote--runner-logins runner)))
          (text (+agent-shell-arena-remote-to-json 'status status))
          (now (float-time)))
     (when (or results
@@ -2484,8 +2533,160 @@ renamed aside first, so only one waiter can win it."
                            (concat (getenv "HOME") (substring repository 1))
                          repository)))))
 
+(defun +agent-shell-arena-remote--refresh (runner command callback)
+  "Run COMMAND, an agent's CLI, on the host to refresh its login.
+It runs outside any sandbox, from a scratch folder with no project, and
+is stopped after `+agent-shell-arena-remote-refresh-timeout' seconds.
+Call CALLBACK with nil once it succeeds, or with why it failed."
+  (let* ((scratch (make-temp-file "pstack-arena-login-" t))
+         (default-directory (file-name-as-directory scratch))
+         (output (generate-new-buffer " *pstack-arena-login*"))
+         (timeout +agent-shell-arena-remote-refresh-timeout)
+         (timed-out nil)
+         (timer nil)
+         (finish
+          (lambda (process)
+            (when timer (cancel-timer timer))
+            (let ((last (with-current-buffer output
+                          (car (last (split-string (buffer-string) "\n" t
+                                                   "[ \t\r]+"))))))
+              (kill-buffer output)
+              (delete-directory scratch t)
+              (funcall
+               callback
+               (cond
+                (timed-out (format "%s timed out after %d s" (car command)
+                                   timeout))
+                ((eql 0 (process-exit-status process)) nil)
+                (t (format "%s exited with %d%s" (car command)
+                           (process-exit-status process)
+                           (if last
+                               (concat ": " (truncate-string-to-width last 200))
+                             ""))))))))
+         (process
+          (condition-case err
+              (make-process
+               :name "pstack-arena-login" :buffer output :command command
+               :connection-type 'pipe :noquery t
+               :sentinel (lambda (process _event)
+                           (unless (process-live-p process)
+                             (funcall finish process))))
+            (error (kill-buffer output)
+                   (delete-directory scratch t)
+                   (run-at-time 0 nil callback (error-message-string err))
+                   nil))))
+    (when process
+      (push process (+agent-shell-arena-remote--runner-refreshes runner))
+      (process-send-eof process)
+      (setq timer (run-at-time timeout nil
+                               (lambda ()
+                                 (when (process-live-p process)
+                                   (setq timed-out t)
+                                   (signal-process process 'TERM))))))))
+
+(defun +agent-shell-arena-remote--login-lock (runner agent)
+  "Return RUNNER's host-wide lock folder for refreshing AGENT's login."
+  (expand-file-name (format "locks/login-%s" agent)
+                    (+agent-shell-arena-remote--runner-root runner)))
+
+(defun +agent-shell-arena-remote--login (runner agent callback)
+  "Make sure AGENT's host login outlasts RUNNER's deadline and margin.
+Refresh it once when it does not, holding the host's lock for AGENT's
+login, since a refresh rotates the refresh token and two at once are
+unsafe.  A runner that finds the lock held waits for it, then reads the
+login again rather than refreshing it too.  Call CALLBACK with a
+`+agent-shell-arena-remote-login'."
+  (let* ((entry (+agent-shell-sandbox-entry agent))
+         (deadline (+agent-shell-arena-remote--runner-deadline runner))
+         (need (+ deadline +agent-shell-arena-remote-login-margin))
+         (lock (+agent-shell-arena-remote--login-lock runner agent))
+         (id (+agent-shell-arena-remote-job-id
+              (+agent-shell-arena-remote--runner-job runner)))
+         (give-up (+ (float-time)
+                     (* 2 +agent-shell-arena-remote-refresh-timeout)))
+         (waited nil))
+    (cl-labels
+        ((expiry () (funcall (plist-get entry :expiry)))
+         (enough-p () (when-let* ((expiry (expiry))) (> expiry need)))
+         (done (refreshed &optional why)
+           (let ((expiry (expiry)))
+             (funcall
+              callback
+              (+agent-shell-arena-remote--make-login
+               :agent agent :refreshed refreshed
+               :remaining (and expiry (max 0 (round (- expiry (float-time)))))
+               :error
+               (when why
+                 (format "%s's login on this host %s, short of the arena's \
+deadline %s plus %d minutes, and %s.  %s"
+                         (plist-get entry :name)
+                         (if expiry
+                             (format-time-string "expires at %F %T %Z" expiry)
+                           "is missing")
+                         (format-time-string "%F %T %Z" deadline)
+                         (/ +agent-shell-arena-remote-login-margin 60)
+                         why (plist-get entry :relogin)))))))
+         (refreshed (error)
+           (+agent-shell-arena-remote--release lock)
+           (cond (error (done nil (concat "refreshing it failed: " error)))
+                 ((enough-p) (done t))
+                 (t (done nil "a refresh did not extend it"))))
+         (attempt ()
+           (cond
+            ((enough-p) (done nil))
+            ((+agent-shell-arena-remote-acquire lock id)
+             (cond ((enough-p)
+                    (+agent-shell-arena-remote--release lock)
+                    (done nil))
+                   (waited
+                    (+agent-shell-arena-remote--release lock)
+                    (done nil "another runner's refresh did not extend it"))
+                   (t (+agent-shell-arena-remote--refresh
+                       runner (plist-get entry :refresh) #'refreshed))))
+            ((> (float-time) give-up)
+             (done nil "another runner held the refresh lock too long"))
+            (t (setq waited t)
+               (run-at-time +agent-shell-arena-remote-tick nil #'attempt)))))
+      (attempt))))
+
+(defun +agent-shell-arena-remote--agents (runner)
+  "Return the agents RUNNER's job uses whose host login can be checked."
+  (seq-filter (lambda (agent)
+                (plist-get (alist-get agent +agent-shell-sandbox-agents)
+                           :expiry))
+              (seq-uniq (mapcar #'+agent-shell-pstack-panel-member-agent
+                                (+agent-shell-arena-remote--members
+                                 (+agent-shell-arena-remote--runner-job
+                                  runner))))))
+
+(defun +agent-shell-arena-remote--logins (runner callback)
+  "Check the host login of each agent RUNNER uses, one at a time.
+Record each in RUNNER's status, then call CALLBACK."
+  (cl-labels ((next (agents)
+                (if (null agents) (funcall callback)
+                  (+agent-shell-arena-remote--login
+                   runner (car agents)
+                   (lambda (login)
+                     (setf (+agent-shell-arena-remote--runner-logins runner)
+                           (append (+agent-shell-arena-remote--runner-logins
+                                    runner)
+                                   (list login)))
+                     (+agent-shell-arena-remote--runner-status runner)
+                     (next (cdr agents)))))))
+    (next (+agent-shell-arena-remote--agents runner))))
+
+(defun +agent-shell-arena-remote--refuse-logins (runner panel)
+  "Settle PANEL's members whose agent's login RUNNER refused."
+  (dolist (login (+agent-shell-arena-remote--runner-logins runner))
+    (when-let* ((why (+agent-shell-arena-remote-login-error login)))
+      (dolist (member (+agent-shell-pstack-panel-members panel))
+        (when (eq (+agent-shell-pstack-panel-member-agent member)
+                  (+agent-shell-arena-remote-login-agent login))
+          (+agent-shell-pstack-panel--settle panel member 'error nil why))))))
+
 (defun +agent-shell-arena-remote--runner-start (runner)
-  "Start RUNNER's arena now that it holds the repository's lock."
+  "Start RUNNER's arena now that it holds the repository's lock.
+On a Linux host, first check the host login of each agent it uses."
   (let ((job (+agent-shell-arena-remote--runner-job runner)))
     (setf (+agent-shell-arena-remote--runner-deadline runner)
           (+ (float-time) (+agent-shell-arena-remote-job-deadline job))
@@ -2498,17 +2699,30 @@ renamed aside first, so only one waiter can win it."
       (condition-case err
           (if previous
               (+agent-shell-arena-remote--recover panel previous)
-            (let ((sparse (+agent-shell-arena-remote-job-sparse job)))
-              (+agent-shell-pstack-panel--provision
-               panel
-               (+agent-shell-arena-git-base-at
-                (+agent-shell-arena-remote--repository job)
-                (+agent-shell-arena-remote-job-base job)
-                (+agent-shell-arena-remote-job-prefix job)
-                (when sparse
-                  (list :cone (+agent-shell-arena-remote-sparse-cone sparse)
-                        :patterns (+agent-shell-arena-remote-sparse-patterns
-                                   sparse)))))))
+            (let* ((sparse (+agent-shell-arena-remote-job-sparse job))
+                   (provision
+                    (lambda ()
+                      (+agent-shell-arena-remote--refuse-logins runner panel)
+                      (unless (eq (+agent-shell-pstack-panel-phase panel)
+                                  'finished)
+                        (+agent-shell-pstack-panel--provision
+                         panel
+                         (+agent-shell-arena-git-base-at
+                          (+agent-shell-arena-remote--repository job)
+                          (+agent-shell-arena-remote-job-base job)
+                          (+agent-shell-arena-remote-job-prefix job)
+                          (when sparse
+                            (list :cone (+agent-shell-arena-remote-sparse-cone
+                                         sparse)
+                                  :patterns
+                                  (+agent-shell-arena-remote-sparse-patterns
+                                   sparse)))))))))
+              (if (eq +agent-shell-sandbox-backend 'bwrap)
+                  (+agent-shell-arena-remote--logins
+                   runner (lambda ()
+                            (+agent-shell-pstack-panel--preparing
+                             panel nil provision)))
+                (funcall provision))))
         (error (+agent-shell-pstack-panel--fail-preparation
                 panel (error-message-string err))))
       (+agent-shell-arena-remote--runner-status runner))))
@@ -2790,7 +3004,11 @@ unfinished."
               (setq timer (run-at-time 0 +agent-shell-arena-remote-tick
                                        #'+agent-shell-arena-remote--runner-tick
                                        runner))
-              (while (not (+agent-shell-arena-remote--runner-done runner))
+              ;; Killing a refresh midway could lose the rotated login.
+              (while (or (not (+agent-shell-arena-remote--runner-done runner))
+                         (seq-some #'process-live-p
+                                   (+agent-shell-arena-remote--runner-refreshes
+                                    runner)))
                 (accept-process-output nil 0.5))
               ;; Let the stops and discards the finish started run first.
               (let ((until (+ (float-time) 3)))
@@ -2798,6 +3016,9 @@ unfinished."
                   (accept-process-output nil 0.1)))
               0)
           (when timer (cancel-timer timer))
+          (dolist (agent (+agent-shell-arena-remote--agents runner))
+            (+agent-shell-arena-remote--release
+             (+agent-shell-arena-remote--login-lock runner agent)))
           (+agent-shell-arena-remote--release
            (+agent-shell-arena-remote--runner-lock runner)))))))
 
