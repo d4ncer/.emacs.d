@@ -103,7 +103,25 @@
          (+agent-shell-pstack-panel-mode nil)
          (git (lambda (&rest args)
                 (apply #'+agent-shell-pstack-arena-acp-test--git repo args)))
-         (lead nil) (panel nil))
+         (lead nil) (panel nil)
+         (capture-starts nil)
+         (note-capture
+          (lambda (manifest name _callback)
+            (push (list name
+                        (seq-every-p
+                         (lambda (candidate)
+                           (and (+agent-shell-pstack-panel--settled-p
+                                 candidate)
+                                (not (buffer-live-p
+                                      (+agent-shell-pstack-panel-member-shell
+                                       candidate)))))
+                         (butlast (+agent-shell-pstack-panel-members
+                                   (car (+agent-shell-pstack-panel-list)))))
+                        (funcall git "for-each-ref"
+                                 (format "refs/pstack-arena/%s/"
+                                         (+agent-shell-arena-git-manifest-id
+                                          manifest))))
+                  capture-starts))))
     (with-temp-file gitconfig
       (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
               "[init]\n\tdefaultBranch = main\n"))
@@ -115,6 +133,7 @@
     (unwind-protect
         (save-window-excursion
           (+agent-shell-pstack-panel-mode 1)
+          (advice-add '+agent-shell-arena-git-capture :before note-capture)
           (setq lead (+agent-shell-drive-start :config 'fixture-codex
                                                :directory repo))
           (+agent-shell-pstack-arena-acp-test--wait-for
@@ -142,6 +161,10 @@
             (should (equal '(done done done)
                            (mapcar #'+agent-shell-pstack-panel-member-state
                                    members)))
+            ;; Each capture began with both candidates stopped and no
+            ;; result ref yet.
+            (should (equal '(("codex" t "") ("opus" t ""))
+                           (sort capture-starts :key #'car)))
             (dolist (candidate candidates)
               (let* ((role (+agent-shell-pstack-panel-member-role candidate))
                      (result (+agent-shell-pstack-panel-member-result
@@ -204,6 +227,7 @@ rubric=unseen lead=denied git=ok." role)
                                       (funcall git "worktree" "list")
                                       "\n" t))))
             (should (equal "" (funcall git "status" "--porcelain")))))
+      (advice-remove '+agent-shell-arena-git-capture note-capture)
       (+agent-shell-pstack-panel-mode -1)
       (when panel
         (dolist (member (+agent-shell-pstack-panel-members panel))

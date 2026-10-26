@@ -140,8 +140,10 @@ initializing), moves to `waiting' (initialized, brief unsent) and `running'
 says which phase runs the member.
 
 A candidate has a SANDBOX.  Once settled, its CAPTURE moves from
-`stopping' to `capturing', then ends as `captured' or `failed'.  RESULT
-then holds :commit, :ref, :changed, :stat and :checkout, or :error."
+`stopping' to `stopped'.  Once every candidate has stopped, it moves to
+`capturing' and ends as `captured' or `failed'.  A candidate that never
+started fails once stopped.  RESULT then holds :commit, :ref, :changed,
+:stat and :checkout, or :error."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result)
 
@@ -735,16 +737,25 @@ Safe to call after any change: a phase that is not over stays."
          (+agent-shell-pstack-panel--disarm panel)
          (setf (+agent-shell-pstack-panel-phase panel) 'capturing)
          (+agent-shell-pstack-panel--advance panel)))
+      ;; A running candidate can read the git store, so no result enters
+      ;; it until every candidate has stopped.
       ('capturing
-       (let ((candidates (+agent-shell-pstack-panel--kind-members
-                          panel 'candidate))
-             (judge (car (+agent-shell-pstack-panel--kind-members
-                          panel 'judge))))
-         (when (seq-every-p (lambda (member)
-                              (memq (+agent-shell-pstack-panel-member-capture
-                                     member)
-                                    '(captured failed)))
-                            candidates)
+       (let* ((candidates (+agent-shell-pstack-panel--kind-members
+                           panel 'candidate))
+              (judge (car (+agent-shell-pstack-panel--kind-members
+                           panel 'judge)))
+              (captures (mapcar #'+agent-shell-pstack-panel-member-capture
+                                candidates)))
+         (cond
+          ((seq-some (lambda (capture) (memq capture '(nil stopping)))
+                     captures))
+          ((memq 'stopped captures)
+           (dolist (member candidates)
+             (when (eq 'stopped (+agent-shell-pstack-panel-member-capture
+                                 member))
+               (+agent-shell-pstack-panel--collect panel member))))
+          ((seq-every-p (lambda (capture) (memq capture '(captured failed)))
+                        captures)
            (cond
             ((not (eq 'pending (+agent-shell-pstack-panel-member-state judge)))
              (+agent-shell-pstack-panel--finish panel))
@@ -755,7 +766,7 @@ Safe to call after any change: a phase that is not over stays."
                    (+agent-shell-pstack-panel-member-error judge)
                    "No candidate changed the base, so there was nothing to \
 judge.")
-             (+agent-shell-pstack-panel--finish panel))))))
+             (+agent-shell-pstack-panel--finish panel)))))))
       ('judging
        (when (funcall settled (+agent-shell-pstack-panel--kind-members
                                panel 'judge))
@@ -799,7 +810,7 @@ judge.")
     (+agent-shell-pstack-panel--write panel member)
     ;; Killing a shell from its own event callback corrupts upstream state.
     (if (eq (+agent-shell-pstack-panel-member-kind member) 'candidate)
-        (run-at-time 0 nil #'+agent-shell-pstack-panel--collect panel member)
+        (run-at-time 0 nil #'+agent-shell-pstack-panel--halt panel member)
       (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
         (run-at-time 0 nil #'+agent-shell-drive-kill shell)))
     (+agent-shell-pstack-panel--advance panel)))
@@ -825,11 +836,31 @@ Then delete its sandbox's private folders and call CALLBACK."
                        (funcall done survivors))))))
     (funcall callback)))
 
+(defun +agent-shell-pstack-panel--halt (panel member)
+  "Stop settled candidate MEMBER of PANEL so its tree stops changing.
+A candidate without a worktree fails, since there is nothing to capture."
+  (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
+  (+agent-shell-pstack-panels--refresh)
+  (+agent-shell-pstack-panel--stop
+   member
+   (lambda ()
+     (if-let* ((manifest (+agent-shell-pstack-panel-arena panel))
+               ((+agent-shell-pstack-panel-member-sandbox member))
+               ((+agent-shell-arena-git-role
+                 manifest (+agent-shell-pstack-panel-member-role member))))
+         (setf (+agent-shell-pstack-panel-member-capture member) 'stopped)
+       (setf (+agent-shell-pstack-panel-member-capture member) 'failed
+             (+agent-shell-pstack-panel-member-result member)
+             (list :error "The candidate never started.")))
+     (+agent-shell-pstack-panel--advance panel)
+     (+agent-shell-pstack-panels--refresh))))
+
 (defun +agent-shell-pstack-panel--collect (panel member)
-  "Stop settled candidate MEMBER of PANEL, then capture what it produced.
+  "Capture what stopped candidate MEMBER of PANEL produced.
 A usable result also gets a checkout of its own for the judge to read."
-  (let ((name (+agent-shell-pstack-panel-member-role member))
-        (manifest (+agent-shell-pstack-panel-arena panel)))
+  (let* ((name (+agent-shell-pstack-panel-member-role member))
+         (manifest (+agent-shell-pstack-panel-arena panel))
+         (role (+agent-shell-arena-git-role manifest name)))
     (cl-labels
         ((end (capture result)
            (setf (+agent-shell-pstack-panel-member-capture member) capture
@@ -842,18 +873,7 @@ A usable result also gets a checkout of its own for the judge to read."
            (lambda (&rest arguments)
              (condition-case err (apply function arguments)
                (error (failed (error-message-string err))))))
-         (capture (role)
-           (setf (+agent-shell-pstack-panel-member-capture member) 'capturing
-                 (+agent-shell-arena-git-role-state role)
-                 (symbol-name (+agent-shell-pstack-panel-member-state member)))
-           (+agent-shell-arena-git-capture
-            manifest name
-            (step (lambda (commit error)
-                    (if (not error)
-                        (compare role commit)
-                      (+agent-shell-arena-git-write-manifest manifest)
-                      (failed error))))))
-         (compare (role commit)
+         (compare (commit)
            (+agent-shell-arena-git-diff
             manifest name
             (step (lambda (diff error)
@@ -872,18 +892,19 @@ A usable result also gets a checkout of its own for the judge to read."
                     (if error (failed error)
                       (end 'captured
                            (append result (list :checkout checkout)))))))))
-      (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
+      (setf (+agent-shell-pstack-panel-member-capture member) 'capturing
+            (+agent-shell-arena-git-role-state role)
+            (symbol-name (+agent-shell-pstack-panel-member-state member)))
       (+agent-shell-pstack-panels--refresh)
-      (+agent-shell-pstack-panel--stop
-       member
-       (step (lambda ()
-               (if-let* ((role (and manifest
-                                    (+agent-shell-pstack-panel-member-sandbox
-                                     member)
-                                    (+agent-shell-arena-git-role
-                                     manifest name))))
-                   (capture role)
-                 (failed "The candidate never started."))))))))
+      (condition-case err
+          (+agent-shell-arena-git-capture
+           manifest name
+           (step (lambda (commit error)
+                   (if (not error)
+                       (compare commit)
+                     (+agent-shell-arena-git-write-manifest manifest)
+                     (failed error)))))
+        (error (failed (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
   "Send MEMBER of PANEL its brief once it is waiting for one."

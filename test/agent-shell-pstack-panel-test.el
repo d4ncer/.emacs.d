@@ -1212,11 +1212,76 @@ criterion from 1 to 5" brief))
                      (+agent-shell-pstack-panel-member-error judge)))
       (should (eq 'finished (+agent-shell-pstack-panel-phase panel))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-arena-captures-after-all-stop ()
+  "Capture nothing while a candidate runs, so none can read another's result."
+  (+agent-shell-pstack-panel-test--with-arena
+    (let ((candidates (+agent-shell-pstack-panel-test--candidates panel)))
+      (finish "opus" "A")
+      (+agent-shell-pstack-panel-test--drain)
+      (should (equal '(stopped nil)
+                     (mapcar #'+agent-shell-pstack-panel-member-capture
+                             candidates)))
+      (should (= 1 (length stopped)))
+      (should-not captured)
+      (should (eq 'candidates (+agent-shell-pstack-panel-phase panel)))
+      (finish "codex" "B")
+      (+agent-shell-pstack-panel-test--drain)
+      (should (equal '("codex" "opus") (sort (copy-sequence captured)
+                                             #'string<)))
+      (should (equal '(captured captured)
+                     (mapcar #'+agent-shell-pstack-panel-member-capture
+                             candidates)))
+      (should (eq 'judging (+agent-shell-pstack-panel-phase panel))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-captures-once-stopped ()
+  "Wait for the last settled candidate to stop before capturing any."
+  (+agent-shell-pstack-panel-test--with-arena
+    (let* ((candidates (+agent-shell-pstack-panel-test--candidates panel))
+           (codex (+agent-shell-pstack-panel-member-shell (cadr candidates)))
+           (held nil)
+           (stop (symbol-function '+agent-shell-drive-stop)))
+      (cl-letf (((symbol-function '+agent-shell-drive-stop)
+                 (lambda (shell &optional reason callback)
+                   (if (eq shell codex)
+                       (setq held (lambda () (funcall callback nil)))
+                     (funcall stop shell reason callback)))))
+        (finish "opus" "A")
+        (finish "codex" "B")
+        (+agent-shell-pstack-panel-test--drain)
+        (should held)
+        (should (equal '(stopped stopping)
+                       (mapcar #'+agent-shell-pstack-panel-member-capture
+                               candidates)))
+        (should (eq 'capturing (+agent-shell-pstack-panel-phase panel)))
+        (should-not captured)
+        (funcall held)
+        (+agent-shell-pstack-panel-test--drain)
+        (should (= 2 (length captured)))
+        (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-capture-failure ()
+  "Capture and judge the other candidates when one capture fails."
+  (+agent-shell-pstack-panel-test--with-arena
+    (setq capture-errors '(("codex" . "git add: boom")))
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
+      (should (equal '(captured failed)
+                     (mapcar #'+agent-shell-pstack-panel-member-capture
+                             (+agent-shell-pstack-panel-test--candidates
+                              panel))))
+      (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))
+      (should (eq (+agent-shell-pstack-panel-member-shell judge)
+                  (nth 1 (nth 2 started)))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-arena-lead-killed-candidates ()
   "Capture what the candidates made when the lead dies, but never judge."
   (+agent-shell-pstack-panel-test--with-arena
     (let ((judge (+agent-shell-pstack-panel-test--judge panel)))
       (finish "opus" "A")
+      (+agent-shell-pstack-panel-test--drain)
+      (should-not captured)
       (lead-event :kind 'clean-up)
       (should (equal '(done error error)
                      (+agent-shell-pstack-panel-test--states panel)))

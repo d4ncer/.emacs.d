@@ -202,10 +202,13 @@ lead's mode-line help:
    `GOTELEMETRY=off` and `GIT_OPTIONAL_LOCKS=0`, and may write the few
    macOS per-user temp and cache paths that xcodebuild, xcrun and the JVM
    need. The candidates' timer starts here.
-4. `capturing`: Emacs stops each settled candidate with every process it
-   started, commits its tree under `refs/pstack-arena/<arena-id>/<role>`,
-   and checks a result that differs from the base out in a separate
-   worktree under the arena's `checkouts/` folder.
+4. `capturing`: Emacs stops each candidate with every process it started
+   as soon as it settles. Once every candidate has stopped, Emacs commits
+   each tree under `refs/pstack-arena/<arena-id>/<role>` and checks a
+   result that differs from the base out in a separate worktree under the
+   arena's `checkouts/` folder. Capture waits for the last candidate
+   because a running candidate can read the git directory, so it would
+   see an earlier result.
 5. `judging`: a read-only judge in the lead's directory gets the task, the
    rubric, and each changed candidate's label, outcome, checkout, diff stat
    and rationale. It scores each criterion and recommends a base.

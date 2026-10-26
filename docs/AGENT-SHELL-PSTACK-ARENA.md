@@ -198,8 +198,8 @@ panel:     preparing ─▶ candidates ─▶ capturing ─▶ judging ─▶ fi
                │            │             │           │
                └─ failure ──┴─ lead killed or no usable candidate ─▶ finished
 
-candidate: pending ▶ starting ▶ waiting ▶ running ▶ stopping ▶ captured
-                                            └▶ error | timeout ▶ stopping ▶ captured
+candidate: pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeout
+capture:   stopping ▶ stopped ▶ (all stopped) capturing ▶ captured | failed
 judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeout
 ```
 
@@ -219,7 +219,10 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
   Experiment 2 shows why both steps are needed. A process that escapes
   both can still write to ROOT, but the capture and the judge below don't
   depend on ROOT after this point.
-- **Capturing** records each candidate's result commit (see Snapshots).
+- **Capturing** records each candidate's result commit (see Snapshots),
+  but only once every candidate has stopped. A candidate can read the
+  shared git directory, so a result captured while another candidate ran
+  would reach that candidate.
 - **Judging.** The judge reads an immutable checkout of each result commit,
   made outside every candidate's root, never the live worktree. Its timer
   is `judge_timeout`.
@@ -497,10 +500,14 @@ None. Every probe above was run on this machine.
 - **An `interrupting` phase.** A request found mid-turn puts the panel in
   `interrupting` until the lead's cancelled `turn-complete`, then
   `preparing` starts. The design folded that wait into `preparing`.
-- **Capture runs per candidate.** Each candidate is stopped and captured as
-  soon as it settles, and a result that differs from the base gets its
-  judge checkout then, not after every candidate is captured. `capturing`
-  is the wait for the last of these.
+- **Stopping runs per candidate, capture waits for all.** Each candidate
+  is stopped as soon as it settles, so its tree stops changing, and its
+  capture state becomes `stopped`. `capturing` waits until every
+  candidate has stopped, then captures them all concurrently, each with
+  its judge checkout when its result differs from the base. Captures
+  write separate refs and git tolerates concurrent object writes, so
+  running them together costs nothing in safety. A candidate that never
+  got a worktree fails as soon as it stops.
 - **Checkouts are worktrees.** Each judge checkout is a detached worktree
   under the arena's `checkouts/` folder, recorded as the role's `checkout`
   in the manifest, so `+agent-shell-arena-git-clean` removes it like a
@@ -523,8 +530,10 @@ None. Every probe above was run on this machine.
   failed with "Invalid path" when it resolved the main worktree. The
   profile now allows reads of the common git directory and metadata reads
   of the literal top level. This exposes the repository's objects and
-  refs, including another candidate's result once it is captured, but no
-  working file of the lead.
+  refs, but no working file of the lead. No candidate sees another's
+  result through them, because nothing is captured until every candidate
+  has stopped. The arena ACP test checks that each capture starts with
+  both candidates stopped and no `refs/pstack-arena/<arena-id>/` ref.
 - **A missing Claude Code token fails the candidate, not the request.** The
   Keychain lookup happens when the candidate starts. That candidate settles
   as `error` with the `security add-generic-password` hint, and the others
