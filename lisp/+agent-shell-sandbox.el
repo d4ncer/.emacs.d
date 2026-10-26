@@ -158,6 +158,42 @@ exist, returning one path or entry or a list of them."
   "Return PATH as an SBPL string literal."
   (concat "\"" (replace-regexp-in-string "[\"\\]" "\\\\\\&" path) "\""))
 
+(defvar +agent-shell-sandbox--user-folders 'unknown
+  "The macOS per-user (TEMP . CACHE) folders as true names, or nil.")
+
+(defun +agent-shell-sandbox--user-folders ()
+  "Return macOS's per-user (TEMP . CACHE) folders, or nil elsewhere."
+  (when (eq +agent-shell-sandbox--user-folders 'unknown)
+    (setq +agent-shell-sandbox--user-folders
+          (when-let* (((eq system-type 'darwin))
+                      (temp (car (+agent-shell-sandbox--lines
+                                  "getconf" "DARWIN_USER_TEMP_DIR")))
+                      (cache (car (+agent-shell-sandbox--lines
+                                   "getconf" "DARWIN_USER_CACHE_DIR"))))
+            (cons (+agent-shell-sandbox--path temp)
+                  (+agent-shell-sandbox--path cache)))))
+  +agent-shell-sandbox--user-folders)
+
+(defun +agent-shell-sandbox--toolchain-writes ()
+  "Return SBPL filters for per-user folders toolchains write on macOS.
+Each is exact, since the temp folder also holds other programs' files,
+such as the Emacs server socket.  TemporaryItems is written by
+xcodebuild, xcrun_db and its siblings by xcrun, hsperfdata_USER by the
+JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
+  (when-let* ((folders (+agent-shell-sandbox--user-folders)))
+    (let ((temp (car folders))
+          (subpath (lambda (path)
+                     (format "(subpath %s)" (+agent-shell-sandbox--string
+                                             path)))))
+      (list (funcall subpath (concat temp "/TemporaryItems"))
+            (format "(regex #\"^%s\")"
+                    (replace-regexp-in-string
+                     "[][.^$*+?(){}|\\\"]" "\\\\\\&"
+                     (concat temp "/xcrun_db")))
+            (funcall subpath (concat temp "/hsperfdata_" (user-login-name)))
+            (funcall subpath (concat (cdr folders)
+                                     "/com.apple.DeveloperTools"))))))
+
 (defun +agent-shell-sandbox-profile (sandbox)
   "Return the sandbox-exec profile text for SANDBOX."
   (let ((subpaths (lambda (paths)
@@ -168,12 +204,15 @@ exist, returning one path or entry or a list of them."
     (concat
      "(version 1)\n(allow default)\n(deny file-write*)\n"
      (format "(allow file-write*%s)\n"
-             (funcall subpaths (append
-                                (list (+agent-shell-sandbox-root sandbox)
-                                      (+agent-shell-sandbox-tmp sandbox)
-                                      (+agent-shell-sandbox-config sandbox)
-                                      "/dev")
-                                (+agent-shell-sandbox-allow-writes sandbox))))
+             (concat
+              (funcall subpaths (append
+                                 (list (+agent-shell-sandbox-root sandbox)
+                                       (+agent-shell-sandbox-tmp sandbox)
+                                       (+agent-shell-sandbox-config sandbox)
+                                       "/dev")
+                                 (+agent-shell-sandbox-allow-writes sandbox)))
+              (mapconcat (lambda (filter) (concat " " filter))
+                         (+agent-shell-sandbox--toolchain-writes) "")))
      ;; A worktree's .git file points git at the lead's repository.
      (format "(deny file-write* (literal %s))\n"
              (+agent-shell-sandbox--string
@@ -206,7 +245,8 @@ exist, returning one path or entry or a list of them."
   "Return the environment every process confined to SANDBOX gets.
 That is SANDBOX's own entries, then these defaults.  TMPDIR points most
 tools at the private temp folder.  GOTMPDIR does the same for the Go
-toolchain's work folders, which it would put in /tmp.
+toolchain's work folders, which it would put in /tmp, and GOTELEMETRY=off
+stops Go tools writing telemetry under ~/Library.
 JAVA_TOOL_OPTIONS gains -Djava.io.tmpdir, since the JVM ignores TMPDIR on
 macOS and extracts native libraries into the default temp folder.
 GIT_OPTIONAL_LOCKS=0 keeps read-only commands such as git status from
@@ -217,6 +257,7 @@ write."
     (append (+agent-shell-sandbox-env sandbox)
             (list (concat "TMPDIR=" tmp)
                   (concat "GOTMPDIR=" tmp)
+                  "GOTELEMETRY=off"
                   (concat "JAVA_TOOL_OPTIONS="
                           (and java (not (string-empty-p java))
                                (concat java " "))

@@ -58,7 +58,7 @@ second when given."
       (should (string-match-p
                (regexp-quote
                 (format "(allow file-write* (subpath %s) (subpath %s) \
-(subpath %s) (subpath \"/dev\"))"
+(subpath %s) (subpath \"/dev\")"
                         (funcall quote-path root)
                         (funcall quote-path (+agent-shell-sandbox-tmp sandbox))
                         (funcall quote-path
@@ -269,6 +269,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
       (let ((process-environment (cons "JAVA_TOOL_OPTIONS=-Xss2m"
                                        process-environment)))
         (should (equal (list (concat "TMPDIR=" tmp) (concat "GOTMPDIR=" tmp)
+                             "GOTELEMETRY=off"
                              (concat "JAVA_TOOL_OPTIONS=-Xss2m -Djava.io.tmpdir="
                                      tmp)
                              "GIT_OPTIONAL_LOCKS=0")
@@ -294,6 +295,28 @@ Keep JAVA_TOOL_OPTIONS the user already had."
         (should (equal (concat tmp "\n")
                        (+agent-shell-sandbox-test--output
                         sandbox (executable-find "go") "env" "GOTMPDIR")))))))
+
+(ert-deftest +agent-shell-sandbox-test-user-folders ()
+  "Write the per-user temp files toolchains need, and nothing else there."
+  (+agent-shell-sandbox-test--on-macos
+    (+agent-shell-sandbox-test--with (root)
+      (let* ((temp (file-truename (string-trim
+                                   (shell-command-to-string
+                                    "getconf DARWIN_USER_TEMP_DIR"))))
+             (suffix (format "%08x" (random #x100000000)))
+             (xcrun (expand-file-name (concat "xcrun_db-pa-test-" suffix) temp))
+             (other (expand-file-name (concat "pa-test-other-" suffix) temp)))
+        (unwind-protect
+            (progn
+              (should (string-prefix-p "/private/var/folders/" temp))
+              (should (eql 0 (+agent-shell-sandbox-test--run
+                              sandbox root "/usr/bin/touch" xcrun)))
+              (should (file-exists-p xcrun))
+              (should-not (eql 0 (+agent-shell-sandbox-test--run
+                                  sandbox root "/usr/bin/touch" other)))
+              (should-not (file-exists-p other)))
+          (delete-file xcrun)
+          (delete-file other))))))
 
 (ert-deftest +agent-shell-sandbox-test-confines-files ()
   "Write inside the root and private folders, but nowhere else."

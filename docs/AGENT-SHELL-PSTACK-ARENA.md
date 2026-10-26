@@ -79,7 +79,15 @@ design.
   - the candidate's private temp folder, `/tmp/pa-<8 hex>`, set as
     `TMPDIR`, `CLAUDE_CODE_TMPDIR` and `GOTMPDIR`, and appended to
     `JAVA_TOOL_OPTIONS` as `-Djava.io.tmpdir`, because the JVM ignores
-    `TMPDIR` on macOS;
+    `TMPDIR` on macOS, while `GOTELEMETRY=off` keeps Go tools from
+    writing telemetry under `~/Library`;
+  - exact paths in the macOS per-user folders that toolchains write even
+    with `TMPDIR` set: `TemporaryItems` for xcodebuild, anything starting
+    `xcrun_db` for xcrun, and `hsperfdata_<user>` for the JVM in
+    `getconf DARWIN_USER_TEMP_DIR`, plus `com.apple.DeveloperTools` for
+    xcodebuild in `getconf DARWIN_USER_CACHE_DIR`. The rest of the temp
+    folder stays unwritable, since it holds other programs' files such as
+    the Emacs server socket;
   - the candidate's private agent config directory, set through
     `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, so it cannot plant hooks or
     settings in the user's real config;

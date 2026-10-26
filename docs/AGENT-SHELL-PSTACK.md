@@ -198,8 +198,10 @@ lead's mode-line help:
    can add shared links, which stay readable. The lead's git directory
    stays readable too, so candidates can run read-only git. Every
    candidate gets `TMPDIR`, `GOTMPDIR` and `-Djava.io.tmpdir` in
-   `JAVA_TOOL_OPTIONS` pointing at its private temp folder, and
-   `GIT_OPTIONAL_LOCKS=0`. The candidates' timer starts here.
+   `JAVA_TOOL_OPTIONS` pointing at its private temp folder, along with
+   `GOTELEMETRY=off` and `GIT_OPTIONAL_LOCKS=0`, and may write the few
+   macOS per-user temp and cache paths that xcodebuild, xcrun and the JVM
+   need. The candidates' timer starts here.
 4. `capturing`: Emacs stops each settled candidate with every process it
    started, commits its tree under `refs/pstack-arena/<arena-id>/<role>`,
    and checks a result that differs from the base out in a separate
