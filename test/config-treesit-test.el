@@ -9,15 +9,15 @@
 (+config-test-load-module "modules/mod-lsp.el")
 (+config-test-load-module "modules/mod-languages.el")
 
-(ert-deftest +config-treesit-native-mappings-and-pins ()
+(ert-deftest +config-treesit-native-mappings-and-sources ()
   (should-not (featurep 'treesit-auto))
   (should (eq (alist-get 'python-mode major-mode-remap-alist) 'python-ts-mode))
   (should (eq treesit-auto-install-grammar 'ask))
   (dolist (language '(bash c cpp css elixir heex html java javascript jsdoc json
                           markdown markdown-inline nix python rust tsx typescript yaml))
-    (should (string-match-p "\\`[[:xdigit:]]\\{40\\}\\'"
-                            (plist-get (cdr (alist-get language treesit-language-source-alist))
-                                       :commit)))))
+    (let ((source (alist-get language treesit-language-source-alist)))
+      (should (string-prefix-p "https://" (car source)))
+      (should-not (plist-member (cdr source) :commit)))))
 
 (ert-deftest +config-treesit-nix-declined-and-available ()
   (with-temp-buffer

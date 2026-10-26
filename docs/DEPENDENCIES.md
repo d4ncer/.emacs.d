@@ -7,7 +7,7 @@ something, fix the configuration forward. Two files record other inputs:
 | File | Contents |
 | --- | --- |
 | emacs-build.eld | Verified Emacs source and Homebrew formula identities, build options and runtime libraries |
-| treesit-grammars.eld | Grammar source commits and source subdirectories |
+| treesit-grammars.eld | Grammar repositories and source subdirectories |
 
 `elpaca-bootstrap.el` clones Elpaca's default branch on a fresh install. After
 that, Elpaca updates itself like any other package.
@@ -64,15 +64,13 @@ The current Homebrew source identity comes from `INSTALL_RECEIPT.json` in the
 installed Cellar directory; its formula revision and used options are recorded
 in `emacs-build.eld`.
 
-Compare the new build's grammar recipes against `treesit-grammars.eld`. Update
-pins deliberately, then verify fontification, indentation, and syntax navigation
-for affected languages. The configured Nix source pin was compiled and exercised
-against nix-ts-mode in a temporary grammar directory.
+Grammars track each repository's default branch, like packages. When a newer
+grammar breaks a mode's queries (Emacs reports a query error in that mode), fix
+the mode's configuration forward or add a `:revision` to that one entry.
 
 Grammar binaries are built locally into `tree-sitter/`, which Git ignores.
-Opening a file whose grammar is missing offers to build it from its pin in
-`treesit-grammars.eld`. Reinstall a grammar when validating a changed source
-pin. No grammar download occurs without installation confirmation.
+Opening a file whose grammar is missing offers to build it from its source in
+`treesit-grammars.eld`. Reinstall a grammar to pick up upstream changes. No grammar download occurs without installation confirmation.
 
 ## Verification commands
 
