@@ -550,8 +550,9 @@ not cancel. Ending the lead's shell otherwise cancels, as locally.
   laptop's arena id. The host's arena folder takes the panel id and a
   suffix of its own, and the results move from
   `refs/pstack-arena/<host arena>/<role>` to the laptop's.
-- **The judge runs in the host checkout**, at the lead's subdirectory, or
-  at the top level when the host's commit lacks that folder.
+- **The judge runs in a read-only sandbox** over the host arena's
+  `checkouts/` folder, as it does on a laptop, so on Linux its root is a
+  read-only bind.
 - **The panel gained a sink, a remote slot, a change hook, a cancel
   command and a reserved role.** `+agent-shell-pstack-panel` has two new
   slots, schema 6. `+agent-shell-pstack-panel-cancel`, bound to `c` in

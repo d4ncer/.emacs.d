@@ -177,8 +177,9 @@ The request adds three fields to the panel block:
 - `members` lists 1 to 4 candidates, each on an agent in
   `+agent-shell-sandbox-agents`. The role `judge` is reserved.
 - `rubric` lists 3 to 6 criteria. Only the judge sees them.
-- `judge` is optional. By default it is the first read-only agent whose
-  identifier differs from the lead's.
+- `judge` is optional, on an agent in `+agent-shell-sandbox-agents`. By
+  default it is the first such agent whose identifier differs from the
+  lead's.
 - `timeout` bounds the candidates, and `judge_timeout` bounds the judge,
   900 seconds by default.
 
@@ -215,8 +216,8 @@ lead's mode-line help:
    arena's `checkouts/` folder. Capture waits for the last candidate
    because a running candidate can read the git directory, so it would
    see an earlier result.
-5. `judging`: a read-only judge in the lead's directory gets the task, the
-   rubric, and each changed candidate's label, outcome, checkout, diff stat
+5. `judging`: a judge in a read-only sandbox over the `checkouts/` folder
+   gets the task, the rubric, and each changed candidate's label, outcome, checkout, diff stat
    and rationale. It scores each criterion and recommends a base.
 6. `finished`: the lead gets one follow-up with each candidate's state,
    result commit, ref, diff stat, rationale and a command that applies its

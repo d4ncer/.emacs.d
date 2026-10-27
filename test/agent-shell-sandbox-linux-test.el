@@ -72,6 +72,17 @@ mount comes after the mounts that hold it."
                                  (file-name-as-directory (cadr other))
                                  (cadr mount))))))))
 
+(ert-deftest +agent-shell-sandbox-linux-test-read-only-mounts ()
+  "Bind a read-only sandbox's root read-only and its private folders writable."
+  (+agent-shell-sandbox-linux-test--with (root) (list :read-only t)
+    (let ((mounts (+agent-shell-sandbox-linux-mounts sandbox)))
+      (should (equal (list 'ro root root)
+                     (+agent-shell-sandbox-linux-test--mount mounts root)))
+      (dolist (path (list (+agent-shell-sandbox-tmp sandbox)
+                          (+agent-shell-sandbox-config sandbox)))
+        (should (equal (list 'rw path path)
+                       (+agent-shell-sandbox-linux-test--mount mounts path)))))))
+
 (ert-deftest +agent-shell-sandbox-linux-test-arguments ()
   "Give bwrap the namespaces, the user's ids and the mounts in order."
   (let ((arguments (+agent-shell-sandbox-linux-arguments

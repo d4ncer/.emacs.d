@@ -124,7 +124,26 @@ def handle_pstack_prompt(message, text, state):
                 f" lead={lead} git={git}."
                 " Considered editing in place; rejected it for a new file.")
     if "judge of a pstack arena" in text:
-        return "SCORES mode=" + state["mode"] + "\n" + text
+        lead = "none"
+        if os.environ.get("PA_LEAD"):
+            try:
+                Path(os.environ["PA_LEAD"]).read_text()
+                lead = "readable"
+            except OSError:
+                lead = "denied"
+        checkout = re.search(r"Checkout: (\S+)", text)
+        try:
+            Path(checkout[1], "opus.txt").read_text()
+            read = "ok"
+        except (OSError, TypeError):
+            read = "denied"
+        try:
+            Path(state["cwd"], "judge.txt").write_text("judge\n")
+            write = "allowed"
+        except OSError:
+            write = "denied"
+        return (f"SCORES mode={state['mode']} lead={lead} checkout={read}"
+                f" write={write}\n" + text)
     if "member of a pstack" in text:
         if "HANG" in text:
             chunk(session_id, "Partial before hang.")

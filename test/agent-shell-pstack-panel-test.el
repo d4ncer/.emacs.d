@@ -866,10 +866,10 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
       (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
                                          (+agent-shell-pstack-panel-test--arena)
                                          nil))))
-      (let ((+agent-shell-drive-read-only-modes '((codex . "read-only"))))
-        (should (eq 'codex (funcall judge (+agent-shell-pstack-panel--parse
-                                           (+agent-shell-pstack-panel-test--arena)
-                                           'codex)))))
+      (should (eq 'claude-code
+                  (funcall judge (+agent-shell-pstack-panel--parse
+                                  (+agent-shell-pstack-panel-test--arena)
+                                  'codex))))
       (let ((panel (+agent-shell-pstack-panel--parse
                     (+agent-shell-pstack-panel-test--arena
                      '(judge . ((agent . "codex"))) '(judge_timeout . 120))
@@ -896,7 +896,7 @@ claude-code")
            ((members . [((role . "-a") (agent . "codex"))])
             "Member role \"-a\" must be lowercase")
            ((judge . ((agent . "gemini"))) "Judge must be an object whose \
-agent is read-only; available agents: codex, claude-code")
+agent can run sandboxed; available agents: codex, claude-code")
            ((judge . "codex") "Judge must be an object")
            ((judge_timeout . 0) "Judge timeout must be a whole number of \
 seconds from 1 to 3600")
@@ -1194,9 +1194,20 @@ a timer of its own."
                      (mapcar #'+agent-shell-arena-git-role-state
                              (+agent-shell-arena-git-manifest-roles manifest))))
       (should (eq 'judging (+agent-shell-pstack-panel-phase panel)))
-      (should (equal (list 'codex 'read-only cwd)
-                     (let ((entry (nth 2 started)))
-                       (list (nth 0 entry) (nth 2 entry) (nth 3 entry)))))
+      (let* ((entry (nth 2 started))
+             (sandbox (nth 2 entry))
+             (checkouts (expand-file-name
+                         "checkouts"
+                         (+agent-shell-arena-git-manifest-directory manifest))))
+        (should (eq 'codex (nth 0 entry)))
+        (should (eq sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
+        (should (+agent-shell-sandbox-read-only sandbox))
+        (should (equal (file-truename checkouts)
+                       (+agent-shell-sandbox-root sandbox)))
+        (should (equal (+agent-shell-sandbox-root sandbox) (nth 3 entry)))
+        (should (+agent-shell-sandbox--under-p
+                 (file-truename cwd)
+                 (+agent-shell-sandbox-deny-reads sandbox))))
       (should (eq (+agent-shell-pstack-panel-member-shell judge)
                   (nth 1 (nth 2 started))))
       (+agent-shell-pstack-panel--expire id 'candidates)
@@ -1210,11 +1221,12 @@ a timer of its own."
                         (+agent-shell-arena-git-manifest-directory manifest))))
         (should (string-prefix-p
                  (format "You are the judge of a pstack arena that \
-Emacs runs for another agent.  You are read-only: Emacs refuses edits and \
-commands that change state.  Each candidate below worked on the same task \
-from the same base commit, alone in a sandbox.  A checkout holds the files \
-its candidate changed, or every file when it changed more than 1000.  Read \
-any other file at the base with git show base:PATH.
+Emacs runs for another agent.  You run in a read-only sandbox: you can \
+read the checkouts below and the repository's git objects, and write only \
+your temp folder.  Each candidate below worked on the same task from the \
+same base commit, alone in a sandbox.  A checkout holds the files its \
+candidate changed, or every file when it changed more than 1000.  Read any \
+other file at the base with git -C CHECKOUT show base:PATH.
 
 Task:
 Add a cache.

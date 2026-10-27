@@ -135,7 +135,8 @@ can still open a path inside one."
                (:copier nil))
   "Where a confined agent may write and what it may not read.
 Paths are true names without a trailing slash."
-  (root nil :read-only t :documentation "Writable working tree.")
+  (root nil :read-only t :documentation "Working tree, writable unless \
+READ-ONLY.")
   (tmp nil :read-only t :documentation "Private temp folder, /tmp/pa-HEX.")
   (config nil :read-only t :documentation "Private agent config folder.")
   (deny-reads nil :read-only t :documentation "Folders the agent cannot read.")
@@ -159,7 +160,10 @@ write.")
          :documentation "Whether the profile reports instead of refusing.")
   (deadline nil :read-only t
             :documentation "Time the agent's login must outlast on Linux, \
-or nil for now."))
+or nil for now.")
+  (read-only nil :read-only t
+             :documentation "Whether the agent may write only its private \
+folders, not ROOT."))
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -351,8 +355,10 @@ and a (regexp . RE) pattern names no path")
 (cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
                                              allow-metadata allow-writes
                                              allow-connects env trace
-                                             deadline)
+                                             deadline read-only)
   "Return a sandbox writing to ROOT, creating its private folders.
+With READ-ONLY non-nil the agent works in ROOT but writes only its
+private temp and config folders and ALLOW-WRITES.
 DENY-READS lists folders the agent may not read, to which the sandbox
 adds `+agent-shell-sandbox-secret-reads'.  It cannot read any sandbox's
 private temp or config folder but its own.  ALLOW-READS lists folders
@@ -415,6 +421,7 @@ available on Linux"))
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
                         :tag tag :trace (and trace t) :deadline deadline
+                        :read-only (and read-only t)
                         resolved)))
          (provisional (funcall make))
          (allowances
@@ -527,6 +534,13 @@ JVM, and the cache's com.apple.DeveloperTools by xcodebuild."
             (concat temp "/hsperfdata_" (user-login-name))
             (concat (cdr folders) "/com.apple.DeveloperTools")))))
 
+(defun +agent-shell-sandbox-own-writes (sandbox)
+  "Return the folders SANDBOX's agent may write besides its allowances."
+  (append (unless (+agent-shell-sandbox-read-only sandbox)
+            (list (+agent-shell-sandbox-root sandbox)))
+          (list (+agent-shell-sandbox-tmp sandbox)
+                (+agent-shell-sandbox-config sandbox))))
+
 (defun +agent-shell-sandbox--filters (allowances)
   "Return the SBPL filters for ALLOWANCES, paths or patterns, each spaced."
   (mapconcat (lambda (allowance)
@@ -594,10 +608,8 @@ report instead."
      "(version 1)\n(allow default)\n" (funcall refuse "file-write*" "")
      (format "(allow file-write*%s)\n"
              (+agent-shell-sandbox--filters
-              (append (list (+agent-shell-sandbox-root sandbox)
-                            (+agent-shell-sandbox-tmp sandbox)
-                            (+agent-shell-sandbox-config sandbox)
-                            "/dev")
+              (append (+agent-shell-sandbox-own-writes sandbox)
+                      '("/dev")
                       (+agent-shell-sandbox-allow-writes sandbox)
                       (+agent-shell-sandbox--toolchain-writes))))
      ;; A worktree's .git file points git at the lead's repository.
@@ -871,7 +883,8 @@ The agent sees `+agent-shell-sandbox-linux-system' read-only with
 `+agent-shell-sandbox-linux-masks' empty, and fresh /proc, /dev, /tmp
 and /run.  Where /etc/resolv.conf leads it finds a file naming
 slirp4netns's DNS server.  Its root, temp and config folders are
-writable but for ROOT/.git, its read and write allowances that exist and
+writable but for ROOT/.git, or only the latter two when the sandbox is
+read-only, its read and write allowances that exist and
 READS, more paths, are read-only and writable binds, and its sockets are
 bound in."
   (let ((root (+agent-shell-sandbox-root sandbox))
@@ -893,8 +906,9 @@ bound in."
                     (+agent-shell-sandbox--resolver sandbox))))
       (funcall binds 'ro (append (+agent-shell-sandbox-allow-reads sandbox)
                                  reads))
-      (funcall binds 'rw (list root (+agent-shell-sandbox-tmp sandbox)
-                               (+agent-shell-sandbox-config sandbox)))
+      (when (+agent-shell-sandbox-read-only sandbox)
+        (funcall binds 'ro (list root)))
+      (funcall binds 'rw (+agent-shell-sandbox-own-writes sandbox))
       (funcall binds 'ro (list (concat root "/.git")))
       (funcall binds 'rw (+agent-shell-sandbox-allow-writes sandbox))
       (mapcar (lambda (socket) (list 'rw socket socket))

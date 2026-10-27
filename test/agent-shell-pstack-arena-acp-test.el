@@ -195,7 +195,14 @@ rubric=unseen lead=denied git=ok." role)
                           (format "git diff --binary %s %s | git apply --3way"
                                   base (plist-get result :commit)))
                          followup))))
-            (should (string-prefix-p "SCORES mode=plan\n" report))
+            ;; The judge reads the checkouts from its read-only sandbox.
+            (should (string-prefix-p "SCORES mode=agent-full-access \
+lead=denied checkout=ok write=denied\n" report))
+            (let ((sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
+              (should (+agent-shell-sandbox-read-only sandbox))
+              (+agent-shell-pstack-arena-acp-test--wait-for
+               (lambda ()
+                 (not (file-exists-p (+agent-shell-sandbox-tmp sandbox))))))
             (dolist (expected '("## Candidate A\nIt finished its turn."
                                 "## Candidate B\nIt finished its turn."
                                 "1. RUBRIC-ONE correctness"

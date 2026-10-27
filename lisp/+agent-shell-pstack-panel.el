@@ -282,18 +282,19 @@ hyphens" role))
 
 (defun +agent-shell-pstack-panel--parse-judge (value lead-agent)
   "Return the judge member from request VALUE.
-Without VALUE, prefer a read-only agent other than LEAD-AGENT."
-  (let* ((agents (+agent-shell-pstack-panel--agents))
+Without VALUE, prefer an agent other than LEAD-AGENT.  The judge runs in
+a read-only sandbox, so it needs an agent that can run sandboxed."
+  (let* ((agents (+agent-shell-pstack-panel--candidate-agents))
          (agent
           (if (null value)
               (or (seq-find (lambda (agent) (not (eq agent lead-agent))) agents)
                   (car agents)
-                  (user-error "No read-only agent can judge the arena"))
+                  (user-error "No sandboxed agent can judge the arena"))
             (let ((name (and (+agent-shell-pstack-panel--object-p value)
                              (map-elt value 'agent))))
               (unless (and (stringp name) (memq (intern name) agents))
-                (user-error "Judge must be an object whose agent is \
-read-only; available agents: %s" (+agent-shell-pstack-panel--names agents)))
+                (user-error "Judge must be an object whose agent can run \
+sandboxed; available agents: %s" (+agent-shell-pstack-panel--names agents)))
               (intern name)))))
     (+agent-shell-pstack-panel--make-member
      :role "judge" :agent agent :kind 'judge :state 'pending)))
@@ -383,14 +384,14 @@ An arena needs a sandbox backend and an agent that can run sandboxed."
                 (car (last names)))
       (car names))))
 
-(defun +agent-shell-pstack-panel--arena-protocol (agents)
-  "Return the protocol paragraph about arenas, naming read-only AGENTS."
+(defun +agent-shell-pstack-panel--arena-protocol ()
+  "Return the protocol paragraph about arenas."
   (format "\nAn arena's members are candidates that write code.  Each starts \
 in its own sandboxed git worktree holding a snapshot of your working tree, and \
 sees only the brief and its focus.  Candidate agents: %s.  An arena request \
 also carries \"rubric\", %d to %d criteria that only the judge sees.  It may \
-add \"judge\":{\"agent\":\"%s\"}, a read-only agent that by default differs \
-from yours, and \"judge_timeout\", %d seconds by default; \"timeout\" bounds \
+add \"judge\":{\"agent\":\"%s\"}, a candidate agent that by default differs \
+from yours and reads the results in a read-only sandbox, and \"judge_timeout\", %d seconds by default; \"timeout\" bounds \
 the candidates.  Emacs runs the candidates, then the judge, and sends you one \
 prompt with each candidate's result commit, diff stat, rationale and the \
 command that applies its diff, then the judge's scores and how to pick, \
@@ -399,7 +400,8 @@ graft and verify."
            (+agent-shell-pstack-panel--candidate-agents))
           (car +agent-shell-pstack-panel--rubric-range)
           (cdr +agent-shell-pstack-panel--rubric-range)
-          (car agents) +agent-shell-pstack-panel-default-judge-timeout))
+          (car (+agent-shell-pstack-panel--candidate-agents))
+          +agent-shell-pstack-panel-default-judge-timeout))
 
 (defun +agent-shell-pstack-panel--protocol ()
   "Return the text telling a lead how to request a panel, or nil."
@@ -439,7 +441,7 @@ saved to, and how to triage the reports.%s"
               +agent-shell-pstack-panel-max-members
               +agent-shell-pstack-panel-max-timeout
               (if (assq 'arena shapes)
-                  (+agent-shell-pstack-panel--arena-protocol agents)
+                  (+agent-shell-pstack-panel--arena-protocol)
                 "")))))
 
 (defun +agent-shell-pstack-panel-protocol-file ()
@@ -519,12 +521,13 @@ Task:\n%s\n"
                                candidates)))
     (concat
      "You are the judge of a pstack arena that Emacs runs for another \
-agent.  You are read-only: Emacs refuses edits and commands that change \
-state.  Each candidate below worked on the same task from the same base \
-commit, alone in a sandbox.  "
+agent.  You run in a read-only sandbox: you can read the checkouts below \
+and the repository's git objects, and write only your temp folder.  Each \
+candidate below worked on the same task from the same base commit, alone \
+in a sandbox.  "
      (format "A checkout holds the files its candidate changed, or every \
 file when it changed more than %d.  Read any other file at the base with \
-git show %s:PATH."
+git -C CHECKOUT show %s:PATH."
              +agent-shell-arena-git-checkout-limit
              (+agent-shell-arena-git-manifest-base
               (+agent-shell-pstack-panel-arena panel)))
@@ -819,11 +822,18 @@ judge.")
                   :changed)))
 
 (defun +agent-shell-pstack-panel--judge (panel judge)
-  "Start PANEL's JUDGE, read-only, with its own timer."
+  "Start PANEL's JUDGE in its read-only sandbox, with its own timer."
   (setf (+agent-shell-pstack-panel-phase panel) 'judging)
   (+agent-shell-pstack-panel--arm
    panel (+agent-shell-pstack-panel-judge-timeout panel))
-  (+agent-shell-pstack-panel--start-member panel judge)
+  (condition-case err
+      (progn
+        (setf (+agent-shell-pstack-panel-member-sandbox judge)
+              (+agent-shell-pstack-arena-judge-sandbox
+               (+agent-shell-pstack-panel-arena panel)))
+        (+agent-shell-pstack-panel--start-member panel judge))
+    (error (+agent-shell-pstack-panel--settle
+            panel judge 'error nil (error-message-string err))))
   (+agent-shell-pstack-panel--advance panel)
   (+agent-shell-pstack-panels--refresh))
 
@@ -849,14 +859,17 @@ judge.")
           (+agent-shell-pstack-panel-member-error member) error)
     (+agent-shell-pstack-panel--write panel member)
     ;; Killing a shell from its own event callback corrupts upstream state.
-    (if (eq (+agent-shell-pstack-panel-member-kind member) 'candidate)
-        (run-at-time 0 nil #'+agent-shell-pstack-panel--halt panel member)
-      (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
-        (run-at-time 0 nil #'+agent-shell-drive-kill shell)))
+    (cond ((eq (+agent-shell-pstack-panel-member-kind member) 'candidate)
+           (run-at-time 0 nil #'+agent-shell-pstack-panel--halt panel member))
+          ((+agent-shell-pstack-panel-member-sandbox member)
+           (run-at-time 0 nil #'+agent-shell-pstack-panel--stop member
+                        #'ignore))
+          ((when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
+             (run-at-time 0 nil #'+agent-shell-drive-kill shell))))
     (+agent-shell-pstack-panel--advance panel)))
 
 (defun +agent-shell-pstack-panel--stop (member callback)
-  "Stop settled candidate MEMBER and every process it started.
+  "Stop settled sandboxed MEMBER and every process it started.
 Then call CALLBACK while its sandbox's private folders are deleted, a
 failure to delete them reported with `message'."
   (if-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
@@ -864,14 +877,14 @@ failure to delete them reported with `message'."
              (role (+agent-shell-pstack-panel-member-role member))
              (done (lambda (survivors)
                      (when survivors
-                       (message "pstack arena: processes %s outlived \
-candidate %s" survivors role))
+                       (message "pstack arena: processes %s outlived %s"
+                                survivors role))
                      (+agent-shell-sandbox-discard
                       sandbox
                       (lambda (error)
                         (when error
-                          (message "pstack arena: candidate %s's private \
-folders stayed: %s" role error))))
+                          (message "pstack arena: %s's private folders \
+stayed: %s" role error))))
                      (funcall callback))))
         (if (buffer-live-p shell)
             (+agent-shell-drive-stop shell nil done)
@@ -1037,7 +1050,7 @@ Do nothing once the panel has left PHASE."
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)
-  "Start MEMBER of PANEL: a candidate in its sandbox, others read-only."
+  "Start MEMBER of PANEL in its sandbox if it has one, else read-only."
   (let ((id (+agent-shell-pstack-panel-id panel))
         (role (+agent-shell-pstack-panel-member-role member))
         (sandbox (+agent-shell-pstack-panel-member-sandbox member)))
@@ -1045,13 +1058,14 @@ Do nothing once the panel has left PHASE."
         (let ((shell (+agent-shell-drive-start
                       :config (+agent-shell-pstack-panel-member-agent member)
                       :directory
-                      (if sandbox
-                          (let ((manifest (+agent-shell-pstack-panel-arena
-                                           panel)))
-                            (+agent-shell-arena-git-directory
-                             manifest (+agent-shell-arena-git-role
-                                       manifest role)))
-                        (+agent-shell-pstack-panel-cwd panel))
+                      (cond ((not sandbox) (+agent-shell-pstack-panel-cwd panel))
+                            ((+agent-shell-sandbox-read-only sandbox)
+                             (+agent-shell-sandbox-root sandbox))
+                            (t (let ((manifest (+agent-shell-pstack-panel-arena
+                                                panel)))
+                                 (+agent-shell-arena-git-directory
+                                  manifest (+agent-shell-arena-git-role
+                                            manifest role)))))
                       :policy (or sandbox 'read-only))))
           (setf (+agent-shell-pstack-panel-member-state member) 'starting
                 (+agent-shell-pstack-panel-member-shell member) shell)
@@ -1227,6 +1241,28 @@ and its :files are written into the worktree for the new sandbox."
       (error (+agent-shell-sandbox-discard sandbox)
              (signal (car err) (cdr err))))
     sandbox))
+
+(defun +agent-shell-pstack-arena-judge-sandbox (manifest)
+  "Return a read-only sandbox for the judge of MANIFEST's arena.
+It works in the arena's checkouts folder and reads the checkouts and the
+git store, but nothing a candidate's sandbox cannot read, nor any
+candidate's worktree.  It writes only its private folders."
+  (let ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+        (checkouts (expand-file-name
+                    "checkouts" (+agent-shell-arena-git-manifest-directory
+                                 manifest))))
+    (make-directory checkouts t)
+    (+agent-shell-sandbox-create
+     checkouts
+     :deny-reads (append (list toplevel +agent-shell-pstack-panel-directory
+                               "~/.claude" "~/.codex")
+                         +agent-shell-pstack-arena-extra-deny-reads
+                         (mapcar #'+agent-shell-arena-git-role-worktree
+                                 (+agent-shell-arena-git-manifest-roles
+                                  manifest)))
+     :allow-reads (list (+agent-shell-arena-git-common-dir manifest))
+     :allow-metadata (list toplevel)
+     :read-only t :deadline +agent-shell-pstack-arena-deadline)))
 
 (defun +agent-shell-pstack-panel--launch (panel)
   "Start PANEL's candidates in their sandboxes and their timer."

@@ -172,9 +172,7 @@ and before any permission prompt, so the policy is enforced here too."
       ((pred +agent-shell-sandbox-p)
        (if write
            (and (+agent-shell-sandbox--under-p
-                 path (list (+agent-shell-sandbox-root policy)
-                            (+agent-shell-sandbox-tmp policy)
-                            (+agent-shell-sandbox-config policy)))
+                 path (+agent-shell-sandbox-own-writes policy))
                 (not (equal path (concat (+agent-shell-sandbox-root policy)
                                          "/.git"))))
          (+agent-shell-sandbox-readable-p policy path)))

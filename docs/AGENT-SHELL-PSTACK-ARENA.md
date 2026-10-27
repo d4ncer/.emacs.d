@@ -224,8 +224,8 @@ The request is a `pstack-panel` block like this:
 - **`members`.** These are 1 to 4 candidates. `focus` names a design
   direction. The task stays identical.
 - **`rubric`.** This is required, with 3 to 6 strings.
-- **`judge`.** By default it is the first read-only agent whose identifier
-  differs from the lead's, which approximates arena's "prefer a different
+- **`judge`.** It must be an agent that can run sandboxed. By default it
+  is the first one whose identifier differs from the lead's, which approximates arena's "prefer a different
   model family".
 - **Rejections.** Emacs rejects an arena, with a reason the lead can act
   on, in any of these cases:
@@ -278,6 +278,16 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
   made outside every candidate's root, never the live worktree. The
   checkout holds only the files the result changed, so a large repository
   is not checked out a second time. Its timer is `judge_timeout`.
+- **The judge is sandboxed read-only.** It runs like a candidate, in its
+  agent's full-access mode under a sandbox that rejects every permission
+  request, so `fetch` gets no approval. The sandbox's root is the arena's
+  `checkouts/` folder and is read-only: the judge writes only its private
+  temp and config folders. It reads the checkouts and the git directory,
+  and is denied what a candidate is denied, every candidate's worktree,
+  and the lead's checkout. It signs in like a candidate, with an access
+  token only, and is stopped and swept like one. Before, it ran in the
+  lead's directory in its read-only mode with the host's own agent
+  config, and could read anything the user can.
 - **Transitions are idempotent.** Each one sets the phase before starting
   the next member and arms the timer before that member can fail. A member
   that fails to start can't re-enter a finished panel.
@@ -360,11 +370,11 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   - the rubric;
   - for each candidate, its label, final state, immutable checkout path,
     `git diff --stat <base> <result>`, and rationale;
-  - where to read the files a candidate left unchanged: `git show
-    <base>:PATH`.
+  - where to read the files a candidate left unchanged: `git -C
+    <checkout> show <base>:PATH`.
 
   The judge scores each criterion for each candidate and recommends a base.
-  It runs read-only.
+  It runs in a read-only sandbox.
 - **The follow-up** gives, for each candidate:
   - its state;
   - its result commit and ref;
@@ -619,7 +629,7 @@ None. Every probe above was run on this machine.
   arena with the rejection follow-up, and Emacs discards the partly built
   arena itself, since no candidate ran in it.
 - **The default judge falls back to the lead's agent.** When no other
-  read-only agent exists, the judge runs on the lead's own agent.
+  sandboxed agent exists, the judge runs on the lead's own agent.
 - **The ACP test checks reads, not late writers.** The arena ACP test
   checks that each candidate cannot read the lead's checkout and never
   saw the rubric. Late background writers are covered by the sandboxed

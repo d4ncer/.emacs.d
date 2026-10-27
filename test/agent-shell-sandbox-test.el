@@ -594,6 +594,29 @@ Keep JAVA_TOOL_OPTIONS the user already had."
         (should-not (eql 0 (funcall run "/bin/sh" "-c" "echo x > .git")))
         (should-not (file-exists-p (expand-file-name ".git" root)))))))
 
+(ert-deftest +agent-shell-sandbox-test-read-only ()
+  "Let a read-only sandbox read its root and write only its private folders."
+  (+agent-shell-sandbox-test--on-macos
+    (+agent-shell-sandbox-test--with (root)
+      (let* ((judge (+agent-shell-sandbox-create root :read-only t))
+             (run (lambda (&rest command)
+                    (apply #'+agent-shell-sandbox-test--run judge root
+                           command))))
+        (unwind-protect
+            (progn
+              (+agent-shell-sandbox-test--write
+               (expand-file-name "result" root) "made")
+              (should (equal (list (+agent-shell-sandbox-tmp judge)
+                                   (+agent-shell-sandbox-config judge))
+                             (+agent-shell-sandbox-own-writes judge)))
+              (should (eql 0 (funcall run "/bin/cat" "result")))
+              (should-not (eql 0 (funcall run "/usr/bin/touch" "inside")))
+              (should-not (file-exists-p (expand-file-name "inside" root)))
+              (should (eql 0 (funcall run "/usr/bin/touch"
+                                      (expand-file-name
+                                       "t" (+agent-shell-sandbox-tmp judge))))))
+          (+agent-shell-sandbox-discard judge))))))
+
 (ert-deftest +agent-shell-sandbox-test-confines-private-reads ()
   "Read only a sandbox's own private folders and no secret.
 A read allowance inside a secret opens just that path.  Each outcome
