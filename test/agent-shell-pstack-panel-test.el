@@ -11,6 +11,12 @@
 (require '+agent-shell-pstack-panel nil t)
 (require 'agent-shell-sandbox-test)
 
+(defun +agent-shell-pstack-panel-test--login (agent)
+  "Return a :login reader of a synthetic AGENT login lasting a day."
+  (lambda ()
+    (+agent-shell-sandbox--make-login
+     :agent agent :access "fixture-access" :expires (+ (float-time) 86400))))
+
 (defmacro +agent-shell-pstack-panel-test--with (&rest body)
   "Run BODY with a pstack lead, stubbed drive functions and fresh panels.
 BODY sees `lead', `directory' (the reports root), `cwd' (the lead's),
@@ -52,8 +58,11 @@ lists the roles whose result equals the base."
           (+agent-shell-drive-read-only-modes
            '((claude-code . "plan") (codex . "read-only")))
           (+agent-shell-sandbox-agents
-           '((claude-code :mode "bypassPermissions")
-             (codex :mode "agent-full-access")))
+           `((claude-code :mode "bypassPermissions"
+                          :login ,(+agent-shell-pstack-panel-test--login
+                                   'claude-code))
+             (codex :mode "agent-full-access"
+                    :login ,(+agent-shell-pstack-panel-test--login 'codex))))
           (lead (generate-new-buffer " *lead*")))
      (cl-letf (((symbol-function '+agent-shell-drive--configs)
                 (lambda () '(((:identifier . codex))
@@ -1099,6 +1108,183 @@ An arena already on disk is discarded once the step in flight returns."
                      (car (last (+agent-shell-pstack-panel-list)))))))
     (should-not started)))
 
+(defmacro +agent-shell-pstack-panel-test--with-checks (&rest body)
+  "Run BODY with login admission held: `checks' lists each check made,
+newest first, as (AGENTS DEADLINE CALLBACK PROGRESS), and `cancelled'
+counts the cancellations."
+  (declare (indent 0))
+  `(let ((checks nil) (cancelled 0))
+     (cl-letf (((symbol-function '+agent-shell-sandbox-check-logins)
+                (lambda (agents deadline callback &optional progress)
+                  (push (list agents deadline callback progress) checks)
+                  (lambda () (cl-incf cancelled)))))
+       ,@body)))
+
+(defun +agent-shell-pstack-panel-test--admitted (agents)
+  "Return a successful login result for each of AGENTS."
+  (mapcar (lambda (agent)
+            (+agent-shell-sandbox-login-result-create
+             :agent agent :remaining 86400))
+          (seq-uniq agents)))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-login-barrier ()
+  "Check every member's login, the judge's too, before any member starts,
+against the arena's deadline plus its grace.  Each result shows as it
+lands, and every candidate's sandbox gets that same deadline."
+  (+agent-shell-pstack-panel-test--with
+    (+agent-shell-pstack-panel-test--with-checks
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena)))
+      (+agent-shell-pstack-panel-test--drain)
+      (let* ((panel (car (+agent-shell-pstack-panel-list)))
+             (stop (+agent-shell-pstack-panel-deadline panel))
+             (horizon (+ stop +agent-shell-pstack-panel-arena-grace)))
+        (should (= 1 (length checks)))
+        (should (< (abs (- stop (+ (float-time)
+                                   (+agent-shell-pstack-panel-arena-budget
+                                    60 900))))
+                   5))
+        (pcase-let ((`(,agents ,deadline ,callback ,progress) (car checks)))
+          (should (equal (mapcar #'+agent-shell-pstack-panel-member-agent
+                                 (+agent-shell-pstack-panel-members panel))
+                         agents))
+          (should (= 3 (length agents)))
+          (should (= horizon deadline))
+          (should (eq 'preparing (+agent-shell-pstack-panel-phase panel)))
+          (should-not started)
+          (funcall progress (+agent-shell-pstack-panel-test--admitted
+                             (list (car agents))))
+          (should (= 1 (length (+agent-shell-pstack-panel-logins panel))))
+          (should-not started)
+          (funcall callback (+agent-shell-pstack-panel-test--admitted agents))
+          (should (equal (seq-uniq agents)
+                         (mapcar #'+agent-shell-sandbox-login-result-agent
+                                 (+agent-shell-pstack-panel-logins panel)))))
+        (should (eq 'candidates (+agent-shell-pstack-panel-phase panel)))
+        (should (= 2 (length started)))
+        (dolist (entry started)
+          (should (= horizon (+agent-shell-sandbox-deadline (nth 2 entry)))))
+        (should (= stop (+agent-shell-pstack-panel-deadline panel)))
+        (should (= 0 cancelled))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-login-refused ()
+  "One refused login, here the judge's alone, refuses the whole arena:
+no member starts, and the lead learns why."
+  (+agent-shell-pstack-panel-test--with
+    (let ((+agent-shell-sandbox-agents
+           `((claude-code :mode "bypassPermissions"
+                          :login ,(+agent-shell-pstack-panel-test--login
+                                   'claude-code))
+             (codex :mode "agent-full-access" :name "Codex"
+                    :login ,(lambda ()
+                              (user-error "No fixture Codex login"))))))
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena
+                          '(members . [((role . "a") (agent . "claude-code"))
+                                       ((role . "b") (agent . "claude-code"))])
+                          '(judge . ((agent . "codex"))))))
+      (+agent-shell-pstack-panel-test--drain)
+      (let ((panel (car (+agent-shell-pstack-panel-list))))
+        (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+        (should (equal '(error error error)
+                       (+agent-shell-pstack-panel-test--states panel)))
+        (should (equal '((claude-code . nil) (codex . t))
+                       (mapcar (lambda (result)
+                                 (cons (+agent-shell-sandbox-login-result-agent
+                                        result)
+                                       (and
+                                        (+agent-shell-sandbox-login-result-error
+                                         result)
+                                        t)))
+                               (+agent-shell-pstack-panel-logins panel))))
+        (should (string-prefix-p "Emacs rejected your pstack-panel request: \
+Codex's login on this host could not be used (No fixture Codex login)"
+                                 (cdar sent)))
+        (should (= 1 (length cleaned)))
+        (should-not (+agent-shell-pstack-panel-arena panel))
+        (should-not (+agent-shell-pstack-panel-login-check panel)))
+      (should-not started))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-cancel-admission ()
+  "An arena whose lead ends while its logins are checked cancels the check
+and waits for it to end before it discards its arena and delivers, once."
+  (+agent-shell-pstack-panel-test--with
+    (+agent-shell-pstack-panel-test--with-checks
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena)))
+      (+agent-shell-pstack-panel-test--drain)
+      (let ((panel (car (+agent-shell-pstack-panel-list)))
+            (sends (length sent)))
+        (lead-event :kind 'clean-up)
+        (+agent-shell-pstack-panel-test--drain)
+        (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+        (should (= 1 cancelled))
+        (should-not (+agent-shell-pstack-panel-followup panel))
+        (should (+agent-shell-pstack-panel-arena panel))
+        (should (= sends (length sent)))
+        (+agent-shell-pstack-panel--finish panel)
+        (should (= 1 cancelled))
+        (pcase-let ((`(,agents ,_ ,callback ,_) (car checks)))
+          (funcall callback (+agent-shell-pstack-panel-test--admitted agents)))
+        (+agent-shell-pstack-panel-test--drain)
+        (should (+agent-shell-pstack-panel-followup panel))
+        (should-not (+agent-shell-pstack-panel-arena panel))
+        (should (= 1 (length cleaned)))
+        (should (= (1+ sends) (length sent)))
+        (+agent-shell-pstack-panel--finish panel)
+        (should (= (1+ sends) (length sent)))
+        (should-not started)))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-admission-past-deadline ()
+  "An arena whose deadline passed while its logins were checked starts
+nothing."
+  (+agent-shell-pstack-panel-test--with
+    (+agent-shell-pstack-panel-test--with-checks
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         (+agent-shell-pstack-panel-test--arena)))
+      (+agent-shell-pstack-panel-test--drain)
+      (let ((panel (car (+agent-shell-pstack-panel-list))))
+        (setf (+agent-shell-pstack-panel-deadline panel) (- (float-time) 1))
+        (pcase-let ((`(,agents ,_ ,callback ,_) (car checks)))
+          (funcall callback (+agent-shell-pstack-panel-test--admitted agents)))
+        (should (equal '(error error error)
+                       (+agent-shell-pstack-panel-test--states panel)))
+        (should (string-search "deadline passed while its logins were checked"
+                               (cdar sent)))
+        (should-not started)))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-deadlines-apart ()
+  "Two arenas checked at once each keep their own deadline, whatever
+order their checks end in."
+  (+agent-shell-pstack-panel-test--with
+    (+agent-shell-pstack-panel-test--with-checks
+      (dolist (request '(("s1" . 60) ("s2" . 600)))
+        (lead-event :kind 'turn-complete :session (car request)
+                    :text (+agent-shell-pstack-panel-test--message
+                           (+agent-shell-pstack-panel-test--arena
+                            (cons 'timeout (cdr request))))))
+      (+agent-shell-pstack-panel-test--drain)
+      (should (= 2 (length checks)))
+      (dolist (check checks)
+        (funcall (nth 2 check)
+                 (+agent-shell-pstack-panel-test--admitted (car check))))
+      (let ((panels (+agent-shell-pstack-panel-list)))
+        (should (= 2 (length panels)))
+        (should (< 500 (abs (- (+agent-shell-pstack-panel-deadline (car panels))
+                               (+agent-shell-pstack-panel-deadline
+                                (cadr panels))))))
+        (dolist (panel panels)
+          (let ((horizon (+agent-shell-pstack-panel--horizon panel)))
+            (should (member horizon (mapcar #'cadr checks)))
+            (dolist (member (+agent-shell-pstack-panel-test--candidates panel))
+              (should (= horizon (+agent-shell-sandbox-deadline
+                                  (+agent-shell-pstack-panel-member-sandbox
+                                   member)))))))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-arena-stops-candidates ()
   "Stop a settled candidate with every process it started.
 Its private folders go even when they hold read-only trees, and a
@@ -1180,7 +1366,8 @@ a timer of its own."
   (+agent-shell-pstack-panel-test--with-arena
     (let ((judge (+agent-shell-pstack-panel-test--judge panel))
           (id (+agent-shell-pstack-panel-id panel))
-          (manifest (+agent-shell-pstack-panel-arena panel)))
+          (manifest (+agent-shell-pstack-panel-arena panel))
+          (deadline (+agent-shell-pstack-panel-deadline panel)))
       (finish "opus" "Rationale A\nRejected a global cache.")
       (push (cons (nth 1 (nth 1 started)) "Half way") partials)
       (+agent-shell-pstack-panel--expire id 'candidates)
@@ -1202,6 +1389,9 @@ a timer of its own."
         (should (eq 'codex (nth 0 entry)))
         (should (eq sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
         (should (+agent-shell-sandbox-read-only sandbox))
+        (should (= deadline (+agent-shell-pstack-panel-deadline panel)))
+        (should (= (+ deadline +agent-shell-pstack-panel-arena-grace)
+                   (+agent-shell-sandbox-deadline sandbox)))
         (should (equal (file-truename checkouts)
                        (+agent-shell-sandbox-root sandbox)))
         (should (equal (+agent-shell-sandbox-root sandbox) (nth 3 entry)))

@@ -113,7 +113,7 @@ arena's :judge ends its judge's prompt."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 6
+(defconst +agent-shell-pstack-panel--schema 7
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -129,7 +129,10 @@ REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
-  rubric judge-timeout arena sink remote)
+  rubric judge-timeout arena sink remote
+  (deadline nil :documentation "Absolute time an arena should end, set once.")
+  (login-check nil :documentation "Cancels login admission until it ends.")
+  (logins nil :documentation "Each agent's login result, as admitted."))
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")
@@ -137,9 +140,28 @@ REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
 (defvar +agent-shell-pstack-arena-extra-deny-reads nil
   "More folders no arena candidate may read, such as a runner's records.")
 
-(defvar +agent-shell-pstack-arena-deadline nil
-  "Time each arena candidate's login must outlast, or nil for now.
-A remote arena's runner sets it to its deadline.")
+(defcustom +agent-shell-pstack-panel-arena-preparation-allowance 1800
+  "Seconds allowed for provisioning and host login admission in an arena."
+  :type 'natnum)
+
+(defcustom +agent-shell-pstack-panel-arena-overhead 300
+  "Seconds of arena budget beyond preparation, candidate and judge timeouts."
+  :type 'natnum)
+
+(defvar +agent-shell-pstack-panel-arena-grace 120
+  "Seconds past an arena's deadline its capture may take.
+Its members' logins must outlast this too.")
+
+(defun +agent-shell-pstack-panel-arena-budget (timeout judge-timeout)
+  "Return the seconds an arena may take with TIMEOUT and JUDGE-TIMEOUT.
+Candidates run in parallel, so their timeout counts once."
+  (+ +agent-shell-pstack-panel-arena-preparation-allowance
+     timeout judge-timeout +agent-shell-pstack-panel-arena-overhead))
+
+(defun +agent-shell-pstack-panel--horizon (panel)
+  "Return the time PANEL's sandboxed members' logins must outlast."
+  (when-let* ((deadline (+agent-shell-pstack-panel-deadline panel)))
+    (+ deadline +agent-shell-pstack-panel-arena-grace)))
 
 (declare-function +agent-shell-arena-remote-launch "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-cancel "+agent-shell-arena-remote")
@@ -740,17 +762,25 @@ in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean."))))
                      (+agent-shell-pstack-panel-phase panel))))
 
 (defun +agent-shell-pstack-panel--finish (panel)
-  "End PANEL, compose its follow-up and deliver it, once.
-A panel with a sink hands itself to the sink instead."
+  "End PANEL, then compose its follow-up and deliver it, once.
+While its login admission runs, that is cancelled and the follow-up waits
+for it to end; see `+agent-shell-pstack-panel--launch'."
   (unless (eq (+agent-shell-pstack-panel-phase panel) 'finished)
     (+agent-shell-pstack-panel--disarm panel)
-    (setf (+agent-shell-pstack-panel-phase panel) 'finished
-          (+agent-shell-pstack-panel-followup panel)
-          (+agent-shell-pstack-panel-followup-text panel))
-    (if-let* ((sink (+agent-shell-pstack-panel-sink panel)))
-        (funcall sink panel)
-      (+agent-shell-pstack-panel--deliver-to
-       (+agent-shell-pstack-panel-lead panel)))))
+    (setf (+agent-shell-pstack-panel-phase panel) 'finished)
+    (if-let* ((cancel (+agent-shell-pstack-panel-login-check panel)))
+        (funcall cancel)
+      (+agent-shell-pstack-panel--finalize panel))))
+
+(defun +agent-shell-pstack-panel--finalize (panel)
+  "Compose finished PANEL's follow-up and deliver it.
+A panel with a sink hands itself to the sink instead."
+  (setf (+agent-shell-pstack-panel-followup panel)
+        (+agent-shell-pstack-panel-followup-text panel))
+  (if-let* ((sink (+agent-shell-pstack-panel-sink panel)))
+      (funcall sink panel)
+    (+agent-shell-pstack-panel--deliver-to
+     (+agent-shell-pstack-panel-lead panel))))
 
 (defun +agent-shell-pstack-panel--kind-members (panel kind)
   "Return PANEL's members of KIND."
@@ -830,7 +860,8 @@ judge.")
       (progn
         (setf (+agent-shell-pstack-panel-member-sandbox judge)
               (+agent-shell-pstack-arena-judge-sandbox
-               (+agent-shell-pstack-panel-arena panel)))
+               (+agent-shell-pstack-panel-arena panel)
+               (+agent-shell-pstack-panel--horizon panel)))
         (+agent-shell-pstack-panel--start-member panel judge))
     (error (+agent-shell-pstack-panel--settle
             panel judge 'error nil (error-message-string err))))
@@ -891,7 +922,6 @@ stayed: %s" role error))))
           ;; Its adapter is gone, so only the sweep can find what it left.
           (+agent-shell-sandbox-sweep
            sandbox (lambda (survivors)
-                     (+agent-shell-sandbox-finish sandbox)
                      (funcall done survivors)))))
     (funcall callback)))
 
@@ -1175,7 +1205,13 @@ the arena runs there instead; see `+agent-shell-arena-remote-launch'."
 
 (defun +agent-shell-pstack-panel--provision (panel base)
   "Create PANEL's arena over BASE and give each candidate a worktree.
-Then start the candidates.  PANEL is preparing."
+Then start its members.  PANEL is preparing.  Its deadline is fixed now,
+unless a host's runner fixed it already."
+  (unless (+agent-shell-pstack-panel-deadline panel)
+    (setf (+agent-shell-pstack-panel-deadline panel)
+          (+ (float-time) (+agent-shell-pstack-panel-arena-budget
+                           (+agent-shell-pstack-panel-timeout panel)
+                           (+agent-shell-pstack-panel-judge-timeout panel)))))
   (let ((manifest (+agent-shell-arena-git-create
                    base (+agent-shell-pstack-panel-id panel))))
     (setf (+agent-shell-pstack-panel-arena panel) manifest)
@@ -1194,13 +1230,16 @@ Then start the candidates.  PANEL is preparing."
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--unsettled (panel kind)
-  "Return PANEL's members of KIND that have not settled.
-A host can refuse a candidate before its arena is provisioned."
+  "Return PANEL's members of KIND that have not settled."
   (seq-remove #'+agent-shell-pstack-panel--settled-p
               (+agent-shell-pstack-panel--kind-members panel kind)))
 
-(defun +agent-shell-pstack-arena-sandbox (manifest name &optional trace)
+(defun +agent-shell-pstack-arena-sandbox (manifest name deadline
+                                                   &optional trace)
   "Return a sandbox confining candidate NAME of MANIFEST to its worktree.
+DEADLINE is its arena's fixed absolute stop time plus capture grace.
+It is explicit so concurrent local panels cannot share dynamic state.
+Only a diagnostic command that starts no agent may pass nil.
 With TRACE non-nil, its profile reports what it would refuse instead.
 It cannot read the lead's checkout, other than the shared dependencies
 and the git directory, the panel reports, the agents' own config, or any
@@ -1234,7 +1273,7 @@ and its :files are written into the worktree for the new sandbox."
            :allow-writes (plist-get profile :write)
            :allow-connects (plist-get profile :connect)
            :env (plist-get profile :env)
-           :trace trace :deadline +agent-shell-pstack-arena-deadline)))
+           :trace trace :deadline deadline)))
     (condition-case err
         (+agent-shell-arena-git-write-files
          worktree (plist-get profile :files) sandbox)
@@ -1242,8 +1281,9 @@ and its :files are written into the worktree for the new sandbox."
              (signal (car err) (cdr err))))
     sandbox))
 
-(defun +agent-shell-pstack-arena-judge-sandbox (manifest)
+(defun +agent-shell-pstack-arena-judge-sandbox (manifest deadline)
   "Return a read-only sandbox for the judge of MANIFEST's arena.
+DEADLINE is the same absolute horizon used for candidate sandboxes.
 It works in the arena's checkouts folder and reads the checkouts and the
 git store, but nothing a candidate's sandbox cannot read, nor any
 candidate's worktree.  It writes only its private folders."
@@ -1262,23 +1302,53 @@ candidate's worktree.  It writes only its private folders."
                                   manifest)))
      :allow-reads (list (+agent-shell-arena-git-common-dir manifest))
      :allow-metadata (list toplevel)
-     :read-only t :deadline +agent-shell-pstack-arena-deadline)))
+     :read-only t :deadline deadline)))
 
 (defun +agent-shell-pstack-panel--launch (panel)
+  "Check every member's host login, then start PANEL's candidates.
+One refused login, even the judge's, refuses the whole arena, and no
+member starts before every login is checked.  A panel that ended while
+its logins were checked gets its follow-up once the check has."
+  (setf (+agent-shell-pstack-panel-login-check panel)
+        (+agent-shell-sandbox-check-logins
+         (mapcar #'+agent-shell-pstack-panel-member-agent
+                 (+agent-shell-pstack-panel-members panel))
+         (+agent-shell-pstack-panel--horizon panel)
+         (lambda (results)
+           (let ((ended (eq (+agent-shell-pstack-panel-phase panel)
+                            'finished)))
+             (setf (+agent-shell-pstack-panel-login-check panel) nil
+                   (+agent-shell-pstack-panel-logins panel) results)
+             (+agent-shell-pstack-panel--preparing
+              panel
+              (or (seq-some #'+agent-shell-sandbox-login-result-error results)
+                  (when (>= (float-time)
+                            (+agent-shell-pstack-panel-deadline panel))
+                    "The arena's deadline passed while its logins were \
+checked."))
+              (lambda ()
+                (+agent-shell-pstack-panel--start-candidates panel)))
+             (when ended (+agent-shell-pstack-panel--finalize panel))
+             (+agent-shell-pstack-panels--refresh)))
+         (lambda (results)
+           (setf (+agent-shell-pstack-panel-logins panel) results)
+           (+agent-shell-pstack-panels--refresh)))))
+
+(defun +agent-shell-pstack-panel--start-candidates (panel)
   "Start PANEL's candidates in their sandboxes and their timer."
   (let ((candidates (+agent-shell-pstack-panel--unsettled panel 'candidate))
         (manifest (+agent-shell-pstack-panel-arena panel)))
     (dolist (member candidates)
       (setf (+agent-shell-pstack-panel-member-sandbox member)
             (+agent-shell-pstack-arena-sandbox
-             manifest (+agent-shell-pstack-panel-member-role member))))
+             manifest (+agent-shell-pstack-panel-member-role member)
+             (+agent-shell-pstack-panel--horizon panel))))
     (setf (+agent-shell-pstack-panel-phase panel) 'candidates)
     (+agent-shell-pstack-panel--arm panel (+agent-shell-pstack-panel-timeout
                                            panel))
     (dolist (member candidates)
       (+agent-shell-pstack-panel--start-member panel member))
-    (+agent-shell-pstack-panel--advance panel)
-    (+agent-shell-pstack-panels--refresh)))
+    (+agent-shell-pstack-panel--advance panel)))
 
 (defun +agent-shell-pstack-panel--resume (lead)
   "Prepare the arenas that waited for LEAD's interrupted turn to end."
@@ -1291,8 +1361,9 @@ candidate's worktree.  It writes only its private folders."
   "Stop PANEL, settling its unfinished members as STATE because of REASON.
 Settle the current phase's members and every pending member, which can
 no longer start, as `error' unless STATE says otherwise.  An arena still
-captures what its candidates made and never starts its judge.  An arena
-on a host gets a cancel instead; see `+agent-shell-arena-remote-cancel'."
+captures what its candidates made and never starts its judge, and one
+still checking its logins ends once the check does.  An arena on a host
+gets a cancel instead; see `+agent-shell-arena-remote-cancel'."
   (if (+agent-shell-pstack-panel-remote panel)
       (+agent-shell-arena-remote-cancel panel reason)
     (dolist (member (+agent-shell-pstack-panel-members panel))

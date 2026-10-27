@@ -197,7 +197,6 @@ and reject a bad pattern a function returns."
            (client (funcall maker 'buffer))
            (profile (expand-file-name "sandbox.sb"
                                       (+agent-shell-sandbox-config sandbox))))
-      (should (eq 'fixture (+agent-shell-sandbox-agent sandbox)))
       (should (equal "full" (+agent-shell-sandbox-mode 'fixture)))
       (should (equal "/usr/bin/sandbox-exec" (alist-get :command client)))
       (should (equal (list "-f" profile (executable-find "sh") "-c" "true")
@@ -213,120 +212,576 @@ and reject a bad pattern a function returns."
        (+agent-shell-sandbox-client-maker sandbox 'unknown #'ignore)
        :type 'user-error))))
 
-(defmacro +agent-shell-sandbox-test--with-keychain (status &rest body)
-  "Run BODY with a fake `security' that exits with STATUS.
-On success it prints a token.  BODY sees `arguments', a function returning
-the arguments it was called with."
-  (declare (indent 1))
-  `(let* ((bin (make-temp-file "pa-bin-" t))
-          (log (expand-file-name "arguments" bin))
+;;;; Host logins
+
+(defun +agent-shell-sandbox-test--jwt (expires)
+  "Return an unsigned JSON web token whose exp claim is EXPIRES."
+  (concat (base64url-encode-string "{\"alg\":\"none\"}" t) "."
+          (base64url-encode-string (format "{\"exp\":%d}" expires) t) ".sig"))
+
+(defun +agent-shell-sandbox-test--claude-json (expires &optional access)
+  "Return a Claude Code host login expiring at EXPIRES, Unix seconds."
+  (json-serialize
+   `((claudeAiOauth (accessToken . ,(or access "fixture-claude-access"))
+                    (refreshToken . "fixture-claude-refresh")
+                    (expiresAt . ,(* 1000 expires))))))
+
+(defun +agent-shell-sandbox-test--codex-json (expires)
+  "Return a Codex host login whose access token expires at EXPIRES."
+  (json-serialize
+   `((auth_mode . "chatgpt") (OPENAI_API_KEY . :null)
+     (tokens (id_token . "fixture-id")
+             (access_token . ,(+agent-shell-sandbox-test--jwt expires))
+             (refresh_token . "fixture-codex-refresh")
+             (account_id . "fixture-account"))
+     (last_refresh . "2026-10-26T00:00:00Z"))))
+
+(defconst +agent-shell-sandbox-test--fake-claude
+  "#!/bin/sh
+printf '%s %s %s %s\\n' \"$(pwd -P)\" \"${CLAUDE_CODE_OAUTH_TOKEN-unset}\" \
+\"${ANTHROPIC_API_KEY-unset}\" \"$CODEX_HOME\" >> \"$FAKE_HOST/runs\"
+case \"$FAKE_CLAUDE\" in
+  fail) echo 'fixture-cli-secret'; exit 1 ;;
+  noop) exit 0 ;;
+esac
+sleep \"${FAKE_DELAY:-0}\"
+expires=$(( $(date +%s) + 28800 ))
+printf '{\"claudeAiOauth\":{\"accessToken\":\"fixture-new\",\
+\"refreshToken\":\"fixture-r2\",\"expiresAt\":%s000}}' \"$expires\" \
+> \"$FAKE_HOST/credentials.tmp\"
+mv \"$FAKE_HOST/credentials.tmp\" \"$FAKE_HOST/credentials.json\"
+touch \"$FAKE_HOST/refreshed\"
+"
+  "A claude that refreshes its fixture login for 8 hours, fails or does
+nothing, as FAKE_CLAUDE says, logging where and how it ran.")
+
+(defconst +agent-shell-sandbox-test--fake-codex
+  "#!/bin/sh
+printf '%s\\n' \"$(pwd -P)\" >> \"$FAKE_HOST/runs\"
+[ \"$FAKE_CODEX\" = noop ] && exit 0
+payload=$(printf '{\"exp\":%d}' $(( $(date +%s) + 800000 )) | base64 \
+| tr -d '=\\n' | tr '+/' '-_')
+printf '{\"tokens\":{\"access_token\":\"e30.%s.s\",\"id_token\":\"i\",\
+\"account_id\":\"a\"}}' \"$payload\" > \"$CODEX_HOME/auth.json\"
+[ -n \"$FAKE_SHORTEN_CLAUDE\" ] && printf '{\"claudeAiOauth\":\
+{\"accessToken\":\"x\",\"expiresAt\":1000}}' > \"$FAKE_HOST/credentials.json\"
+exit 0
+"
+  "A codex that refreshes its fixture login, unless FAKE_CODEX is noop.")
+
+(defconst +agent-shell-sandbox-test--fake-security
+  "#!/bin/sh
+printf '%s\\n' \"$@\" > \"$FAKE_HOST/security-arguments\"
+[ -f \"$FAKE_HOST/keychain\" ] || { echo 'item could not be found' >&2; \
+exit 44; }
+cat \"$FAKE_HOST/keychain\"
+"
+  "A security that prints the fixture Keychain item, if there is one.")
+
+(defmacro +agent-shell-sandbox-test--with-host (&rest body)
+  "Run BODY against a fixture host: its logins, CLIs, Keychain and locks.
+BODY sees `host', its folder, and `runs', which returns the lines the
+fake CLIs logged.  Claude Code's login is host/credentials.json, its
+Keychain item host/keychain, and Codex's home host/codex/."
+  (declare (indent 0))
+  `(let* ((host (file-name-as-directory
+                 (file-truename (make-temp-file "pa-host-" t))))
+          (bin (expand-file-name "bin/" host))
+          (+agent-shell-sandbox-claude-credentials
+           (expand-file-name "credentials.json" host))
+          (+agent-shell-sandbox-codex-home (expand-file-name "codex/" host))
+          (+agent-shell-sandbox--login-locks (expand-file-name "locks/" host))
           (+agent-shell-sandbox--security (expand-file-name "security" bin))
-          (arguments (lambda ()
-                       (split-string (+agent-shell-sandbox-test--read log)))))
-     (+agent-shell-sandbox-test--write
-      (expand-file-name "security" bin)
-      (format "#!/bin/sh\necho \"$@\" > %s\n%s"
-              (shell-quote-argument log)
-              (if (eql ,status 0) "echo token-123\n"
-                (format "echo 'not found' >&2\nexit %d\n" ,status))))
-     (set-file-modes (expand-file-name "security" bin) #o755)
+          (+agent-shell-sandbox--login-tick 0.05)
+          (+agent-shell-sandbox-refresh-timeout 20)
+          (exec-path (cons bin exec-path))
+          (process-environment
+           (append (list (concat "PATH=" bin path-separator (getenv "PATH"))
+                         (concat "FAKE_HOST=" host))
+                   process-environment))
+          (runs (lambda ()
+                  (let ((file (expand-file-name "runs" host)))
+                    (and (file-exists-p file)
+                         (split-string (+agent-shell-sandbox-test--read file)
+                                       "\n" t))))))
+     (ignore runs)
+     (make-directory bin t)
+     (make-directory +agent-shell-sandbox-codex-home)
+     (pcase-dolist (`(,name . ,script)
+                    `(("claude" . ,+agent-shell-sandbox-test--fake-claude)
+                      ("codex" . ,+agent-shell-sandbox-test--fake-codex)
+                      ("security" . ,+agent-shell-sandbox-test--fake-security)))
+       (+agent-shell-sandbox-test--write (expand-file-name name bin) script)
+       (set-file-modes (expand-file-name name bin) #o755))
      (unwind-protect (progn ,@body)
-       (delete-directory bin t))))
+       (delete-directory host t))))
+
+(defun +agent-shell-sandbox-test--logins (host claude codex)
+  "Write HOST's Claude Code and Codex logins expiring at CLAUDE and CODEX."
+  (when claude
+    (+agent-shell-sandbox-test--write
+     (expand-file-name "credentials.json" host)
+     (+agent-shell-sandbox-test--claude-json claude)))
+  (when codex
+    (+agent-shell-sandbox-test--write
+     (expand-file-name "codex/auth.json" host)
+     (+agent-shell-sandbox-test--codex-json codex))))
+
+(defmacro +agent-shell-sandbox-test--with-deadline (deadline &rest body)
+  "Run BODY with `sandbox', a fresh sandbox whose deadline is DEADLINE."
+  (declare (indent 1))
+  `(let* ((root (file-truename (make-temp-file "pa-test-" t)))
+          (sandbox (+agent-shell-sandbox-create root :deadline ,deadline)))
+     (unwind-protect (progn ,@body)
+       (dolist (directory (list root (+agent-shell-sandbox-tmp sandbox)
+                                (+agent-shell-sandbox-config sandbox)))
+         (delete-directory directory t)))))
+
+(defun +agent-shell-sandbox-test--secret-free (text)
+  "Assert TEXT holds no fixture refresh credential, token or CLI output."
+  (dolist (secret '("fixture-claude-refresh" "fixture-codex-refresh"
+                    "fixture-claude-access" "fixture-cli-secret"
+                    "not-json-secret"))
+    (should-not (string-search secret text))))
 
 (ert-deftest +agent-shell-sandbox-test-prepare-claude ()
-  "Sign Claude Code in from the Keychain token with private folders."
-  (+agent-shell-sandbox-test--with (root)
-    (let ((+agent-shell-sandbox-claude-token-service "pa-test-service")
-          (tmp (+agent-shell-sandbox-tmp sandbox)))
-      (+agent-shell-sandbox-test--with-keychain 0
-        (should (equal (list "CLAUDE_CODE_OAUTH_TOKEN=token-123"
-                             "ANTHROPIC_API_KEY="
-                             (concat "CLAUDE_CONFIG_DIR="
-                                     (+agent-shell-sandbox-config sandbox))
-                             (concat "CLAUDE_CODE_TMPDIR=" tmp))
-                       (+agent-shell-sandbox-prepare-claude sandbox)))
-        (should (equal '("find-generic-password" "-s" "pa-test-service" "-w")
-                       (funcall arguments))))
-      (+agent-shell-sandbox-test--with-keychain 44
-        (should-error (+agent-shell-sandbox-prepare-claude sandbox)
-                      :type 'user-error))
-      (should-not (directory-files (+agent-shell-sandbox-config sandbox)
-                                   nil "\\`[^.]")))))
+  "Sign Claude Code in with the host login's access token alone.
+macOS reads it from the login Keychain, Linux from its credentials file."
+  (+agent-shell-sandbox-test--with-host
+    (let ((later (+ (truncate (float-time)) 3600)))
+      (+agent-shell-sandbox-test--write
+       (expand-file-name "keychain" host)
+       (+agent-shell-sandbox-test--claude-json later))
+      (+agent-shell-sandbox-test--logins host later nil)
+      (dolist (backend '(sandbox-exec bwrap))
+        (let ((+agent-shell-sandbox-backend backend))
+          (+agent-shell-sandbox-test--with-deadline (- later 60)
+            (let ((env (+agent-shell-sandbox-prepare-claude sandbox)))
+              (should (equal (list (concat "CLAUDE_CODE_OAUTH_TOKEN="
+                                           "fixture-claude-access")
+                                   "ANTHROPIC_API_KEY="
+                                   (concat "CLAUDE_CONFIG_DIR="
+                                           (+agent-shell-sandbox-config
+                                            sandbox))
+                                   (concat "CLAUDE_CODE_TMPDIR="
+                                           (+agent-shell-sandbox-tmp sandbox)))
+                             env))
+              (should-not (directory-files (+agent-shell-sandbox-config sandbox)
+                                           nil "\\`[^.]")))))))
+    (should (equal (list "find-generic-password" "-s" "Claude Code-credentials"
+                         "-a" (user-login-name) "-w")
+                   (split-string (+agent-shell-sandbox-test--read
+                                  (expand-file-name "security-arguments" host))
+                                 "\n" t)))))
 
-(defmacro +agent-shell-sandbox-test--with-codex (&rest body)
-  "Run BODY with a prepared Codex sandbox and a fake Codex home.
-BODY sees `real' and `copy', the real and copied auth.json, and `env'."
-  (declare (indent 0))
-  `(+agent-shell-sandbox-test--with (root home)
-     (let* ((+agent-shell-sandbox-codex-home home)
-            (real (expand-file-name "auth.json" home))
-            (copy (expand-file-name "auth.json"
-                                    (+agent-shell-sandbox-config sandbox))))
-       (+agent-shell-sandbox-test--write real "login-1")
-       (+agent-shell-sandbox-test--write (expand-file-name "config.toml" home)
-                                         "model = \"x\"")
-       (setf (+agent-shell-sandbox-agent sandbox) 'codex)
-       (let ((env (+agent-shell-sandbox-prepare-codex sandbox)))
-         ,@body))))
-
-(defun +agent-shell-sandbox-test--refresh (file text)
-  "Write TEXT to FILE as a later refresh would."
-  (+agent-shell-sandbox-test--write file text)
-  (set-file-times file (time-add nil 5)))
+(ert-deftest +agent-shell-sandbox-test-prepare-claude-invalid ()
+  "Refuse a missing, malformed, empty or short host login, saying nothing
+of its contents, and never fall back to the other backend's store."
+  (+agent-shell-sandbox-test--with-host
+    (let* ((now (truncate (float-time)))
+           (keychain (expand-file-name "keychain" host))
+           (refuse
+            (lambda (deadline)
+              (+agent-shell-sandbox-test--with-deadline deadline
+                (let ((err (should-error
+                            (+agent-shell-sandbox-prepare-claude sandbox)
+                            :type 'user-error)))
+                  (+agent-shell-sandbox-test--secret-free
+                   (error-message-string err)))))))
+      (+agent-shell-sandbox-test--logins host (+ now 3600) nil)
+      (let ((+agent-shell-sandbox-backend 'sandbox-exec))
+        (funcall refuse nil)
+        (dolist (text (list "{\"claudeAiOauth\": not-json-secret"
+                            "[1, 2]"
+                            (+agent-shell-sandbox-test--claude-json
+                             (+ now 3600) "")
+                            "{\"claudeAiOauth\":{\"accessToken\":\"x\"}}"
+                            "{\"claudeAiOauth\":{\"accessToken\":\"x\",\
+\"expiresAt\":\"soon\"}}"))
+          (+agent-shell-sandbox-test--write keychain text)
+          (funcall refuse nil))
+        (+agent-shell-sandbox-test--write
+         keychain (+agent-shell-sandbox-test--claude-json (+ now 3600)))
+        (funcall refuse (+ now 3600)))
+      (let ((+agent-shell-sandbox-backend 'bwrap))
+        (delete-file +agent-shell-sandbox-claude-credentials)
+        (funcall refuse nil)))))
 
 (ert-deftest +agent-shell-sandbox-test-prepare-codex ()
-  "Give Codex private copies of its login and config."
-  (+agent-shell-sandbox-test--with-codex
-    (should (equal (list (concat "CODEX_HOME="
-                                 (+agent-shell-sandbox-config sandbox)))
-                   env))
-    (should (equal "login-1" (+agent-shell-sandbox-test--read copy)))
-    (should (= #o600 (file-modes copy)))
-    (should (equal "model = \"x\""
-                   (+agent-shell-sandbox-test--read
-                    (expand-file-name "config.toml"
-                                      (+agent-shell-sandbox-config sandbox)))))
-    (delete-file real)
-    (should-error (+agent-shell-sandbox-prepare-codex sandbox)
-                  :type 'user-error)))
+  "Write Codex an allowlisted login without a refresh token, mode 0600,
+and its settings, on either backend.  The token must strictly outlast
+the deadline."
+  (+agent-shell-sandbox-test--with-host
+    (let ((expires (+ (truncate (float-time)) 3600)))
+      (+agent-shell-sandbox-test--logins host nil expires)
+      (+agent-shell-sandbox-test--write
+       (expand-file-name "config.toml" +agent-shell-sandbox-codex-home)
+       "model = \"o3\"\n")
+      (dolist (backend '(sandbox-exec bwrap))
+        (let ((+agent-shell-sandbox-backend backend))
+          (+agent-shell-sandbox-test--with-deadline (1- expires)
+            (let* ((env (+agent-shell-sandbox-prepare-codex sandbox))
+                   (config (+agent-shell-sandbox-config sandbox))
+                   (auth (expand-file-name "auth.json" config))
+                   (login (with-temp-buffer
+                            (insert-file-contents auth)
+                            (json-parse-buffer :object-type 'alist)))
+                   (tokens (alist-get 'tokens login)))
+              (should (equal (list (concat "CODEX_HOME=" config)
+                                   "OPENAI_API_KEY=" "CODEX_API_KEY=")
+                             env))
+              (should (= #o600 (file-modes auth)))
+              (should (equal '(auth_mode OPENAI_API_KEY tokens last_refresh)
+                             (mapcar #'car login)))
+              (should (eq :null (alist-get 'OPENAI_API_KEY login)))
+              (should (equal `((id_token . "fixture-id")
+                               (access_token
+                                . ,(+agent-shell-sandbox-test--jwt expires))
+                               (refresh_token . "")
+                               (account_id . "fixture-account"))
+                             tokens))
+              (should (equal "model = \"o3\"\n"
+                             (+agent-shell-sandbox-test--read
+                              (expand-file-name "config.toml" config))))))
+          (dolist (deadline (list expires (1+ expires)))
+            (+agent-shell-sandbox-test--with-deadline deadline
+              (should-error (+agent-shell-sandbox-prepare-codex sandbox)
+                            :type 'user-error)
+              (should-not (directory-files (+agent-shell-sandbox-config sandbox)
+                                           nil "\\`[^.]"))))))
+      (+agent-shell-sandbox-test--write
+       (expand-file-name "codex/auth.json" host)
+       "{\"OPENAI_API_KEY\":\"sk-fixture\"}")
+      (+agent-shell-sandbox-test--with-deadline nil
+        (should-error (+agent-shell-sandbox-prepare-codex sandbox)
+                      :type 'user-error)))))
 
-(ert-deftest +agent-shell-sandbox-test-codex-copy-back ()
-  "Copy a refreshed login back over an untouched real login."
-  (+agent-shell-sandbox-test--with-codex
-    (+agent-shell-sandbox-test--refresh copy "login-2")
-    (+agent-shell-sandbox-finish sandbox)
-    (should (equal "login-2" (+agent-shell-sandbox-test--read real)))
-    (should (= #o600 (file-modes real)))))
+(ert-deftest +agent-shell-sandbox-test-codex-host-unchanged ()
+  "What a Codex sandbox does to its login never reaches the host's, which
+may itself change meanwhile."
+  (+agent-shell-sandbox-test--with-host
+    (let* ((expires (+ (truncate (float-time)) 3600))
+           (real (expand-file-name "codex/auth.json" host)))
+      (+agent-shell-sandbox-test--logins host nil expires)
+      (dolist (replace '(nil t))
+        (let* ((root (file-truename (make-temp-file "pa-test-" t)))
+               (sandbox (+agent-shell-sandbox-create root))
+               (copy (expand-file-name "auth.json"
+                                       (+agent-shell-sandbox-config sandbox)))
+               (outcome 'pending))
+          (+agent-shell-sandbox-prepare-codex sandbox)
+          (when replace
+            (+agent-shell-sandbox-test--write real "{\"replaced\": true}"))
+          (let ((before (+agent-shell-sandbox-test--read real)))
+            (+agent-shell-sandbox-test--write copy "{\"refreshed\": true}")
+            (set-file-times copy (time-add nil 5))
+            (+agent-shell-sandbox-discard sandbox
+                                          (lambda (error) (setq outcome error)))
+            (+agent-shell-sandbox-test-wait
+             (lambda () (not (eq 'pending outcome))))
+            (should-not outcome)
+            (should (equal before (+agent-shell-sandbox-test--read real))))
+          (delete-directory root t))))))
 
-(ert-deftest +agent-shell-sandbox-test-codex-real-changed ()
-  "Keep a real login that changed since the copy, even if the copy is newer."
-  (+agent-shell-sandbox-test--with-codex
-    (+agent-shell-sandbox-test--write real "login-user")
-    (+agent-shell-sandbox-test--refresh copy "login-2")
-    (+agent-shell-sandbox-finish sandbox)
-    (should (equal "login-user" (+agent-shell-sandbox-test--read real)))))
+(defun +agent-shell-sandbox-test--check (agents deadline)
+  "Check AGENTS' logins against DEADLINE and return the results."
+  (let* ((results 'pending)
+         (cancel (+agent-shell-sandbox-check-logins
+                  agents deadline (lambda (value) (setq results value)))))
+    (should (functionp cancel))
+    (should (eq 'pending results))
+    (+agent-shell-sandbox-test-wait (lambda () (not (eq 'pending results))))
+    results))
 
-(ert-deftest +agent-shell-sandbox-test-codex-unrefreshed ()
-  "Leave the real login alone when the agent never refreshed it."
-  (+agent-shell-sandbox-test--with-codex
-    (let ((before (file-attribute-modification-time (file-attributes real))))
-      (+agent-shell-sandbox-finish sandbox)
-      (should (equal before (file-attribute-modification-time
-                             (file-attributes real))))
-      (should (equal "login-1" (+agent-shell-sandbox-test--read real))))))
+(defun +agent-shell-sandbox-test--summary (results)
+  "Return each of RESULTS as (AGENT REFRESHED ERROR-P)."
+  (mapcar (lambda (result)
+            (list (+agent-shell-sandbox-login-result-agent result)
+                  (+agent-shell-sandbox-login-result-refreshed result)
+                  (and (+agent-shell-sandbox-login-result-error result) t)))
+          results))
 
-(ert-deftest +agent-shell-sandbox-test-finish-failure ()
-  "Report a :finish step that fails instead of signaling."
-  (+agent-shell-sandbox-test--with (root)
-    (let ((+agent-shell-sandbox-agents
-           '((fixture :finish (lambda (_) (error "Login copy failed")))))
-          (messages nil))
-      (setf (+agent-shell-sandbox-agent sandbox) 'fixture)
-      (cl-letf (((symbol-function 'message)
-                 (lambda (format &rest arguments)
-                   (push (apply #'format-message format arguments) messages))))
-        (+agent-shell-sandbox-finish sandbox))
-      (should (string-search "Login copy failed" (car messages))))))
+(ert-deftest +agent-shell-sandbox-test-login-lasts ()
+  "A login that outlasts the deadline and margin is used as it is.
+Each agent is checked once, in order, and never before the check returns."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (now (float-time)))
+      (+agent-shell-sandbox-test--logins host (round (+ now 36000))
+                                         (round (+ now 720000)))
+      (let ((results (+agent-shell-sandbox-test--check
+                      '(claude-code codex claude-code) (+ now 3600))))
+        (should (equal '((claude-code nil nil) (codex nil nil))
+                       (+agent-shell-sandbox-test--summary results)))
+        (should (< (abs (- 36000 (+agent-shell-sandbox-login-result-remaining
+                                  (car results))))
+                   5))
+        (should-not (funcall runs))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-refreshes ()
+  "An expired login is refreshed once on the host, outside any sandbox or
+project, without the sandbox sign-in overrides, then used."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (process-environment
+           (append '("CLAUDE_CODE_OAUTH_TOKEN=leak" "ANTHROPIC_API_KEY=leak"
+                     "CODEX_HOME=/private/tmp/pa-sandbox-codex")
+                   process-environment)))
+      (+agent-shell-sandbox-test--logins host (- (truncate (float-time)) 60)
+                                         nil)
+      (let ((results (+agent-shell-sandbox-test--check
+                      '(claude-code) (+ (float-time) 3600))))
+        (should (equal '((claude-code t nil))
+                       (+agent-shell-sandbox-test--summary results)))
+        (should (< (abs (- 28800 (+agent-shell-sandbox-login-result-remaining
+                                  (car results))))
+                   5)))
+      (pcase-let ((`(,cwd ,token ,key ,codex-home)
+                   (split-string (car (funcall runs)))))
+        (should (string-match-p "/pstack-login-" cwd))
+        (should-not (file-exists-p cwd))
+        (should (equal '("unset" "unset") (list token key)))
+        (should (equal (directory-file-name +agent-shell-sandbox-codex-home)
+                       codex-home)))
+      (should (= 1 (length (funcall runs))))
+      (should-not (file-exists-p (+agent-shell-sandbox--login-lock
+                                  'claude-code))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-refresh-fails ()
+  "A refresh that fails or hangs refuses the agent with why and what to
+do, never with what the CLI printed."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap))
+      (+agent-shell-sandbox-test--logins host (- (truncate (float-time)) 60)
+                                         nil)
+      (let* ((process-environment (cons "FAKE_CLAUDE=fail" process-environment))
+             (result (car (+agent-shell-sandbox-test--check
+                           '(claude-code) (+ (float-time) 3600))))
+             (why (+agent-shell-sandbox-login-result-error result)))
+        (should-not (+agent-shell-sandbox-login-result-refreshed result))
+        (should (string-search "claude exited with status 1" why))
+        (should (string-search "Log Claude Code in again on the host" why))
+        (+agent-shell-sandbox-test--secret-free why))
+      (let* ((+agent-shell-sandbox-refresh-timeout 1)
+             (process-environment (cons "FAKE_DELAY=5" process-environment))
+             (result (car (+agent-shell-sandbox-test--check
+                           '(claude-code) (+ (float-time) 3600)))))
+        (should (string-search "claude timed out after 1 s"
+                               (+agent-shell-sandbox-login-result-error
+                                result))))
+      (let* ((+agent-shell-sandbox-agents
+              '((claude-code :name "Claude Code"
+                             :login +agent-shell-sandbox--claude-login
+                             :refresh ("pa-no-such-cli"))))
+             (result (car (+agent-shell-sandbox-test--check
+                           '(claude-code) (+ (float-time) 3600)))))
+        (should (string-search "pa-no-such-cli could not be started"
+                               (+agent-shell-sandbox-login-result-error
+                                result))))
+      (should-not (file-exists-p (+agent-shell-sandbox--login-lock
+                                  'claude-code))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-not-extended ()
+  "A refresh that leaves the token short refuses, and a token expiring
+exactly at the deadline plus margin is short."
+  (+agent-shell-sandbox-test--with-host
+    (let* ((+agent-shell-sandbox-backend 'bwrap)
+           (deadline (+ (truncate (float-time)) 3600))
+           (need (+ deadline +agent-shell-sandbox-login-margin))
+           (process-environment (append '("FAKE_CLAUDE=noop" "FAKE_CODEX=noop")
+                                        process-environment)))
+      (+agent-shell-sandbox-test--logins host (1+ need) need)
+      (let ((results (+agent-shell-sandbox-test--check
+                      '(claude-code codex) deadline)))
+        (should (equal '((claude-code nil nil) (codex nil t))
+                       (+agent-shell-sandbox-test--summary results)))
+        (let ((why (+agent-shell-sandbox-login-result-error (cadr results))))
+          (should (string-search "a refresh did not extend it" why))
+          (should (string-search "could not be triggered" why))))
+      (should (= 1 (length (funcall runs))))
+      (+agent-shell-sandbox-test--logins host need nil)
+      (should (equal '((claude-code nil t))
+                     (+agent-shell-sandbox-test--summary
+                      (+agent-shell-sandbox-test--check
+                       '(claude-code) deadline))))
+      (should (= 2 (length (funcall runs)))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-refreshes-once ()
+  "Two checks finding one expired login refresh it once between them."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (process-environment (cons "FAKE_DELAY=1" process-environment))
+          (results nil))
+      (+agent-shell-sandbox-test--logins host (- (truncate (float-time)) 60)
+                                         nil)
+      (dotimes (_ 2)
+        (+agent-shell-sandbox-check-logins
+         '(claude-code) (+ (float-time) 3600)
+         (lambda (value) (push (car value) results))))
+      (+agent-shell-sandbox-test-wait (lambda () (= 2 (length results))))
+      (should (= 1 (length (funcall runs))))
+      (should-not (seq-some #'+agent-shell-sandbox-login-result-error results))
+      (should (= 1 (seq-count #'+agent-shell-sandbox-login-result-refreshed
+                              results))))))
+
+(defun +agent-shell-sandbox-test--hold (agent pid)
+  "Make PID, with another nonce, the owner of AGENT's login lock."
+  (let ((lock (+agent-shell-sandbox--login-lock agent)))
+    (make-directory lock t)
+    (+agent-shell-sandbox-test--write (expand-file-name "owner" lock)
+                                      (format "%d foreign\n" pid))
+    lock))
+
+(defun +agent-shell-sandbox-test--dead-pid ()
+  "Return the pid of a process that has exited."
+  (let ((process (start-process "pa-dead" nil "true")))
+    (while (process-live-p process) (accept-process-output nil 0.01))
+    (process-id process)))
+
+(ert-deftest +agent-shell-sandbox-test-login-lock-ownership ()
+  "Only the check whose pid and nonce own a lock releases it.  A dead
+owner's lock is taken over, a live one's waited for, but not forever."
+  (+agent-shell-sandbox-test--with-host
+    (let* ((one (+agent-shell-sandbox--make-login-check :nonce "one"))
+           (two (+agent-shell-sandbox--make-login-check :nonce "two"))
+           (lock (+agent-shell-sandbox--login-lock 'codex)))
+      (should (string-prefix-p +agent-shell-sandbox--login-locks lock))
+      (should (+agent-shell-sandbox--login-acquire one 'codex))
+      (should (= #o700 (file-modes lock)))
+      (should-not (+agent-shell-sandbox--login-acquire two 'codex))
+      (+agent-shell-sandbox--login-release two)
+      (should (file-exists-p lock))
+      (+agent-shell-sandbox--login-release one)
+      (should-not (file-exists-p lock))
+      (+agent-shell-sandbox-test--hold 'codex
+                                       (+agent-shell-sandbox-test--dead-pid))
+      (should (+agent-shell-sandbox--login-acquire two 'codex))
+      (should (equal (cons (emacs-pid) "two")
+                     (+agent-shell-sandbox--lock-owner lock)))
+      (+agent-shell-sandbox--login-release two)
+      (should-not (directory-files +agent-shell-sandbox--login-locks nil
+                                   "\\`[^.]")))
+    (let* ((+agent-shell-sandbox-backend 'bwrap)
+           (+agent-shell-sandbox-refresh-timeout 0.5)
+           (holder (start-process "pa-holder" nil "sleep" "30")))
+      (unwind-protect
+          (progn
+            (+agent-shell-sandbox-test--logins
+             host (- (truncate (float-time)) 60) nil)
+            (+agent-shell-sandbox-test--hold 'claude-code
+                                             (process-id holder))
+            (let ((why (+agent-shell-sandbox-login-result-error
+                        (car (+agent-shell-sandbox-test--check
+                              '(claude-code) (+ (float-time) 3600))))))
+              (should (string-search "held its lock too long" why)))
+            (should-not (funcall runs))
+            (should (file-exists-p (+agent-shell-sandbox--login-lock
+                                    'claude-code))))
+        (delete-process holder)))))
+
+(ert-deftest +agent-shell-sandbox-test-login-waiter-rereads ()
+  "A check that waited for another's lock reads the login again rather
+than refresh it, and refuses when the other did not extend it."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (holder (start-process "pa-holder" nil "sleep" "30")))
+      (+agent-shell-sandbox-test--logins host (- (truncate (float-time)) 60)
+                                         nil)
+      (+agent-shell-sandbox-test--hold 'claude-code (process-id holder))
+      (run-at-time 0.3 nil #'delete-process holder)
+      (let ((why (+agent-shell-sandbox-login-result-error
+                  (car (+agent-shell-sandbox-test--check
+                        '(claude-code) (+ (float-time) 3600))))))
+        (should (string-search "another refresh did not extend it" why)))
+      (should-not (funcall runs))
+      (should-not (file-exists-p (+agent-shell-sandbox--login-lock
+                                  'claude-code))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-cancel-drains ()
+  "Cancelling a waiting check ends it at once; cancelling one whose
+refresh runs ends it, once, only after the refresh exits and its lock
+is released."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (holder (start-process "pa-holder" nil "sleep" "30")))
+      (unwind-protect
+          (let ((calls nil))
+            (+agent-shell-sandbox-test--logins
+             host (- (truncate (float-time)) 60) nil)
+            (let ((lock (+agent-shell-sandbox-test--hold 'claude-code
+                                                         (process-id holder)))
+                  (cancel (+agent-shell-sandbox-check-logins
+                           '(claude-code codex) (+ (float-time) 3600)
+                           (lambda (results) (push results calls)))))
+              (accept-process-output nil 0.2)
+              (should-not calls)
+              (funcall cancel)
+              (funcall cancel)
+              (+agent-shell-sandbox-test-wait (lambda () calls))
+              (accept-process-output nil 0.2)
+              (should (= 1 (length calls)))
+              (should (equal '((claude-code nil t) (codex nil t))
+                             (+agent-shell-sandbox-test--summary (car calls))))
+              (should (string-search "cancelled"
+                                     (+agent-shell-sandbox-login-result-error
+                                      (caar calls))))
+              (should (equal (cons (process-id holder) "foreign")
+                             (+agent-shell-sandbox--lock-owner lock)))
+              (delete-directory lock t)))
+        (delete-process holder)))
+    (let* ((+agent-shell-sandbox-backend 'bwrap)
+           (process-environment (cons "FAKE_DELAY=1" process-environment))
+           (lock (+agent-shell-sandbox--login-lock 'claude-code))
+           (calls nil)
+           (cancel (+agent-shell-sandbox-check-logins
+                    '(claude-code codex) (+ (float-time) 3600)
+                    (lambda (results)
+                      (push (list results (file-exists-p lock)
+                                  (file-exists-p
+                                   (expand-file-name "refreshed" host)))
+                            calls)))))
+      (+agent-shell-sandbox-test-wait (lambda () (funcall runs)))
+      (should (file-exists-p lock))
+      (funcall cancel)
+      (accept-process-output nil 0.1)
+      (should-not calls)
+      (should (file-exists-p lock))
+      (+agent-shell-sandbox-test-wait (lambda () calls))
+      (funcall cancel)
+      (accept-process-output nil 0.1)
+      (should (= 1 (length calls)))
+      (pcase-let ((`(,results ,locked ,refreshed) (car calls)))
+        (should-not locked)
+        (should refreshed)
+        (should (equal '((claude-code t nil) (codex nil t))
+                       (+agent-shell-sandbox-test--summary results)))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-final-reread ()
+  "Every login is read again before the check succeeds, so one that a
+later agent's refresh shortened is refused."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (now (truncate (float-time)))
+          (process-environment (cons "FAKE_SHORTEN_CLAUDE=1"
+                                     process-environment)))
+      (+agent-shell-sandbox-test--logins host (+ now 36000) (- now 60))
+      (let ((results (+agent-shell-sandbox-test--check
+                      '(claude-code codex) (+ now 3600))))
+        (should (equal '((claude-code nil t) (codex t nil))
+                       (+agent-shell-sandbox-test--summary results)))
+        (should (string-search "changed before admission finished"
+                               (+agent-shell-sandbox-login-result-error
+                                (car results))))))))
+
+(ert-deftest +agent-shell-sandbox-test-login-unknown-agent ()
+  "An agent with no login reader is refused without any refresh."
+  (+agent-shell-sandbox-test--with-host
+    (let ((+agent-shell-sandbox-agents '((fixture :refresh ("claude")))))
+      (should (equal '((fixture nil t) (gemini nil t))
+                     (+agent-shell-sandbox-test--summary
+                      (+agent-shell-sandbox-test--check
+                       '(fixture gemini) (+ (float-time) 3600)))))
+      (should-not (funcall runs)))))
 
 (ert-deftest +agent-shell-sandbox-test-delete-read-only ()
   "Delete read-only trees without following a symlink out of them."

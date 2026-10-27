@@ -307,8 +307,8 @@ transcript is kept.  A shell with a policy is hidden from
 (defun +agent-shell-drive-stop (shell &optional reason callback)
   "Stop sandboxed SHELL and every process it started, then call CALLBACK.
 Kill the adapter's descendants, kill SHELL as `+agent-shell-drive-kill'
-does with REASON, sweep processes working in the sandbox, and finish its
-agent's credentials.  CALLBACK gets the pids that survived the sweep.  The
+does with REASON, then sweep processes working in the sandbox.
+CALLBACK gets the pids that survived the sweep.  The
 work runs from a timer, so SHELL's own event callbacks may call this.
 
 On Linux the adapter's launcher ends its PID namespace by
@@ -322,7 +322,6 @@ to be killed outright."
      0 nil
      (lambda ()
        (let ((finish (lambda (survivors)
-                       (+agent-shell-sandbox-finish sandbox)
                        (when callback (funcall callback survivors)))))
          (if (eq +agent-shell-sandbox-backend 'bwrap)
              (let ((process (+agent-shell-drive--adapter-process shell))

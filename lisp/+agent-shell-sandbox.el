@@ -15,10 +15,9 @@
 ;; the sandbox's tag, and a sandbox in trace mode reports what its profile
 ;; would refuse instead of refusing it.
 ;;
-;; Stopping takes three steps, in order: `+agent-shell-sandbox-kill-tree'
-;; while the adapter lives, `+agent-shell-sandbox-sweep' once it is gone,
-;; then `+agent-shell-sandbox-finish'.  `+agent-shell-drive-stop' runs them
-;; around killing the shell.  `+agent-shell-sandbox-discard' then deletes
+;; Stopping takes two steps, in order: `+agent-shell-sandbox-kill-tree'
+;; while the adapter lives, then `+agent-shell-sandbox-sweep' once it is
+;; gone.  `+agent-shell-drive-stop' runs them around killing the shell.  `+agent-shell-sandbox-discard' then deletes
 ;; the private folders, whatever modes the agent's tools left in them.
 ;;
 ;; On GNU/Linux, `+agent-shell-sandbox-backend' is `bwrap' and the same
@@ -31,8 +30,8 @@
 ;; PID and IPC namespaces with slirp4netns as its only route out, and an
 ;; environment holding only `+agent-shell-sandbox-linux-environment'.
 ;; The same mounts decide what `+agent-shell-sandbox-readable-p' allows.
-;; Agents sign in with an access token copied from the host's login and no
-;; refresh token, so nothing is copied back, and stopping is
+;; On both backends agents receive the host login's access token and no
+;; refresh credential, so nothing is copied back.  Linux stopping uses
 ;; `+agent-shell-sandbox-terminate', since the PID namespace takes every
 ;; process with it.
 
@@ -68,49 +67,56 @@ folder holding one is covered.  The default holds the Nix daemon's."
   :type '(repeat directory))
 
 (defcustom +agent-shell-sandbox-claude-credentials "~/.claude/.credentials.json"
-  "Claude Code login whose access token Linux sandboxes sign in with."
+  "Claude Code host login file used by the bwrap backend.
+The sandbox-exec backend reads the host login Keychain instead."
   :type 'file)
 
 (defcustom +agent-shell-sandbox-agents
   '((claude-code :mode "bypassPermissions"
                  :prepare +agent-shell-sandbox-prepare-claude
                  :name "Claude Code"
-                 :expiry +agent-shell-sandbox-claude-expiry
+                 :login +agent-shell-sandbox--claude-login
                  :refresh ("claude" "-p" "Reply with the single word OK.")
                  :relogin "Log Claude Code in again on the host: run claude \
 there and use /login.")
     (codex :mode "agent-full-access"
            :prepare +agent-shell-sandbox-prepare-codex
-           :finish +agent-shell-sandbox-finish-codex
            :name "Codex"
-           :expiry +agent-shell-sandbox-codex-expiry
+           :login +agent-shell-sandbox--codex-login
            :refresh ("codex" "exec" "--skip-git-repo-check"
                      "Reply with the single word OK.")
            :relogin "A refresh of Codex's login could not be triggered; log \
 Codex in again on the host with codex login."))
-  "How each agent runs in a sandbox, by agent config identifier.
-:mode is the full-access session mode.  :prepare is called with the
-sandbox, may record credentials in it, and returns environment entries
-that take precedence over the agent's own.  :finish, when present, is
-called with the sandbox once its processes are gone.
-
-The rest serve a Linux host, whose sandboxes sign in with the access
-token of the host's own login.  :name names the agent to people.
-:expiry returns when that token expires, as a float time, or nil without
-a login.  :refresh is a command that makes the agent's CLI refresh the
-login, and :relogin tells a person what to do when that fails."
+  "The single registry for sandbox launch and host login policy.
+:mode names the full-access session mode.  :prepare receives a sandbox
+and returns environment entries, using a fresh projected host login.
+:login returns a `+agent-shell-sandbox--login' or signals a sanitized
+user error; it is the only reader of this provider's host credential
+and expiry on either backend.  :name names the provider, :refresh is
+its host CLI command, and :relogin gives host login instructions.
+Every arena member, including its judge, must have a :login reader.
+No sandbox may refresh a host login or copy credentials back."
   :type '(alist :key-type symbol :value-type plist))
 
 (defvar +agent-shell-sandbox--security "/usr/bin/security"
   "macOS's Keychain tool, by absolute path so no other one on PATH runs.")
 
-(defcustom +agent-shell-sandbox-claude-token-service
-  "pstack-arena-claude-token"
-  "Keychain service holding a `claude setup-token' token for candidates."
-  :type 'string)
+(defcustom +agent-shell-sandbox-login-margin 600
+  "Seconds every checked host login must outlast the supplied deadline.
+Applied once by `+agent-shell-sandbox-check-logins' on both backends."
+  :type 'natnum)
+
+(defcustom +agent-shell-sandbox-refresh-timeout 180
+  "Seconds a host CLI refresh may run while holding its login lease."
+  :type 'natnum)
+
+(defvar +agent-shell-sandbox--login-tick 1
+  "Seconds between attempts to acquire a host login lease.
+This is independent of remote transport polling.")
 
 (defcustom +agent-shell-sandbox-codex-home "~/.codex"
-  "Codex home whose login and config sandboxed Codex agents copy."
+  "Host Codex home supplying projected OAuth logins and filtered settings.
+Sandboxes never write back to this directory."
   :type 'directory)
 
 (defcustom +agent-shell-sandbox-secret-reads
@@ -140,8 +146,6 @@ READ-ONLY.")
   (tmp nil :read-only t :documentation "Private temp folder, /tmp/pa-HEX.")
   (config nil :read-only t :documentation "Private agent config folder.")
   (deny-reads nil :read-only t :documentation "Folders the agent cannot read.")
-  (agent nil :documentation "Agent identifier, set when prepared.")
-  (credentials nil :documentation "Plist the agent's :finish reads.")
   (allow-reads nil :read-only t
                :documentation "Folders or patterns inside DENY-READS the \
 agent may read.")
@@ -159,8 +163,8 @@ write.")
   (trace nil :read-only t
          :documentation "Whether the profile reports instead of refusing.")
   (deadline nil :read-only t
-            :documentation "Time the agent's login must outlast on Linux, \
-or nil for now.")
+            :documentation "Time the agent's access token must outlast, or \
+nil for now.")
   (read-only nil :read-only t
              :documentation "Whether the agent may write only its private \
 folders, not ROOT."))
@@ -393,8 +397,10 @@ On Linux the sandbox shows only `+agent-shell-sandbox-linux-mounts', so
 DENY-READS and ALLOW-METADATA change nothing there.  ALLOW-READS and
 ALLOW-WRITES are read-only and writable binds of the paths that exist,
 patterns are refused, each of ALLOW-CONNECTS must be an existing socket,
-and TRACE is refused.  The agent's login must outlast DEADLINE, a time
-value, or the present when it is nil."
+and TRACE is refused.
+
+On either backend, the injected access token must strictly outlast
+DEADLINE, an absolute time, or the present when it is nil."
   (unless +agent-shell-sandbox-backend
     (user-error "No sandbox on %s: agents run confined only on macOS and \
 GNU/Linux" system-type))
@@ -685,11 +691,9 @@ the client's own.  On Linux it runs the command as
     (let* ((entry (+agent-shell-sandbox-entry agent))
            (profile (expand-file-name "sandbox.sb"
                                       (+agent-shell-sandbox-config sandbox)))
-           (environment (progn
-                          (setf (+agent-shell-sandbox-agent sandbox) agent)
-                          (append (funcall (plist-get entry :prepare) sandbox)
-                                  (+agent-shell-sandbox-environment
-                                   sandbox)))))
+           (environment
+            (append (funcall (plist-get entry :prepare) sandbox)
+                    (+agent-shell-sandbox-environment sandbox))))
       (with-temp-file profile (insert (+agent-shell-sandbox-profile sandbox)))
       (lambda (buffer)
         (when-let* ((client (funcall client-maker buffer)))
@@ -705,93 +709,57 @@ the client's own.  On Linux it runs the command as
                           (alist-get :environment-variables client)))
             client))))))
 
-(defun +agent-shell-sandbox--keychain (service)
-  "Return the password of Keychain item SERVICE, or signal a user error."
-  (with-temp-buffer
-    (if (eql 0 (call-process +agent-shell-sandbox--security nil '(t nil) nil
-                             "find-generic-password" "-s" service "-w"))
-        (string-trim-right (buffer-string))
-      (user-error "No Keychain item %s; store a `claude setup-token' token \
-with: security add-generic-password -a \"$USER\" -s %s -w" service service))))
-
 (defun +agent-shell-sandbox-prepare-claude (sandbox)
-  "Return Claude Code's environment for SANDBOX, signing in by token.
-On macOS the token is a `claude setup-token' token from the Keychain.  On
-Linux it is the access token of `+agent-shell-sandbox-claude-credentials',
-which must outlast SANDBOX's deadline."
-  (let ((tmp (+agent-shell-sandbox-tmp sandbox)))
+  "Return Claude Code's environment for SANDBOX, signed in by access token.
+The token is the host login's, read fresh, and must outlast SANDBOX's
+deadline.  No refresh credential reaches the sandbox."
+  (let ((login (+agent-shell-sandbox--read-login 'claude-code)))
+    (+agent-shell-sandbox--outlast login
+                                   (+agent-shell-sandbox-deadline sandbox))
     (list (concat "CLAUDE_CODE_OAUTH_TOKEN="
-                  (if (eq +agent-shell-sandbox-backend 'bwrap)
-                      (+agent-shell-sandbox--claude-access-token sandbox)
-                    (+agent-shell-sandbox--keychain
-                     +agent-shell-sandbox-claude-token-service)))
+                  (+agent-shell-sandbox--login-access login))
           "ANTHROPIC_API_KEY="
           (concat "CLAUDE_CONFIG_DIR=" (+agent-shell-sandbox-config sandbox))
-          (concat "CLAUDE_CODE_TMPDIR=" tmp))))
+          (concat "CLAUDE_CODE_TMPDIR=" (+agent-shell-sandbox-tmp sandbox)))))
 
-(defun +agent-shell-sandbox--hash (file)
-  "Return FILE's SHA-256, or nil when it is missing."
-  (when (file-readable-p file)
-    (with-temp-buffer
-      (set-buffer-multibyte nil)
-      (insert-file-contents-literally file)
-      (secure-hash 'sha256 (current-buffer)))))
-
-(defun +agent-shell-sandbox--mtime (file)
-  "Return FILE's modification time."
-  (file-attribute-modification-time (file-attributes file)))
+(defun +agent-shell-sandbox--codex-auth (login)
+  "Return a Codex auth.json signing in with projected LOGIN's access token.
+It keeps the ID token and account id, which Codex needs, and its refresh
+token is empty, so the agent cannot rotate the host's login."
+  (json-serialize
+   `((auth_mode . "chatgpt")
+     (OPENAI_API_KEY . :null)
+     (tokens (id_token . ,(+agent-shell-sandbox--login-id-token login))
+             (access_token . ,(+agent-shell-sandbox--login-access login))
+             (refresh_token . "")
+             (account_id . ,(+agent-shell-sandbox--login-account-id login)))
+     ,@(when-let* ((refreshed (+agent-shell-sandbox--login-last-refresh login)))
+         `((last_refresh . ,refreshed))))))
 
 (defun +agent-shell-sandbox-prepare-codex (sandbox)
-  "Copy the Codex login into SANDBOX and return Codex's environment.
-On Linux the copy holds the access and ID tokens but no refresh token,
-the access token must outlast SANDBOX's deadline, and nothing is copied
-back."
-  (let* ((home (expand-file-name +agent-shell-sandbox-codex-home))
+  "Write Codex's login and settings into SANDBOX; return its environment.
+The login holds the host's access and ID tokens but no refresh token,
+and must outlast SANDBOX's deadline.  The settings are the host's.
+Nothing is ever copied back."
+  (let* ((login (+agent-shell-sandbox--read-login 'codex))
          (config (+agent-shell-sandbox-config sandbox))
-         (real (expand-file-name "auth.json" home))
-         (copy (expand-file-name "auth.json" config))
-         (settings (expand-file-name "config.toml" home)))
-    (unless (file-readable-p real)
-      (user-error "No Codex login at %s; run codex login" real))
-    (if (eq +agent-shell-sandbox-backend 'bwrap)
-        (let ((login (+agent-shell-sandbox--codex-access-login real sandbox)))
-          (with-file-modes #o600
-            (with-temp-file copy (insert login))))
-      (copy-file real copy t)
-      (set-file-modes copy #o600)
-      (setf (+agent-shell-sandbox-credentials sandbox)
-            (list :real real :copy copy
-                  :real-hash (+agent-shell-sandbox--hash real)
-                  :copied (+agent-shell-sandbox--mtime copy))))
-    (when (file-readable-p settings)
-      (copy-file settings (expand-file-name "config.toml" config) t))
-    (list (concat "CODEX_HOME=" config))))
-
-(defun +agent-shell-sandbox-finish-codex (sandbox)
-  "Copy SANDBOX's Codex login back if the agent refreshed it.
-Only when the copy changed after it was made and the real login did not."
-  (cl-destructuring-bind (&key real copy real-hash copied &allow-other-keys)
-      (+agent-shell-sandbox-credentials sandbox)
-    (when (and copy (file-readable-p copy)
-               (time-less-p copied (+agent-shell-sandbox--mtime copy))
-               (equal real-hash (+agent-shell-sandbox--hash real)))
-      (let ((temporary (make-temp-file
-                        (expand-file-name ".auth.json." (file-name-directory
-                                                         real)))))
-        (copy-file copy temporary t)
-        (set-file-modes temporary #o600)
-        (rename-file temporary real t)))))
-
-(defun +agent-shell-sandbox-finish (sandbox)
-  "Run the :finish step of SANDBOX's agent, if it has one.
-A failure is reported with `message' rather than signaled, so the rest
-of a stop still runs."
-  (when-let* ((agent (+agent-shell-sandbox-agent sandbox))
-              (finish (plist-get (+agent-shell-sandbox-entry agent) :finish)))
-    (condition-case err (funcall finish sandbox)
-      (error (message "Finishing the %s sandbox at %s failed: %s" agent
-                      (+agent-shell-sandbox-root sandbox)
-                      (error-message-string err))))))
+         (settings (expand-file-name "config.toml"
+                                     +agent-shell-sandbox-codex-home))
+         (text (when (file-readable-p settings)
+                 (with-temp-buffer
+                   (set-buffer-multibyte nil)
+                   (insert-file-contents-literally settings)
+                   (buffer-string)))))
+    (+agent-shell-sandbox--outlast login
+                                   (+agent-shell-sandbox-deadline sandbox))
+    (with-file-modes #o600
+      (let ((coding-system-for-write 'no-conversion))
+        (write-region (+agent-shell-sandbox--codex-auth login) nil
+                      (expand-file-name "auth.json" config) nil 'silent)
+        (when text
+          (write-region text nil (expand-file-name "config.toml" config)
+                        nil 'silent))))
+    (list (concat "CODEX_HOME=" config) "OPENAI_API_KEY=" "CODEX_API_KEY=")))
 
 (defun +agent-shell-sandbox--lines (program &rest arguments)
   "Return the output lines of PROGRAM run with ARGUMENTS."
@@ -980,11 +948,9 @@ it runs from, such as its npm install, added read-only.  Its environment
 holds only the prepared entries, then `+agent-shell-sandbox-environment'
 and `+agent-shell-sandbox-linux-environment'.  The client's own entries
 are dropped, since they may hold this Emacs's whole environment."
-  (let ((prepared (progn
-                    (setf (+agent-shell-sandbox-agent sandbox) agent)
-                    (funcall (plist-get (+agent-shell-sandbox-entry agent)
-                                        :prepare)
-                             sandbox))))
+  (let ((prepared (funcall (plist-get (+agent-shell-sandbox-entry agent)
+                                    :prepare)
+                           sandbox)))
     (make-directory (+agent-shell-sandbox--home sandbox) t)
     (with-temp-file (+agent-shell-sandbox--resolver sandbox)
       (insert "nameserver 10.0.2.3\n"))
@@ -1020,90 +986,471 @@ are dropped, since they may hold this Emacs's whole environment."
                 (alist-get :environment-variables client) environment)
           client)))))
 
-(defun +agent-shell-sandbox--json (file)
-  "Return FILE's JSON as alists, with null as nil."
-  (with-temp-buffer
-    (insert-file-contents file)
-    (json-parse-buffer :object-type 'alist :null-object nil)))
+;;;; Host logins and arena admission (both backends)
 
-(defun +agent-shell-sandbox--outlast (sandbox agent expiry)
-  "Signal unless AGENT's token, expiring at time EXPIRY, outlasts SANDBOX.
-That is its deadline, or the present when it has none."
-  (let ((deadline (or (+agent-shell-sandbox-deadline sandbox) (current-time))))
-    (unless (time-less-p deadline expiry)
-      (user-error "%s's access token expires at %s, before the sandbox's \
-deadline %s; refresh this host's login first" agent
-                  (format-time-string "%F %T %Z" expiry)
-                  (format-time-string "%F %T %Z" deadline)))))
+(defconst +agent-shell-sandbox--claude-service "Claude Code-credentials"
+  "Keychain service of Claude Code's own login on macOS.")
 
-(defun +agent-shell-sandbox--claude-oauth ()
-  "Return the claudeAiOauth object of the host's Claude Code login, or nil."
-  (let ((file (expand-file-name +agent-shell-sandbox-claude-credentials)))
-    (and (file-readable-p file)
-         (alist-get 'claudeAiOauth (+agent-shell-sandbox--json file)))))
+(defvar +agent-shell-sandbox--login-locks
+  "~/.local/state/pstack-arena/login-locks/"
+  "Folder of this user's host login locks.
+Fixed, so every Emacs on the host, local or a remote runner, shares them.")
 
-(defun +agent-shell-sandbox-claude-expiry ()
-  "Return when the host's Claude Code access token expires, or nil."
-  (let ((expires (alist-get 'expiresAt
-                            (ignore-errors
-                              (+agent-shell-sandbox--claude-oauth)))))
-    (and (numberp expires) (/ expires 1000.0))))
+(cl-defstruct (+agent-shell-sandbox--login
+               (:constructor +agent-shell-sandbox--make-login)
+               (:copier nil))
+  "Private projection of one host OAuth login and that token's expiry.
+No refresh credential, API key or raw host object is representable.
+Identity fields are required for Codex only.  Never store this in panel
+state, check results, diagnostics, or remote wire data."
+  (agent nil :read-only t)
+  (access nil :read-only t)
+  (expires nil :read-only t)
+  (id-token nil :read-only t)
+  (account-id nil :read-only t)
+  (last-refresh nil :read-only t))
 
-(defun +agent-shell-sandbox-codex-expiry ()
-  "Return when the host's Codex access token expires, or nil."
+(cl-defstruct (+agent-shell-sandbox-login-result
+               (:constructor +agent-shell-sandbox-login-result-create)
+               (:copier nil))
+  "Secret-free admission result for one AGENT, safe for remote status.
+REFRESHED says this check successfully refreshed it.  REMAINING is seconds
+left at final validation, nil without a readable login.  ERROR is nil on
+success, otherwise sanitized refusal/relogin guidance.  Any error refuses
+an entire arena, including providers needed only by the judge."
+  (agent nil :read-only t)
+  (refreshed nil :read-only t)
+  (remaining nil :read-only t)
+  (error nil :read-only t))
+
+(cl-defstruct (+agent-shell-sandbox--login-check
+               (:constructor +agent-shell-sandbox--make-login-check)
+               (:copier nil))
+  "Private owner of one asynchronous admission operation.
+It owns its timer, refresh PROCESS and LEASE, the lock folder it holds
+with its NONCE.  It never holds a projected login."
+  agents deadline need callback progress results cancelled done timer
+  process nonce lease)
+
+(defun +agent-shell-sandbox--json-get (object &rest keys)
+  "Return the value at KEYS in parsed JSON OBJECT, or nil."
+  (dolist (key keys object)
+    (setq object (and (consp object) (alist-get key object)))))
+
+(defun +agent-shell-sandbox--parse-login (text name)
+  "Return host login TEXT parsed as JSON, or signal naming agent NAME.
+The parser's message is dropped, since it could quote the credential."
+  (condition-case nil
+      (json-parse-string text :object-type 'alist :null-object nil)
+    (error (user-error "%s's host login is not valid JSON" name))))
+
+(defun +agent-shell-sandbox--finite-p (number)
+  "Return whether NUMBER is a finite number."
+  (and (numberp number) (= number number) (/= (abs number) 1.0e+INF)))
+
+(defun +agent-shell-sandbox--read-login (agent)
+  "Return AGENT's host login through its registry :login reader.
+Signal a `user-error' without credential contents when AGENT has no
+reader or its login is missing, unreadable or lacks a finite expiry."
+  (let* ((entry (alist-get agent +agent-shell-sandbox-agents))
+         (name (or (plist-get entry :name) (symbol-name agent)))
+         (reader (plist-get entry :login))
+         (login (if (not reader)
+                    (user-error "%s has no host login reader, so it cannot \
+run sandboxed in an arena" name)
+                  (condition-case err (funcall reader)
+                    (user-error (signal (car err) (cdr err)))
+                    (error (user-error "%s's host login could not be read"
+                                       name))))))
+    (unless (and (+agent-shell-sandbox--login-p login)
+                 (stringp (+agent-shell-sandbox--login-access login))
+                 (not (string-empty-p (+agent-shell-sandbox--login-access
+                                       login)))
+                 (+agent-shell-sandbox--finite-p
+                  (+agent-shell-sandbox--login-expires login)))
+      (user-error "%s's host login has no access token with a known expiry"
+                  name))
+    login))
+
+(defun +agent-shell-sandbox--claude-login ()
+  "Return the host's Claude Code login, projected.
+On macOS it is the login Keychain's, on Linux
+`+agent-shell-sandbox-claude-credentials'.  There is no other source."
+  (let* ((relogin "run claude on this host and use /login")
+         (oauth
+          (+agent-shell-sandbox--json-get
+           (+agent-shell-sandbox--parse-login
+            (if (eq +agent-shell-sandbox-backend 'bwrap)
+                (let ((file (expand-file-name
+                             +agent-shell-sandbox-claude-credentials)))
+                  (unless (file-readable-p file)
+                    (user-error "No Claude Code login at %s; %s" file relogin))
+                  (with-temp-buffer
+                    (insert-file-contents file)
+                    (buffer-string)))
+              (with-temp-buffer
+                (let ((default-directory "/"))
+                  (unless (eql 0 (call-process
+                                  +agent-shell-sandbox--security nil '(t nil)
+                                  nil "find-generic-password"
+                                  "-s" +agent-shell-sandbox--claude-service
+                                  "-a" (user-login-name) "-w"))
+                    (user-error "No readable Claude Code login in this host's \
+login Keychain; %s" relogin)))
+                (buffer-string)))
+            "Claude Code")
+           'claudeAiOauth))
+         (access (+agent-shell-sandbox--json-get oauth 'accessToken))
+         (expires (+agent-shell-sandbox--json-get oauth 'expiresAt)))
+    (unless (and (stringp access) (not (string-empty-p access))
+                 (+agent-shell-sandbox--finite-p expires))
+      (user-error "Claude Code's host login has no access token with an \
+expiry; %s" relogin))
+    (+agent-shell-sandbox--make-login
+     :agent 'claude-code :access access :expires (/ expires 1000.0))))
+
+(defun +agent-shell-sandbox--codex-login ()
+  "Return the host's Codex ChatGPT login from its auth.json, projected."
   (let* ((file (expand-file-name "auth.json" +agent-shell-sandbox-codex-home))
-         (access (ignore-errors
-                   (alist-get 'access_token
-                              (alist-get 'tokens
-                                         (+agent-shell-sandbox--json file)))))
-         (expiry (and (stringp access)
-                      (+agent-shell-sandbox--jwt-expiry access))))
-    (and (numberp expiry) (float expiry))))
-
-(defun +agent-shell-sandbox--claude-access-token (sandbox)
-  "Return the host's Claude Code access token if it outlasts SANDBOX."
-  (let* ((file (expand-file-name +agent-shell-sandbox-claude-credentials))
-         (oauth (+agent-shell-sandbox--claude-oauth))
-         (token (alist-get 'accessToken oauth))
-         (expires (alist-get 'expiresAt oauth)))
-    (unless (and (stringp token) (numberp expires))
-      (user-error "No Claude Code login at %s; run claude and log in" file))
-    (+agent-shell-sandbox--outlast sandbox "Claude Code" (/ expires 1000.0))
-    token))
+         (login (if (file-readable-p file)
+                    (+agent-shell-sandbox--parse-login
+                     (with-temp-buffer
+                       (insert-file-contents file)
+                       (buffer-string))
+                     "Codex")
+                  (user-error "No Codex login at %s; run codex login on this \
+host" file)))
+         (tokens (+agent-shell-sandbox--json-get login 'tokens))
+         (fields (mapcar (lambda (key)
+                           (let ((value (+agent-shell-sandbox--json-get
+                                         tokens key)))
+                             (and (stringp value) (not (string-empty-p value))
+                                  value)))
+                         '(access_token id_token account_id)))
+         (expires (and (car fields)
+                       (+agent-shell-sandbox--jwt-expiry (car fields))))
+         (refreshed (+agent-shell-sandbox--json-get login 'last_refresh)))
+    (unless (and (seq-every-p #'identity fields) expires)
+      (user-error "No ChatGPT login with a known expiry for Codex at %s; run \
+codex login on this host" file))
+    (+agent-shell-sandbox--make-login
+     :agent 'codex :access (nth 0 fields) :expires expires
+     :id-token (nth 1 fields) :account-id (nth 2 fields)
+     :last-refresh (and (stringp refreshed) refreshed))))
 
 (defun +agent-shell-sandbox--jwt-expiry (token)
-  "Return the exp claim of JSON web token TOKEN, or nil."
-  (when-let* ((payload (nth 1 (split-string token "\\."))))
+  "Return the exp claim of JSON web token TOKEN as a float, or nil.
+This reads the expiry only; it does not verify the signature."
+  (when-let* ((parts (split-string token "\\."))
+              ((= 3 (length parts))))
     (condition-case nil
-        (alist-get 'exp (json-parse-string
-                         (decode-coding-string
-                          (base64-decode-string payload t) 'utf-8)
-                         :object-type 'alist))
+        (let ((expiry (alist-get 'exp (json-parse-string
+                                       (decode-coding-string
+                                        (base64-decode-string
+                                         (string-trim-right (nth 1 parts) "=+")
+                                         t)
+                                        'utf-8)
+                                       :object-type 'alist))))
+          (and (+agent-shell-sandbox--finite-p expiry) (float expiry)))
       (error nil))))
 
-(defun +agent-shell-sandbox--codex-access-login (real sandbox)
-  "Return a Codex auth.json signing in with REAL's access token alone.
-It keeps the ID token and account id, which Codex needs, and its refresh
-token is empty, so the agent cannot rotate the host's login.  Signal
-unless the access token outlasts SANDBOX."
-  (let* ((login (+agent-shell-sandbox--json real))
-         (tokens (alist-get 'tokens login))
-         (access (alist-get 'access_token tokens))
-         (expiry (and (stringp access)
-                      (+agent-shell-sandbox--jwt-expiry access))))
-    (unless (and (numberp expiry) (alist-get 'id_token tokens)
-                 (alist-get 'account_id tokens))
-      (user-error "No ChatGPT login for Codex at %s; run codex login" real))
-    (+agent-shell-sandbox--outlast sandbox "Codex" expiry)
-    (json-serialize
-     `((auth_mode . "chatgpt")
-       (OPENAI_API_KEY . :null)
-       (tokens (id_token . ,(alist-get 'id_token tokens))
-               (access_token . ,access)
-               (refresh_token . "")
-               (account_id . ,(alist-get 'account_id tokens)))
-       ,@(when-let* ((refreshed (alist-get 'last_refresh login)))
-           `((last_refresh . ,refreshed)))))))
+(defun +agent-shell-sandbox--outlast (login deadline)
+  "Signal unless projected LOGIN's token strictly outlasts DEADLINE.
+DEADLINE is a time, or nil for the present."
+  (let ((deadline (float-time deadline))
+        (expires (+agent-shell-sandbox--login-expires login))
+        (entry (alist-get (+agent-shell-sandbox--login-agent login)
+                          +agent-shell-sandbox-agents)))
+    (unless (< deadline expires)
+      (user-error "%s's access token expires at %s, before the sandbox's \
+deadline %s.  %s"
+                  (or (plist-get entry :name)
+                      (+agent-shell-sandbox--login-agent login))
+                  (format-time-string "%F %T %Z" expires)
+                  (format-time-string "%F %T %Z" deadline)
+                  (or (plist-get entry :relogin)
+                      "Refresh this host's login first.")))))
+
+(defun +agent-shell-sandbox-check-logins (agents deadline callback
+                                                 &optional progress)
+  "Admit AGENTS for an arena ending at absolute Unix time DEADLINE.
+Each distinct agent's host login must outlast DEADLINE plus
+`+agent-shell-sandbox-login-margin'.  A short one is refreshed at most
+once, under a host-wide lock, and every login is read again before the
+check succeeds.  CALLBACK gets a `+agent-shell-sandbox-login-result' for
+each agent, in order, exactly once and never before this returns.
+PROGRESS, when given, gets the results so far as each agent's lands.
+Return a function that cancels the check: it stops waiting and starts no
+refresh, but lets one already running finish before CALLBACK runs."
+  (let ((check (+agent-shell-sandbox--make-login-check
+                :agents (seq-uniq agents) :deadline deadline
+                :need (+ deadline +agent-shell-sandbox-login-margin)
+                :callback callback :progress progress
+                :nonce (format "%08x%08x" (random #x100000000)
+                               (random #x100000000)))))
+    (setf (+agent-shell-sandbox--login-check-timer check)
+          (run-at-time 0 nil #'+agent-shell-sandbox--check-next check))
+    (lambda () (+agent-shell-sandbox--check-cancel check))))
+
+(defun +agent-shell-sandbox--check-cancel (check)
+  "Cancel CHECK, waking a check that waits for a lock."
+  (unless (or (+agent-shell-sandbox--login-check-cancelled check)
+              (+agent-shell-sandbox--login-check-done check))
+    (setf (+agent-shell-sandbox--login-check-cancelled check) t)
+    (when-let* ((timer (+agent-shell-sandbox--login-check-timer check)))
+      (cancel-timer timer)
+      (timer-set-time timer (current-time))
+      (timer-activate timer))))
+
+(defun +agent-shell-sandbox--check-next (check)
+  "Check the next agent of CHECK, or end it once none is left."
+  (setf (+agent-shell-sandbox--login-check-timer check) nil)
+  (let ((results (+agent-shell-sandbox--login-check-results check)))
+    (if-let* ((agent (nth (length results)
+                          (+agent-shell-sandbox--login-check-agents check))))
+        (+agent-shell-sandbox--check-login
+         check agent
+         (lambda (result)
+           (setf (+agent-shell-sandbox--login-check-results check)
+                 (append results (list result)))
+           (when-let* ((progress (+agent-shell-sandbox--login-check-progress
+                                  check)))
+             (funcall progress (+agent-shell-sandbox--login-check-results
+                                check)))
+           (+agent-shell-sandbox--check-next check)))
+      (unless (+agent-shell-sandbox--login-check-cancelled check)
+        (setf (+agent-shell-sandbox--login-check-results check)
+              (mapcar (lambda (result)
+                        (if (+agent-shell-sandbox-login-result-error result)
+                            result
+                          (+agent-shell-sandbox--reread check result)))
+                      results)))
+      (setf (+agent-shell-sandbox--login-check-done check) t)
+      (funcall (+agent-shell-sandbox--login-check-callback check)
+               (+agent-shell-sandbox--login-check-results check)))))
+
+(defun +agent-shell-sandbox--try-login (agent)
+  "Return (LOGIN . ERROR) for AGENT's host login; one of them is nil."
+  (condition-case err (list (+agent-shell-sandbox--read-login agent))
+    (user-error (cons nil (error-message-string err)))))
+
+(defun +agent-shell-sandbox--login-result (check agent read refreshed
+                                                 &optional why)
+  "Return CHECK's result for AGENT, whose login READ found.
+READ is from `+agent-shell-sandbox--try-login'.  REFRESHED says CHECK
+refreshed it, and WHY, when non-nil, why AGENT is refused."
+  (let ((login (car read))
+        (entry (alist-get agent +agent-shell-sandbox-agents)))
+    (+agent-shell-sandbox-login-result-create
+     :agent agent :refreshed refreshed
+     :remaining (and login (max 0 (round (- (+agent-shell-sandbox--login-expires
+                                             login)
+                                            (float-time)))))
+     :error
+     (when why
+       (format "%s's login on this host %s, short of the arena's deadline %s \
+plus %d minutes, and %s.  %s"
+               (or (plist-get entry :name) agent)
+               (if login
+                   (format-time-string "expires at %F %T %Z"
+                                       (+agent-shell-sandbox--login-expires
+                                        login))
+                 (format "could not be used (%s)"
+                         (string-trim-right (cdr read) "\\.")))
+               (format-time-string
+                "%F %T %Z" (+agent-shell-sandbox--login-check-deadline check))
+               (/ +agent-shell-sandbox-login-margin 60)
+               why
+               (or (plist-get entry :relogin)
+                   "Log it in again on the host."))))))
+
+(defun +agent-shell-sandbox--enough-p (check read)
+  "Return whether login READ outlasts what CHECK needs."
+  (when-let* ((login (car read)))
+    (> (+agent-shell-sandbox--login-expires login)
+       (+agent-shell-sandbox--login-check-need check))))
+
+(defun +agent-shell-sandbox--reread (check result)
+  "Return RESULT of CHECK after reading its agent's login once more."
+  (let* ((agent (+agent-shell-sandbox-login-result-agent result))
+         (read (+agent-shell-sandbox--try-login agent))
+         (refreshed (+agent-shell-sandbox-login-result-refreshed result)))
+    (if (+agent-shell-sandbox--enough-p check read)
+        (+agent-shell-sandbox--login-result check agent read refreshed)
+      (+agent-shell-sandbox--login-result
+       check agent read refreshed "it changed before admission finished"))))
+
+(defun +agent-shell-sandbox--check-login (check agent callback)
+  "Check AGENT's host login for CHECK, then call CALLBACK with its result.
+A short or missing login is read again under AGENT's lock and refreshed
+once if still short.  A check that waited for another's lock only reads
+again.  Waiting is bounded at twice `+agent-shell-sandbox-refresh-timeout'."
+  (let ((entry (alist-get agent +agent-shell-sandbox-agents))
+        (give-up (+ (float-time) (* 2 +agent-shell-sandbox-refresh-timeout)))
+        (waited nil))
+    (cl-labels
+        ((result (read refreshed &optional why)
+           (funcall callback (+agent-shell-sandbox--login-result
+                              check agent read refreshed why)))
+         (release-with (read refreshed &optional why)
+           (+agent-shell-sandbox--login-release check)
+           (result read refreshed why))
+         (refreshed (failure)
+           (let ((read (+agent-shell-sandbox--try-login agent)))
+             (cond (failure (release-with read nil (concat "refreshing it \
+failed: " failure)))
+                   ((+agent-shell-sandbox--enough-p check read)
+                    (release-with read t))
+                   (t (release-with read nil "a refresh did not extend it")))))
+         (attempt ()
+           (setf (+agent-shell-sandbox--login-check-timer check) nil)
+           (if (+agent-shell-sandbox--login-check-cancelled check)
+               (funcall callback
+                        (+agent-shell-sandbox-login-result-create
+                         :agent agent
+                         :error "Login admission was cancelled."))
+             (let ((read (+agent-shell-sandbox--try-login agent)))
+               (cond
+                ((+agent-shell-sandbox--enough-p check read) (result read nil))
+                ((not (plist-get entry :login))
+                 (result read nil "Emacs has no way to read it"))
+                ((not (plist-get entry :refresh))
+                 (result read nil "it has no host refresh command"))
+                ((+agent-shell-sandbox--login-acquire check agent)
+                 (let ((read (+agent-shell-sandbox--try-login agent)))
+                   (cond
+                    ((+agent-shell-sandbox--enough-p check read)
+                     (release-with read nil))
+                    (waited (release-with read nil "another refresh did not \
+extend it"))
+                    (t (+agent-shell-sandbox--refresh check agent
+                                                      #'refreshed)))))
+                ((> (float-time) give-up)
+                 (result read nil "another refresh held its lock too long"))
+                (t (setq waited t)
+                   (setf (+agent-shell-sandbox--login-check-timer check)
+                         (run-at-time +agent-shell-sandbox--login-tick nil
+                                      #'attempt))))))))
+      (attempt))))
+
+(defun +agent-shell-sandbox--login-lock (agent)
+  "Return the host lock folder for refreshing AGENT's login.
+It depends on nothing but this user and AGENT."
+  (expand-file-name (format "login-%s" agent)
+                    +agent-shell-sandbox--login-locks))
+
+(defun +agent-shell-sandbox--lock-owner (lock)
+  "Return LOCK's (PID . NONCE), or nil when unknown."
+  (ignore-errors
+    (pcase (split-string (with-temp-buffer
+                           (insert-file-contents
+                            (expand-file-name "owner" lock))
+                           (buffer-string)))
+      (`(,pid ,nonce) (and (string-match-p "\\`[0-9]+\\'" pid)
+                           (cons (string-to-number pid) nonce))))))
+
+(defun +agent-shell-sandbox--login-acquire (check agent)
+  "Take AGENT's login lock for CHECK; return whether it did.
+A lock whose owner no longer runs is renamed aside first, so only one
+waiter can take it over.  A live owner, even another check in this
+Emacs, keeps it."
+  (let ((lock (+agent-shell-sandbox--login-lock agent))
+        (nonce (+agent-shell-sandbox--login-check-nonce check)))
+    (with-file-modes #o700
+      (make-directory (file-name-directory lock) t))
+    (condition-case nil
+        (progn
+          (with-file-modes #o700 (make-directory lock))
+          (with-temp-file (expand-file-name "owner" lock)
+            (insert (format "%d %s\n" (emacs-pid) nonce)))
+          (setf (+agent-shell-sandbox--login-check-lease check) lock)
+          t)
+      (file-already-exists
+       (let ((owner (+agent-shell-sandbox--lock-owner lock)))
+         (when (and owner (/= (car owner) (emacs-pid))
+                    (not (process-attributes (car owner))))
+           (let ((aside (format "%s.stale-%d-%s" lock (emacs-pid) nonce)))
+             (when (ignore-errors (rename-file lock aside) t)
+               (delete-directory aside t)
+               (+agent-shell-sandbox--login-acquire check agent)))))))))
+
+(defun +agent-shell-sandbox--login-release (check)
+  "Give up CHECK's lock if its pid and nonce still own it.
+Never while CHECK's refresh runs."
+  (when-let* ((lock (+agent-shell-sandbox--login-check-lease check))
+              ((not (process-live-p
+                     (+agent-shell-sandbox--login-check-process check)))))
+    (when (equal (+agent-shell-sandbox--lock-owner lock)
+                 (cons (emacs-pid)
+                       (+agent-shell-sandbox--login-check-nonce check)))
+      (delete-directory lock t))
+    (setf (+agent-shell-sandbox--login-check-lease check) nil)))
+
+(defun +agent-shell-sandbox--host-environment ()
+  "Return `process-environment' for a host CLI refreshing its own login.
+Sandbox sign-in overrides are dropped and CODEX_HOME is the host's."
+  (cons (concat "CODEX_HOME=" (directory-file-name
+                               (expand-file-name
+                                +agent-shell-sandbox-codex-home)))
+        (seq-remove (lambda (entry)
+                      (string-match-p "\\`\\(?:CLAUDE_CODE_OAUTH_TOKEN\
+\\|ANTHROPIC_API_KEY\\|CLAUDE_CONFIG_DIR\\|CLAUDE_CODE_TMPDIR\
+\\|OPENAI_API_KEY\\|CODEX_API_KEY\\|CODEX_HOME\\)=" entry))
+                    process-environment)))
+
+(defun +agent-shell-sandbox--refresh (check agent callback)
+  "Run AGENT's :refresh command on the host for CHECK, then call CALLBACK.
+It runs outside any sandbox, from a scratch folder with no project, on
+the host's own login, and is stopped after
+`+agent-shell-sandbox-refresh-timeout' seconds.  CALLBACK gets nil once
+it succeeds, or why it failed; its output, which could hold credentials,
+is discarded."
+  (let* ((command (plist-get (alist-get agent +agent-shell-sandbox-agents)
+                             :refresh))
+         (program (car command))
+         (scratch (make-temp-file "pstack-login-" t))
+         (default-directory (file-name-as-directory scratch))
+         (process-environment (+agent-shell-sandbox--host-environment))
+         (timeout +agent-shell-sandbox-refresh-timeout)
+         (timed-out nil)
+         (timer nil))
+    (cl-flet ((finish (failure)
+                (when timer (cancel-timer timer))
+                (setf (+agent-shell-sandbox--login-check-process check) nil)
+                (ignore-errors (delete-directory scratch t))
+                (funcall callback failure)))
+      (condition-case nil
+          (let ((process
+                 (make-process
+                  :name "pstack-login-refresh" :command command
+                  :connection-type 'pipe :noquery t :filter #'ignore
+                  :sentinel
+                  (lambda (process _event)
+                    (unless (process-live-p process)
+                      (finish
+                       (cond (timed-out (format "%s timed out after %d s"
+                                                program timeout))
+                             ((eql 0 (process-exit-status process)) nil)
+                             (t (format "%s exited with status %d" program
+                                        (process-exit-status process))))))))))
+            (setf (+agent-shell-sandbox--login-check-process check) process)
+            (process-send-eof process)
+            (setq timer
+                  (run-at-time
+                   timeout nil
+                   (lambda ()
+                     (when (process-live-p process)
+                       (setq timed-out t)
+                       (signal-process process 'TERM)
+                       (setq timer (run-at-time
+                                    10 nil (lambda ()
+                                             (when (process-live-p process)
+                                               (signal-process
+                                                process 'KILL))))))))))
+        (error (run-at-time 0 nil #'finish
+                            (format "%s could not be started" program)))))))
+
+;;;; Linux shutdown
 
 (defun +agent-shell-sandbox-terminate (process callback &optional seconds)
   "Stop PROCESS, a Linux sandbox's launcher, then call CALLBACK.

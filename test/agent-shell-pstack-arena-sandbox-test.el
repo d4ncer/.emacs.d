@@ -20,14 +20,15 @@
                        (file-executable-p "/usr/bin/sandbox-exec")))
      ,@body))
 
-(defun +arena-sandbox-test--candidate (repo name)
-  "Provision candidate NAME over the lead at REPO.
+(defun +arena-sandbox-test--candidate (repo name &optional deadline)
+  "Provision candidate NAME over the lead at REPO with explicit DEADLINE.
 Return (MANIFEST WORKTREE SANDBOX)."
   (let* ((manifest (+arena-git-test--arena (+arena-git-test--base repo)))
          (worktree (+arena-git-test--provision manifest name))
          (+agent-shell-pstack-panel-directory
           (expand-file-name "reports/" +arena-git-test--scratch)))
-    (list manifest worktree (+agent-shell-pstack-arena-sandbox manifest name))))
+    (list manifest worktree
+          (+agent-shell-pstack-arena-sandbox manifest name deadline))))
 
 (defun +arena-sandbox-test--run (sandbox directory &rest command)
   "Run COMMAND in DIRECTORY confined to SANDBOX with its environment.
@@ -51,17 +52,28 @@ Return (STATUS . OUTPUT)."
   (delete-directory (+agent-shell-sandbox-config sandbox) t))
 
 (ert-deftest +arena-sandbox-test-deadline ()
-  "A candidate's sandbox carries the deadline its login must outlast."
+  "Each candidate's and the judge's sandbox carries the deadline it was
+given, so arenas running at once never share one."
   (+arena-git-test--with-scratch
-    (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
-      (dolist (deadline (list nil (+ (float-time) 3600)))
-        (pcase-let* ((+agent-shell-pstack-arena-deadline deadline)
-                     (`(,_ ,_ ,sandbox)
-                      (+arena-sandbox-test--candidate
-                       repo (if deadline "later" "now"))))
-          (unwind-protect
-              (should (equal deadline (+agent-shell-sandbox-deadline sandbox)))
-            (+arena-sandbox-test--discard sandbox)))))))
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (now (float-time))
+           (made
+            (mapcar (lambda (deadline)
+                      (pcase-let ((`(,manifest ,_ ,sandbox)
+                                   (+arena-sandbox-test--candidate
+                                    repo (format "c%d" (round (- deadline now)))
+                                    deadline)))
+                        (list deadline sandbox
+                              (+agent-shell-pstack-arena-judge-sandbox
+                               manifest deadline))))
+                    (list (+ now 3600) (+ now 7200)))))
+      (unwind-protect
+          (pcase-dolist (`(,deadline . ,sandboxes) made)
+            (dolist (sandbox sandboxes)
+              (should (equal deadline
+                             (+agent-shell-sandbox-deadline sandbox)))))
+        (dolist (sandbox (mapcan #'cdr made))
+          (+arena-sandbox-test--discard sandbox))))))
 
 (ert-deftest +arena-sandbox-test-read-only-git ()
   "Run git status and git diff in a candidate, never the lead's files.

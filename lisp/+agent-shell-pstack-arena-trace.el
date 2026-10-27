@@ -360,7 +360,7 @@ everything reported before the report appears."
 DIRECTORY is the candidate's working directory."
   (let* ((manifest (+agent-shell-pstack-arena-trace-run-manifest run))
          (sandbox (+agent-shell-pstack-arena-sandbox
-                   manifest "trace"
+                   manifest "trace" nil
                    (not (+agent-shell-pstack-arena-trace-run-enforce run))))
          (default-directory "/"))
     (setf (+agent-shell-pstack-arena-trace-run-sandbox run) sandbox)

@@ -763,211 +763,204 @@ and, after the runner restarts, the follow-up."
 
 ;;;; Host logins
 
-(defconst +arena-remote-test--fake-claude
-  "#!/bin/sh
-echo run >> \"$FAKE_LOG\"
-case \"$FAKE_CLAUDE\" in
-  fail) echo 'Invalid API key - Please run /login'; exit 1 ;;
-  noop) echo OK; exit 0 ;;
-esac
-sleep \"${FAKE_DELAY:-0}\"
-expires=$(( ($(date +%s) + 28800) * 1000 ))
-printf '{\"claudeAiOauth\":{\"accessToken\":\"new\",\"refreshToken\":\"r2\",\
-\"expiresAt\":%s}}' \"$expires\" > \"$FAKE_CLAUDE_FILE.tmp\"
-mv \"$FAKE_CLAUDE_FILE.tmp\" \"$FAKE_CLAUDE_FILE\"
-echo OK
-"
-  "A claude that refreshes its fixture login for 8 hours, or fails, or
-does nothing, as FAKE_CLAUDE says, logging each run to FAKE_LOG.")
+(ert-deftest +agent-shell-arena-remote-test-login-status ()
+  "A status carries how each agent's host login stood, with nothing but
+its agent, refresh, time left and refusal, and the laptop shows it."
+  (+arena-remote-test--with-scratch
+    (let* ((status (+agent-shell-arena-remote--make-status
+                    :id "abc-12345678" :phase 'preparing :heartbeat 1
+                    :logins
+                    (list (+agent-shell-sandbox-login-result-create
+                           :agent 'claude-code :refreshed t :remaining 28800)
+                          (+agent-shell-sandbox-login-result-create
+                           :agent 'codex :remaining 60
+                           :error "Codex's login on this host is short."))))
+           (json (+agent-shell-arena-remote-to-json 'status status))
+           (back (+agent-shell-arena-remote-from-json 'status json))
+           (remote (+arena-remote-test--record
+                    (+agent-shell-arena-remote--make-host
+                     :kind 'ssh :name "box"))))
+      (should (equal json (+agent-shell-arena-remote-to-json 'status back)))
+      (should (seq-every-p #'+agent-shell-sandbox-login-result-p
+                           (+agent-shell-arena-remote-status-logins back)))
+      (dolist (login (alist-get 'logins (json-parse-string
+                                         json :object-type 'alist
+                                         :array-type 'list)))
+        (should-not (seq-difference (mapcar #'car login)
+                                    '(agent refreshed remaining error))))
+      (setf (+agent-shell-arena-remote-directory remote) scratch)
+      (+agent-shell-arena-remote--mirror remote back)
+      (should (string-search "logins: claude-code refreshed, 8.0 h left; \
+codex refused"
+                             (+agent-shell-arena-remote-describe remote))))))
 
-(defconst +arena-remote-test--fake-codex
-  "#!/bin/sh
-echo run >> \"$FAKE_LOG\"
-[ \"$FAKE_CODEX\" = noop ] && { echo OK; exit 0; }
-payload=$(printf '{\"exp\":%d}' $(( $(date +%s) + 800000 )) | base64 | tr -d '=\\n')
-printf '{\"tokens\":{\"access_token\":\"h.%s.s\"}}' \"$payload\" \
-> \"$CODEX_FIXTURE_HOME/auth.json\"
-echo OK
-"
-  "A codex that refreshes its fixture login, unless FAKE_CODEX is noop.")
+(defmacro +arena-remote-test--with-admission (agents &rest body)
+  "Run BODY with AGENTS as the sandbox registry and arena git stubbed.
+BODY sees `started', the members started, and `statuses', the number of
+logins each status written held, oldest first."
+  (declare (indent 1))
+  `(let ((+agent-shell-sandbox-agents ,agents)
+         (started nil) (statuses nil))
+     (cl-letf* ((write (symbol-function '+agent-shell-arena-remote--write-json))
+                ((symbol-function '+agent-shell-arena-remote--write-json)
+                 (lambda (file kind record)
+                   (when (eq kind 'status)
+                     (setq statuses
+                           (append statuses
+                                   (list (length
+                                          (+agent-shell-arena-remote-status-logins
+                                           record))))))
+                   (funcall write file kind record)))
+                ((symbol-function '+agent-shell-arena-git-base-at)
+                 (lambda (directory &rest _)
+                   (+agent-shell-arena-git--base
+                    :git-dir (expand-file-name ".git" directory)
+                    :toplevel directory :prefix "" :head "head"
+                    :commit (make-string 40 ?a))))
+                ((symbol-function '+agent-shell-arena-git-provision)
+                 (lambda (_manifest _name callback)
+                   (run-at-time 0 nil callback "/worktree" nil)))
+                ((symbol-function '+agent-shell-arena-git-clean)
+                 (lambda (_manifest callback)
+                   (run-at-time 0 nil callback nil nil)))
+                ((symbol-function '+agent-shell-drive-start)
+                 (lambda (&rest arguments) (push arguments started) nil)))
+       ,@body)))
 
-(defun +arena-remote-test--jwt (expiry)
-  "Return a JSON web token whose exp claim is EXPIRY."
-  (concat "h." (string-trim-right
-                (base64-encode-string (format "{\"exp\":%d}" expiry) t) "=+")
-          ".s"))
-
-(defmacro +arena-remote-test--with-logins (claude codex &rest body)
-  "Run BODY with fixture host logins and fake claude and codex on PATH.
-The Claude Code token expires CLAUDE seconds from now and Codex's CODEX.
-BODY sees `root', a host state folder, `runs', which returns how many
-times the fakes ran, and `runner', which makes a runner whose job uses
-both agents."
-  (declare (indent 2))
-  `(let* ((root (file-name-as-directory
-                 (file-truename (make-temp-file "arena-remote-login-" t))))
-          (bin (expand-file-name "bin/" root))
-          (log (expand-file-name "runs" root))
-          (+agent-shell-sandbox-claude-credentials
-           (expand-file-name "credentials.json" root))
-          (+agent-shell-sandbox-codex-home (expand-file-name "codex/" root))
-          (+agent-shell-arena-remote-tick 0.1)
-          (+agent-shell-arena-remote-refresh-timeout 20)
-          (exec-path (cons bin exec-path))
-          (process-environment
-           (append (list (concat "PATH=" bin path-separator (getenv "PATH"))
-                         (concat "FAKE_LOG=" log)
-                         (concat "FAKE_CLAUDE_FILE="
-                                 +agent-shell-sandbox-claude-credentials)
-                         (concat "CODEX_FIXTURE_HOME="
-                                 +agent-shell-sandbox-codex-home))
-                   process-environment))
-          (runs (lambda ()
-                  (if (file-exists-p log)
-                      (with-temp-buffer
-                        (insert-file-contents log)
-                        (count-lines (point-min) (point-max)))
-                    0)))
-          (runner (lambda ()
-                    (let ((directory (make-temp-file
-                                      (expand-file-name "job-" root) t)))
-                      (+agent-shell-arena-remote--make-runner
-                       :job (+arena-remote-test--job) :root root
-                       :directory (file-name-as-directory directory)
-                       :deadline (+ (float-time) 3600))))))
-     (ignore runs runner)
-     (make-directory bin t)
-     (make-directory +agent-shell-sandbox-codex-home t)
-     (pcase-dolist (`(,name . ,script)
-                    `(("claude" . ,+arena-remote-test--fake-claude)
-                      ("codex" . ,+arena-remote-test--fake-codex)))
-       (with-temp-file (expand-file-name name bin) (insert script))
-       (set-file-modes (expand-file-name name bin) #o755))
-     (with-temp-file +agent-shell-sandbox-claude-credentials
-       (insert (format "{\"claudeAiOauth\":{\"accessToken\":\"old\",\
-\"refreshToken\":\"r1\",\"expiresAt\":%d}}"
-                       (* 1000 (round (+ (float-time) ,claude))))))
-     (with-temp-file (expand-file-name "auth.json"
-                                       +agent-shell-sandbox-codex-home)
-       (insert (format "{\"tokens\":{\"access_token\":\"%s\"}}"
-                       (+arena-remote-test--jwt
-                        (round (+ (float-time) ,codex))))))
-     (unwind-protect (progn ,@body)
-       (delete-directory root t))))
-
-(defun +arena-remote-test--login (runner agent)
-  "Return the login RUNNER finds for AGENT."
-  (car (+arena-remote-test--wait
-        (lambda (done) (+agent-shell-arena-remote--login runner agent done)))))
-
-(ert-deftest +agent-shell-arena-remote-test-login-lasts ()
-  "A login that outlasts the deadline and margin is used as it is."
-  (+arena-remote-test--with-logins (* 10 3600) (* 200 3600)
-    (let ((login (+arena-remote-test--login (funcall runner) 'claude-code)))
-      (should (equal 0 (funcall runs)))
-      (should-not (+agent-shell-arena-remote-login-refreshed login))
-      (should-not (+agent-shell-arena-remote-login-error login))
-      (should (< (abs (- (* 10 3600)
-                         (+agent-shell-arena-remote-login-remaining login)))
-                 5)))))
-
-(ert-deftest +agent-shell-arena-remote-test-login-refreshes ()
-  "An expired login is refreshed once, outside the sandbox, then used."
-  (+arena-remote-test--with-logins -60 (* 200 3600)
-    (let ((runner (funcall runner)))
-      (let ((login (+arena-remote-test--login runner 'claude-code)))
-        (should (equal 1 (funcall runs)))
-        (should (+agent-shell-arena-remote-login-refreshed login))
-        (should-not (+agent-shell-arena-remote-login-error login))
-        (should (< (abs (- (* 8 3600)
-                           (+agent-shell-arena-remote-login-remaining login)))
-                   5)))
-      (should-not (file-exists-p (+agent-shell-arena-remote--login-lock
-                                  runner 'claude-code))))))
-
-(ert-deftest +agent-shell-arena-remote-test-login-refresh-fails ()
-  "A refresh that fails refuses the agent with why and what to do."
-  (+arena-remote-test--with-logins -60 (* 200 3600)
-    (let* ((process-environment (cons "FAKE_CLAUDE=fail" process-environment))
-           (login (+arena-remote-test--login (funcall runner) 'claude-code))
-           (why (+agent-shell-arena-remote-login-error login)))
-      (should (equal 1 (funcall runs)))
-      (should-not (+agent-shell-arena-remote-login-refreshed login))
-      (should (string-search "claude exited with 1: Invalid API key" why))
-      (should (string-search "Log Claude Code in again on the host" why)))))
-
-(ert-deftest +agent-shell-arena-remote-test-login-not-extended ()
-  "A refresh that leaves the token short refuses; for Codex, it says no
-refresh could be triggered."
-  (+arena-remote-test--with-logins (* 200 3600) 60
-    (let* ((process-environment (cons "FAKE_CODEX=noop" process-environment))
-           (login (+arena-remote-test--login (funcall runner) 'codex))
-           (why (+agent-shell-arena-remote-login-error login)))
-      (should (equal 1 (funcall runs)))
-      (should (string-search "a refresh did not extend it" why))
-      (should (string-search "could not be triggered" why)))))
-
-(ert-deftest +agent-shell-arena-remote-test-login-refreshes-once ()
-  "Two runners finding one expired login refresh it once between them."
-  (+arena-remote-test--with-logins -60 (* 200 3600)
-    (let* ((process-environment (cons "FAKE_DELAY=1" process-environment))
-           (logins nil)
-           (deadline (+ (float-time) 30)))
-      (dolist (runner (list (funcall runner) (funcall runner)))
-        (+agent-shell-arena-remote--login
-         runner 'claude-code (lambda (login) (push login logins))))
-      (while (and (< (length logins) 2) (< (float-time) deadline))
-        (accept-process-output nil 0.05))
-      (should (equal 1 (funcall runs)))
-      (should (equal 2 (length logins)))
-      (should-not (seq-some #'+agent-shell-arena-remote-login-error logins))
-      (should (equal 1 (seq-count #'+agent-shell-arena-remote-login-refreshed
-                                  logins))))))
+(defun +arena-remote-test--fixture-login (agent file)
+  "Return a :login reader of AGENT whose expiry is the number in FILE."
+  (lambda ()
+    (+agent-shell-sandbox--make-login
+     :agent agent :access "fixture-access"
+     :expires (string-to-number (with-temp-buffer
+                                  (insert-file-contents file)
+                                  (buffer-string))))))
 
 (ert-deftest +agent-shell-arena-remote-test-login-refusal-reaches-status ()
-  "A Linux runner checks each agent's login before provisioning, refuses
-the members of one it cannot use, and records every login in its status."
-  (+arena-remote-test--with-logins -60 (* 200 3600)
-    (let* ((process-environment (cons "FAKE_CLAUDE=fail" process-environment))
-           (+agent-shell-sandbox-backend 'bwrap)
-           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
-           (+agent-shell-pstack-panel-change-hook nil)
-           (+agent-shell-pstack-arena-deadline nil)
-           (runner (funcall runner))
-           (provisioned nil))
-      (cl-letf (((symbol-function '+agent-shell-pstack-panel--provision)
-                 (lambda (panel _base) (setq provisioned panel)))
-                ((symbol-function '+agent-shell-arena-git-base-at) #'ignore))
+  "A runner checks every agent's host login before any member starts, as
+a local arena does.  One refusal refuses every member, and each agent's
+result reaches the status as its check ends."
+  (+arena-remote-test--with-scratch
+    (let* ((expiry (expand-file-name "codex-expiry" scratch))
+           (directory (file-name-as-directory
+                       (expand-file-name "jobs/abc-12345678" scratch)))
+           (runner (+agent-shell-arena-remote--make-runner
+                    :job (+arena-remote-test--job) :root scratch
+                    :directory directory)))
+      (make-directory directory t)
+      (with-temp-file expiry (insert (format "%d" (+ (float-time) 86400))))
+      (+arena-remote-test--with-admission
+          `((claude-code :name "Claude Code"
+                         :login ,(lambda ()
+                                   (user-error "No fixture Claude Code login")))
+            (codex :name "Codex"
+                   :login ,(+arena-remote-test--fixture-login 'codex expiry)))
+        (add-hook '+agent-shell-pstack-panel-change-hook
+                  (lambda () (+agent-shell-arena-remote--runner-status runner)))
         (+agent-shell-arena-remote--runner-start runner)
-        (let ((deadline (+ (float-time) 30)))
-          (while (and (not provisioned) (< (float-time) deadline))
-            (accept-process-output nil 0.05))))
-      (should provisioned)
-      (+agent-shell-arena-remote--runner-status runner)
-      (let* ((status (+agent-shell-arena-remote--read-json
-                      (+agent-shell-arena-remote--runner-file
-                       runner "status.json")
-                      'status))
-             (members (+agent-shell-arena-remote-status-members status))
-             (logins (+agent-shell-arena-remote-status-logins status))
-             (remote (+arena-remote-test--record
-                      (+agent-shell-arena-remote--make-host
-                       :kind 'ssh :name "box"))))
-        (should (equal '(claude-code codex)
-                       (mapcar #'+agent-shell-arena-remote-login-agent logins)))
-        (should (string-search
-                 "Log Claude Code in again"
-                 (+agent-shell-arena-remote-member-error (car members))))
-        (should (eq 'error (+agent-shell-arena-remote-member-state
-                            (car members))))
-        (should (equal '(pending pending)
-                       (mapcar #'+agent-shell-arena-remote-member-state
-                               (cdr members))))
-        (setf (+agent-shell-arena-remote-directory remote) root)
-        (+agent-shell-arena-remote--mirror remote status)
-        (should (string-match-p
-                 "logins: claude-code refused; codex, 2[0-9][0-9]\\.[0-9] h left"
-                 (+agent-shell-arena-remote-describe remote)))))))
+        (let ((panel (+agent-shell-arena-remote--runner-panel runner)))
+          (should (< (abs (- (+agent-shell-pstack-panel-deadline panel)
+                             (+ (float-time) 2400)))
+                     5))
+          (+arena-remote-test--wait
+           (lambda (done)
+             (let ((timer nil))
+               (setq timer
+                     (run-at-time
+                      0 0.02 (lambda ()
+                               (when (+agent-shell-arena-remote--runner-done
+                                      runner)
+                                 (cancel-timer timer)
+                                 (funcall done)))))))))
+        (should-not started)
+        (should (equal '(0 1 2) (seq-uniq statuses)))
+        (let* ((status (+agent-shell-arena-remote--read-json
+                        (+agent-shell-arena-remote--runner-file
+                         runner "status.json")
+                        'status))
+               (logins (+agent-shell-arena-remote-status-logins status))
+               (remote (+arena-remote-test--record
+                        (+agent-shell-arena-remote--make-host
+                         :kind 'ssh :name "box"))))
+          (should (eq 'finished
+                      (+agent-shell-arena-remote-status-phase status)))
+          (should (equal '(claude-code codex)
+                         (mapcar #'+agent-shell-sandbox-login-result-agent
+                                 logins)))
+          (dolist (member (+agent-shell-arena-remote-status-members status))
+            (should (eq 'error (+agent-shell-arena-remote-member-state member)))
+            (should (string-search "No fixture Claude Code login"
+                                   (+agent-shell-arena-remote-member-error
+                                    member))))
+          (setf (+agent-shell-arena-remote-directory remote) scratch)
+          (+agent-shell-arena-remote--mirror remote status)
+          (should (string-match-p
+                   "logins: claude-code refused; codex, 2[34]\\.[0-9] h left"
+                   (+agent-shell-arena-remote-describe remote))))))))
+
+(ert-deftest +agent-shell-arena-remote-test-login-refresh-drains-on-exit ()
+  "A runner cancelled while it refreshes a host login exits only once the
+refresh has finished and released its lock."
+  (+arena-remote-test--with-scratch
+    (let* ((root scratch)
+           (directory (file-name-as-directory
+                       (expand-file-name "jobs/abc-12345678/" root)))
+           (expiry (expand-file-name "claude-expiry" root))
+           (later (expand-file-name "codex-expiry" root))
+           (started-file (expand-file-name "refresh-started" root))
+           (refreshed (expand-file-name "refreshed" root))
+           (+agent-shell-sandbox--login-locks (expand-file-name "login-locks/"
+                                                                root))
+           (+agent-shell-arena-remote-tick 0.1)
+           (+agent-shell-arena-remote--runner nil)
+           (watch nil))
+      (make-directory directory t)
+      (+agent-shell-arena-remote--write-json
+       (expand-file-name "job.json" directory) 'job (+arena-remote-test--job))
+      (with-temp-file expiry (insert "0"))
+      (with-temp-file later (insert (format "%d" (+ (float-time) 86400))))
+      (+arena-remote-test--with-admission
+          `((claude-code :name "Claude Code"
+                         :login ,(+arena-remote-test--fixture-login
+                                  'claude-code expiry)
+                         :refresh
+                         ("/bin/sh" "-c"
+                          ,(format "touch %s; sleep 1; echo $(( $(date +%%s) \
++ 86400 )) > %s; touch %s"
+                                   (shell-quote-argument started-file)
+                                   (shell-quote-argument expiry)
+                                   (shell-quote-argument refreshed))))
+            (codex :name "Codex"
+                   :login ,(+arena-remote-test--fixture-login 'codex later)))
+        (setq watch
+              (run-at-time 0 0.05
+                           (lambda ()
+                             (when (file-exists-p started-file)
+                               (cancel-timer watch)
+                               (with-temp-file (expand-file-name "cancel"
+                                                                 directory)
+                                 (insert "Stop now."))))))
+        (unwind-protect
+            (should (eql 0 (+agent-shell-arena-remote-runner-main directory)))
+          (cancel-timer watch)
+          (advice-remove 'yes-or-no-p #'+agent-shell-arena-remote--refuse)
+          (advice-remove 'y-or-n-p #'+agent-shell-arena-remote--refuse))
+        (should (file-exists-p refreshed))
+        (should-not (file-exists-p (+agent-shell-sandbox--login-lock
+                                    'claude-code)))
+        (should-not started)
+        (let ((status (+agent-shell-arena-remote--read-json
+                       (expand-file-name "status.json" directory) 'status)))
+          (should (eq 'finished
+                      (+agent-shell-arena-remote-status-phase status)))
+          (should (equal '(claude-code codex)
+                         (mapcar #'+agent-shell-sandbox-login-result-agent
+                                 (+agent-shell-arena-remote-status-logins
+                                  status))))
+          (dolist (member (+agent-shell-arena-remote-status-members status))
+            (should (equal "Stop now."
+                           (+agent-shell-arena-remote-member-error
+                            member)))))))))
 
 ;;;; Re-attaching
 

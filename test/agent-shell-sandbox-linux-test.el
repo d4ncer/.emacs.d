@@ -210,7 +210,8 @@ back.  Refuse a token that expires before the deadline."
                  (before (with-temp-buffer (insert-file-contents real)
                                            (buffer-string))))
             (should (equal (list (concat "CODEX_HOME="
-                                         (+agent-shell-sandbox-config sandbox)))
+                                         (+agent-shell-sandbox-config sandbox))
+                                  "OPENAI_API_KEY=" "CODEX_API_KEY=")
                            env))
             (should (= #o600 (file-modes copy)))
             (should (equal "chatgpt" (alist-get 'auth_mode login)))
@@ -222,8 +223,6 @@ back.  Refuse a token that expires before the deadline."
                            (alist-get 'access_token tokens)))
             (with-temp-file copy (insert "{\"refreshed\": true}"))
             (set-file-times copy (time-add nil 5))
-            (setf (+agent-shell-sandbox-agent sandbox) 'codex)
-            (+agent-shell-sandbox-finish sandbox)
             (should (equal before (with-temp-buffer
                                     (insert-file-contents real)
                                     (buffer-string)))))))

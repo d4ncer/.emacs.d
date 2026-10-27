@@ -95,9 +95,19 @@
               '((fixture-codex . "read-only") (fixture-claude . "plan"))
               +agent-shell-sandbox-agents
               '((fixture-codex :mode "agent-full-access"
-                               :prepare pa-test-prepare)
+                               :prepare pa-test-prepare
+                               :login (lambda ()
+                                        (+agent-shell-sandbox--make-login
+                                         :agent 'fixture-codex
+                                         :access "fixture-access"
+                                         :expires (+ (float-time) 86400))))
                 (fixture-claude :mode "agent-full-access"
-                                :prepare pa-test-prepare))
+                                :prepare pa-test-prepare
+                               :login (lambda ()
+                                        (+agent-shell-sandbox--make-login
+                                         :agent 'fixture-claude
+                                         :access "fixture-access"
+                                         :expires (+ (float-time) 86400)))))
               agent-shell-show-welcome-message nil
               agent-shell-show-config-icons nil
               agent-shell-prefer-viewport-interaction nil
@@ -162,8 +172,16 @@ record, and `delivered', which waits for a panel's follow-up."
                      (list (concat "PA_LEAD=" (expand-file-name "README"
                                                                 lead-repo)))))
           (+agent-shell-sandbox-agents
-           `((fixture-codex :mode "agent-full-access" :prepare ,prepare)
-             (fixture-claude :mode "agent-full-access" :prepare ,prepare)))
+           `((fixture-codex :mode "agent-full-access" :prepare ,prepare
+             :login ,(lambda ()
+                       (+agent-shell-sandbox--make-login
+                        :agent 'fixture-codex :access "fixture-access"
+                        :expires (+ (float-time) 86400))))
+             (fixture-claude :mode "agent-full-access" :prepare ,prepare
+             :login ,(lambda ()
+                       (+agent-shell-sandbox--make-login
+                        :agent 'fixture-claude :access "fixture-access"
+                        :expires (+ (float-time) 86400))))))
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
@@ -387,7 +405,8 @@ The follow-up matches the one the same arena gives when run locally."
                       followup (list +agent-shell-pstack-arena-directory
                                      (expand-file-name "arenas/" host-root)))))
             (should (string-search (format "It ran on local host %s \
-(Emacs %s).\n"
+(Emacs %s), logins: fixture-claude, 24.0 h left; fixture-codex, 24.0 h \
+left.\n"
                                            (abbreviate-file-name
                                             (directory-file-name host-root))
                                            emacs-version)

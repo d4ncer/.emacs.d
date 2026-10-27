@@ -62,12 +62,10 @@ working inside it."
                    :allow-reads (list (file-name-directory
                                        +agent-shell-sandbox-acp-test--fixture))))
          (tmp (+agent-shell-sandbox-tmp sandbox))
-         (finished nil)
          (+agent-shell-sandbox-agents
           `((fixture-codex
              :mode "agent-full-access"
-             :prepare ,(lambda (_) (list "PA_ENV=sandbox"))
-             :finish ,(lambda (_) (setq finished t)))))
+             :prepare ,(lambda (_) (list "PA_ENV=sandbox")))))
          (agent-shell-agent-configs
           (list (+agent-shell-sandbox-acp-test--config)))
          (agent-shell-show-welcome-message nil)
@@ -123,7 +121,6 @@ working inside it."
           (+agent-shell-sandbox-acp-test--wait-for
            (lambda () (not (eq stopped 'pending))))
           (should-not stopped)
-          (should finished)
           (should-not (buffer-live-p shell))
           (should-not (process-attributes adapter))
           (sleep-for (+ 2 +agent-shell-sandbox-acp-test--delay))

@@ -91,8 +91,16 @@
                     (list (concat "PA_LEAD=" (expand-file-name "README"
                                                                repo)))))
          (+agent-shell-sandbox-agents
-          `((fixture-codex :mode "agent-full-access" :prepare ,prepare)
-            (fixture-claude :mode "agent-full-access" :prepare ,prepare)))
+          `((fixture-codex :mode "agent-full-access" :prepare ,prepare
+             :login ,(lambda ()
+                       (+agent-shell-sandbox--make-login
+                        :agent 'fixture-codex :access "fixture-access"
+                        :expires (+ (float-time) 86400))))
+            (fixture-claude :mode "agent-full-access" :prepare ,prepare
+             :login ,(lambda ()
+                       (+agent-shell-sandbox--make-login
+                        :agent 'fixture-claude :access "fixture-access"
+                        :expires (+ (float-time) 86400))))))
          (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
          (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
          (+agent-shell-drive--watchers (make-hash-table :test #'equal))
