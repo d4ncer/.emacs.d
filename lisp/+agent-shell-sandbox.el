@@ -85,8 +85,7 @@ there and use /login.")
            :login +agent-shell-sandbox--codex-login
            :refresh ("codex" "exec" "--skip-git-repo-check"
                      "Reply with the single word OK.")
-           :relogin "A refresh of Codex's login could not be triggered; log \
-Codex in again on the host with codex login."))
+           :relogin "Log Codex in again on the host with codex login."))
   "The single registry for sandbox launch and host login policy.
 :mode names the full-access session mode.  :prepare receives a sandbox
 and returns environment entries, using a fresh projected host login.
@@ -1414,7 +1413,9 @@ again.  Waiting is bounded at twice `+agent-shell-sandbox-refresh-timeout'."
 failed: " failure)))
                    ((+agent-shell-sandbox--enough-p check read)
                     (release-with read t))
-                   (t (release-with read nil "a refresh did not extend it")))))
+                   (t (release-with read nil "its CLI kept the current \
+token, since it renews a login only close to expiry; shorter timeouts \
+would fit")))))
          (attempt ()
            (setf (+agent-shell-sandbox--login-check-timer check) nil)
            (if (+agent-shell-sandbox--login-check-cancelled check)

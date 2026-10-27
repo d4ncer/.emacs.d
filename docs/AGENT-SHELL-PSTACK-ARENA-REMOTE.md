@@ -196,8 +196,17 @@ and a Claude Code judge started under the shipped runner. Its status
 recorded `claude-code` as refreshed with about 8 hours left. The host's
 refresh token had changed, and the candidate and judge both finished.
 Codex's token lasted more than 9 days, and `codex exec` did not refresh
-it when only `last_refresh` was old. Whether it refreshes a token near its `exp` is untested, which is
-why its refusal says a refresh could not be triggered.
+it when only `last_refresh` was old. Whether it refreshes a token near its `exp` is untested.
+
+**Measured on the remote host, 2026-10-27.** With 52 minutes left on
+Claude Code's token and an arena needing 59, `claude -p` exited 0 and
+left the login untouched: same expiry, same refresh token, file not
+rewritten. Claude Code 2.1.304 renews a login only close to expiry and
+has no command that forces it. The check therefore cannot extend a login
+early, and its refusal says so and suggests logging in again or shorter
+timeouts. Forcing a refresh by marking the stored login expired was
+considered and rejected: it rewrites the user's real login, and a
+concurrent refresh by another session could be overwritten.
 
 ### Setting up the host and versions
 
