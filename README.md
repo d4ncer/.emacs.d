@@ -56,9 +56,6 @@ emacs -Q --batch -L test -l test/restore-config.el
 ## Case files
 
 - [MODULES.md](docs/MODULES.md): who owns what, who needs whom, when it wakes up.
-- [Performance changes](docs/superpowers/plans/2026-10-22-config-performance.md)
-  and [architecture changes](docs/superpowers/plans/2026-10-22-config-architecture.md):
-  what changed and the receipts.
 - Package updates: run `scripts/verify-packages.el` after, or things get slow.
 
 ## Credits

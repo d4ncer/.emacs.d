@@ -62,7 +62,6 @@ agent/
 /.agent-shell/
 /life-agent/
 /.worktrees/
-/.superpowers/
 
 # Built locally from treesit-grammars.eld
 /tree-sitter/
