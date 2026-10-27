@@ -736,28 +736,141 @@ token is empty, so the agent cannot rotate the host's login."
      ,@(when-let* ((refreshed (+agent-shell-sandbox--login-last-refresh login)))
          `((last_refresh . ,refreshed))))))
 
+(defun +agent-shell-sandbox--toml-refuse (number why)
+  "Refuse Codex settings because line NUMBER WHY."
+  (user-error "Codex's config.toml line %d %s; a sandbox refuses settings it \
+cannot strip of MCP servers" number why))
+
+(defun +agent-shell-sandbox--toml-scan (line state number)
+  "Return the lexical STATE after LINE, line NUMBER of a TOML file.
+STATE is (STRING . DEPTH): STRING is the delimiter of a multiline string
+still open or nil, and DEPTH counts the brackets and braces open."
+  (let ((string (car state)) (depth (cdr state)) (i 0) (end (length line)))
+    (while (< i end)
+      (let ((char (aref line i))
+            (at (lambda (delimiter)
+                  (eql i (string-search delimiter line i)))))
+        (cond
+         (string
+          (let ((close (string-search string line i))
+                (escape (and (equal string "\"\"\"")
+                             (string-search "\\" line i))))
+            (cond ((and escape (or (null close) (< escape close)))
+                   (setq i (+ escape 2)))
+                  (close (setq string nil i (+ close 3)))
+                  (t (setq i end)))))
+         ((eq char ?#) (setq i end))
+         ((or (funcall at "\"\"\"") (funcall at "'''"))
+          (setq string (substring line i (+ i 3)) i (+ i 3)))
+         ((eq char ?\")
+          (if (eql i (string-match "\"\\(?:[^\"\\\n]\\|\\\\.\\)*\"" line i))
+              (setq i (match-end 0))
+            (+agent-shell-sandbox--toml-refuse number
+                                               "has an unclosed string")))
+         ((eq char ?')
+          (if-let* ((close (string-search "'" line (1+ i))))
+              (setq i (1+ close))
+            (+agent-shell-sandbox--toml-refuse number
+                                               "has an unclosed string")))
+         ((memq char '(?\[ ?\{)) (cl-incf depth) (cl-incf i))
+         ((memq char '(?\] ?\}))
+          (when (zerop depth)
+            (+agent-shell-sandbox--toml-refuse number "closes a bracket it \
+never opened"))
+          (cl-decf depth) (cl-incf i))
+         (t (cl-incf i)))))
+    (cons string depth)))
+
+(defun +agent-shell-sandbox--toml-key (line number)
+  "Return the KIND and first KEY of LINE, line NUMBER, outside any value.
+KIND is `header', `key' or `other', for a blank or comment line."
+  (cond
+   ((string-match-p "\\`[ \t]*\\(?:#.*\\)?\r?\n?\\'" line) (list 'other nil))
+   ((string-match "\\`[ \t]*\\(\\[\\[?\\)?[ \t]*\
+\\(?:\\([A-Za-z0-9_-]+\\)\\|\"\\([^\"\\\n]*\\)\"\\|'\\([^'\n]*\\)'\\)" line)
+    (list (if (match-beginning 1) 'header 'key)
+          (or (match-string 2 line) (match-string 3 line)
+              (match-string 4 line))))
+   (t (+agent-shell-sandbox--toml-refuse
+       number "starts with a key this filter cannot read"))))
+
+(defun +agent-shell-sandbox--toml-lines (text)
+  "Return TEXT's lines, each (LINE KIND KEY), for the MCP filter.
+LINE keeps its terminator.  KIND is `header', `key', `other', or
+`continuation' for a line inside a multiline value.  KEY is a header or
+key line's first key.  Signal on syntax the filter cannot follow."
+  (let ((state '(nil . 0)) (start 0) (number 0) lines)
+    (while (< start (length text))
+      (let* ((newline (string-search "\n" text start))
+             (end (if newline (1+ newline) (length text)))
+             (line (substring text start end)))
+        (cl-incf number)
+        (push (cons line (if (or (car state) (/= 0 (cdr state)))
+                             (list 'continuation nil)
+                           (+agent-shell-sandbox--toml-key line number)))
+              lines)
+        (setq state (+agent-shell-sandbox--toml-scan line state number)
+              start end)))
+    (when (or (car state) (/= 0 (cdr state)))
+      (+agent-shell-sandbox--toml-refuse number "ends inside a value"))
+    (nreverse lines)))
+
+(defun +agent-shell-sandbox--codex-mcp-lines (lines)
+  "Return whether each of LINES, as from `+agent-shell-sandbox--toml-lines',
+configures MCP servers: a table whose header's first key is mcp_servers,
+up to the next other header, or a root line whose first key is, with any
+multiline value it opens."
+  (let ((root t) (table nil) (value nil))
+    (mapcar (pcase-lambda (`(,_ ,kind ,key))
+              (pcase kind
+                ('header (setq root nil value nil
+                               table (equal key "mcp_servers")))
+                ('key (setq value (and root (equal key "mcp_servers"))))
+                ('other (setq value nil)))
+              (or table value))
+            lines)))
+
+(defun +agent-shell-sandbox--codex-config-without-mcp (text)
+  "Return Codex settings TEXT with its root mcp_servers configuration removed.
+Every other line stays byte for byte.  Signal rather than return text
+that might still configure an MCP server."
+  (let* ((lines (+agent-shell-sandbox--toml-lines text))
+         (kept (apply #'concat
+                      (cl-loop for (line) in lines
+                               for mcp in (+agent-shell-sandbox--codex-mcp-lines
+                                           lines)
+                               unless mcp collect line))))
+    (when (seq-some #'identity
+                    (+agent-shell-sandbox--codex-mcp-lines
+                     (+agent-shell-sandbox--toml-lines kept)))
+      (user-error "Codex's config.toml still configures MCP servers once \
+filtered; a sandbox refuses it"))
+    kept))
+
 (defun +agent-shell-sandbox-prepare-codex (sandbox)
   "Write Codex's login and settings into SANDBOX; return its environment.
 The login holds the host's access and ID tokens but no refresh token,
-and must outlast SANDBOX's deadline.  The settings are the host's.
-Nothing is ever copied back."
+and must outlast SANDBOX's deadline.  The settings are the host's without
+MCP servers.  Nothing is written until both are ready, and nothing is
+ever copied back."
   (let* ((login (+agent-shell-sandbox--read-login 'codex))
          (config (+agent-shell-sandbox-config sandbox))
          (settings (expand-file-name "config.toml"
                                      +agent-shell-sandbox-codex-home))
-         (text (when (file-readable-p settings)
-                 (with-temp-buffer
-                   (set-buffer-multibyte nil)
-                   (insert-file-contents-literally settings)
-                   (buffer-string)))))
+         (filtered (when (file-readable-p settings)
+                     (+agent-shell-sandbox--codex-config-without-mcp
+                      (with-temp-buffer
+                        (set-buffer-multibyte nil)
+                        (insert-file-contents-literally settings)
+                        (buffer-string))))))
     (+agent-shell-sandbox--outlast login
                                    (+agent-shell-sandbox-deadline sandbox))
     (with-file-modes #o600
       (let ((coding-system-for-write 'no-conversion))
         (write-region (+agent-shell-sandbox--codex-auth login) nil
                       (expand-file-name "auth.json" config) nil 'silent)
-        (when text
-          (write-region text nil (expand-file-name "config.toml" config)
+        (when filtered
+          (write-region filtered nil (expand-file-name "config.toml" config)
                         nil 'silent))))
     (list (concat "CODEX_HOME=" config) "OPENAI_API_KEY=" "CODEX_API_KEY=")))
 

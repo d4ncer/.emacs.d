@@ -409,14 +409,14 @@ of its contents, and never fall back to the other backend's store."
 
 (ert-deftest +agent-shell-sandbox-test-prepare-codex ()
   "Write Codex an allowlisted login without a refresh token, mode 0600,
-and its settings, on either backend.  The token must strictly outlast
-the deadline."
+and its settings without MCP servers, on either backend.  The token must
+strictly outlast the deadline."
   (+agent-shell-sandbox-test--with-host
     (let ((expires (+ (truncate (float-time)) 3600)))
       (+agent-shell-sandbox-test--logins host nil expires)
       (+agent-shell-sandbox-test--write
        (expand-file-name "config.toml" +agent-shell-sandbox-codex-home)
-       "model = \"o3\"\n")
+       "model = \"o3\"\n[mcp_servers.docs]\ncommand = \"npx\"\n")
       (dolist (backend '(sandbox-exec bwrap))
         (let ((+agent-shell-sandbox-backend backend))
           (+agent-shell-sandbox-test--with-deadline (1- expires)
@@ -482,6 +482,91 @@ may itself change meanwhile."
             (should-not outcome)
             (should (equal before (+agent-shell-sandbox-test--read real))))
           (delete-directory root t))))))
+
+(defconst +agent-shell-sandbox-test--toml
+  (concat
+   "# Codex settings\n"
+   "model = \"o3\"\n"
+   "mcp_servers.dotted.command = \"x\"\n"
+   "\"mcp_servers\" = { inline = { command = \"y\" } }\n"
+   "mcp_servers = [\n"
+   "  \"multi\",\n"
+   "]\n"
+   "matrix = [\n"
+   "  [\"mcp_servers\"],\n"
+   "]\n"
+   "note = \"\"\"\n"
+   "[mcp_servers.inside_a_string]\n"
+   "\"\"\"\n"
+   "mcp_servers_note = 'kept'\n"
+   "\n"
+   "[mcp_servers.alpha]\r\n"
+   "command = \"npx\"\r\n"
+   "args = [\"-y\", \"[mcp_servers.not_a_header]\"]\r\n"
+   "\r\n"
+   "[mcp_servers.alpha.env]\n"
+   "TOKEN = \"\"\"\n"
+   "[model_providers.fake]\n"
+   "\"\"\"\n"
+   "# alpha's comment\n"
+   "[profiles.fast]\r\n"
+   "model = \"o4-mini\"\r\n"
+   "mcp_servers = { scoped = { command = \"z\" } }\n"
+   "[profiles.fast.mcp_servers.kept]\n"
+   "command = \"kept\"\n"
+   "[[ 'mcp_servers'.beta ]]\n"
+   "command = \"gone\"\n"
+   "[model_providers.local]\n"
+   "name = \"mcp_servers = nope\"  # [mcp_servers.x]\n")
+  "Codex settings interleaving MCP servers with unrelated settings.")
+
+(ert-deftest +agent-shell-sandbox-test-codex-config-without-mcp ()
+  "Drop every root MCP server table and assignment, leaving every other
+line byte for byte, strings and profiles included."
+  (should (equal (concat
+                  "# Codex settings\n"
+                  "model = \"o3\"\n"
+                  "matrix = [\n"
+                  "  [\"mcp_servers\"],\n"
+                  "]\n"
+                  "note = \"\"\"\n"
+                  "[mcp_servers.inside_a_string]\n"
+                  "\"\"\"\n"
+                  "mcp_servers_note = 'kept'\n"
+                  "\n"
+                  "[profiles.fast]\r\n"
+                  "model = \"o4-mini\"\r\n"
+                  "mcp_servers = { scoped = { command = \"z\" } }\n"
+                  "[profiles.fast.mcp_servers.kept]\n"
+                  "command = \"kept\"\n"
+                  "[model_providers.local]\n"
+                  "name = \"mcp_servers = nope\"  # [mcp_servers.x]\n")
+                 (+agent-shell-sandbox--codex-config-without-mcp
+                  +agent-shell-sandbox-test--toml)))
+  (should (equal "" (+agent-shell-sandbox--codex-config-without-mcp "")))
+  (should (equal "a = 1" (+agent-shell-sandbox--codex-config-without-mcp
+                          "a = 1"))))
+
+(ert-deftest +agent-shell-sandbox-test-codex-config-invalid ()
+  "Refuse settings the filter cannot follow before writing anything."
+  (dolist (text '("[mcp_servers.x\ncommand = 1\n"
+                  "key = \"unclosed\n"
+                  "\"mcp\\u005fservers\".x = 1\n"
+                  "note = \"\"\"\nnever closed\n"
+                  "a = ]\n"
+                  "= 1\n"))
+    (should-error (+agent-shell-sandbox--codex-config-without-mcp text)
+                  :type 'user-error))
+  (+agent-shell-sandbox-test--with-host
+    (+agent-shell-sandbox-test--logins host nil (+ (float-time) 3600))
+    (+agent-shell-sandbox-test--write
+     (expand-file-name "config.toml" +agent-shell-sandbox-codex-home)
+     "[mcp_servers.x\n")
+    (+agent-shell-sandbox-test--with-deadline nil
+      (should-error (+agent-shell-sandbox-prepare-codex sandbox)
+                    :type 'user-error)
+      (should-not (directory-files (+agent-shell-sandbox-config sandbox)
+                                   nil "\\`[^.]")))))
 
 (defun +agent-shell-sandbox-test--check (agents deadline)
   "Check AGENTS' logins against DEADLINE and return the results."
