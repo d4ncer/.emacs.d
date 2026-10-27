@@ -158,9 +158,11 @@ candidate's worktree gets the lead's patterns, and the follow-up names any
 file a candidate changed outside them. Git LFS files are captured as
 pointers, and the follow-up flags a candidate that changed one. The
 protocol describes arenas only when some configured agent has an entry in
-`+agent-shell-sandbox-agents`. A Claude Code candidate signs in with the
-token in the Keychain item `pstack-arena-claude-token`, made by `claude
-setup-token`; without it that candidate fails to start.
+`+agent-shell-sandbox-agents`. Every member signs in with the access token
+of the host's own login, never a refresh token. Before any member starts,
+Emacs checks that each agent's login outlasts the arena, refreshes it once
+on the host if not, and refuses the whole arena if one still falls short;
+see Host logins in [the arena design](AGENT-SHELL-PSTACK-ARENA.md).
 
 The request adds three fields to the panel block:
 

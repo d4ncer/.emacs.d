@@ -106,7 +106,7 @@ design.
     A later rule allows the candidate's own two folders back. The pattern
     matters because each sandbox's folders are made when it is, so an
     earlier candidate's profile cannot name a later one's. A config
-    folder holds copied credentials such as Codex's `auth.json`;
+    folder holds the agent's sign-in, such as Codex's `auth.json`;
   - the credential locations in `+agent-shell-sandbox-secret-reads`: SSH
     and GnuPG keys, the AWS, Google Cloud, Azure and Kubernetes logins,
     Docker's registry logins, `~/.netrc` and `~/.authinfo`, the GitHub
@@ -208,6 +208,91 @@ reads CLAUDE.md files from parent directories, so a workspace under
 after a restart never collides with leftovers. A lead in a subdirectory
 gets candidates that start in the same subdirectory of their worktrees.
 
+## Host logins
+
+Every sandboxed agent, candidate or judge, on a laptop or a host, signs
+in with the short-lived access token of the host's own login. No sandbox
+gets a refresh token, an API key or a long-lived token, so no sandbox can
+rotate the host's login, and nothing is ever copied back.
+
+- **Claude Code.** On macOS, Emacs reads the login Keychain item Claude
+  Code keeps, service `Claude Code-credentials` and the user's login name
+  as account, with `/usr/bin/security find-generic-password -w`. On Linux
+  it reads `+agent-shell-sandbox-claude-credentials`,
+  `~/.claude/.credentials.json` by default. Either way it takes
+  `claudeAiOauth.accessToken` and the same object's `expiresAt`, and
+  passes only the token, as `CLAUDE_CODE_OAUTH_TOKEN`, with a private
+  `CLAUDE_CONFIG_DIR`. A missing or locked Keychain item or a malformed
+  login refuses the sandbox. There is no fallback to another source.
+- **Codex.** Emacs reads `auth.json` in `+agent-shell-sandbox-codex-home`
+  and writes the sandbox a new one, mode 0600. It holds the access token,
+  the ID token and account id Codex needs, an empty `refresh_token` and a
+  null `OPENAI_API_KEY`. The token's expiry is the `exp` claim of its
+  JWT. An API-key login, or one without the ChatGPT identity fields, is
+  refused.
+- **Codex settings without MCP servers.** The sandbox also gets the host's
+  `config.toml` with every root `mcp_servers` table, array of tables and
+  assignment removed line by line, and every other line kept byte for
+  byte. Settings the filter cannot follow, such as an escaped quoted key or
+  an unclosed string, refuse the sandbox before either file is written,
+  and so does MCP configuration that survives the filter.
+
+Each agent's entry in `+agent-shell-sandbox-agents` names its `:login`
+reader, its `:refresh` command and its `:relogin` advice. That registry is
+the only list of agents that can run sandboxed.
+
+**Admission.** Once an arena's worktrees exist, and before any member
+starts, its panel checks every agent its members use, the judge's
+included, with `+agent-shell-sandbox-check-logins`. A laptop and a host's
+runner do this through the same `+agent-shell-pstack-panel--launch`.
+
+1. Each login must outlast the arena's deadline plus
+   `+agent-shell-pstack-panel-arena-grace`, 2 minutes, plus
+   `+agent-shell-sandbox-login-margin`, 10 minutes.
+2. A login that falls short is refreshed once on the host, outside any
+   sandbox. Emacs runs the agent's own CLI from a scratch folder with no
+   project, on the host's login storage, without the sandbox sign-in
+   variables, and stops it after `+agent-shell-sandbox-refresh-timeout`,
+   180 s. Its output is discarded, since it could hold credentials.
+3. A refresh rotates the refresh token, so two at once are unsafe. A
+   refresh runs only under the agent's lock,
+   `~/.local/state/pstack-arena/login-locks/login-AGENT`, which every
+   Emacs of the user on that host shares. The lock records its owner's pid
+   and a nonce for the check, so a second check in the same Emacs waits
+   too. A dead owner's lock is renamed aside and taken over. A check that
+   waited for another's lock reads the login again rather than refresh
+   it, and waits at most twice the refresh timeout.
+4. Before it succeeds, the check reads every login again.
+5. One refusal refuses the whole arena, with the reason and the agent's
+   relogin advice in the rejection. No member has started.
+
+Each result records the agent, whether this check refreshed it, the
+seconds left and any refusal, and never a token. A panel keeps the results
+in its `logins` slot, and a host's runner writes each to its status as it
+lands. Cancelling an arena during admission lets a running refresh finish
+and release its lock before the arena ends, and a runner does not exit
+before then.
+
+Each sandbox reads the login again when it is made, and refuses unless the
+token outlasts the deadline it is given. A login replaced or logged out
+after admission refuses that member rather than hand it a token that
+expires mid-run.
+
+**Deadline.** An arena's deadline is fixed once, when its provisioning
+starts. `+agent-shell-pstack-panel-arena-budget` adds the preparation
+allowance, 30 minutes, the candidates' timeout once, since they run in
+parallel, the judge's timeout, and 5 minutes of overhead. A host's runner
+fixes the deadline from the same budget when it takes the repository's
+lock. Every candidate and judge sandbox is given that deadline plus the
+grace explicitly, so arenas running at once never share one. Phase timers
+are unchanged. On a host, the runner also cancels the arena at its
+deadline and reports regardless 2 minutes later.
+
+`+agent-shell-sandbox` owns the readers, the check, the lock and the
+refresh. `+agent-shell-pstack-panel` owns admission and the deadline.
+`+agent-shell-arena-remote` carries the results on the wire and in the
+host line.
+
 ## Request
 
 The request is a `pstack-panel` block like this:
@@ -250,8 +335,9 @@ judge:     pending ▶ starting ▶ waiting ▶ running ▶ done | error | timeo
 ```
 
 - **Preparing.** Emacs does git and clone work in async processes, never in
-  an event handler, so it doesn't freeze. The candidates' timer starts only
-  when preparing ends. A request found mid-turn waits for the lead's
+  an event handler, so it doesn't freeze. Preparing ends with the login
+  admission in Host logins. The candidates' timer starts only when
+  preparing ends. A request found mid-turn waits for the lead's
   cancelled `turn-complete` before capturing the base, so the lead's
   interrupted edit has landed first.
 - **Stopping.**
@@ -467,18 +553,15 @@ another `$TMPDIR`. Candidates therefore get a short private temp folder,
 
 **What experiment 1 changes in the design.**
 
-- **Each agent signs in its own way.** A Claude Code candidate gets
-  `CLAUDE_CODE_OAUTH_TOKEN` from the Keychain item
-  `pstack-arena-claude-token`. It is never refreshed, so a candidate cannot
-  rotate your login away. Emacs rejects an arena with a Claude Code
-  candidate when the item is missing. A Codex candidate gets a copy of
-  `~/.codex/auth.json` in a private `CODEX_HOME`.
-- **Codex token refreshes need a copy-back.** A candidate that refreshes
-  its token holds the newest refresh token. If refresh tokens rotate, that
-  would leave your real `~/.codex/auth.json` stale. No refresh happened in
-  this run: both files still recorded the Oct 18 refresh. When a candidate
-  ends, Emacs copies its `auth.json` back if the copy is newer and the real
-  file has not changed since it was copied.
+- **Each agent signed in its own way.** A Claude Code candidate got a
+  long-lived `claude setup-token` token from its own Keychain item, and a
+  Codex candidate a copy of `~/.codex/auth.json`. Both are gone: every
+  agent now gets only the host login's access token, as Host logins says.
+- **Codex token refreshes needed a copy-back.** A candidate holding a
+  refresh token could rotate it and leave the real `~/.codex/auth.json`
+  stale, so Emacs copied a newer `auth.json` back. No refresh happened in
+  this run. Sandboxes no longer get a refresh token, and the copy-back is
+  deleted.
 - **Candidates can read their own credentials.** The token or `auth.json`
   sits inside the sandbox, and the network is open, so a hostile candidate
   could send it out. That's the same exposure any agent session has today,
@@ -617,10 +700,9 @@ None. Every probe above was run on this machine.
   result through them, because nothing is captured until every candidate
   has stopped. The arena ACP test checks that each capture starts with
   both candidates stopped and no `refs/pstack-arena/<arena-id>/` ref.
-- **A missing Claude Code token fails the candidate, not the request.** The
-  Keychain lookup happens when the candidate starts. That candidate settles
-  as `error` with the `security add-generic-password` hint, and the others
-  run.
+- **A refused login fails the whole arena.** Every agent's host login is
+  checked before any member starts, and one refusal, even the judge's,
+  ends the arena with the rejection follow-up. See Host logins.
 - **An `error` event settles a running member.** The event carries only a
   code and a message, so Emacs cannot tell a failed prompt from another
   failed request. It settles a member on any `error` while the member's

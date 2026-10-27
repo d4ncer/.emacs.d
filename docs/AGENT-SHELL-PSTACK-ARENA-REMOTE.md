@@ -171,56 +171,24 @@ mount needs a path.
 
 ### Credentials
 
-Credentials live on the host, so nothing is sent per job. Candidates never
+Credentials live on the host, so nothing is sent per job. Candidates and
+the judge sign in with the access token of the host's own login and never
 get a refresh token, so there is nothing to rotate and nothing to copy
-back:
+back. A runner admits an arena as a laptop does: its panel checks every
+agent's host login before any member starts, refreshes a short one once on
+the host under the shared per-agent lock, and refuses the whole arena if
+one still falls short. Host logins in
+[the arena design](AGENT-SHELL-PSTACK-ARENA.md) has the details. macOS and
+Linux hosts behave alike.
 
-- **Claude Code** candidates get the host login's access token as
-  `CLAUDE_CODE_OAUTH_TOKEN` and a private `CLAUDE_CONFIG_DIR`.
-- **Codex** candidates get a private `CODEX_HOME` whose `auth.json` holds
-  the host login's access and ID tokens and an empty refresh token.
+The status's `logins` field records each agent, whether the check
+refreshed it, and the seconds its token had left, with no token values.
+The runner writes each agent's result as its check ends. The laptop's host
+line shows them, as in `logins: claude-code refreshed, 8.0 h left`.
 
-As built, both agents' candidates sign in with the access token of the
-host's own login, and that token expires, so the host refreshes its own
-logins and candidates never get a refresh token. Before any candidate or
-judge starts, a runner on a Linux host checks each agent the arena uses:
-
-1. It reads when the host login's access token expires: Claude Code's
-   `claudeAiOauth.expiresAt` in `~/.claude/.credentials.json`, and the
-   `exp` claim of the access token JWT in Codex's `auth.json`. Each agent's
-   reader, refresh command and advice live in its entry in
-   `+agent-shell-sandbox-agents`.
-2. The token must outlast the runner's deadline plus
-   `+agent-shell-arena-remote-login-margin`, 10 minutes by default. If it
-   does not, the runner refreshes the login on the host, outside any
-   sandbox, by running the agent's own CLI once from a scratch folder with
-   no project: `claude -p "Reply with the single word OK."` or `codex exec
-   --skip-git-repo-check` with the same prompt. The run is asynchronous and
-   is stopped after `+agent-shell-arena-remote-refresh-timeout`, 180 s by
-   default. Then the runner reads the login again.
-3. A refresh rotates the refresh token, so two at once are unsafe. A
-   runner refreshes only while it holds `locks/login-AGENT`, a lock for
-   the whole host with the same stale-owner rule as the repository lock,
-   and reads the login again once it holds it. A runner that finds the
-   lock held waits, then reads the login again rather than refreshing it
-   too. A runner does not exit while its refresh still runs.
-4. If the token still falls short, the runner settles that agent's
-   members as errors before provisioning, so they get no worktree. The
-   reason names the expiry, the deadline and why the refresh did not help,
-   and tells the user to log the agent in again on the host. For Codex it
-   says a refresh could not be triggered. The reason reaches the status,
-   the laptop's panel and the follow-up like any member error.
-5. The status's `logins` field records each agent, whether the runner
-   refreshed it, and the seconds its token had left, with no token values.
-   The laptop's host line shows them, as in `logins: claude-code
-   refreshed, 8.0 h left`.
-
-A macOS host, like the laptop, signs Claude Code in with a `claude
-setup-token` token and skips the check.
-
-The copy-back rule is dropped for remote candidates. It could not survive
-two candidates refreshing at once, and it promoted candidate-written data
-into the host's real login.
+The copy-back rule is gone everywhere. It could not survive two sandboxes
+refreshing at once, and it promoted sandbox-written data into the host's
+real login.
 
 **Measured on the remote host, 2026-10-27.** With `expiresAt` set a
 minute in the past, a fixture remote arena with one Claude Code candidate
@@ -275,8 +243,10 @@ uploads the job and starts the runner in one round trip, through
 
 The runner writes its status through a temporary file and a rename, with a
 heartbeat, its pid and a wire version. It writes results before the status
-that announces them. It has an overall deadline: preparation allowance plus
-the candidates' timeout plus the judge's timeout plus slack. It extends the
+that announces them. It has an overall deadline from
+`+agent-shell-pstack-panel-arena-budget`, as a local arena does:
+preparation allowance plus the candidates' timeout plus the judge's
+timeout plus overhead. It extends the
 workspace's stop time with `coder schedule extend` while it runs, and
 refuses a job when less than that deadline remains.
 
@@ -448,8 +418,8 @@ Then the runner:
    checking the cancel marker on every tick.
 3. Builds a panel without a lead from the job. The panel's sink writes
    the results instead of delivering a follow-up. It gives the panel a
-   base at the fetched commit and runs the panel's own provisioning,
-   candidates, capture and judge.
+   base at the fetched commit, fixes its deadline, and runs the panel's
+   own provisioning, login admission, candidates, capture and judge.
 4. Rewrites `status.json` through a temporary file and a rename,
    whenever the panel changes and every 10 s as a heartbeat.
 5. On a cancel marker, cancels the panel with the marker's reason. That
@@ -561,8 +531,8 @@ not cancel. Ending the lead's shell otherwise cancels, as locally.
 - **The Linux backend plugs in unchanged.** Arenas are gated on
   `+agent-shell-sandbox-backend` rather than macOS, so a runner on Linux
   accepts them. Each candidate's sandbox gets the runner's deadline, plus
-  its two minutes' grace, as `:deadline`, through
-  `+agent-shell-pstack-arena-deadline`. The runner's code ships
+  its two minutes' grace, as `:deadline`, which the panel now passes to
+  each sandbox explicitly. The runner's code ships
   `+agent-shell-sandbox-launch.sh`, which the backend finds on
   `load-path`.
 - **Results stay on the host until cleaned.** This is as designed, but it
@@ -622,9 +592,9 @@ lasts about 10 days.
 - **The host's login files** kept their modification times through every
   run.
 
-So candidates get only an access token. The runner checks that the token
-outlives the arena's deadline and refreshes the host's own login first if
-it does not.
+So candidates get only an access token. The arena checks that the token
+outlives its deadline and refreshes the host's own login first if it does
+not.
 
 **Autostop.** The host's `coder` CLI is not logged in. The laptop's is,
 and `coder schedule extend NAME 6h` moved the stop time to six hours from
@@ -763,11 +733,12 @@ Implemented so far:
   transitions, prerequisite negotiation and bundling against scratch
   clones, LFS refusal, one call per host, timeouts, backoff and
   unreachability with a stubbed process layer, the SSH command's quoting,
-  the runner's lock, and re-attaching from records on disk. Fake `claude`
-  and `codex` executables cover the host login check: a lasting login is
-  not refreshed, an expired one is refreshed once, a failed or ineffective
-  refresh refuses with its reason, two runners refresh once between them,
-  and a refusal reaches the status and the host line.
+  the runner's lock, and re-attaching from records on disk. Login results
+  cross the wire and reach the host line, a refusal refuses every member
+  before any starts and reaches the status agent by agent, and a runner
+  cancelled mid-refresh exits only once the refresh has. The login check
+  itself, with fake `claude`, `codex` and `security` executables, is
+  covered in `test/agent-shell-sandbox-test.el`.
 - **`test/agent-shell-arena-git-test.el`**: a base made in another clone,
   given the lead's sparse patterns, and cleaning a fetched role.
 - **`test/agent-shell-pstack-arena-remote-acp-test.el`**, the gate
@@ -806,8 +777,8 @@ Still planned:
 | Hiding socket folders leaves sockets reachable | high | isolation | Fixed. Own network namespace through slirp4netns, sockets only by `:connect`. The probe found Docker, the user D-Bus and 10 abstract sockets. |
 | ACP file requests bypass the namespace | high | isolation | Fixed. On Linux the gate allows only paths visible inside the namespace. |
 | Other candidates' private folders and host secrets readable | high | isolation | Fixed. Allowlist mounts, private home, cleared environment. The probe found the Coder agent's token, SSH keys and cloud credentials. |
-| Concurrent refresh rotation breaks copy-back | high | isolation | Fixed. Candidates get no refresh tokens: a setup-token for Claude Code, an access token for Codex. |
-| Copy-back promotes candidate data into the real login | medium | isolation | Fixed. Copy-back is dropped for remote candidates. |
+| Concurrent refresh rotation breaks copy-back | high | isolation | Fixed. Sandboxes get no refresh tokens, only the host login's access token. |
+| Copy-back promotes candidate data into the real login | medium | isolation | Fixed. Copy-back is deleted. |
 | SysV IPC shared | medium | isolation | Fixed. `--unshare-ipc`. |
 | Profile keys lose meaning under `bwrap` | medium | isolation | Fixed. Linux meanings defined; regex refused; missing sockets fail loudly. |
 | Laptop keeps nothing on disk | high | lifecycle | Fixed. A record per remote arena, and re-attach by session id. |
