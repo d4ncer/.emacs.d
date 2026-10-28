@@ -99,7 +99,21 @@ candidate's diff yourself and score it against your rubric, then compare \
 your scores with the judge's.  Pick one candidate as the base and apply its \
 diff with its command above.  Graft the best parts of the others by hand, \
 never by checking their files out over your tree.  Then verify the result \
-as the arena skill says."))
+as the arena skill says.")
+    (delegate
+     :summary "one agent you choose implements the task, tests it and \
+commits on a branch of its own, in a shell the user can watch"
+     :contract "You work alone, with full write access, in your agent's \
+full-access mode, so nobody is asked for permission; a permission request \
+ends your turn.  Implement the task, run the repository's tests, and commit \
+your work with git on the branch you are on, in small commits with clear \
+messages.  Do not switch branches, rewrite history or push.  End your turn \
+with a report as your final message: what you built, how you tested it, and \
+what a reviewer should know.  Nobody answers questions during the turn."
+     :triage "Review the branch before you merge it: read its commits and \
+its diff against the commit it started from, and run the tests yourself.  \
+Then merge it, ask for changes in a new delegate panel, or take the work \
+over."))
   "Panel shapes by name.
 Each value is a plist: :summary describes the shape to the lead, :contract
 ends each member's prompt, and :triage ends the follow-up to the lead.  An
@@ -108,6 +122,13 @@ arena's :judge ends its judge's prompt."
 
 (defcustom +agent-shell-pstack-panel-default-judge-timeout 900
   "Seconds an arena's judge may run when the request names none."
+  :type 'natnum)
+
+(defcustom +agent-shell-pstack-panel-default-delegate-timeout 2700
+  "Seconds a delegate may run when the request names none.
+A delegate implements, tests and commits, not just reviews, so this
+defaults higher than `+agent-shell-pstack-panel-default-timeout'.  It is
+still capped by `+agent-shell-pstack-panel-max-timeout'."
   :type 'natnum)
 
 (defcustom +agent-shell-pstack-arena-measure-egress nil
@@ -136,7 +157,9 @@ Slots are only appended.  Bump this whenever either struct gains one.")
 PHASE moves through the shape's phases and ends at `finished'; see
 `+agent-shell-pstack-panel--advance'.  A panel with a SINK has no lead:
 once finished, the SINK is called with the panel in place of delivery.
-REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
+REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena.
+A delegate's ARENA is its manifest, whose delegate record says how it
+works and what it left; see `+agent-shell-arena-git-delegate'."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
@@ -207,7 +230,11 @@ A candidate has a SANDBOX.  Once settled, its CAPTURE moves from
 `stopping' to `stopped'.  Once every candidate has stopped, it moves to
 `capturing' and ends as `captured' or `failed'.  A candidate that never
 started fails once stopped.  RESULT then holds :commit, :ref, :changed,
-:stat and :checkout, or :error."
+:stat and :checkout, or :error.
+
+A delegate's CAPTURE takes the same steps without waiting for others.
+Its RESULT holds :survivors, the pids that outlived its stop, and :error
+when collecting failed; what it left is in its panel's manifest."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result
   (egress-file nil :documentation "Where its egress record is saved.")
@@ -237,7 +264,8 @@ kill their member shells by hand" (length stale) (if (cdr stale) "s" ""))))
   "Member states that end a member.")
 
 (defconst +agent-shell-pstack-panel--phase-kinds
-  '((running . member) (candidates . candidate) (judging . judge))
+  '((running . member) (candidates . candidate) (judging . judge)
+    (delegating . delegate))
   "The kind of member each phase runs.
 Expiry and abandonment reach only the current phase's members.")
 
@@ -371,55 +399,87 @@ LEAD-AGENT is the requesting lead's agent identifier."
 macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s" system-type))
     (unless (and (stringp brief) (not (string-blank-p brief)))
       (user-error "Brief must be a non-empty string"))
-    (let ((timeout (+agent-shell-pstack-panel--seconds
-                    request 'timeout +agent-shell-pstack-panel-default-timeout
-                    "Timeout"))
-          (agents (if arena (+agent-shell-pstack-panel--candidate-agents)
-                    (+agent-shell-pstack-panel--agents))))
-      (unless (and (proper-list-p values)
-                   (<= 1 (length values) +agent-shell-pstack-panel-max-members))
-        (user-error "Members must list 1 to %d members"
-                    +agent-shell-pstack-panel-max-members))
-      (let* ((members (mapcar (lambda (value)
-                                (+agent-shell-pstack-panel--parse-member
-                                 value agents (if arena 'candidate 'member)))
-                              values))
-             (roles (mapcar #'+agent-shell-pstack-panel-member-role members)))
-        (when-let* ((duplicate (seq-find (lambda (role)
-                                           (member role
-                                                   (cdr (member role roles))))
-                                         roles)))
-          (user-error "Role %s appears more than once" duplicate))
-        (if (not arena)
-            (+agent-shell-pstack-panel--make
-             :shape shape :brief brief :timeout timeout :members members)
-          (when (member "judge" roles)
-            (user-error "Role judge is reserved for the arena's judge"))
-          (when (member "base" roles)
-            (user-error "Role base is reserved for the ref holding the base"))
-          (let ((rubric (+agent-shell-pstack-panel--parse-rubric
-                         (map-elt request 'rubric)))
-                (judge (+agent-shell-pstack-panel--parse-judge
-                        (map-elt request 'judge) lead-agent))
-                (judge-timeout (+agent-shell-pstack-panel--seconds
-                                request 'judge_timeout
-                                +agent-shell-pstack-panel-default-judge-timeout
-                                "Judge timeout")))
-            (+agent-shell-pstack-panel--make
-             :shape shape :brief brief :timeout timeout :rubric rubric
-             :judge-timeout judge-timeout :phase 'preparing
-             :measure-egress +agent-shell-pstack-arena-measure-egress
-             :members (append members (list judge)))))))))
+    (if (eq shape 'delegate)
+        (+agent-shell-pstack-panel--parse-delegate request)
+      (let ((timeout (+agent-shell-pstack-panel--seconds
+                      request 'timeout +agent-shell-pstack-panel-default-timeout
+                      "Timeout"))
+            (agents (if arena (+agent-shell-pstack-panel--candidate-agents)
+                      (+agent-shell-pstack-panel--agents))))
+        (unless (and (proper-list-p values)
+                     (<= 1 (length values)
+                         +agent-shell-pstack-panel-max-members))
+          (user-error "Members must list 1 to %d members"
+                      +agent-shell-pstack-panel-max-members))
+        (let* ((members (mapcar (lambda (value)
+                                  (+agent-shell-pstack-panel--parse-member
+                                   value agents (if arena 'candidate 'member)))
+                                values))
+               (roles (mapcar #'+agent-shell-pstack-panel-member-role members)))
+          (when-let* ((duplicate (seq-find (lambda (role)
+                                             (member role
+                                                     (cdr (member role roles))))
+                                           roles)))
+            (user-error "Role %s appears more than once" duplicate))
+          (if (not arena)
+              (+agent-shell-pstack-panel--make
+               :shape shape :brief brief :timeout timeout :members members)
+            (when (member "judge" roles)
+              (user-error "Role judge is reserved for the arena's judge"))
+            (when (member "base" roles)
+              (user-error "Role base is reserved for the ref holding the base"))
+            (let ((rubric (+agent-shell-pstack-panel--parse-rubric
+                           (map-elt request 'rubric)))
+                  (judge (+agent-shell-pstack-panel--parse-judge
+                          (map-elt request 'judge) lead-agent))
+                  (judge-timeout
+                   (+agent-shell-pstack-panel--seconds
+                    request 'judge_timeout
+                    +agent-shell-pstack-panel-default-judge-timeout
+                    "Judge timeout")))
+              (+agent-shell-pstack-panel--make
+               :shape shape :brief brief :timeout timeout :rubric rubric
+               :judge-timeout judge-timeout :phase 'preparing
+               :measure-egress +agent-shell-pstack-arena-measure-egress
+               :members (append members (list judge))))))))))
+
+(defun +agent-shell-pstack-panel--parse-delegate (request)
+  "Return the delegate panel REQUEST describes, or signal `user-error'.
+REQUEST already has a valid version and brief."
+  (when-let* ((fields (seq-filter (lambda (field)
+                                    (map-contains-key request field))
+                                  '(rubric judge judge_timeout))))
+    (user-error "Delegate panels have no judge, so remove %s"
+                (string-join (mapcar (lambda (field) (format "\"%s\"" field))
+                                     fields)
+                             " and ")))
+  (let ((values (map-elt request 'members)))
+    (unless (and (proper-list-p values) (= 1 (length values)))
+      (user-error "Delegate panels take exactly one member, the agent you \
+hand the task to."))
+    (+agent-shell-pstack-panel--make
+     :shape 'delegate :brief (map-elt request 'brief) :phase 'preparing
+     :timeout (+agent-shell-pstack-panel--seconds
+               request 'timeout
+               +agent-shell-pstack-panel-default-delegate-timeout "Timeout")
+     :members (list (+agent-shell-pstack-panel--parse-member
+                     (car values)
+                     (+agent-shell-pstack-panel--candidate-agents)
+                     'delegate)))))
 
 ;;;; Prompts
 
 (defun +agent-shell-pstack-panel--shapes ()
   "Return the entries of the shapes a lead may request here.
-An arena needs a sandbox backend and an agent that can run sandboxed."
+An arena needs a sandbox backend and an agent that can run sandboxed.  A
+delegate needs an agent that can run full-access, but no sandbox: it is
+never confined."
   (seq-remove (lambda (shape)
-                (and (eq (car shape) 'arena)
-                     (not (and +agent-shell-sandbox-backend
-                               (+agent-shell-pstack-panel--candidate-agents)))))
+                (pcase (car shape)
+                  ('arena (not (and +agent-shell-sandbox-backend
+                                    (+agent-shell-pstack-panel--candidate-agents))))
+                  ('delegate
+                   (not (+agent-shell-pstack-panel--candidate-agents)))))
               +agent-shell-pstack-panel-shapes))
 
 (defun +agent-shell-pstack-panel--series (shapes conjunction)
@@ -449,6 +509,19 @@ graft and verify."
           (car (+agent-shell-pstack-panel--candidate-agents))
           +agent-shell-pstack-panel-default-judge-timeout))
 
+(defun +agent-shell-pstack-panel--delegate-protocol ()
+  "Return the protocol paragraph about delegates."
+  (format "\nA delegate's one member writes code: it implements the brief, \
+runs the tests and commits on a new branch, in a git worktree of its own or, \
+where the repository's profile says so, in your own checkout, which you then \
+leave alone until the follow-up arrives.  Delegate agents: %s.  A delegate \
+request has no judge, and its \"timeout\", %d seconds by default, \
+bounds the whole run.  Emacs sends you one prompt with its report, its \
+branch, its commits and how to review and merge them."
+          (+agent-shell-pstack-panel--names
+           (+agent-shell-pstack-panel--candidate-agents))
+          +agent-shell-pstack-panel-default-delegate-timeout))
+
 (defun +agent-shell-pstack-panel--protocol ()
   "Return the text telling a lead how to request a panel, or nil."
   (when-let* ((agents (+agent-shell-pstack-panel--agents)))
@@ -468,10 +541,10 @@ file paths\",\"timeout\":%d,\"members\":[{\"role\":\"data-flow\",\"agent\":\
 Shapes: %s.
 Agents: %s.  With two or more members, mix agents so the panel spans \
 vendors.
-Each member starts fresh, read-only, in your working directory, and sees \
-only the brief and its own focus.  Use 1 to %d members with unique roles of \
-lowercase letters, digits and hyphens.  The timeout is in seconds, at most \
-%d.  End your turn right after the block.  Emacs starts the panel as soon as \
+Each how or interrogate member starts fresh, read-only, in your working \
+directory, and sees only the brief and its own focus.  Use 1 to %d members \
+with unique roles of lowercase letters, digits and hyphens.  The timeout \
+is in seconds, at most %d.  End your turn right after the block.  Emacs starts the panel as soon as \
 the block is complete, and interrupts your turn if you call a tool after it.
 Do not wait or poll after the block.  When every member has finished or \
 timed out, Emacs sends you a prompt with each report inline, the path it was \
@@ -486,9 +559,11 @@ saved to, and how to triage the reports.%s"
               (+agent-shell-pstack-panel--names agents)
               +agent-shell-pstack-panel-max-members
               +agent-shell-pstack-panel-max-timeout
-              (if (assq 'arena shapes)
-                  (+agent-shell-pstack-panel--arena-protocol)
-                "")))))
+              (concat
+               (when (assq 'arena shapes)
+                 (+agent-shell-pstack-panel--arena-protocol))
+               (when (assq 'delegate shapes)
+                 (+agent-shell-pstack-panel--delegate-protocol)))))))
 
 (defun +agent-shell-pstack-panel-protocol-file ()
   "Return the file that holds the panel protocol for leads."
@@ -537,6 +612,18 @@ for another agent.  Other candidates work on the same task elsewhere.\n\n\
 Task:\n%s\n"
                 role (+agent-shell-pstack-panel-brief panel))
         focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
+      ('delegate
+       (let ((manifest (+agent-shell-pstack-panel-arena panel)))
+         (concat
+          (format "You are the %s delegate of a pstack panel that Emacs runs \
+for another agent.  You work on branch %s, %s.\n\nTask:\n%s\n"
+                  role (+agent-shell-arena-git-delegate-branch manifest)
+                  (if (eq (+agent-shell-pstack-panel--isolation panel) 'branch)
+                      "in the other agent's own checkout, which nobody else \
+touches until you finish"
+                    "in a git worktree of your own")
+                  (+agent-shell-pstack-panel-brief panel))
+          focus "\n" (+agent-shell-pstack-panel--shape panel :contract))))
       ('judge (+agent-shell-pstack-panel--judge-brief panel)))))
 
 (defun +agent-shell-pstack-panel--label (panel candidate)
@@ -621,6 +708,8 @@ started.  To retry, end a message with a corrected pstack-panel block."
             (+agent-shell-pstack-panel-rejection panel)))
    ((+agent-shell-pstack-panel--arena-p panel)
     (+agent-shell-pstack-panel--arena-text panel))
+   ((+agent-shell-pstack-panel--delegate-p panel)
+    (+agent-shell-pstack-panel--delegate-text panel))
    (t
     (let ((members (+agent-shell-pstack-panel-members panel)))
       (concat
@@ -733,6 +822,82 @@ directory: %s\n"
        "\n" (+agent-shell-pstack-panel--shape panel :triage)
        "\nThe results stay until you clean the arena up: press x on its line \
 in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean."))))
+
+(defun +agent-shell-pstack-panel--return-text (manifest)
+  "Return what happened to the lead's checkout MANIFEST's delegate took."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (origin (+agent-shell-arena-git-delegate-origin delegate))
+         (name (+agent-shell-arena-git-origin-name origin))
+         (note (+agent-shell-arena-git-delegate-note delegate))
+         (switch (pcase origin
+                   (`(branch . ,_) (format "git switch %s" name))
+                   (`(detached . ,commit)
+                    (format "git switch --detach %s" commit)))))
+    (pcase (+agent-shell-arena-git-delegate-restore delegate)
+      ('restored (format "Your checkout was clean, so Emacs switched it back \
+to %s." name))
+      ('unneeded (format "Your checkout was already back on %s." name))
+      ('dirty (format "Emacs left your checkout there instead of switching \
+back to %s.  %s  Commit or stash, then run %s." name note switch))
+      ((or 'changed 'missing) note)
+      (_ (format "Emacs left your checkout there: %s  Once nothing runs \
+there, press x on its line in the pstack panels view to switch back to %s."
+                 (or note "it could not check it.") name)))))
+
+(defun +agent-shell-pstack-panel--delegate-text (panel)
+  "Return the part of delegate PANEL's follow-up that reports its outcome."
+  (let* ((member (car (+agent-shell-pstack-panel-members panel)))
+         (role (+agent-shell-pstack-panel-member-role member))
+         (manifest (+agent-shell-pstack-panel-arena panel))
+         (error (plist-get (+agent-shell-pstack-panel-member-result member)
+                           :error)))
+    (if (not (and manifest (+agent-shell-pstack-panel-member-shell member)))
+        (format "pstack panel %s (delegate) ended before its delegate \
+started: %s"
+                (+agent-shell-pstack-panel-id panel)
+                (+agent-shell-pstack-panel-member-error member))
+      (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+             (base (+agent-shell-arena-git-manifest-base manifest))
+             (branch (+agent-shell-arena-git-delegate-branch manifest))
+             (commits (+agent-shell-arena-git-delegate-commits delegate))
+             (worktree (eq (+agent-shell-arena-git-delegate-isolation delegate)
+                           'worktree)))
+        (concat
+         (format "pstack panel %s (delegate) has finished: %s (%s): %s.\n"
+                 (+agent-shell-pstack-panel-id panel) role
+                 (+agent-shell-pstack-panel-member-agent member)
+                 (+agent-shell-pstack-panel-member-state member))
+         (when-let* ((error (+agent-shell-pstack-panel-member-error member)))
+           (format "%s\n" error))
+         (when error
+           (format "Emacs could not collect what it left: %s\n" error))
+         (format "Branch: %s, %d commit%s since %s, the commit it started \
+from%s\n"
+                 branch (length commits) (if (= 1 (length commits)) "" "s")
+                 base (if commits ":" "."))
+         (mapconcat (lambda (commit)
+                      (format "  %s %s\n" (substring (car commit) 0 12)
+                              (cdr commit)))
+                    commits "")
+         (if worktree
+             (concat
+              (format "Workspace: %s\n"
+                      (+agent-shell-arena-git-directory
+                       manifest (+agent-shell-arena-git-role manifest role)))
+              (when-let* ((note (+agent-shell-arena-git-delegate-note
+                                 delegate)))
+                (format "%s  Cleaning the workspace up loses them.\n" note)))
+           (format "Isolation: your own checkout, on %s while it ran.  %s\n"
+                   branch (+agent-shell-pstack-panel--return-text manifest)))
+         (format "Report:\n%s\n"
+                 (+agent-shell-pstack-panel--rationale member))
+         (format "\nTo review: git log %s..%s\nTo merge: git merge --ff-only \
+%s, or push it and open a pull request.\n" base branch branch)
+         (when worktree
+           "The workspace stays until you clean it up: press x on its line in \
+the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
+branch stays either way.\n")
+         "\n" (+agent-shell-pstack-panel--shape panel :triage))))))
 
 ;;;; Egress
 
@@ -886,6 +1051,16 @@ address or a name."
   "Return whether PANEL is an arena."
   (eq (+agent-shell-pstack-panel-shape panel) 'arena))
 
+(defun +agent-shell-pstack-panel--delegate-p (panel)
+  "Return whether PANEL is a delegate."
+  (eq (+agent-shell-pstack-panel-shape panel) 'delegate))
+
+(defun +agent-shell-pstack-panel--isolation (panel)
+  "Return delegate PANEL's isolation, once its manifest exists, or nil."
+  (when-let* ((manifest (+agent-shell-pstack-panel-arena panel))
+              (delegate (+agent-shell-arena-git-manifest-delegate manifest)))
+    (+agent-shell-arena-git-delegate-isolation delegate)))
+
 (defun +agent-shell-pstack-panel--find (id)
   "Return the panel with ID, or nil."
   (gethash id +agent-shell-pstack-panel--panels))
@@ -1019,7 +1194,14 @@ judge.")
       ('judging
        (when (funcall settled (+agent-shell-pstack-panel--kind-members
                                panel 'judge))
-         (+agent-shell-pstack-panel--finish panel))))))
+         (+agent-shell-pstack-panel--finish panel)))
+      ('delegating
+       (let ((delegate (car (+agent-shell-pstack-panel-members panel))))
+         (pcase (+agent-shell-pstack-panel-member-capture delegate)
+           ('stopped (+agent-shell-pstack-panel--collect-delegate
+                      panel delegate))
+           ((or 'captured 'failed)
+            (+agent-shell-pstack-panel--finish panel))))))))
 
 (defun +agent-shell-pstack-panel--usable-p (candidate)
   "Return whether CANDIDATE's captured result changed the base."
@@ -1068,6 +1250,9 @@ judge.")
     ;; Killing a shell from its own event callback corrupts upstream state.
     (cond ((eq (+agent-shell-pstack-panel-member-kind member) 'candidate)
            (run-at-time 0 nil #'+agent-shell-pstack-panel--halt panel member))
+          ((eq (+agent-shell-pstack-panel-member-kind member) 'delegate)
+           (run-at-time 0 nil #'+agent-shell-pstack-panel--halt-delegate
+                        panel member))
           ((+agent-shell-pstack-panel-member-sandbox member)
            (run-at-time 0 nil #'+agent-shell-pstack-panel--stop member
                         #'ignore))
@@ -1193,6 +1378,52 @@ A usable result also gets a checkout of its own for the judge to read."
                      (failed error)))))
         (error (failed (error-message-string err)))))))
 
+(defun +agent-shell-pstack-panel--delegate-directory (panel)
+  "Return where PANEL's delegate works: its worktree, or the lead's directory."
+  (let ((manifest (+agent-shell-pstack-panel-arena panel)))
+    (if-let* ((role (car (+agent-shell-arena-git-manifest-roles manifest))))
+        (+agent-shell-arena-git-directory manifest role)
+      (+agent-shell-pstack-panel-cwd panel))))
+
+(defun +agent-shell-pstack-panel--halt-delegate (panel member)
+  "Stop settled delegate MEMBER of PANEL and every process it started."
+  (setf (+agent-shell-pstack-panel-member-capture member) 'stopping)
+  (+agent-shell-pstack-panels--refresh)
+  (+agent-shell-drive-stop-unconfined
+   (+agent-shell-pstack-panel-member-shell member) nil
+   (lambda (survivors)
+     (setf (+agent-shell-pstack-panel-member-capture member) 'stopped
+           (+agent-shell-pstack-panel-member-result member)
+           (when survivors (list :survivors survivors)))
+     (+agent-shell-pstack-panel--advance panel)
+     (+agent-shell-pstack-panels--refresh))))
+
+(defun +agent-shell-pstack-panel--collect-delegate (panel member)
+  "Record what stopped delegate MEMBER of PANEL left, then advance PANEL.
+A process that outlived the stop keeps the lead's checkout on the
+delegate's branch; see `+agent-shell-arena-git-finish-delegate'."
+  (let ((survivors (plist-get (+agent-shell-pstack-panel-member-result member)
+                              :survivors)))
+    (cl-flet ((end (capture &optional error)
+                (setf (+agent-shell-pstack-panel-member-capture member) capture)
+                (when error
+                  (setf (+agent-shell-pstack-panel-member-result member)
+                        (append (+agent-shell-pstack-panel-member-result member)
+                                (list :error error))))
+                (+agent-shell-pstack-panel--advance panel)
+                (+agent-shell-pstack-panels--refresh)))
+      (setf (+agent-shell-pstack-panel-member-capture member) 'capturing)
+      (+agent-shell-pstack-panels--refresh)
+      (condition-case err
+          (+agent-shell-arena-git-finish-delegate
+           (+agent-shell-pstack-panel-arena panel)
+           (when survivors
+             (format "Processes %s outlived the delegate."
+                     (mapconcat #'number-to-string survivors ", ")))
+           (lambda (_ error)
+             (if error (end 'failed error) (end 'captured))))
+        (error (end 'failed (error-message-string err)))))))
+
 (defun +agent-shell-pstack-panel--send-brief (panel member)
   "Send MEMBER of PANEL its brief once it is waiting for one."
   (when (and (eq (+agent-shell-pstack-panel-member-state member) 'waiting)
@@ -1267,10 +1498,12 @@ Do nothing once the panel has left PHASE."
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)
-  "Start MEMBER of PANEL in its sandbox if it has one, else read-only."
-  (let ((id (+agent-shell-pstack-panel-id panel))
-        (role (+agent-shell-pstack-panel-member-role member))
-        (sandbox (+agent-shell-pstack-panel-member-sandbox member)))
+  "Start MEMBER of PANEL: sandboxed, full-access for a delegate, or read-only."
+  (let* ((id (+agent-shell-pstack-panel-id panel))
+         (role (+agent-shell-pstack-panel-member-role member))
+         (sandbox (+agent-shell-pstack-panel-member-sandbox member))
+         (delegate (eq (+agent-shell-pstack-panel-member-kind member)
+                       'delegate)))
     (when (and sandbox (+agent-shell-pstack-panel-measure-egress panel))
       (with-demoted-errors "pstack arena: egress measurement failed: %S"
         (require '+agent-shell-egress)
@@ -1281,7 +1514,10 @@ Do nothing once the panel has left PHASE."
         (let ((shell (+agent-shell-drive-start
                       :config (+agent-shell-pstack-panel-member-agent member)
                       :directory
-                      (cond ((not sandbox) (+agent-shell-pstack-panel-cwd panel))
+                      (cond (delegate
+                             (+agent-shell-pstack-panel--delegate-directory
+                              panel))
+                            ((not sandbox) (+agent-shell-pstack-panel-cwd panel))
                             ((+agent-shell-sandbox-read-only sandbox)
                              (+agent-shell-sandbox-root sandbox))
                             (t (let ((manifest (+agent-shell-pstack-panel-arena
@@ -1289,7 +1525,9 @@ Do nothing once the panel has left PHASE."
                                  (+agent-shell-arena-git-directory
                                   manifest (+agent-shell-arena-git-role
                                             manifest role)))))
-                      :policy (or sandbox 'read-only))))
+                      :policy (cond (sandbox sandbox)
+                                    (delegate 'full-access)
+                                    (t 'read-only)))))
           (setf (+agent-shell-pstack-panel-member-state member) 'starting
                 (+agent-shell-pstack-panel-member-shell member) shell)
           (+agent-shell-drive-watch
@@ -1327,10 +1565,11 @@ Return the panel, or nil when TEXT requests none or one already seen."
       (cond
        ((+agent-shell-pstack-panel-rejection panel)
         (+agent-shell-pstack-panel--finish panel))
-       ((+agent-shell-pstack-panel--arena-p panel)
+       ((memq (+agent-shell-pstack-panel-shape panel) '(arena delegate))
         (setf (+agent-shell-pstack-panel-cwd panel)
               (with-current-buffer lead (agent-shell-cwd)))
-        ;; The base must include the edit the interrupt may cut short.
+        ;; The base must include the edit the interrupt may cut short, and
+        ;; a delegate's checkout must be clean of it.
         (if tool
             (setf (+agent-shell-pstack-panel-phase panel) 'interrupting)
           (+agent-shell-pstack-panel--prepare panel)))
@@ -1378,6 +1617,12 @@ A preparation the lead abandoned discards its arena."
                      panel (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--prepare (panel)
+  "Prepare arena or delegate PANEL, whose lead's turn has ended."
+  (if (+agent-shell-pstack-panel--delegate-p panel)
+      (+agent-shell-pstack-panel--prepare-delegate panel)
+    (+agent-shell-pstack-panel--prepare-arena panel)))
+
+(defun +agent-shell-pstack-panel--prepare-arena (panel)
   "Snapshot the lead's tree as PANEL's base and give each candidate a worktree.
 Then start the candidates.  When the repository's profile names a host,
 the arena runs there instead; see `+agent-shell-arena-remote-launch'."
@@ -1544,7 +1789,7 @@ checked."))
     (+agent-shell-pstack-panel--advance panel)))
 
 (defun +agent-shell-pstack-panel--resume (lead)
-  "Prepare the arenas that waited for LEAD's interrupted turn to end."
+  "Prepare the panels that waited for LEAD's interrupted turn to end."
   (dolist (panel (+agent-shell-pstack-panel-list))
     (when (and (eq lead (+agent-shell-pstack-panel-lead panel))
                (eq (+agent-shell-pstack-panel-phase panel) 'interrupting))
@@ -1602,6 +1847,118 @@ An arena on a host decides for itself; see
   (sort (hash-table-values +agent-shell-pstack-panel--panels)
         :key #'+agent-shell-pstack-panel-created))
 
+;;;; Delegates
+
+(defun +agent-shell-pstack-panel--prepare-delegate (panel)
+  "Give PANEL's delegate a branch and somewhere to work, then start it.
+The repository's profile picks a worktree of its own or, with
+:delegate (:isolation branch), the lead's checkout, which must be clean.
+The panel's timeout starts now and covers this preparation too."
+  (setf (+agent-shell-pstack-panel-phase panel) 'preparing
+        (+agent-shell-pstack-panel-deadline panel)
+        (+ (float-time) (+agent-shell-pstack-panel-timeout panel)))
+  (+agent-shell-arena-git-repository
+   (+agent-shell-pstack-panel-cwd panel)
+   (lambda (base error)
+     (+agent-shell-pstack-panel--preparing
+      panel error
+      (lambda ()
+        (if (eq 'branch
+                (plist-get (plist-get (+agent-shell-arena-git-profile
+                                       (+agent-shell-arena-git-base-toplevel
+                                        base))
+                                      :delegate)
+                           :isolation))
+            (+agent-shell-pstack-panel--take-checkout panel base)
+          (+agent-shell-pstack-panel--provision-delegate panel base))))))
+  (+agent-shell-pstack-panels--refresh))
+
+(defun +agent-shell-pstack-panel--provision-delegate (panel base)
+  "Give PANEL's delegate a worktree on its new branch at BASE, then start it."
+  (let ((manifest (+agent-shell-arena-git-create
+                   base (+agent-shell-pstack-panel-id panel)
+                   (+agent-shell-arena-git--delegate :isolation 'worktree))))
+    (setf (+agent-shell-pstack-panel-arena panel) manifest)
+    (+agent-shell-arena-git-provision
+     manifest
+     (+agent-shell-pstack-panel-member-role
+      (car (+agent-shell-pstack-panel-members panel)))
+     (lambda (_directory error)
+       (+agent-shell-pstack-panel--preparing
+        panel error (lambda () (+agent-shell-pstack-panel--start-delegate
+                                panel))))
+     (+agent-shell-arena-git-delegate-branch manifest))))
+
+(defun +agent-shell-pstack-panel--take-checkout (panel base)
+  "Put the lead's clean checkout at BASE on PANEL's delegate branch.
+Record where it was first, so a restart can still return it."
+  (+agent-shell-arena-git-changes
+   (+agent-shell-arena-git-base-git-dir base)
+   (+agent-shell-arena-git-base-toplevel base) nil
+   (lambda (paths error)
+     (+agent-shell-pstack-panel--preparing
+      panel (or error
+                (when paths
+                  (format "Branch-mode delegates need a clean checkout; \
+commit or stash your changes first.  Changed: %s."
+                          (+agent-shell-arena-git-describe-paths paths))))
+      (lambda ()
+        (let ((manifest
+               (+agent-shell-arena-git-create
+                base (+agent-shell-pstack-panel-id panel)
+                (+agent-shell-arena-git--delegate
+                 :isolation 'branch
+                 :origin (if-let* ((ref (+agent-shell-arena-git-base-branch
+                                         base)))
+                             (cons 'branch ref)
+                           (cons 'detached
+                                 (+agent-shell-arena-git-base-head base)))))))
+          (setf (+agent-shell-pstack-panel-arena panel) manifest)
+          (+agent-shell-arena-git-take
+           manifest
+           (lambda (_branch error)
+             (+agent-shell-pstack-panel--preparing
+              panel error
+              (lambda () (+agent-shell-pstack-panel--start-delegate
+                          panel)))))))))))
+
+(defun +agent-shell-pstack-panel--start-delegate (panel)
+  "Start PANEL's delegate, full-access, for what remains of its timeout."
+  (let ((remaining (- (+agent-shell-pstack-panel-deadline panel) (float-time))))
+    (if (<= remaining 0)
+        (+agent-shell-pstack-panel--fail-preparation
+         panel (format "The %d-second timeout passed while Emacs prepared \
+the delegate's workspace."
+                       (+agent-shell-pstack-panel-timeout panel)))
+      (setf (+agent-shell-pstack-panel-phase panel) 'delegating)
+      (+agent-shell-pstack-panel--arm panel remaining)
+      (+agent-shell-pstack-panel--start-member
+       panel (car (+agent-shell-pstack-panel-members panel)))
+      (+agent-shell-pstack-panel--advance panel)
+      (+agent-shell-pstack-panels--refresh))))
+
+(defun +agent-shell-pstack-panel--interrupted ()
+  "Return the manifests of branch-mode delegates no panel holds, unreturned.
+Each may have left the lead's checkout on its branch, as when Emacs
+exited mid-run."
+  (let ((held (delq nil (mapcar (lambda (panel)
+                                  (when-let* ((manifest
+                                               (+agent-shell-pstack-panel-arena
+                                                panel)))
+                                    (+agent-shell-arena-git-manifest-id
+                                     manifest)))
+                                (+agent-shell-pstack-panel-list)))))
+    (seq-filter
+     (lambda (manifest)
+       (when-let* ((delegate (+agent-shell-arena-git-manifest-delegate
+                              manifest)))
+         (and (eq (+agent-shell-arena-git-delegate-isolation delegate) 'branch)
+              (not (memq (+agent-shell-arena-git-delegate-restore delegate)
+                         '(restored unneeded)))
+              (not (member (+agent-shell-arena-git-manifest-id manifest)
+                           held)))))
+     (+agent-shell-arena-git-arenas))))
+
 ;;;; View
 
 (defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
@@ -1617,7 +1974,7 @@ An arena on a host decides for itself; see
   "pstack panels"
   "List pstack panels, their members and reports.
 \\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line.
-\\[+agent-shell-pstack-panels-clean] cleans up the finished arena on the line.
+\\[+agent-shell-pstack-panels-clean] cleans up the finished arena or delegate on the line.
 \\[+agent-shell-pstack-panels-cancel] cancels the unfinished panel on the line."
   (setq-local revert-buffer-function
               (lambda (&rest _) (+agent-shell-pstack-panels--render))
@@ -1640,6 +1997,20 @@ An arena on a host decides for itself; see
   (cond ((buffer-live-p buffer) (buffer-name buffer))
         (buffer "ended")
         (t "not started")))
+
+(defun +agent-shell-pstack-panels--return (manifest)
+  "Describe returning the checkout branch-mode MANIFEST's delegate took."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (name (+agent-shell-arena-git-origin-name
+                (+agent-shell-arena-git-delegate-origin delegate))))
+    (if (memq (+agent-shell-arena-git-delegate-restore delegate)
+              '(restored unneeded))
+        (format "back on %s  (x forgets its record)" name)
+      (format "%s(x switches it back to %s)"
+              (if-let* ((note (+agent-shell-arena-git-delegate-note delegate)))
+                  (concat note "  ")
+                "")
+              name))))
 
 (defun +agent-shell-pstack-panels--render ()
   "Redraw the current panels buffer, keeping point's line."
@@ -1665,11 +2036,23 @@ message with a pstack-panel block.\n"))
           (+agent-shell-pstack-panels--line lead "  " rejection))
         (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
           (let ((directory (+agent-shell-arena-git-manifest-directory
-                            manifest)))
-            (+agent-shell-pstack-panels--line
-             directory "  Arena: " (abbreviate-file-name directory)
-             (if (eq (+agent-shell-pstack-panel-phase panel) 'finished)
-                 "  (x cleans it up)" ""))
+                            manifest))
+                (finished (eq (+agent-shell-pstack-panel-phase panel)
+                              'finished)))
+            (pcase (+agent-shell-pstack-panel--isolation panel)
+              ('branch
+               (+agent-shell-pstack-panels--line
+                (+agent-shell-arena-git-manifest-toplevel manifest)
+                "  Isolation: "
+                (if finished
+                    (+agent-shell-pstack-panels--return manifest)
+                  "your checkout, on the delegate's branch; do not edit or \
+commit there until this finishes")))
+              (isolation
+               (+agent-shell-pstack-panels--line
+                directory (if isolation "  Workspace: " "  Arena: ")
+                (abbreviate-file-name directory)
+                (if finished "  (x cleans it up)" ""))))
             (when-let* ((remote (+agent-shell-pstack-panel-remote panel)))
               (+agent-shell-pstack-panels--line
                directory "  Host: "
@@ -1697,6 +2080,23 @@ message with a pstack-panel block.\n"))
         (insert "\n")
         (put-text-property start (point) '+agent-shell-pstack-panels-panel
                            panel)))
+    (dolist (manifest (+agent-shell-pstack-panel--interrupted))
+      (let ((start (point))
+            (toplevel (+agent-shell-arena-git-manifest-toplevel manifest)))
+        (+agent-shell-pstack-panels--line
+         toplevel
+         (propertize (+agent-shell-arena-git-manifest-id manifest) 'face 'bold)
+         (if (+agent-shell-arena-git-delegate-restore
+              (+agent-shell-arena-git-manifest-delegate manifest))
+             "  delegate  not returned"
+           "  delegate  interrupted"))
+        (+agent-shell-pstack-panels--line
+         toplevel "  Isolation: " (abbreviate-file-name toplevel) " is on "
+         (+agent-shell-arena-git-delegate-branch manifest)
+         "  " (+agent-shell-pstack-panels--return manifest))
+        (insert "\n")
+        (put-text-property start (point) '+agent-shell-pstack-panels-manifest
+                           manifest)))
     (goto-char (point-min))
     (forward-line (1- line))))
 
@@ -1739,7 +2139,10 @@ message with a pstack-panel block.\n"))
                        (+agent-shell-pstack-panel-member-role member)
                        (+agent-shell-pstack-panel-member-agent member)
                        (+agent-shell-pstack-panel-member-state member)))
-             (+agent-shell-pstack-panel-members panel) "")))
+             (+agent-shell-pstack-panel-members panel) "")
+            (when (eq (+agent-shell-pstack-panel--isolation panel) 'branch)
+              "\n  the delegate works in your checkout; do not edit or \
+commit there until it finishes")))
          panels "\n")
         "\nmouse-1: show panels")))))
 
@@ -1806,9 +2209,22 @@ An arena that ran on a host is cleaned there too."
   (let ((id (+agent-shell-arena-git-manifest-id manifest))
         (remote (and (featurep '+agent-shell-arena-remote)
                      (+agent-shell-arena-remote-recorded-p manifest))))
-    (when (yes-or-no-p (format "Remove arena %s's worktrees, checkouts and \
-result refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
-                               (if remote " and its host" "")))
+    (when (yes-or-no-p
+           (pcase (when-let* ((delegate
+                               (+agent-shell-arena-git-manifest-delegate
+                                manifest)))
+                    (+agent-shell-arena-git-delegate-isolation delegate))
+             ('worktree
+              (format "Remove delegate %s's worktree from %s?  Its branch %s \
+stays. " id (+agent-shell-arena-git-manifest-toplevel manifest)
+                      (+agent-shell-arena-git-delegate-branch manifest)))
+             ('branch
+              (format "Return %s from %s if it is clean, and forget delegate \
+%s?  The branch stays. " (+agent-shell-arena-git-manifest-toplevel manifest)
+                      (+agent-shell-arena-git-delegate-branch manifest) id))
+             (_ (format "Remove arena %s's worktrees, checkouts and result \
+refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
+                        (if remote " and its host" "")))))
       (dolist (panel (+agent-shell-pstack-panel-list))
         (when-let* ((held (+agent-shell-pstack-panel-arena panel))
                     ((equal id (+agent-shell-arena-git-manifest-id held))))
@@ -1826,10 +2242,14 @@ result refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
       (+agent-shell-pstack-panels--refresh))))
 
 (defun +agent-shell-pstack-panels-clean ()
-  "Clean up the finished arena on the current line, after confirmation."
+  "Clean up the finished arena or delegate on the current line.
+Ask for confirmation first."
   (interactive)
-  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel)))
+  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel))
+        (manifest (get-text-property (point)
+                                     '+agent-shell-pstack-panels-manifest)))
     (cond
+     (manifest (+agent-shell-pstack-arena--clean manifest))
      ((not (and panel (+agent-shell-pstack-panel-arena panel)))
       (user-error "No arena on this line"))
      ((not (eq (+agent-shell-pstack-panel-phase panel) 'finished))

@@ -1913,8 +1913,8 @@ captured commit-opus$" (funcall text)))
   "Describe arenas only where candidates can run sandboxed."
   (+agent-shell-pstack-panel-test--with
     (let ((protocol (+agent-shell-pstack-panel--protocol)))
-      (should (string-match-p "calls for a how, interrogate or arena panel"
-                              protocol))
+      (should (string-match-p "calls for a how, interrogate, arena or \
+delegate panel" protocol))
       (should (string-match-p "^Shapes: how (.*); interrogate (.*); arena \
 (candidates each implement" protocol))
       (should (string-match-p "Candidate agents: codex, claude-code\\."
@@ -1922,16 +1922,19 @@ captured commit-opus$" (funcall text)))
       (should (string-match-p "\"rubric\", 3 to 6 criteria that only the judge \
 sees" protocol))
       (should (string-match-p "\"judge_timeout\", 900 seconds" protocol))
-      (should (string-match-p "^Request how, interrogate and arena panels"
-                              (+agent-shell-pstack-panel--reminder))))
-    (dolist (binding '((+agent-shell-sandbox-backend . nil)
-                       (+agent-shell-sandbox-agents . nil)))
-      (cl-progv (list (car binding)) (list (cdr binding))
+      (should (string-match-p "^Request how, interrogate, arena and \
+delegate panels" (+agent-shell-pstack-panel--reminder))))
+    (pcase-dolist (`(,variable ,shapes ,series)
+                   '((+agent-shell-sandbox-backend "how, interrogate or delegate"
+                                                   "how, interrogate and delegate")
+                     (+agent-shell-sandbox-agents "how or interrogate"
+                                                  "how and interrogate")))
+      (cl-progv (list variable) (list nil)
         (let ((protocol (+agent-shell-pstack-panel--protocol)))
-          (should (string-match-p "calls for a how or interrogate panel"
+          (should (string-match-p (format "calls for a %s panel" shapes)
                                   protocol))
           (should-not (string-match-p "arena\\|rubric" protocol))
-          (should (string-match-p "^Request how and interrogate panels"
+          (should (string-match-p (format "^Request %s panels" series)
                                   (+agent-shell-pstack-panel--reminder))))))))
 
 (provide 'agent-shell-pstack-panel-test)
