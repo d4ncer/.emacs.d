@@ -782,5 +782,463 @@ a final response."
       (should-not (file-exists-p (+agent-shell-pstack-panel--report-file
                                   panel member ".final.json"))))))
 
+;;;; Transcripts
+
+(defmacro +remote-delegate-test--with-transcript (&rest body)
+  "Run BODY with `job', a fresh job folder, `recorder' writing its
+transcript, small bounds, and `remote', a laptop record caching it."
+  (declare (indent 0))
+  `(+remote-delegate-test--with-scratch
+     (let* ((job (expand-file-name "jobs/abc-1/" scratch))
+            (+agent-shell-arena-remote-transcript-segment-bytes 400)
+            (+agent-shell-arena-remote-transcript-segments 3)
+            (+agent-shell-arena-remote-transcript-record-bytes 120)
+            (+agent-shell-arena-remote-transcript-page-bytes 300)
+            (+agent-shell-arena-remote-transcript-cache-bytes 2000)
+            (recorder (+agent-shell-arena-remote--recorder-open
+                       (expand-file-name "transcript/" job)))
+            (laptop (expand-file-name "laptop/" scratch))
+            (remote (+agent-shell-arena-remote--make
+                     :id "abc-1" :panel "abc" :phase 'remote :shape 'delegate
+                     :directory laptop
+                     :host (+agent-shell-arena-remote--make-host
+                            :kind 'local :name scratch))))
+       (make-directory laptop t)
+       (puthash "abc-1" remote +agent-shell-arena-remote--arenas)
+       (unwind-protect (progn ,@body)
+         (when-let* ((buffer (+agent-shell-arena-remote--transcript-live
+                              remote)))
+           (kill-buffer buffer))))))
+
+(defun +remote-delegate-test--page (job remote)
+  "Fetch the next transcript page of JOB for REMOTE; return whether more."
+  (let* ((cursor (+agent-shell-arena-remote-cursor remote))
+         (envelope (json-parse-string
+                    (json-serialize
+                     (+agent-shell-arena-remote--poll-page
+                      job (and cursor
+                               (list (+agent-shell-arena-remote-cursor-epoch
+                                      cursor)
+                                     (+agent-shell-arena-remote-cursor-segment
+                                      cursor)
+                                     (+agent-shell-arena-remote-cursor-offset
+                                      cursor)
+                                     (+agent-shell-arena-remote-cursor-seq
+                                      cursor)))))
+                    :object-type 'alist :array-type 'list :null-object nil
+                    :false-object nil)))
+    (+agent-shell-arena-remote--cache-transcript remote
+                                                 (alist-get 'tail envelope))))
+
+(defun +remote-delegate-test--drain (job remote)
+  "Fetch JOB's transcript pages for REMOTE until none is left."
+  (let ((pages 0))
+    (while (progn (cl-incf pages) (+remote-delegate-test--page job remote))
+      (should (< pages 100)))
+    pages))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-recorder-bounds ()
+  "Records stay within their byte bound, split between characters, never
+span segments, and only the newest segments stay."
+  (+remote-delegate-test--with-transcript
+    (let ((directory (expand-file-name "transcript/" job))
+          (text (concat (make-string 100 ?é) "\"quoted\"\n" (make-string 50 ?x))))
+      (dotimes (_ 12)
+        (+agent-shell-arena-remote--record recorder "assistant" text))
+      (let ((segments (+agent-shell-arena-remote--segments directory))
+            (seqs nil) (joined ""))
+        (should (= 3 (length segments)))
+        (dolist (segment segments)
+          (let ((bytes (+agent-shell-arena-remote--read-bytes
+                        (+agent-shell-arena-remote--segment-file directory
+                                                                 segment))))
+            (should (<= (length bytes) 400))
+            (should (string-suffix-p "\n" bytes))
+            (dolist (line (split-string (decode-coding-string bytes 'utf-8)
+                                        "\n" t))
+              (should (<= (1+ (string-bytes (encode-coding-string line 'utf-8)))
+                          120))
+              (let ((record (json-parse-string line :object-type 'alist)))
+                (push (alist-get 'seq record) seqs)
+                (setq joined (concat joined (alist-get 'text record)))))))
+        (should (equal (reverse seqs) (number-sequence (car (last seqs))
+                                                       (car seqs))))
+        (should (string-search "\"quoted\"\n" joined))
+        (should (string-suffix-p (make-string 50 ?x) joined))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-recorder-resumes ()
+  "A restarted runner drops a torn last line and numbers on from the last
+whole record, in the same epoch."
+  (+remote-delegate-test--with-transcript
+    (let ((directory (expand-file-name "transcript/" job)))
+      (+agent-shell-arena-remote--record recorder "notice" "one")
+      (+agent-shell-arena-remote--record recorder "notice" "two")
+      (let ((file (+agent-shell-arena-remote--segment-file
+                   directory (+agent-shell-arena-remote--recorder-segment
+                              recorder))))
+        (write-region "{\"seq\":3,\"ti" nil file t 'silent)
+        (let ((again (+agent-shell-arena-remote--recorder-open directory)))
+          (should (equal (+agent-shell-arena-remote--recorder-epoch recorder)
+                         (+agent-shell-arena-remote--recorder-epoch again)))
+          (should (= 2 (+agent-shell-arena-remote--recorder-seq again)))
+          (+agent-shell-arena-remote--record again "notice" "three")
+          (should (equal '(1 2 3)
+                         (mapcar (lambda (line)
+                                   (alist-get 'seq (json-parse-string
+                                                    line :object-type 'alist)))
+                                 (split-string
+                                  (+agent-shell-arena-remote--read-bytes file)
+                                  "\n" t)))))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-projection ()
+  "The transcript keeps agent text, tool titles and lifecycle notices, and
+never a final text, permission or tool argument."
+  (+remote-delegate-test--with-transcript
+    (let ((runner (+agent-shell-arena-remote--make-runner :transcript recorder)))
+      (dolist (event '((:kind progress :part assistant :text "Reading ")
+                       (:kind progress :part assistant :text "the handler.")
+                       (:kind progress :part tool :text "Read upload.el"
+                              :status "completed")
+                       (:kind permission :text "secret-token")
+                       (:kind turn-complete :stop-reason "end_turn"
+                              :text "FINAL REPORT")))
+        (+agent-shell-arena-remote--record-transcript runner event))
+      (+remote-delegate-test--drain job remote)
+      (should (equal '(("assistant" . "Reading the handler.")
+                       ("tool" . "Read upload.el (completed)")
+                       ("notice" . "The turn ended: end_turn."))
+                     (mapcar (lambda (record)
+                               (cons (alist-get 'kind record)
+                                     (alist-get 'text record)))
+                             (+agent-shell-arena-remote--cached-records
+                              remote)))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-pages ()
+  "Pages bring whole records in order within their bound, across
+segments, leave a partial last line for later, replay without
+duplicates, and mark what rotated away as a gap."
+  (+remote-delegate-test--with-transcript
+    (let ((directory (expand-file-name "transcript/" job))
+          (seqs (lambda ()
+                  (delq 0 (mapcar (lambda (record) (alist-get 'seq record))
+                                  (+agent-shell-arena-remote--cached-records
+                                   remote))))))
+      (dotimes (index 6)
+        (+agent-shell-arena-remote--record recorder "notice"
+                                           (format "record %d %s" index
+                                                   (make-string 40 ?n))))
+      (should (> (+remote-delegate-test--drain job remote) 1))
+      (should (equal (number-sequence 1 6) (funcall seqs)))
+      ;; A torn line waits; a replayed page adds nothing.
+      (let ((file (+agent-shell-arena-remote--segment-file
+                   directory (+agent-shell-arena-remote--recorder-segment
+                              recorder)))
+            (cursor (+agent-shell-arena-remote-cursor remote)))
+        (write-region "{\"seq\":7," nil file t 'silent)
+        (+remote-delegate-test--drain job remote)
+        (should (equal (number-sequence 1 6) (funcall seqs)))
+        (setf (+agent-shell-arena-remote-cursor remote)
+              (+agent-shell-arena-remote--make-cursor
+               :epoch (+agent-shell-arena-remote-cursor-epoch cursor)
+               :segment (car (+agent-shell-arena-remote--segments directory))
+               :offset 0 :seq 6))
+        (+remote-delegate-test--drain job remote)
+        (should (equal (number-sequence 1 6) (funcall seqs))))
+      ;; Records that rotated away before a poll leave a gap notice.
+      (setq recorder (+agent-shell-arena-remote--recorder-open directory))
+      (dotimes (index 20)
+        (+agent-shell-arena-remote--record recorder "notice"
+                                           (format "later %d %s" index
+                                                   (make-string 40 ?l))))
+      (+remote-delegate-test--drain job remote)
+      (let ((records (+agent-shell-arena-remote--cached-records remote)))
+        (should (seq-find (lambda (record)
+                            (string-prefix-p "Part of the transcript is missing"
+                                             (alist-get 'text record)))
+                          records))
+        (should (equal (car (last (funcall seqs)))
+                       (+agent-shell-arena-remote--recorder-seq recorder)))
+        (let ((seqs (funcall seqs)))
+          (should (equal seqs (sort (seq-uniq seqs) #'<))))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-malformed-page ()
+  "A malformed page is refused before the cache or cursor change."
+  (+remote-delegate-test--with-transcript
+    (dolist (page '(((epoch . "../x") (next (segment . 1) (offset . 0))
+                     (records))
+                    ((epoch . "e1") (next (segment . 1) (offset . 0))
+                     (records ((seq . 2) (time . 1) (kind . "notice")
+                               (text . "b"))
+                              ((seq . 1) (time . 1) (kind . "notice")
+                               (text . "a"))))
+                    ((epoch . "e1") (next (segment . 1) (offset . 0))
+                     (records ((seq . 1) (time . 1) (kind . "shell")
+                               (text . "rm -rf"))))))
+      (should-error (+agent-shell-arena-remote--cache-transcript remote page)
+                    :type '+agent-shell-arena-remote-wire)
+      (should-not (+agent-shell-arena-remote-cursor remote))
+      (should-not (file-exists-p (+agent-shell-arena-remote--cache-file
+                                  remote))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-cache-bound ()
+  "The laptop's cache keeps whole newest records within its bound and
+says it dropped the rest."
+  (+remote-delegate-test--with-transcript
+    (dotimes (index 60)
+      (+agent-shell-arena-remote--append-cache
+       remote (list `((seq . ,(1+ index)) (time . 1) (kind . "notice")
+                      (text . ,(make-string 50 ?c))))))
+    (let ((records (+agent-shell-arena-remote--cached-records remote)))
+      (should (<= (file-attribute-size
+                   (file-attributes (+agent-shell-arena-remote--cache-file
+                                     remote)))
+                  2000))
+      (should (string-prefix-p "Older transcript was dropped"
+                               (alist-get 'text (car records))))
+      (should (= 60 (alist-get 'seq (car (last records))))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-buffer ()
+  "The transcript buffer shows records literally, follows a window at its
+end, keeps a reader's place elsewhere, and starts no process."
+  (+remote-delegate-test--with-transcript
+    (+agent-shell-arena-remote--append-cache
+     remote (list '((seq . 1) (time . 1) (kind . "assistant")
+                    (text . "Plain \e[31mred\e[0m -*- eval: (kill-emacs) -*-"))
+                  '((seq . 2) (time . 2) (kind . "tool") (text . "Read a"))))
+    (let* ((processes (length (process-list)))
+           (scheduled nil)
+           (buffer (cl-letf (((symbol-function
+                               '+agent-shell-arena-remote--schedule)
+                              (lambda (&rest _) (setq scheduled t))))
+                     (+agent-shell-arena-remote-transcript-buffer remote))))
+      (should scheduled)
+      (should (= processes (length (process-list))))
+      (with-current-buffer buffer
+        (should (derived-mode-p '+agent-shell-arena-remote-transcript-mode))
+        (should buffer-read-only)
+        (should (string-search "\e[31mred" (buffer-string)))
+        (should-not (local-variable-p 'eval))
+        (save-window-excursion
+          (switch-to-buffer buffer)
+          (goto-char (point-min))
+          (+agent-shell-arena-remote--append-cache
+           remote (list '((seq . 3) (time . 3) (kind . "notice")
+                          (text . "third"))))
+          (+agent-shell-arena-remote--show-transcript remote)
+          (should (= (point) (point-min)))
+          (should (string-search "third" (buffer-string)))
+          (goto-char (point-max))
+          (+agent-shell-arena-remote--append-cache
+           remote (list '((seq . 4) (time . 4) (kind . "notice")
+                          (text . "fourth"))))
+          (+agent-shell-arena-remote--show-transcript remote)
+          (should (= (window-point) (point-max)))
+          (should (= 1 (how-many "third" (point-min) (point-max)))))
+        (should (string-match-p "local host .* | delegate | remote | \
+read-only | last poll never"
+                                (+agent-shell-arena-remote--transcript-header)))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-poll-envelope ()
+  "The version-2 poll answer parses with its status and tail, and a
+version-1 answer still parses."
+  (let* ((status (+agent-shell-arena-remote--make-status
+                  :id "abc-1" :phase 'delegating :heartbeat 1 :shape 'delegate
+                  :results nil))
+         (output (concat "pstack-arena-poll 2\n"
+                         (json-serialize
+                          `((version . 2) (alive . t) (cancel . :false)
+                            (status . ,(+agent-shell-arena-remote--encode
+                                        'status status))
+                            (tail (epoch . "e1") (records . [])
+                                  (next (segment . 1) (offset . 0)))))))
+         (poll (+agent-shell-arena-remote-parse-poll output)))
+    (should (plist-get poll :alive))
+    (should-not (plist-get poll :cancel))
+    (should (eq 'delegating (+agent-shell-arena-remote-status-phase
+                             (plist-get poll :status))))
+    (should (equal "e1" (alist-get 'epoch (plist-get poll :tail))))
+    (should (plist-get (+agent-shell-arena-remote-parse-poll
+                        "pstack-arena-poll alive=1 cancel=0\n")
+                       :alive))
+    (should-error (+agent-shell-arena-remote-parse-poll
+                   "pstack-arena-poll 2\n{not json")
+                  :type '+agent-shell-arena-remote-wire)))
+
+;; A regression: a status with members once failed to serialize, and the
+;; poll script fell back to the version-1 answer without a transcript.
+(ert-deftest +agent-shell-pstack-remote-delegate-test-poll-page-status ()
+  "The host's poll page carries the runner's status as the laptop reads it."
+  (+remote-delegate-test--with-transcript
+    (let ((status (+agent-shell-arena-remote--make-status
+                   :id "abc-1" :phase 'delegating :heartbeat 1 :shape 'delegate
+                   :members (list (+agent-shell-arena-remote--make-member
+                                   :role "builder" :agent 'codex
+                                   :kind 'delegate :state 'running))
+                   :results nil)))
+      (+agent-shell-arena-remote--write-json
+       (expand-file-name "status.json" job) 'status status)
+      (+agent-shell-arena-remote--record recorder "notice" "hello")
+      (let ((poll (+agent-shell-arena-remote-parse-poll
+                   (concat "pstack-arena-poll 2\n"
+                           (json-serialize
+                            (+agent-shell-arena-remote--poll-page job nil))))))
+        (should (equal '(running)
+                       (mapcar #'+agent-shell-arena-remote-member-state
+                               (+agent-shell-arena-remote-status-members
+                                (plist-get poll :status)))))
+        (+agent-shell-arena-remote--cache-transcript remote
+                                                     (plist-get poll :tail))
+        (should (equal '("hello")
+                       (mapcar (lambda (record) (alist-get 'text record))
+                               (+agent-shell-arena-remote--cached-records
+                                remote))))))))
+
+;;;; Process leases
+
+(defmacro +remote-delegate-test--with-systemd (&rest body)
+  "Run BODY with fake systemd-run and systemctl in `bin', logging to `log'.
+The fake scope runs its command; systemctl stop kills the processes it
+started and is-active then answers inactive."
+  (declare (indent 0))
+  `(let* ((bin (file-name-as-directory (make-temp-file "pa-systemd-" t)))
+          (log (expand-file-name "log" bin))
+          (+agent-shell-drive-systemd-run (expand-file-name "systemd-run" bin))
+          (+agent-shell-drive-systemctl (expand-file-name "systemctl" bin)))
+     (with-temp-file +agent-shell-drive-systemd-run
+       (insert "#!/bin/sh\necho \"run $*\" >>" log "\n"
+               "while [ \"$1\" != -- ]; do shift; done; shift\n"
+               "echo $$ >" bin "scope.pid\nexec \"$@\"\n"))
+     (with-temp-file +agent-shell-drive-systemctl
+       (insert "#!/bin/sh\necho \"ctl $*\" >>" log "\n"
+               "case $2 in\n"
+               "  stop) kill -9 $(cat " bin "scope.pid) 2>/dev/null; "
+               "touch " bin "stopped;;\n"
+               "  is-active) [ -f " bin "stopped ] && { echo inactive; exit 3; }; "
+               "echo active;;\nesac\n"))
+     (set-file-modes +agent-shell-drive-systemd-run #o755)
+     (set-file-modes +agent-shell-drive-systemctl #o755)
+     (unwind-protect (progn ,@body)
+       (delete-directory bin t))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-scope-lease ()
+  "A leased adapter starts outermost in its own scope, after its owner
+record is written, and stopping the lease stops the scope."
+  (+remote-delegate-test--with-systemd
+    (let* ((file (expand-file-name "leases/builder.json" bin))
+           (lease (list :file file :unit "pstack-delegate-abc-1-builder"))
+           (client (+agent-shell-drive--lease-client
+                    lease '((:command . "/bin/sleep")
+                            (:command-params . ("30"))
+                            (:environment-variables . ("A=1"))))))
+      (should (equal (+agent-shell-drive--read-lease file)
+                     `((version . 1)
+                       (nonce . ,(alist-get 'nonce
+                                            (+agent-shell-drive--read-lease
+                                             file)))
+                       (unit . "pstack-delegate-abc-1-builder"))))
+      (should (equal #o600 (file-modes file)))
+      (should (equal +agent-shell-drive-systemd-run (alist-get :command client)))
+      (should (equal '("--user" "--scope" "--quiet" "--collect"
+                       "--unit=pstack-delegate-abc-1-builder" "--"
+                       "/bin/sleep" "30")
+                     (alist-get :command-params client)))
+      (should (equal '("A=1") (alist-get :environment-variables client)))
+      (let ((process (make-process :name "pa-scope" :noquery t
+                                   :command (cons (alist-get :command client)
+                                                  (alist-get :command-params
+                                                             client)))))
+        (+remote-delegate-test--wait
+         (lambda (done)
+           (run-at-time 0.3 nil done)))
+        (should (process-live-p process))
+        (should (equal '(nil)
+                       (+remote-delegate-test--wait
+                        (lambda (done)
+                          (+agent-shell-drive-reap-lease file done)))))
+        (+remote-delegate-test--wait
+         (lambda (done) (run-at-time 0.3 nil done)))
+        (should-not (process-live-p process))
+        (should (string-search "ctl --user stop pstack-delegate-abc-1-builder"
+                               (+remote-delegate-test--read-file log)))))))
+
+(defun +remote-delegate-test--read-file (file)
+  "Return FILE's contents."
+  (with-temp-buffer (insert-file-contents file) (buffer-string)))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-process-lease ()
+  "Without a scope, a lease kills only the adapter whose pid still has its
+recorded start time, with its process tree."
+  (let* ((directory (make-temp-file "pa-lease-" t))
+         (file (expand-file-name "lease.json" directory))
+         (process (make-process :name "pa-lease" :noquery t
+                                :command '("/bin/sh" "-c"
+                                           "sleep 30 & sleep 30; wait"))))
+    (unwind-protect
+        (progn
+          (+agent-shell-drive--write-lease
+           (list :file file)
+           `((version . 1) (unit . :null) (pid . ,(process-id process))
+             (start . "(1 2 3 4)")))
+          (should (equal '(nil) (+remote-delegate-test--wait
+                                 (lambda (done)
+                                   (+agent-shell-drive-reap-lease file done)))))
+          (should (process-live-p process))
+          (+agent-shell-drive--write-lease
+           (list :file file)
+           `((version . 1) (unit . :null) (pid . ,(process-id process))
+             (start . ,(format "%S" (alist-get 'start (process-attributes
+                                                       (process-id
+                                                        process)))))))
+          (+remote-delegate-test--wait
+           (lambda (done) (+agent-shell-drive-reap-lease file done)))
+          (+remote-delegate-test--wait (lambda (done) (run-at-time 0.3 nil done)))
+          (should-not (process-live-p process)))
+      (when (process-live-p process) (delete-process process))
+      (delete-directory directory t))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-quarantine ()
+  "A quarantined lock is never taken over, even once its owner is gone."
+  (+remote-delegate-test--with-scratch
+    (let* ((lock (expand-file-name "locks/repo" scratch))
+           (runner (+agent-shell-arena-remote--make-runner :lock lock)))
+      (make-directory lock t)
+      (with-temp-file (expand-file-name "owner" lock)
+        (insert "999999999 \"gone-job\"\n"))
+      (+agent-shell-arena-remote--quarantine runner "Writers survived.")
+      (should-not (+agent-shell-arena-remote-acquire lock "next-job"))
+      (delete-file (expand-file-name "quarantine" lock))
+      (should (+agent-shell-arena-remote-acquire lock "next-job")))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-progress-events ()
+  "Only progress watchers get agent text chunks and tool calls, even a
+tool call with no agent text before it."
+  (let ((+agent-shell-drive--watchers (make-hash-table :test #'equal))
+        (+agent-shell-drive--shells (make-hash-table :test #'eq))
+        (+agent-shell-drive--progress (make-hash-table :test #'equal))
+        (shell (generate-new-buffer " *progress*"))
+        (plain nil) (progress nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-subscribe-to)
+                   (lambda (&rest _) 'token))
+                  ((symbol-function 'agent-shell-session-id)
+                   (lambda (&rest _) "s1")))
+          (+agent-shell-drive-watch shell 'plain 1
+                                    (lambda (event) (push event plain)))
+          (+agent-shell-drive-watch-progress
+           shell 'observer 1 (lambda (event) (push event progress)))
+          (+agent-shell-drive--dispatch
+           shell '((:event . tool-call-update)
+                   (:data (:tool-call (:title . "Run tests")
+                                      (:status . "in_progress")))))
+          (+agent-shell-drive--dispatch
+           shell '((:event . agent-message-chunk) (:data (:text-chunk . "Hi"))))
+          (should-not plain)
+          (should (equal '((:kind progress :shell nil :part assistant :text "Hi")
+                           (:kind progress :shell nil :part tool
+                                  :text "Run tests" :status "in_progress"))
+                         (mapcar (lambda (event) (plist-put event :shell nil))
+                                 progress))))
+      (kill-buffer shell))))
+
 (provide 'agent-shell-pstack-remote-delegate-test)
 ;;; agent-shell-pstack-remote-delegate-test.el ends here

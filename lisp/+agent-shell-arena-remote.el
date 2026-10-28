@@ -2102,18 +2102,23 @@ transcript page as parsed JSON, or nil."
                           (json-parse-string (substring output (match-end 0))
                                              :object-type 'alist
                                              :array-type 'list
-                                             :null-object nil
-                                             :false-object nil)
+                                             :null-object :null
+                                             :false-object :false)
                         (json-error
                          (signal '+agent-shell-arena-remote-wire
                                  (list (format "poll envelope is not JSON: %s"
                                                (error-message-string err))))))))
-        (list :alive (alist-get 'alive envelope)
-              :cancel (alist-get 'cancel envelope)
-              :status (when-let* ((status (alist-get 'status envelope)))
-                        (+agent-shell-arena-remote-from-json
-                         'status (json-serialize status)))
-              :tail (alist-get 'tail envelope)))
+        (unless (and (listp envelope) (consp (car-safe envelope)))
+          (signal '+agent-shell-arena-remote-wire
+                  (list "poll envelope is not an object")))
+        (list :alive (eq t (alist-get 'alive envelope))
+              :cancel (eq t (alist-get 'cancel envelope))
+              :status (let ((status (alist-get 'status envelope)))
+                        (unless (+agent-shell-arena-remote--absent-p status)
+                          (+agent-shell-arena-remote--decode 'status status)))
+              :tail (let ((tail (alist-get 'tail envelope)))
+                      (unless (+agent-shell-arena-remote--absent-p tail)
+                        tail))))
     (+agent-shell-arena-remote--parse-poll-1 output)))
 
 (defun +agent-shell-arena-remote--parse-poll-1 (output)
@@ -2780,6 +2785,7 @@ malformed line was skipped."
       (while (memq segment segments)
         (let* ((file (+agent-shell-arena-remote--segment-file directory segment))
                (size (or (file-attribute-size (file-attributes file)) 0))
+               (cut (< (+ offset budget) size))
                (bytes (if (< offset size)
                           (+agent-shell-arena-remote--read-bytes
                            file offset (min size (+ offset budget)))
@@ -2798,7 +2804,9 @@ malformed line was skipped."
             nil)
           (setq offset (+ offset start))
           (cond
-           ((< offset size) (setq more t) (throw 'full nil))
+           ;; Past a whole record the page had no room for, or a line the
+           ;; runner is still writing.
+           ((< offset size) (setq more cut) (throw 'full nil))
            ((memq (1+ segment) segments)
             (if (<= budget 0) (progn (setq more t) (throw 'full nil))
               (setq segment (1+ segment) offset 0)))
@@ -2826,7 +2834,7 @@ nothing here writes the runner's files."
                      (+agent-shell-arena-remote--read-bytes
                       (funcall file "status.json"))
                      'utf-8)
-                    :object-type 'alist :array-type 'list
+                    :object-type 'alist :array-type 'array
                     :null-object :null :false-object :false)))
          (tail
           (condition-case err

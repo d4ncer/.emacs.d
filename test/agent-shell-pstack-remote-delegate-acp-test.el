@@ -443,6 +443,15 @@ pointer=refused" followup))
            (member (car (+agent-shell-pstack-panel-members panel))))
       (+remote-delegate-acp-test--wait-for
        (lambda () (eq 'running (+agent-shell-pstack-panel-member-state member))))
+      ;; The running delegate's text reaches the laptop over its polls.
+      (+remote-delegate-acp-test--wait-for
+       (lambda ()
+         (seq-find (lambda (record)
+                     (string-prefix-p "PARTIAL DELEGATE" (alist-get 'text record)))
+                   (+agent-shell-arena-remote--cached-records
+                    (+agent-shell-pstack-panel-remote panel)))))
+      (should (eq 'remote (+agent-shell-arena-remote-phase
+                           (+agent-shell-pstack-panel-remote panel))))
       (+agent-shell-pstack-panel-cancel panel "You cancelled the panel.")
       (+remote-delegate-acp-test--wait-for
        (lambda () (+agent-shell-pstack-panel-delivered panel)))
