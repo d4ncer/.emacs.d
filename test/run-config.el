@@ -86,6 +86,8 @@
                          "-l" "run-agent-shell-pstack-delegate")
   (+config-check-process "Remote pstack arenas over ACP"
                          "-l" "run-agent-shell-pstack-arena-remote")
+  (+config-check-process "Remote pstack delegates over ACP"
+                         "-l" "run-agent-shell-pstack-remote-delegate")
   (+config-check-process "agent-shell workarounds over ACP" "-l" "run-agent-shell-perf")
   (+config-check-process "Helper compilation" "-l" "config-compile-test")
   (princ (format "All configuration gates passed; %d ERT tests.\n" +config-check-tests)))

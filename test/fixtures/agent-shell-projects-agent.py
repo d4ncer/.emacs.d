@@ -105,11 +105,50 @@ def reach_egress_server():
         time.sleep(float(os.environ.get("PA_EGRESS_HOLD", "2.5")))
 
 
+def sandboxed_delegate(role, text, state):
+    """Try to commit, write a ref and git config, then propose a commit.
+
+    A sandboxed delegate's git metadata is read-only, so each attempt
+    should be refused.  NO-COMMIT-BLOCK leaves the block out."""
+    cwd = state["cwd"]
+    run = lambda *args: subprocess.run(["git", *args], cwd=cwd,
+                                       capture_output=True, text=True)
+    Path(cwd, role + ".txt").write_text(role + "\n")
+    attempts = {}
+    added = run("add", role + ".txt").returncode == 0
+    committed = run("-c", "user.name=Sandbox", "-c", "user.email=s@example.com",
+                    "commit", "-q", "-m", "sneaky").returncode == 0
+    attempts["commit"] = "ok" if added and committed else "refused"
+    common = Path(cwd, run("rev-parse", "--git-common-dir").stdout.strip())
+
+    def attempt(name, path, text):
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a") as stream:
+                stream.write(text)
+            attempts[name] = "ok"
+        except OSError:
+            attempts[name] = "refused"
+
+    attempt("ref", common / "refs" / "heads" / "sneaky", "0" * 40 + "\n")
+    attempt("config", common / "config", "[user]\n\tname = Sneaky\n")
+    attempt("pointer", Path(cwd, ".git"), "\n")
+    report = (f"DELEGATE role={role} mode={state['mode']} "
+              + " ".join(f"{key}={value}" for key, value in attempts.items()))
+    if "NO-COMMIT-BLOCK" in text:
+        return report
+    block = json.dumps({"version": 1, "subject": f"[{role}] Add {role}.txt",
+                        "body": "Write the file.\n\nChecked by the fixture."})
+    return report + "\n\n```pstack-commit\n" + block + "\n```\n"
+
+
 def pstack_delegate(role, text, state):
     """Commit a file as a delegate, optionally start a writer, and report.
 
     WRITER LOG PIDFILE leaves an orphaned loop appending to LOG, with its
     pid in PIDFILE; LEAVE-DIRTY leaves an uncommitted file behind."""
+    if "Leave your changes uncommitted" in text:
+        return sandboxed_delegate(role, text, state)
     cwd = state["cwd"]
     git = lambda *args: subprocess.run(["git", *args], cwd=cwd, check=True,
                                        capture_output=True, text=True)
@@ -140,7 +179,19 @@ def handle_pstack_prompt(message, text, state):
         return f"TRIAGED {text.count(chr(10) + '## ')}"
     delegate = re.search(r"You are the (\S+) delegate of a pstack panel", text)
     if delegate:
-        return pstack_delegate(delegate[1], text, state)
+        if "NARRATE" in text:
+            chunk(session_id, "I will add the file.")
+            emit({"method": "session/update", "params": {
+                "sessionId": session_id,
+                "update": {"sessionUpdate": "tool_call", "toolCallId": "write-1",
+                           "title": "Write builder file", "kind": "edit",
+                           "status": "completed"},
+            }})
+        reply = pstack_delegate(delegate[1], text, state)
+        if "HANG" in text:
+            chunk(session_id, f"PARTIAL {reply}")
+            return False
+        return reply
     candidate = re.search(r"You are the (\S+) candidate of a pstack arena", text)
     if candidate:
         role = candidate[1]

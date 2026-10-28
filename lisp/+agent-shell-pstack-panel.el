@@ -1850,9 +1850,13 @@ Do nothing once the panel has left PHASE."
           (when-let* ((observer (plist-get (+agent-shell-pstack-panel-runner
                                             panel)
                                            :observer)))
+            ;; Lifecycle events reach the observer through the member's
+            ;; own handler, first.
             (+agent-shell-drive-watch-progress
              shell 'pstack-panel (cons id role)
-             (lambda (event) (funcall observer member event)))))
+             (lambda (event)
+               (when (eq (plist-get event :kind) 'progress)
+                 (funcall observer member event))))))
       (error (+agent-shell-pstack-panel--settle
               panel member 'error nil (error-message-string err))))))
 
