@@ -541,9 +541,10 @@ graft and verify."
 (defun +agent-shell-pstack-panel--delegate-protocol ()
   "Return the protocol paragraph about delegates."
   (format "\nA delegate's one member writes code: it implements the brief, \
-runs the tests and commits on a new branch, in a git worktree of its own or, \
-where the repository's profile says so, in your own checkout, which you then \
-leave alone until the follow-up arrives.  Delegate agents: %s.  A delegate \
+runs the tests and commits on a new branch, in a git worktree of its own, \
+on the repository's host when its profile names one, or, where the profile \
+says so, in your own checkout, which you then leave alone until the \
+follow-up arrives.  Delegate agents: %s.  A delegate \
 request has no judge, and its \"timeout\", %d seconds by default, \
 bounds the whole run.  Emacs sends you one prompt with its report, its \
 branch, its commits and how to review and merge them."

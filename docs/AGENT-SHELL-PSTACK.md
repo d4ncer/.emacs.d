@@ -398,12 +398,19 @@ follow-up. `M-x +agent-shell-pstack-arena-reattach` resumes polling it.
 
 A delegate hands the whole task to one agent the lead picks. The agent
 implements it, runs the tests and commits on a new branch,
-`pstack/delegate/<panel-id>`. It runs unsandboxed, in its agent's
-full-access mode from `+agent-shell-sandbox-agents`: `bypassPermissions`
-for Claude Code and `agent-full-access` for Codex. It needs no sandbox
-backend, so it works on Linux and macOS alike, but its repository needs a
-commit and no submodules, as an arena's does. A delegate always runs on
-this Emacs, whatever the profile's `:host` says.
+`pstack/delegate/<panel-id>`. By default it runs unsandboxed, in its
+agent's full-access mode from `+agent-shell-sandbox-agents`:
+`bypassPermissions` for Claude Code and `agent-full-access` for Codex. It
+then needs no sandbox backend, so it works on Linux and macOS alike, but
+its repository needs a commit and no submodules, as an arena's does.
+
+The repository's profile decides where and how it runs, once, when the
+request arrives; see `+agent-shell-arena-git-delegate-options`. A profile
+with `:host` runs its delegates on that host, as its arenas do;
+`:delegate (:host local)` keeps them here. `:delegate (:sandbox t)`
+confines a delegate to its workspace, here or on the host, and Emacs
+makes its one commit; see below. The agent-supplied request never
+chooses any of this.
 
 The request names exactly one member and no rubric or judge:
 
@@ -437,8 +444,10 @@ own copies of the `:files` paths.
 
 A repository too large for a second worktree can have the delegate work in
 the lead's own checkout instead. Its profile in
-`+agent-shell-pstack-arena-profiles` says so with `:delegate`, whose only
-key is `:isolation`, `worktree` or `branch`:
+`+agent-shell-pstack-arena-profiles` says so with `:delegate`, whose keys
+are `:isolation`, `worktree` or `branch`, `:host`, only ever `local`, and
+`:sandbox`, `t` or `nil`; a key it does not know, or names twice, is an
+error:
 
 ```elisp
 (add-to-list
@@ -453,12 +462,86 @@ lead's mode-line help say so. When the delegate has finished, Emacs
 switches the checkout back to the branch or commit it was on, but only if
 the checkout is clean and still on the delegate's branch, and then forgets
 the delegate's record. Otherwise it leaves the checkout where it is, keeps
-the record and says why.
+the record and says why. Branch isolation is laptop-only: with an
+effective host Emacs refuses it before making anything, and says to use
+`:delegate (:host local)`.
+
+#### Sandboxed delegates
+
+With `:delegate (:sandbox t)`, the delegate runs as an arena candidate
+does: its host login is admitted first, it gets the access token and no
+refresh credential, and it writes only its workspace, its private folders
+and the profile's `:write` paths. Its git metadata stays read-only even
+where `:write` overlaps it: the worktree's `.git` pointer, its own git
+directory and the common one, or the checkout's `.git` in branch
+isolation. So it cannot commit, write a ref or change git config. Its
+prompt tells it to leave its changes uncommitted and end its final
+message with exactly one block:
+
+````
+```pstack-commit
+{"version":1,"subject":"[uploads] Add rate limiting",
+ "body":"Reject requests above the configured upload budget."}
+```
+````
+
+Once every one of its processes has stopped, Emacs makes at most one
+commit of the workspace, through a private index, as the laptop user's
+git identity: `user.name` and `user.email` as the lead's repository
+reads them, conditional includes and all, never the environment's
+`GIT_AUTHOR_*`, the host's, or the arena's. Both author and committer
+are that identity, the message is the block's subject and body as given,
+and nothing is signed or appended. A request is refused before anything
+starts when that identity is missing or holds `<`, `>` or control
+characters.
+
+The block must close the final response of a turn that completed: the
+report is written with a `ROLE.final.json` marker holding its hash, and a
+partial, cancelled or timed-out response never proposes a commit, even
+when it holds a block. Duplicate or unknown keys, a multi-line subject,
+control characters, trailers such as `Co-authored-by:` and messages over
+64 KiB are refused too. Then, or when its processes could not be shown to
+have stopped or its branch moved, the follow-up says `No commit created`,
+why, and where the changes stay. A tree identical to the start makes no
+commit.
+
+The commit is journaled in the manifest: its parent, tree, message,
+identity and dates are saved before it is made, its id before the branch
+moves to it by compare-and-swap. Collecting again after a crash reuses or
+remakes the same commit, so a delegate never gets two, and a branch that
+moved meanwhile is left alone.
+
+#### On a remote host
+
+A delegate whose profile names a `:host` runs there in a worktree of the
+host's checkout, on `pstack/delegate/<panel-id>` at the laptop's `HEAD`.
+It does not get the lead's uncommitted files. The job travels as an
+arena's does, through the same submit, poll, fetch and clean calls; see
+`docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md`. The host's readiness file must
+list the capability `"delegate":1`.
+
+An unsandboxed remote delegate uses the host's own agent logins and
+commits itself, with `GIT_AUTHOR_*` and `GIT_COMMITTER_*` naming the
+laptop user's identity in its shell's environment. A sandboxed one runs
+in the host's sandbox, and the host's runner makes its one commit as
+above, as the laptop identity the job carries. When the delegate ends,
+its branch comes back as `refs/heads/pstack/delegate/<panel-id>`,
+checked against the report and the start, and never over a branch of
+that name already here at another commit. Its commits are listed from
+the fetched tip.
+
+The panels view shows where it runs, its branch and its workspace on the
+host. Its member line opens a read-only transcript with `RET`, even after
+it finished: a bounded record of its agent text, tool calls and
+lifecycle notices, fetched by the same polls, which come every five
+seconds while the transcript is shown. `g` there polls now and `q` closes
+it. It is text, never a shell: nothing there reaches the agent. A
+`Report:` line opens the saved final report.
 
 #### The panels view
 
 The delegate's line in `C-c P` shows its shell, and `RET` opens it, live,
-while it runs. `c` cancels it. A worktree delegate's line shows its
+while it runs; a remote delegate's opens its transcript instead. `c` cancels it. A worktree delegate's line shows its
 workspace, and once it has finished, `x` removes the worktree. A
 branch-mode delegate's line shows the checkout's state, and `x` switches
 the checkout back if Emacs could not, then forgets the record. Cleaning
@@ -484,7 +567,10 @@ To merge: git merge --ff-only pstack/delegate/3f9a0cd2e701, or push it and open 
 ```
 
 A branch-mode follow-up says instead whether Emacs switched the checkout
-back. A timeout or a cancellation keeps every commit the delegate made. A
+back. A sandboxed delegate's says whether Emacs made its commit, and if
+not, why. A remote delegate's names where it ran, its workspace on the
+host and the uncommitted paths left there, apart from the branch, and
+says when the branch could not be brought back here. A timeout or a cancellation keeps every commit the delegate made. A
 worktree's uncommitted changes are named, since cleaning the workspace up
 loses them.
 
@@ -509,6 +595,17 @@ rules. Returning it twice does nothing the second time. A record whose
 checkout came back is gone, so `C-c P` lists only the ones still left on
 the branch. A process that outlived the delegate's stop also keeps the
 checkout on the branch, and the panels view names it.
+
+A remote delegate's runner never runs the delegate twice. Before the
+adapter starts, the runner writes a launch record: on a systemd host, the
+adapter runs in a transient scope of its own,
+`pstack-delegate-<job>-<role>`, which stopping ends with every process in
+it; elsewhere the record holds the adapter's pid and start time. A
+restarted runner stops what the record owns, marks an unfinished
+delegate as interrupted, and collects; a saved final response with a
+matching marker still gets its commit. When the writers cannot be shown
+to have stopped, the work stays, nothing is committed, and the host's
+repository lock stays quarantined until someone looks.
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and

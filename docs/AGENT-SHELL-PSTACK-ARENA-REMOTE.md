@@ -1,6 +1,8 @@
 # pstack arena panels on a remote host: design
 
-Status: revision 2, implemented except the Linux sandbox. The transport,
+Status: revision 2, implemented except the Linux sandbox; delegates run
+on hosts too, as [Delegates on a host](#delegates-on-a-host) says. The
+transport,
 base transfer, runner and laptop side live in
 `lisp/+agent-shell-arena-remote.el`, with hooks in
 `lisp/+agent-shell-pstack-panel.el` and `lisp/+agent-shell-arena-git.el`.
@@ -290,28 +292,45 @@ every field's type at the boundary. Ids must be names safe in a path and
 a ref, commits full hex ids, and agents identifiers. An error names the
 field, such as `status.members[0].agent`.
 
-- **The job**, `job.json`: the panel id, brief, rubric, timeouts,
-  candidates, judge, the lead's prefix, the base, its prerequisite, the
-  lead's sparse patterns, the profile as plain data, the host checkout,
-  the code hash, the runner's deadline in seconds, and `measure_egress`,
-  the panel's egress switch. A job without that field measures nothing.
+- **The job**, `job.json`: the panel id, its `shape`, `arena` or
+  `delegate`, the brief, rubric, timeouts, `members`, each with a role,
+  agent, kind (`candidate`, `judge` or `delegate`) and focus, the lead's
+  prefix, the base, its prerequisite, the lead's sparse patterns, the
+  profile as plain data, the host checkout, the code hash, the runner's
+  deadline in seconds, and `measure_egress`, the panel's egress switch. A
+  job without that field measures nothing. A delegate job adds
+  `delegate`: its frozen `sandbox` and the laptop user's `identity`, a
+  `name` and `email`. Wire version 2 writes only `members`; the decoder
+  turns a version-1 job's `candidates` and `judge` into an arena's
+  members, and nothing else reads them. A shape whose members or fields
+  do not fit it, an arena with a delegate payload or a delegate without
+  one, is refused naming the field.
 - **The status**, `status.json`: the runner's phase (`queued`, then the
-  panel's), its pid, heartbeat and deadline, the host's arena id, each
-  member's state, capture and error, and whether results are written.
+  panel's, with `delegating` and `finalizing` for a delegate), its pid,
+  heartbeat and deadline, the host's arena id, each member's state,
+  capture and error, whether results are written, the shape, and a
+  delegate's transcript epoch, kept segments and newest sequence number.
 - **The report**, `report.json`: each member's state, capture, text,
-  error, result commit, diff stat and capture failure, and any rejection.
+  error, result commit, diff stat and capture failure, any rejection,
+  the shape, and a delegate's outcome: its branch and tip, commits,
+  host workspace, sandbox, up to ten uncommitted paths and their count,
+  and whether its one commit was `committed`, `empty` or `blocked`, and
+  why.
 - **The laptop's record**, `remote.json` in the laptop's arena folder:
   the panel and session ids, the host, the laptop phase, the cancel
   state, whether the job was submitted, the results fetched and the
   follow-up delivered, the last heartbeat and when it changed, the
-  restarts, the host's arena id and Emacs.
+  restarts, the host's arena id and Emacs, the shape, and a delegate's
+  transcript cursor.
 
 The host's setup writes `~/.local/share/pstack-arena/ready.json` once its
 smoke check passes, and deletes it on every boot first. It has its own
 format, version 1, with no `kind`. `emacs` is required, and `written_at`,
 `adapters_bin`, `claude_agent_acp`, `codex_acp`, `node`, `bwrap`,
-`unshare` and `slirp4netns` are optional. Each tool is an object with
-`path` and `version`:
+`unshare`, `slirp4netns` and `capabilities` are optional. Each tool is an
+object with `path` and `version`. `capabilities` is `{"delegate":1}`
+once setup has proved the host can run delegates, as below; an arena
+needs none:
 
 ```json
 {"version":1,"written_at":"2026-10-26T10:29:45.684Z",
@@ -574,6 +593,85 @@ arena's code. The only addition is a line naming the host.
 has not delivered, and every 5 s it gives arenas without a live lead the
 shell whose session id matches. Turning off panels while Emacs quits does
 not cancel. Ending the lead's shell otherwise cancels, as locally.
+
+### Delegates on a host
+
+A delegate whose profile's effective host is set, as
+`+agent-shell-arena-git-delegate-options` resolves it, is the job's
+other shape: the same submit, poll, fetch and clean calls, code by hash,
+`remote.json` and host kinds, with no second protocol or runner. The
+laptop locates the lead's repository at `HEAD`, reads the laptop user's
+identity, and pins `HEAD` as the base; no snapshot of the lead's tree is
+made. The job's deadline is the delegate's timeout, counted from when its
+runner holds the repository lock, as an arena's budget is.
+
+The runner rebuilds a panel of the job's shape with its policy's routing
+keys cleared, so it can never submit itself, and refuses the job unless
+the readiness file it read lists `"delegate":1`, a sandboxed delegate has
+a sandbox backend, and, under systemd, `systemd-run` exists. It then runs
+the existing delegate provisioner: a named branch in a worktree of the
+host checkout, refused rather than reused when that branch exists. The
+same repository lock serializes arenas and delegates.
+
+Before the adapter starts, the runner writes the member's launch record,
+`jobs/<id>/leases/<role>.json`, holding a nonce. Under systemd the
+adapter runs outermost in a transient scope, `systemd-run --user --scope
+--collect --unit=pstack-delegate-<job>-<role>`, inside the runner's own
+service; stopping that unit is the stop, for cancel, timeout and
+recovery alike, and the unit's being inactive is the proof that its
+writers ended. A missing or failed scope refuses the delegate rather than
+running it uncontained. A local host records the adapter's pid and start
+time instead, and a pid whose start time differs is never signalled. A
+restarted runner reaps what the record owns before it collects, never
+runs the delegate again, and quarantines the repository lock when it
+cannot prove quiescence; a quarantined lock is never taken over as
+stale.
+
+An unsandboxed delegate commits itself with the identity in its shell's
+environment. A sandboxed one's commit is made by the runner, from the
+proposal in its final response, before the results are packaged; see
+`docs/AGENT-SHELL-PSTACK.md`. The results bundle holds
+`refs/heads/pstack/delegate/<panel>` over the base's parent, so an
+unchanged branch travels too. The laptop fetches it into
+`refs/pstack-arena/<id>/delegate`, checks the tip against the report and
+that the base is its ancestor, then creates the branch by
+compare-and-swap; one already there at another commit is left alone and
+the fetched ref kept. The commits are listed from the verified tip with
+the same `delegate-log` helper local collection uses.
+
+#### Transcripts
+
+The runner watches the delegate's shell through the drive library's own
+subscription, for agent text chunks and tool calls as well as lifecycle
+events, and appends a public projection of them to
+`jobs/<id>/transcript/<segment>.jsonl`: records of `seq`, `time`, `kind`
+(`assistant`, `tool` or `notice`) and `text`, never permission payloads,
+auth, environment, tool arguments, hidden reasoning or the final report.
+A record is at most 16 KiB encoded, split between characters; a segment
+at most 1 MiB, never split mid-line; and the newest eight segments stay.
+A restarted runner drops a torn last line and numbers on in the same
+epoch.
+
+A delegate's poll passes a cursor, its epoch, segment, byte offset and
+last sequence number. The poll script still leaves the cancel marker
+first, then runs a short batch Emacs from the job's code,
+`+agent-shell-arena-remote-poll-batch`, which answers with one JSON
+envelope: whether the runner lives, the cancel marker, the status and at
+most 64 KiB of whole records after the cursor, with the next cursor and
+whether a gap precedes them or more follows. When that fails the plain
+answer follows, so status and cancels never wait on a transcript. An
+arena's poll passes no cursor.
+
+The laptop validates each page, appends records it lacks to
+`transcript.jsonl` in the laptop's arena folder, at most 8 MiB, with a
+notice for each gap or truncation, and only then saves the advanced
+cursor, so a replayed page adds nothing. It fetches the next page at once
+when there is more, and polls every
+`+agent-shell-arena-remote-transcript-interval` seconds, 5, while the
+transcript buffer is shown. The final fetch brings the kept segments
+too. `+agent-shell-arena-remote-transcript-buffer` shows the cache
+literally in a `special-mode` buffer, following only windows at its end;
+it owns no timer, process or connection.
 
 ## How the implementation departs
 
@@ -841,7 +939,28 @@ Implemented so far:
   - a laptop restart that forgets every panel, then re-attaches and
     delivers.
 
+- **`test/agent-shell-pstack-remote-delegate-test.el`**: delegate policy
+  and profile keys, version-1 jobs normalized, both shapes round-tripped
+  and cross-shape fields refused, readiness, the laptop identity through
+  conditional includes, the commit proposal, one journaled commit and its
+  crash recovery, protected git metadata on both backends, the
+  successful-final marker, the transcript's bounds, paging, replay, gaps,
+  cache and buffer, process leases with a stand-in systemd, and lock
+  quarantine.
+- **`test/agent-shell-pstack-remote-delegate-acp-test.el`**, the gate
+  "Remote pstack delegates over ACP": sandboxed delegates here and
+  full-access and sandboxed delegates on a `(local . DIRECTORY)` host,
+  with a laptop identity unlike the host's, refused git writes in the
+  sandbox, the branch fetched back, the transcript over polls and the
+  final fetch, `RET` from the panels view, one follow-up after a
+  re-attach, cleanup, cancel, a timeout without a final response and a
+  killed runner.
+
 Still planned:
+
+- **Delegate scopes on a systemd host.** The scope is tested only with a
+  stand-in `systemd-run` and `systemctl`; a delegate whose scope is
+  stopped mid-run, leaving no process, needs a real Linux host.
 
 - **Unit tests** for the `bwrap` argument builder from a sandbox spec.
 - **A Linux sandbox test** that runs only on Linux, through `bwrap`, as
