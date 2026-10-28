@@ -1181,6 +1181,52 @@ and a message."
 
 ;;;; Delegates
 
+;;;; Remote delegate design signatures
+
+(cl-defstruct (+agent-shell-arena-git-user
+               (:constructor +agent-shell-arena-git--user)
+               (:copier nil))
+  "A validated git identity read from the laptop repository's config.
+NAME and EMAIL contain no identity delimiters or control characters.
+Both author and committer use this identity; host config is no fallback."
+  name email)
+
+(defun +agent-shell-arena-git-delegate-options (profile)
+  "Resolve delegate execution policy from validated repository PROFILE.
+Return explicit :host, :isolation and :sandbox values.  Absent :host
+inherits PROFILE's registered host pair; only the symbol `local' may
+override it, resolving to nil.  Reject remote
+branch isolation before any resource is created.  Sandbox defaults nil.
+This is the sole resolver; freeze its result for launch and recovery.
+See docs/sketch-remote-delegate.md; this signature is not wired in."
+  (ignore profile)
+  (error "Not implemented"))
+
+(defun +agent-shell-arena-git-user-identity (directory callback)
+  "Read DIRECTORY's repository-effective git user config on the laptop.
+Honor conditional includes; ignore inherited author/committer variables.
+Call CALLBACK asynchronously with a `+agent-shell-arena-git-user' and
+nil, or nil and an actionable error.  Never substitute host or arena
+capture identity when name or email is missing or invalid."
+  (ignore directory callback)
+  (error "Not implemented"))
+
+(defun +agent-shell-arena-git-finalize-delegate
+    (manifest identity message callback)
+  "Make at most one user commit for MANIFEST's stopped sandboxed delegate.
+IDENTITY is the frozen laptop user; MESSAGE is its validated terminal
+commit subject and body.  The caller must establish that all writers
+stopped.  Require the recorded branch at base, snapshot through a private
+index, and preserve sparse/generated-path semantics.  Persist intent
+and oid before compare-and-swap publication; recovery reuses that oid.
+An unchanged tree makes no commit.  Never use arena capture authorship,
+append trailers, sign, or overwrite moved refs.  Reconcile the worktree
+index without overwriting files.  Only this function writes finalization
+intent in the delegate manifest.  CALLBACK receives its delegate record
+and nil, or nil and an error; it runs asynchronously and exactly once."
+  (ignore manifest identity message callback)
+  (error "Not implemented"))
+
 (defun +agent-shell-arena-git-delegate-branch (manifest)
   "Return the branch MANIFEST's pstack delegate commits on.
 It is named for the panel, whose id is the arena id without its suffix."

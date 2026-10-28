@@ -134,6 +134,16 @@ A local host's is ready.json in its state folder."
 
 ;;;; Records on the wire
 
+(cl-defstruct (+agent-shell-arena-remote-request-member
+               (:constructor +agent-shell-arena-remote--make-request-member)
+               (:copier nil))
+  "One requested member in the proposed version-2 job protocol.
+KIND is candidate or judge for an arena, delegate for a delegate job.
+Only the wire decoder normalizes version-1 candidates and judge fields
+to this representation.  Status/report members remain observations.
+See docs/sketch-remote-delegate.md; existing codecs do not use this yet."
+  role agent kind focus)
+
 (defconst +agent-shell-arena-remote-wire-version 1
   "Version of the records this code writes.
 It reads every version from 1 up to this one, so a laptop that updated
@@ -2184,6 +2194,52 @@ The follow-up is composed as a local arena's is."
     (+agent-shell-arena-remote--sync)))
 
 ;;;; Cancel, abandon, re-attach and clean
+
+;;;; Remote delegate transcript design signatures
+
+(defun +agent-shell-arena-remote--record-transcript (runner event)
+  "Append the public projection of delegate EVENT to RUNNER's transcript.
+Use the existing drive watcher, never another ACP subscription.  Store
+UTF-8 JSONL with monotonic seq/time/kind/text, bounded to eight 1 MiB
+segments and 16 KiB per encoded record.  Exclude auth, permission payloads,
+environment, tool arguments and hidden reasoning.  Resume sequence
+numbers after a restart, dropping an incomplete last line.  The runner
+is the only writer; its final member report remains authoritative.
+See docs/sketch-remote-delegate.md; this signature is not wired in."
+  (ignore runner event)
+  (error "Not implemented"))
+
+(defun +agent-shell-arena-remote--poll-page (directory cursor)
+  "Read one version-2 poll envelope for job DIRECTORY on the host.
+CURSOR is nil or an epoch/segment/byte-offset tuple.  Include the existing
+alive/cancel/status observations and at most 64 KiB of whole transcript
+records, with next cursor, gap and more indicators.  Validate all paths
+against DIRECTORY; tolerate rotation and a partial final line.  A tail
+failure must not hide status or cancel acknowledgment.  This is called
+by the existing poll script using the shipped batch Emacs, not another
+connection or job protocol.  It never mutates runner-owned artifacts."
+  (ignore directory cursor)
+  (error "Not implemented"))
+
+(defun +agent-shell-arena-remote--cache-transcript (remote page)
+  "Validate and durably cache REMOTE's transcript PAGE on the laptop.
+Require matching job/epoch, ordered records and bounded contiguous
+cursors.  Persist records before advancing the remote record's cursor;
+replaying a page after restart must not duplicate text.  Bound cache and
+visible text to 8 MiB, marking rotation/truncation gaps.  Update existing
+read-only views while preserving readers' scroll positions.  Tail errors
+never prevent member results from being fetched or delivered."
+  (ignore remote page)
+  (error "Not implemented"))
+
+(defun +agent-shell-arena-remote-transcript-buffer (remote)
+  "Return REMOTE's read-only delegate transcript buffer, creating it if needed.
+Render the bounded local cache as literal text in `special-mode', with
+host, role, last poll and lifecycle/gap notices.  Never start an agent,
+remote shell or buffer-owned poll timer.  Refresh requests use REMOTE's
+existing per-host polling queue; finished jobs remain readable offline."
+  (ignore remote)
+  (error "Not implemented"))
 
 (defvar +agent-shell-arena-remote--quitting nil
   "Non-nil while Emacs quits, which never cancels a remote arena.")

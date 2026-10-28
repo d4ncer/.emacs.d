@@ -1902,6 +1902,19 @@ An arena on a host decides for itself; see
 
 ;;;; Delegates
 
+(defun +agent-shell-pstack-panel--delegate-commit-message (text)
+  "Extract a sandboxed delegate's proposed commit message from final TEXT.
+Require exactly one terminal version-1 pstack-commit JSON block with a
+nonempty one-line subject and a string body, at most 64 KiB in UTF-8.
+Reject duplicate keys, trailers and controls except body newlines/tabs.
+Preserve the supplied subject/body and style; never invent attribution
+or infer a message from partial text, tools or a rolling transcript.
+Return the commit message string, or signal `user-error' with the reason
+collection must preserve the dirty worktree instead of committing.
+See docs/sketch-remote-delegate.md; this signature is not wired in."
+  (ignore text)
+  (error "Not implemented"))
+
 (defun +agent-shell-pstack-panel--prepare-delegate (panel)
   "Give PANEL's delegate a branch and somewhere to work, then start it.
 The repository's profile picks a worktree of its own or, with

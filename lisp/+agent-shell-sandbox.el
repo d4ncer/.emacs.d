@@ -358,6 +358,18 @@ and a (regexp . RE) pattern names no path")
         ((not (and (stringp value) (file-name-absolute-p value)))
          "an absolute path or a (regexp . RE) pattern")))
 
+(defun +agent-shell-sandbox--check-protected-paths (root paths)
+  "Validate proposed write-protected PATHS inside writable sandbox ROOT.
+Return canonical paths for immutable git pointer files and git metadata
+directories, including metadata outside ROOT.  Reject a path that would
+make ROOT itself unwritable or an ambiguous symlink target.  The create
+function stores these paths; both backend renderers enforce them after
+profile write allowances, so an overlapping allowance cannot enable git
+commits.  This validates policy, not the current filesystem permissions.
+See docs/sketch-remote-delegate.md; this signature is not wired in."
+  (ignore root paths)
+  (error "Not implemented"))
+
 (cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
                                              allow-metadata allow-writes
                                              allow-connects env trace

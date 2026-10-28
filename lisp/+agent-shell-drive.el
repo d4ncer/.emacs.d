@@ -235,6 +235,20 @@ and before any permission prompt, so the policy is enforced here too."
   "Return CONFIG with KEY set to VALUE."
   (cons (cons key value) (assq-delete-all key (copy-alist config))))
 
+(defun +agent-shell-drive--lease-client (lease client)
+  "Arrange durable process ownership for CLIENT under the recorded LEASE.
+LEASE names a private owner record with a nonce and process start identity,
+written before launch.  Return a client description whose adapter starts
+under the host's supervisor or member scope; keep sandbox and environment
+setup on that same launch path.  A runner crash must leave enough ownership
+to stop this member's descendants through the existing stop operations.
+Never infer ownership from cwd or signal a reused bare pid.  Lost ownership
+blocks recovery and quarantines the repository lease until quiescence can
+be proved.  No transcript or credential payload belongs in the lease.
+See docs/sketch-remote-delegate.md; this signature is not wired in."
+  (ignore lease client)
+  (error "Not implemented"))
+
 (cl-defun +agent-shell-drive-start (&key config directory policy)
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
 POLICY nil starts an ordinary shell.  With `read-only', the shell runs in its
