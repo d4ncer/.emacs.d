@@ -166,7 +166,10 @@ write.")
 nil for now.")
   (read-only nil :read-only t
              :documentation "Whether the agent may write only its private \
-folders, not ROOT."))
+folders, not ROOT.")
+  (egress nil :documentation "Its `+agent-shell-egress' session, or nil."))
+
+(declare-function +agent-shell-egress-launch-environment "+agent-shell-egress")
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
@@ -1059,7 +1062,8 @@ The returned maker runs the client's command through
 it runs from, such as its npm install, added read-only.  Its environment
 holds only the prepared entries, then `+agent-shell-sandbox-environment'
 and `+agent-shell-sandbox-linux-environment'.  The client's own entries
-are dropped, since they may hold this Emacs's whole environment."
+are dropped, since they may hold this Emacs's whole environment.  An
+egress session gives the launcher alone its observer's folder."
   (let ((prepared (funcall (plist-get (+agent-shell-sandbox-entry agent)
                                     :prepare)
                            sandbox)))
@@ -1095,7 +1099,12 @@ are dropped, since they may hold this Emacs's whole environment."
                         (+agent-shell-sandbox-linux-arguments
                          mounts (cons program
                                       (alist-get :command-params client))))
-                (alist-get :environment-variables client) environment)
+                ;; The launcher alone sees these; NAMES leaves them out.
+                (alist-get :environment-variables client)
+                (append environment
+                        (when-let* ((session (+agent-shell-sandbox-egress
+                                              sandbox)))
+                          (+agent-shell-egress-launch-environment session))))
           client)))))
 
 ;;;; Host logins and arena admission (both backends)

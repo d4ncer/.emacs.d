@@ -456,6 +456,56 @@ The writer would write a file two seconds after the stop."
           (delete-process process)
           (kill-buffer (process-buffer process)))))))
 
+(ert-deftest +agent-shell-sandbox-linux-test-egress ()
+  "Record the HTTPS destination a member reaches, named by its DNS
+question and SNI, but neither the request path nor the agent's login.
+Without a session the launcher gets no observer folder."
+  (+agent-shell-sandbox-linux-test--on-linux
+    (skip-unless (and (executable-find "tshark") (executable-find "nsenter")))
+    (require '+agent-shell-egress)
+    (+agent-shell-sandbox-linux-test--with (root) nil
+      (let ((canary "CANARY-5d2c81")
+            (file (expand-file-name "opus.egress.json" root))
+            (identity '(:panel "p1" :arena nil :role "opus" :kind candidate))
+            (script "python3 -c \"
+import urllib.request
+try:
+    urllib.request.urlopen('https://github.com/%s', timeout=15)
+except Exception:
+    pass\""))
+        (should-not (assoc-string
+                     "PA_SANDBOX_EGRESS"
+                     (mapcar (lambda (entry) (car (split-string entry "=")))
+                             (alist-get :environment-variables
+                                        (+agent-shell-sandbox-linux-test--client
+                                         sandbox "true")))))
+        (let* ((session (+agent-shell-egress-open sandbox file identity))
+               (result (+agent-shell-sandbox-linux-test--run
+                        sandbox (format script canary)))
+               (record nil))
+          (should (eql 0 (car result)))
+          (+agent-shell-egress-close session (lambda (value)
+                                               (setq record value)))
+          (let ((deadline (+ (float-time) 10)))
+            (while (and (not record) (< (float-time) deadline))
+              (accept-process-output nil 0.05)))
+          (should (memq (+agent-shell-egress-record-state record)
+                        '(finished partial)))
+          (should (seq-find
+                   (lambda (destination)
+                     (and (eql 443 (+agent-shell-egress-destination-port
+                                    destination))
+                          (member '("github.com" . sni)
+                                  (+agent-shell-egress-destination-names
+                                   destination))))
+                   (+agent-shell-egress-record-destinations record)))
+          (let ((text (with-temp-buffer (insert-file-contents file)
+                                        (buffer-string))))
+            (should (string-search "\"dns\"" text))
+            (should-not (string-search canary text))
+            (should-not (string-search "PA_TEST_SECRET" text)))
+          (should-not (file-exists-p (concat file ".d"))))))))
+
 (ert-deftest +agent-shell-sandbox-linux-test-clone ()
   "Clone a private path with GNU cp, copying where reflinks fail.
 Links stay links."

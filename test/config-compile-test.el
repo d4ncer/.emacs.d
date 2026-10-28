@@ -18,6 +18,7 @@
                        "lisp/+modeline-data.el" "lisp/+grep-edit.el"
                        "lisp/+agent-shell-sandbox.el"
                        "lisp/+agent-shell-drive.el"
+                       "lisp/+agent-shell-egress.el"
                        "lisp/+agent-shell-pstack.el"
                        "lisp/+agent-shell-pstack-panel.el"
                        "lisp/+agent-shell-pstack-arena-trace.el"

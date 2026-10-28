@@ -48,6 +48,7 @@
 (declare-function agent-shell-interrupt "agent-shell")
 (declare-function agent-shell-subscribe-to "agent-shell")
 (declare-function agent-shell-unsubscribe "agent-shell")
+(declare-function +agent-shell-egress-attach "+agent-shell-egress")
 (defvar agent-shell-agent-configs)
 (defvar agent-shell-session-strategy)
 (defvar agent-shell-cwd-function)
@@ -275,6 +276,9 @@ transcript is kept.  A shell with a policy is hidden from
                      agent-shell-transcript-file-path-function)))
               (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
+    (when-let* ((session (and sandboxed (+agent-shell-sandbox-egress policy))))
+      (+agent-shell-egress-attach
+       session (lambda () (+agent-shell-drive--adapter shell))))
     (when policy
       (advice-add 'agent-shell-buffers :filter-return
                   #'+agent-shell-drive--hide-owned)
