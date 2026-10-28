@@ -58,11 +58,13 @@ Upstream panels mix model families. Ports to one harness lose that, or shell
 out to other vendors' CLIs. Here Emacs starts each panel member as an agent
 shell for a configured agent. `lisp/+agent-shell-pstack-panel.el` holds the
 panels, and `+agent-shell-pstack-panel-mode` is global and enabled with
-agent-shell. It covers the `how`, `interrogate` and `arena` shapes in
-`+agent-shell-pstack-panel-shapes`. `how` and `interrogate` members only
-read. `arena` candidates write code, so each runs in its own sandboxed
-worktree; see [Run an arena](#run-an-arena) and the design in
-`docs/AGENT-SHELL-PSTACK-ARENA.md`.
+agent-shell. It covers the `how`, `interrogate`, `arena` and `delegate`
+shapes in `+agent-shell-pstack-panel-shapes`. `how` and `interrogate`
+members only read. `arena` candidates write code, so each runs in its own
+sandboxed worktree; see [Run an arena](#run-an-arena) and the design in
+`docs/AGENT-SHELL-PSTACK-ARENA.md`. A `delegate` hands the whole task to
+one agent, which commits on a branch of its own; see
+[Delegate panels](#delegate-panels).
 
 ### Request a panel
 
@@ -143,7 +145,9 @@ an unsent draft. Emacs retries on the lead's next `turn-complete` or
 
 Panels live in memory. Restarting Emacs ends the lead and every member, so an
 interrupted panel does not resume. An arena on a remote host is the
-exception; see [On a remote host](#on-a-remote-host). Killing the lead
+exception; see [On a remote host](#on-a-remote-host). A delegate that worked
+in the lead's checkout leaves a record that lets Emacs return the checkout
+later; see [Delegate panels](#delegate-panels). Killing the lead
 stops its unfinished panels. The panel and member structs only gain slots at the end and carry
 a schema number, `+agent-shell-pstack-panel--schema`. Loading the library
 again drops in-memory panels from another schema, with a message, rather
@@ -381,6 +385,110 @@ follow-up. `M-x +agent-shell-pstack-arena-reattach` resumes polling it.
 `x` and `M-x +agent-shell-pstack-arena-clean` clean both sides. See
 `docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md`.
 
+### Delegate panels
+
+A delegate hands the whole task to one agent the lead picks. The agent
+implements it, runs the tests and commits on a new branch,
+`pstack/delegate/<panel-id>`. It runs unsandboxed, in its agent's
+full-access mode from `+agent-shell-sandbox-agents`: `bypassPermissions`
+for Claude Code and `agent-full-access` for Codex. It needs no sandbox
+backend, so it works on Linux and macOS alike, but its repository needs a
+commit and no submodules, as an arena's does. A delegate always runs on
+this Emacs, whatever the profile's `:host` says.
+
+The request names exactly one member and no rubric or judge:
+
+````
+```pstack-panel
+{"version":1,"shape":"delegate","brief":"Add rate limiting to the uploads
+ endpoint and cover it with tests","timeout":2700,
+ "members":[{"role":"rate-limit","agent":"codex"}]}
+```
+````
+
+- `members` lists one member, on an agent in `+agent-shell-sandbox-agents`.
+  Emacs rejects zero or several members, an agent without a full-access
+  mode, and the arena fields `rubric`, `judge` and `judge_timeout`, each
+  with a reason the lead can act on.
+- `timeout` bounds the whole run, preparation included. It defaults to
+  `+agent-shell-pstack-panel-default-delegate-timeout`, 2700 seconds, and
+  is at most 3600.
+
+A request found mid-turn waits for the lead's interrupted turn to end, as
+an arena's does. The delegate's shell is hidden from `agent-shell-buffers`.
+A permission request rejects and ends it, since its mode should never ask.
+
+#### Isolation
+
+By default the delegate gets a git worktree of its own under
+`+agent-shell-pstack-arena-directory`, on its new branch at the lead's
+`HEAD`. The repository's profile provisions it as it would an arena
+candidate: `:shared` links, `:private` and `:copy` clones, and the lead's
+own copies of the `:files` paths.
+
+A repository too large for a second worktree can have the delegate work in
+the lead's own checkout instead. Its profile in
+`+agent-shell-pstack-arena-profiles` says so with `:delegate`, whose only
+key is `:isolation`, `worktree` or `branch`:
+
+```elisp
+(add-to-list
+ '+agent-shell-pstack-arena-profiles
+ '("~/src/big-repo/" :delegate (:isolation branch)))
+```
+
+Emacs then refuses a request while the checkout has changes, and lists up
+to ten of them. A clean checkout switches to the delegate's branch until
+the delegate finishes. Leave it alone meanwhile; the panels view and the
+lead's mode-line help say so. When the delegate has finished, Emacs
+switches the checkout back to the branch or commit it was on, but only if
+the checkout is clean and still on the delegate's branch. Otherwise it
+leaves the checkout where it is and says why.
+
+#### The panels view
+
+The delegate's line in `C-c P` shows its shell, and `RET` opens it, live,
+while it runs. `c` cancels it. A worktree delegate's line shows its
+workspace, and once it has finished, `x` removes the worktree. A
+branch-mode delegate's line shows the checkout's state, and `x` switches
+the checkout back if Emacs could not, then forgets the record. Cleaning
+never deletes the delegate's branch.
+
+#### The follow-up
+
+Once the delegate's turn ends, times out or is cancelled, Emacs stops its
+adapter's processes and process groups, never a whole directory's, then
+lists the branch's commits since the commit it started from. The lead gets
+one follow-up:
+
+```
+pstack panel 3f9a0cd2e701 (delegate) has finished: rate-limit (codex): done.
+Branch: pstack/delegate/3f9a0cd2e701, 2 commits since <start>, the commit it started from:
+  d4e5f6a7b8c9 Add a token-bucket limiter for uploads
+  00aa11bb22cc Add limiter tests
+Workspace: ~/.local/state/pstack-arena/3f9a0cd2e701-7e2b9a04/rate-limit
+Report:
+...
+To review: git log <start>..pstack/delegate/3f9a0cd2e701
+To merge: git merge --ff-only pstack/delegate/3f9a0cd2e701, or push it and open a pull request.
+```
+
+A branch-mode follow-up says instead whether Emacs switched the checkout
+back. A timeout or a cancellation keeps every commit the delegate made. A
+worktree's uncommitted changes are named, since cleaning the workspace up
+loses them.
+
+#### Recovery
+
+Every delegate keeps a manifest under `+agent-shell-pstack-arena-directory`.
+A branch-mode manifest records where the checkout was before Emacs switched
+it, and is written before the switch and again after Emacs tries to switch
+back. If Emacs exits while a branch-mode delegate runs, the next Emacs lists
+it in `C-c P` as interrupted, and `x` returns the checkout under the same
+rules. Returning it twice does nothing the second time. A process that
+outlived the delegate's stop also keeps the checkout on the branch, and the
+panels view names it.
+
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
 event watching shared with `agent-shell-projects`.
@@ -392,9 +500,10 @@ panel since Emacs started, with its id, shape, phase or status and lead, and
 each member's role, agent, state and report. An arena also shows its folder
 and each candidate's capture, and a remote one its host and the host's
 phase. `RET` visits the report, the arena folder, or the member or lead
-shell, `x` cleans up a finished arena, and `c` cancels an unfinished panel. The buffer
-redraws whenever a panel changes. The decision trail and plan views are
-planned.
+shell, `x` cleans up a finished arena or delegate, and `c` cancels an
+unfinished panel. Below the panels it lists each branch-mode delegate an
+earlier Emacs left unreturned. The buffer redraws whenever a panel changes.
+The decision trail and plan views are planned.
 
 While a lead has a panel running, its mode line shows `panel 1/3`, the
 settled and total member counts, next to `pstack`. Hovering lists each

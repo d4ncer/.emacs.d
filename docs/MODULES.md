@@ -98,7 +98,7 @@ revert edits. There is no separate wgrep transaction or wgrep dependency.
 - Agent integration: inbox transport and request delivery. Starting, sending
   to and watching shells goes through `lisp/+agent-shell-drive.el`, which
   pstack panels (`lisp/+agent-shell-pstack-panel.el`) also use for their
-  read-only member shells. Its sandboxed shells take their sandbox-exec
+  read-only, sandboxed and full-access member shells. Its sandboxed shells take their sandbox-exec
   profile, credentials and stop steps from `lisp/+agent-shell-sandbox.el`.
 - Code and review: captured diffs, explanations and connected navigation.
 
