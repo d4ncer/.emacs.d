@@ -796,7 +796,8 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
                             (car (+agent-shell-pstack-panel-members panel))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-schema-guard ()
-  "Drop panels from an older struct layout when the file loads again."
+  "Drop panels from an older struct layout when the file loads again.
+That includes a panel whose arena manifest has an older layout."
   (+agent-shell-pstack-panel-test--with
     (lead-event :kind 'turn-complete :session "s1"
                 :text (+agent-shell-pstack-panel-test--message
@@ -810,12 +811,18 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
                  (setf (+agent-shell-pstack-panel-schema panel) 1)
                  panel)
                +agent-shell-pstack-panel--panels)
+      (puthash "old-manifest"
+               (let ((panel (copy-sequence current)))
+                 (setf (+agent-shell-pstack-panel-arena panel)
+                       (record '+agent-shell-arena-git-manifest "id"))
+                 panel)
+               +agent-shell-pstack-panel--panels)
       (cl-letf (((symbol-function 'message)
                  (lambda (format &rest args)
                    (push (apply #'format-message format args) messages))))
         (load (locate-library "+agent-shell-pstack-panel.el") nil t t))
       (should (equal (list current) (+agent-shell-pstack-panel-list)))
-      (should (string-prefix-p "Dropped 2 pstack panels" (car messages)))
+      (should (string-prefix-p "Dropped 3 pstack panels" (car messages)))
       (setq messages nil)
       (cl-letf (((symbol-function 'message)
                  (lambda (format &rest args)

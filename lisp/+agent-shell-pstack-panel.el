@@ -244,9 +244,15 @@ when collecting failed; what it left is in its panel's manifest."
   "Map panel id to panel, including rejected requests.")
 
 (defun +agent-shell-pstack-panel--current-p (panel)
-  "Return whether PANEL was made with the current struct schema."
-  (eql (ignore-errors (+agent-shell-pstack-panel-schema panel))
-       +agent-shell-pstack-panel--schema))
+  "Return whether PANEL and its arena manifest have the current structs.
+A manifest carries no schema, so its slot count stands in for one."
+  (and (eql (ignore-errors (+agent-shell-pstack-panel-schema panel))
+            +agent-shell-pstack-panel--schema)
+       (let ((arena (+agent-shell-pstack-panel-arena panel)))
+         (or (null arena)
+             (= (length arena)
+                (length (cl-struct-slot-info
+                         '+agent-shell-arena-git-manifest)))))))
 
 ;; A reload that changed a struct would break every older record in place.
 (let ((stale (seq-remove
