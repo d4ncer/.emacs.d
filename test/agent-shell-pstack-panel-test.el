@@ -1736,6 +1736,14 @@ pointers.*graft such a file by hand\\.$"
   (funcall finish "opus" "Rationale A")
   (funcall finish "codex" "Rationale B")
   (+agent-shell-pstack-panel-test--drain)
+  ;; Closing egress records can hold the judge's start past one drain.
+  (let ((judge (+agent-shell-pstack-panel-test--judge
+                (car (last (+agent-shell-pstack-panel-list)))))
+        (deadline (+ (float-time) 10)))
+    (while (and (eq 'pending (+agent-shell-pstack-panel-member-state judge))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.05))
+    (should-not (eq 'pending (+agent-shell-pstack-panel-member-state judge))))
   (funcall member-event "judge" :kind 'init-finished)
   (funcall member-event "judge" :kind 'turn-complete :text "A wins."))
 
