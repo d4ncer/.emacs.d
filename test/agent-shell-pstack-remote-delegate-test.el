@@ -229,6 +229,12 @@ base bundle carries it to a repository holding only the lead's HEAD."
              (copy (expand-file-name "copy/" scratch))
              (bundle (expand-file-name "base.bundle" scratch)))
         (should-not (equal head snapshot))
+        (should (equal "Laptop User <laptop@example.com>\n\
+Laptop User <laptop@example.com>\n\
+Snapshot uncommitted work for pstack delegate abc123def456"
+                       (+remote-delegate-test--git
+                        repo "log" "-1" "--format=%an <%ae>%n%cn <%ce>%n%B"
+                        snapshot)))
         (should (equal snapshot (+agent-shell-arena-remote-job-base
                                  (cdr submitted))))
         (should (equal head (+remote-delegate-test--git

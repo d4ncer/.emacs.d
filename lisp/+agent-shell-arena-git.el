@@ -342,14 +342,23 @@ during capture; retry once they settle")))))
     (attempt nil 1)))
 
 (defun +agent-shell-arena-git--commit (git-dir work-tree tree parent message
-                                               fail done)
+                                               fail done &optional identity)
   "Call DONE with a commit of TREE on PARENT with MESSAGE, or FAIL.
-The commit needs no user identity and is never signed."
+Use IDENTITY, a validated `+agent-shell-arena-git-user', for author and
+committer when supplied; otherwise use the arena capture identity.
+The commit is never signed."
   (+agent-shell-arena-git--git
    git-dir work-tree
    (list "commit-tree" "--no-gpg-sign" "-p" parent "-m" message tree)
    fail (lambda (output) (funcall done (string-trim output)))
-   +agent-shell-arena-git--identity))
+   (if identity
+       (let ((name (+agent-shell-arena-git-user-name identity))
+             (email (+agent-shell-arena-git-user-email identity)))
+         (list (concat "GIT_AUTHOR_NAME=" name)
+               (concat "GIT_AUTHOR_EMAIL=" email)
+               (concat "GIT_COMMITTER_NAME=" name)
+               (concat "GIT_COMMITTER_EMAIL=" email)))
+     +agent-shell-arena-git--identity)))
 
 ;;;; Base
 
@@ -454,11 +463,12 @@ and nil, or nil and a message, for the reasons an arena's base fails."
       (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
 (defun +agent-shell-arena-git-capture-base (directory callback
-                                                      &optional reuse-head)
+                                         &optional reuse-head identity message)
   "Snapshot the working tree of the lead at DIRECTORY as a base commit.
 The commit's parent is HEAD and its tree holds tracked and untracked,
 non-ignored files.  With REUSE-HEAD non-nil, a tree equal to HEAD's
-makes HEAD itself the base.  Call CALLBACK with a
+makes HEAD itself the base.  IDENTITY and MESSAGE override the arena
+capture identity and base commit message.  Call CALLBACK with a
 `+agent-shell-arena-git-base' and nil, or nil and a message saying why
 there is no base."
   (let ((fail (lambda (message) (funcall callback nil message))))
@@ -492,10 +502,12 @@ there is no base."
                     (progn (setf (+agent-shell-arena-git-base-commit base) head)
                            (funcall callback base nil))
                   (+agent-shell-arena-git--commit
-                   git-dir toplevel tree head "pstack arena base" fail
+                   git-dir toplevel tree head (or message "pstack arena base")
+                   fail
                    (lambda (commit)
                      (setf (+agent-shell-arena-git-base-commit base) commit)
-                     (funcall callback base nil)))))))))
+                     (funcall callback base nil))
+                   identity)))))))
       (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
 ;;;; Manifest

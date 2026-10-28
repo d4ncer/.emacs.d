@@ -332,6 +332,13 @@ follow-up names where it ran, once."
       ;; as a snapshot commit on top of its unpushed HEAD.
       (should (equal (funcall lead-git "rev-parse" "HEAD")
                      (funcall lead-git "rev-parse" (concat base "^"))))
+      (dolist (git (list lead-git host-git))
+        (should (equal
+                 (format "Snapshot uncommitted work for pstack delegate %s\n\
+Laptop Person <laptop@example.com>\nLaptop Person <laptop@example.com>"
+                         id)
+                 (funcall git "log" "-1" "--format=%B%an <%ae>%n%cn <%ce>"
+                          base))))
       (should (equal "Scratch\nAn uncommitted edit"
                      (funcall host-git "show" (concat branch ":README"))))
       (should (equal "Lead" (funcall host-git "show" (concat branch

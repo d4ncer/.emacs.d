@@ -117,6 +117,20 @@
   (+arena-git-test--ok
    (lambda (done) (+agent-shell-arena-git-capture manifest role done))))
 
+(ert-deftest +agent-shell-arena-git-test-base-capture-identity ()
+  "An arena's base keeps the capture identity even without a user identity."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "file.txt" "initial\n")))
+      (with-temp-file config (insert ""))
+      (+arena-git-test--write (expand-file-name "file.txt" repo) "changed\n")
+      (let ((commit (+agent-shell-arena-git-base-commit
+                     (+arena-git-test--base repo))))
+        (should (equal "pstack arena <pstack-arena@localhost>\n\
+pstack arena <pstack-arena@localhost>\npstack arena base"
+                       (+arena-git-test--git
+                        repo "log" "-1" "--format=%an <%ae>%n%cn <%ce>%n%B"
+                        commit)))))))
+
 (ert-deftest +agent-shell-arena-git-test-base-snapshots-working-tree ()
   (+arena-git-test--with-scratch
     (let* ((repo (+arena-git-test--repo

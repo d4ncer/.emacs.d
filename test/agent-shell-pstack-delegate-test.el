@@ -319,8 +319,13 @@ The lead's checkout, index and stash stay as they were."
           (should-not (equal head snapshot))
           (should (equal head (git "rev-parse" (concat snapshot "^"))))
           (should (equal snapshot (git "rev-parse" branch)))
-          (should (equal "pstack arena <pstack-arena@localhost>"
-                         (git "log" "-1" "--format=%an <%ae>" snapshot)))
+          (should (equal "Test <test@example.com>\nTest <test@example.com>"
+                         (git "log" "-1" "--format=%an <%ae>%n%cn <%ce>"
+                              snapshot)))
+          (should (equal (format "Snapshot uncommitted work for pstack \
+delegate %s"
+                                 (+agent-shell-pstack-panel-id panel))
+                         (git "log" "-1" "--format=%B" snapshot)))
           (should (equal head (+agent-shell-arena-git-delegate-head
                                (+agent-shell-arena-git-manifest-delegate
                                 manifest))))
@@ -364,6 +369,29 @@ onto yours with git rebase --onto HEAD %s %s.\n" snapshot snapshot branch)
                            (insert-file-contents
                             (expand-file-name "README" repo))
                            (buffer-string)))))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-invalid-identity ()
+  "Refuse missing or invalid identities before creating git resources."
+  (pcase-dolist (`(,config . ,reason)
+                 '(("[user]\n\tname = Only Name\n" . "user.email nil")
+                   ("[user]\n\tname = Invalid <name>\n\temail = a@example.com\n"
+                    . "user.name \"Invalid <name>\"")))
+    (+agent-shell-pstack-delegate-test--with
+      (with-temp-file gitconfig (insert config))
+      (with-temp-file (expand-file-name "loose.txt" repo) (insert "x\n"))
+      (let ((objects (git "count-objects" "-v")))
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-delegate-test--message
+                           (+agent-shell-pstack-delegate-test--request)))
+        (let ((text (followup)))
+          (should (string-search reason text))
+          (should (string-search "Set user.name and user.email with git config"
+                                 text)))
+        (should-not started)
+        (should-not (file-exists-p arenas))
+        (should (equal objects (git "count-objects" "-v")))
+        (should (equal "main" (git "branch" "--format=%(refname:short)")))
+        (should (= 1 (length (split-string (git "worktree" "list") "\n"))))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-branch-dirty-start ()
   "Refuse a branch-mode delegate in a dirty checkout, creating nothing."

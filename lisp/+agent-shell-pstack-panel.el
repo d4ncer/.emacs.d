@@ -2354,8 +2354,8 @@ Its policy comes from the repository's profile, once; see
 own or, with :delegate (:isolation branch), the lead's checkout, which
 must be clean.  A worktree, here or on a host, starts from the snapshot
 of the lead's working tree an arena takes, or HEAD when that is clean.
-A sandboxed or remote delegate needs the laptop user's git identity
-first.  The panel's timeout starts now and covers this preparation too."
+A delegate needs the laptop user's git identity first.  The panel's
+timeout starts now and covers this preparation too."
   (setf (+agent-shell-pstack-panel-phase panel) 'preparing
         (+agent-shell-pstack-panel-deadline panel)
         (+ (float-time) (+agent-shell-pstack-panel-timeout panel)))
@@ -2369,7 +2369,7 @@ first.  The panel's timeout starts now and covers this preparation too."
                (profile (+agent-shell-arena-git-profile toplevel))
                (options (+agent-shell-arena-git-delegate-options profile))
                (route
-                (lambda ()
+                (lambda (identity)
                   (if (eq (plist-get options :isolation) 'branch)
                       (+agent-shell-pstack-panel--take-checkout panel base)
                     (+agent-shell-arena-git-capture-base
@@ -2385,7 +2385,9 @@ first.  The panel's timeout starts now and covers this preparation too."
                                  panel snapshot profile))
                             (+agent-shell-pstack-panel--provision-delegate
                              panel snapshot)))))
-                     t)))))
+                     t identity
+                     (format "Snapshot uncommitted work for pstack delegate %s"
+                             (+agent-shell-pstack-panel-id panel)))))))
           (setf (+agent-shell-pstack-panel-delegate-options panel) options)
           (when (and (plist-get options :sandbox)
                      (not (plist-get options :host))
@@ -2393,16 +2395,16 @@ first.  The panel's timeout starts now and covers this preparation too."
             (user-error "This repository's profile sandboxes delegates, which \
 needs macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s"
                         system-type))
-          (if (not (or (plist-get options :host) (plist-get options :sandbox)))
-              (funcall route)
-            (+agent-shell-arena-git-user-identity
-             toplevel
-             (lambda (identity error)
-               (+agent-shell-pstack-panel--preparing
-                panel error
-                (lambda ()
-                  (setf (+agent-shell-pstack-panel-identity panel) identity)
-                  (funcall route)))))))))))
+          (+agent-shell-arena-git-user-identity
+           toplevel
+           (lambda (identity error)
+             (+agent-shell-pstack-panel--preparing
+              panel error
+              (lambda ()
+                (when (or (plist-get options :host)
+                          (plist-get options :sandbox))
+                  (setf (+agent-shell-pstack-panel-identity panel) identity))
+                (funcall route identity))))))))))
   (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--provision-delegate (panel base)
