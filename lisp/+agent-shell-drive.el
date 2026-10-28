@@ -32,6 +32,17 @@
 ;; permission request rejects and ends it, since that mode should never
 ;; ask.  Stop it with `+agent-shell-drive-stop-unconfined', which ends the
 ;; adapter's process tree and process groups and nothing else.
+;;
+;; A shell started with a process lease records who owns its processes in
+;; a file before its adapter starts.  With a systemd unit name the adapter
+;; runs in a transient scope of that name, which
+;; `+agent-shell-drive-stop-lease' stops, taking every descendant with it
+;; however it detached.  `+agent-shell-drive-reap-lease' stops what a lease
+;; file names after the Emacs that started it died.
+;;
+;; A watcher added with `+agent-shell-drive-watch-progress' also gets
+;; `progress' events: :part `assistant' with each chunk of agent text as
+;; :text, and :part `tool' with a tool call's :text title and :status.
 
 ;;; Code:
 
@@ -89,6 +100,11 @@ CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.")
   "Plan from the last request this shell rejected during the turn.")
 (defvar-local +agent-shell-drive--reason nil
   "Why Lisp killed this shell.")
+(defvar-local +agent-shell-drive--lease nil
+  "Process lease this shell was started with; see `+agent-shell-drive-start'.")
+
+(defvar +agent-shell-drive--progress (make-hash-table :test #'equal)
+  "Keys of watchers that also get `progress' events.")
 
 (defun +agent-shell-drive--configs ()
   "Return `agent-shell-agent-configs' with function entries resolved."
@@ -191,7 +207,9 @@ and before any permission prompt, so the policy is enforced here too."
            (and (+agent-shell-sandbox--under-p
                  path (+agent-shell-sandbox-own-writes policy))
                 (not (equal path (concat (+agent-shell-sandbox-root policy)
-                                         "/.git"))))
+                                         "/.git")))
+                (not (+agent-shell-sandbox--under-p
+                      path (+agent-shell-sandbox-protect policy))))
          (+agent-shell-sandbox-readable-p policy path)))
       (_ nil))))
 
@@ -235,21 +253,149 @@ and before any permission prompt, so the policy is enforced here too."
   "Return CONFIG with KEY set to VALUE."
   (cons (cons key value) (assq-delete-all key (copy-alist config))))
 
-(defun +agent-shell-drive--lease-client (lease client)
-  "Arrange durable process ownership for CLIENT under the recorded LEASE.
-LEASE names a private owner record with a nonce and process start identity,
-written before launch.  Return a client description whose adapter starts
-under the host's supervisor or member scope; keep sandbox and environment
-setup on that same launch path.  A runner crash must leave enough ownership
-to stop this member's descendants through the existing stop operations.
-Never infer ownership from cwd or signal a reused bare pid.  Lost ownership
-blocks recovery and quarantines the repository lease until quiescence can
-be proved.  No transcript or credential payload belongs in the lease.
-See docs/sketch-remote-delegate.md; this signature is not wired in."
-  (ignore lease client)
-  (error "Not implemented"))
+(defvar +agent-shell-drive-systemd-run "systemd-run"
+  "The systemd-run that starts a leased adapter in a scope of its own.")
 
-(cl-defun +agent-shell-drive-start (&key config directory policy)
+(defvar +agent-shell-drive-systemctl "systemctl"
+  "The systemctl that stops a lease's scope and says whether it ended.")
+
+(defun +agent-shell-drive--write-lease (lease record)
+  "Write RECORD, an alist, as LEASE's owner record, atomically and privately."
+  (let* ((file (plist-get lease :file))
+         (temporary (progn (make-directory (file-name-directory file) t)
+                           (make-temp-file (concat file ".")))))
+    (set-file-modes temporary #o600)
+    (let ((coding-system-for-write 'utf-8-unix))
+      (with-temp-file temporary (insert (json-serialize record) "\n")))
+    (rename-file temporary file t)))
+
+(defun +agent-shell-drive--read-lease (file)
+  "Return the owner record in lease FILE as an alist, or nil."
+  (ignore-errors
+    (with-temp-buffer
+      (insert-file-contents file)
+      (json-parse-buffer :object-type 'alist :null-object nil))))
+
+(defun +agent-shell-drive--lease-client (lease client)
+  "Return CLIENT, an ACP client description, running under LEASE.
+LEASE is (:file FILE :unit UNIT).  Its owner record, holding a fresh
+nonce and UNIT, is written to FILE before the adapter starts.  With UNIT
+the adapter runs in the transient systemd scope UNIT, outermost, so the
+sandbox and environment set up on the same launch path go with it; the
+scope's processes go when it is stopped, whatever they did meanwhile.
+Without UNIT the record later gains the adapter's pid and start time,
+and nothing ever signals a pid whose start time differs."
+  (let ((unit (plist-get lease :unit))
+        (client (copy-alist client)))
+    (+agent-shell-drive--write-lease
+     lease `((version . 1) (nonce . ,(format "%016x" (random (expt 2 62))))
+             (unit . ,(or unit :null))))
+    (when unit
+      (let ((command (alist-get :command client)))
+        (setf (alist-get :command client) +agent-shell-drive-systemd-run
+              (alist-get :command-params client)
+              (append (list "--user" "--scope" "--quiet" "--collect"
+                            (concat "--unit=" unit) "--"
+                            (or (executable-find command) command))
+                      (alist-get :command-params client)))))
+    client))
+
+(defun +agent-shell-drive--note-adapter (shell)
+  "Add live SHELL's adapter pid and start time to its process lease."
+  (when-let* ((lease (and (buffer-live-p shell)
+                          (buffer-local-value '+agent-shell-drive--lease shell)))
+              ((not (plist-get lease :unit)))
+              (pid (+agent-shell-drive--adapter shell))
+              (record (+agent-shell-drive--read-lease (plist-get lease :file)))
+              ((not (alist-get 'pid record))))
+    (+agent-shell-drive--write-lease
+     lease (append `((pid . ,pid)
+                     (start . ,(format "%S" (alist-get 'start
+                                                       (process-attributes
+                                                        pid)))))
+                   record))))
+
+(defun +agent-shell-drive-lease (shell)
+  "Return the systemd-scoped process lease SHELL was started with, or nil."
+  (when-let* ((lease (and (buffer-live-p shell)
+                          (buffer-local-value '+agent-shell-drive--lease
+                                              shell))))
+    (and (plist-get lease :unit) lease)))
+
+(defun +agent-shell-drive--unit-active-p (unit)
+  "Return whether systemd still runs UNIT, or `unknown' when it cannot say."
+  (let ((default-directory "/"))
+    (with-temp-buffer
+      (pcase (ignore-errors
+               (call-process +agent-shell-drive-systemctl nil t nil "--user"
+                             "is-active" unit))
+        ('nil 'unknown)
+        (_ (and (member (string-trim (buffer-string))
+                        '("active" "activating" "deactivating" "reloading"
+                          "refreshing"))
+                t))))))
+
+(defun +agent-shell-drive--stop-unit (unit callback &optional rounds)
+  "Stop systemd scope UNIT and call CALLBACK once it has ended.
+CALLBACK gets nil, or a list naming UNIT when it still runs after
+ROUNDS checks or systemctl cannot say."
+  (let ((default-directory "/"))
+    (ignore-errors
+      (call-process +agent-shell-drive-systemctl nil nil nil "--user"
+                    "stop" unit)))
+  (cl-labels ((check (rounds)
+                (pcase (+agent-shell-drive--unit-active-p unit)
+                  ('nil (funcall callback nil))
+                  (_ (if (<= rounds 0)
+                         (funcall callback (list unit))
+                       (run-at-time 0.5 nil #'check (1- rounds)))))))
+    (check (or rounds 20))))
+
+(defun +agent-shell-drive-stop-lease (lease shell callback)
+  "Stop SHELL and everything in its LEASE's scope, then call CALLBACK.
+CALLBACK gets nil once the scope has ended, or what survived.  The work
+runs from a timer, so SHELL's own event callbacks may call this."
+  (run-at-time
+   0 nil
+   (lambda ()
+     (+agent-shell-drive-kill shell)
+     (+agent-shell-drive--stop-unit (plist-get lease :unit) callback))))
+
+(defun +agent-shell-drive-reap-lease (file callback)
+  "Stop what the process lease in FILE owns, after its owner died.
+A scope is stopped and awaited.  A recorded adapter is killed with its
+process tree and groups only while its pid still has the recorded start
+time.  CALLBACK gets nil once nothing it owns runs, or what survived or
+could not be verified."
+  (let* ((record (+agent-shell-drive--read-lease file))
+         (unit (alist-get 'unit record))
+         (pid (alist-get 'pid record))
+         (start (alist-get 'start record)))
+    (cond
+     ((null record) (run-at-time 0 nil callback nil))
+     (unit (+agent-shell-drive--stop-unit unit callback))
+     ((and (natnump pid)
+           (equal start (format "%S" (alist-get 'start
+                                                (process-attributes pid)))))
+      (let* ((processes (+agent-shell-drive--processes))
+             (group (nth 2 (assq pid processes)))
+             (groups (and group (not (eql group (nth 2 (assq (emacs-pid)
+                                                             processes))))
+                          (list group))))
+        (cl-labels ((sweep (rounds)
+                      (let ((pids (+agent-shell-drive--tree
+                                   pid groups (+agent-shell-drive--processes))))
+                        (when (assq pid (+agent-shell-drive--processes))
+                          (push pid pids))
+                        (if (or (null pids) (<= rounds 0))
+                            (funcall callback pids)
+                          (+agent-shell-sandbox--kill pids)
+                          (run-at-time 0.2 nil #'sweep (1- rounds))))))
+          (sweep +agent-shell-sandbox--sweeps))))
+     (t (run-at-time 0 nil callback nil)))))
+
+(cl-defun +agent-shell-drive-start (&key config directory policy environment
+                                         lease)
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
 POLICY nil starts an ordinary shell.  With `read-only', the shell runs in its
 agent's mode from `+agent-shell-drive-read-only-modes' with a responder that
@@ -258,7 +404,12 @@ in its agent's full-access mode from `+agent-shell-sandbox-agents', and a
 permission request is rejected and kills it.  With a `+agent-shell-sandbox',
 its adapter runs confined to the sandbox in that mode, every permission
 request is rejected, and no transcript is kept.  A shell with a policy is
-hidden from `agent-shell-buffers'."
+hidden from `agent-shell-buffers'.
+
+ENVIRONMENT lists NAME=VALUE entries the adapter and its subprocesses
+get ahead of everything else, without touching `process-environment'.
+LEASE, (:file FILE :unit UNIT), runs the adapter under a durable process
+lease; see `+agent-shell-drive--lease-client'."
   (require 'agent-shell)
   (let* ((config (+agent-shell-drive-config config))
          (agent (map-elt config :identifier))
@@ -275,11 +426,32 @@ hidden from `agent-shell-buffers'."
                      (+agent-shell-drive--override
                       config :default-session-mode-id (lambda () mode))
                    config))
+         (config (if environment
+                     (let ((maker (map-elt config :client-maker)))
+                       (+agent-shell-drive--override
+                        config :client-maker
+                        (lambda (buffer)
+                          (when-let* ((client (funcall maker buffer)))
+                            (let ((client (copy-alist client)))
+                              (setf (alist-get :environment-variables client)
+                                    (append environment
+                                            (alist-get :environment-variables
+                                                       client)))
+                              client)))))
+                   config))
          (config (if sandboxed
                      (+agent-shell-drive--override
                       config :client-maker
                       (+agent-shell-sandbox-client-maker
                        policy agent (map-elt config :client-maker)))
+                   config))
+         (config (if lease
+                     (let ((maker (map-elt config :client-maker)))
+                       (+agent-shell-drive--override
+                        config :client-maker
+                        (lambda (buffer)
+                          (when-let* ((client (funcall maker buffer)))
+                            (+agent-shell-drive--lease-client lease client)))))
                    config))
          (directory (file-name-as-directory (file-truename directory)))
          (cwd-function (lambda () directory))
@@ -294,6 +466,8 @@ hidden from `agent-shell-buffers'."
                                 ('read-only #'+agent-shell-drive--respond)
                                 ('full-access #'+agent-shell-drive--end)
                                 (_ #'+agent-shell-drive--reject))))
+                (when lease
+                  (setq-local +agent-shell-drive--lease lease))
                 (when sandboxed
                   (setq-local agent-shell-transcript-file-path-function nil))))
          (shell
@@ -309,6 +483,11 @@ hidden from `agent-shell-buffers'."
                      agent-shell-transcript-file-path-function)))
               (save-window-excursion (agent-shell-start :config config))))))
     (with-current-buffer shell (funcall pin))
+    (when lease
+      (+agent-shell-drive--note-adapter shell)
+      (agent-shell-subscribe-to
+       :shell-buffer shell :event 'init-finished
+       :on-event (lambda (_event) (+agent-shell-drive--note-adapter shell))))
     (when-let* ((session (and sandboxed (+agent-shell-sandbox-egress policy))))
       (+agent-shell-egress-attach
        session (lambda () (+agent-shell-drive--adapter shell))))
@@ -487,6 +666,7 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
   "Remove watcher KEY, forgetting its shell once nothing watches it."
   (when-let* ((entry (gethash key +agent-shell-drive--watchers)))
     (remhash key +agent-shell-drive--watchers)
+    (remhash key +agent-shell-drive--progress)
     (unless (+agent-shell-drive--watching (car entry))
       (+agent-shell-drive--forget (car entry)))))
 
@@ -539,8 +719,32 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
                (list :reason reason)))
             ('error (list :message (map-elt data :message))))))))))
 
+(defun +agent-shell-drive--progress-event (shell event)
+  "Return the `progress' event upstream EVENT from SHELL makes, or nil.
+Agent text chunks and tool calls make one even when no agent text came
+before them, which the parsed events leave out."
+  (let ((data (map-elt event :data)))
+    (pcase (map-elt event :event)
+      ('agent-message-chunk
+       (when-let* ((chunk (map-elt data :text-chunk))
+                   ((not (string-empty-p chunk))))
+         (list :kind 'progress :shell shell :part 'assistant :text chunk)))
+      ((or 'tool-call 'tool-call-update)
+       (when-let* ((title (map-nested-elt data '(:tool-call :title))))
+         (list :kind 'progress :shell shell :part 'tool :text title
+               :status (map-nested-elt data '(:tool-call :status))))))))
+
 (defun +agent-shell-drive--dispatch (shell event)
   "Deliver upstream EVENT from SHELL to its watchers."
+  (when-let* ((progress (and (gethash shell +agent-shell-drive--shells)
+                             (+agent-shell-drive--progress-event shell event))))
+    (dolist (watcher (+agent-shell-drive--watching shell))
+      (when (and (gethash (car watcher) +agent-shell-drive--progress)
+                 (eq (gethash (car watcher) +agent-shell-drive--watchers)
+                     (cdr watcher)))
+        (condition-case err (funcall (cddr watcher) progress)
+          (error (message "agent-shell-drive: watcher %S errored on \
+progress: %S" (car watcher) err))))))
   (when-let* ((state (gethash shell +agent-shell-drive--shells))
               (parsed (+agent-shell-drive--parse shell state event)))
     (unwind-protect
@@ -573,6 +777,13 @@ it moves the watcher."
                        :turn nil :final nil)
                  +agent-shell-drive--shells))
       (puthash key (cons shell function) +agent-shell-drive--watchers))))
+
+(defun +agent-shell-drive-watch-progress (shell owner id function)
+  "Watch SHELL as `+agent-shell-drive-watch' does, adding `progress' events.
+The watcher's key is (`progress' OWNER . ID), apart from OWNER's others."
+  (let ((key (cons 'progress (cons owner id))))
+    (+agent-shell-drive-watch shell 'progress (cons owner id) function)
+    (puthash key t +agent-shell-drive--progress)))
 
 (defun +agent-shell-drive-unwatch (owner &optional id)
   "Remove OWNER's watcher ID, or all of OWNER's watchers when ID is nil."

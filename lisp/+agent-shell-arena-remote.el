@@ -132,19 +132,37 @@ A local host's is ready.json in its state folder."
 (defvar +agent-shell-arena-remote-tick 2
   "Seconds between a runner's checks for a cancel and its deadline.")
 
+(defvar +agent-shell-arena-remote-transcript-segment-bytes 1048576
+  "Most bytes a host transcript segment holds.")
+
+(defvar +agent-shell-arena-remote-transcript-segments 8
+  "Segments a host keeps of a delegate's transcript, newest last.")
+
+(defvar +agent-shell-arena-remote-transcript-record-bytes 16384
+  "Most bytes one encoded transcript record takes, newline included.")
+
+(defvar +agent-shell-arena-remote-transcript-page-bytes 65536
+  "Most bytes of whole transcript records one poll brings.")
+
+(defvar +agent-shell-arena-remote-transcript-cache-bytes 8388608
+  "Most bytes of transcript the laptop keeps and shows per delegate.")
+
+(defcustom +agent-shell-arena-remote-transcript-interval 5
+  "Seconds between polls of a delegate whose transcript is shown."
+  :type 'number)
+
 ;;;; Records on the wire
 
 (cl-defstruct (+agent-shell-arena-remote-request-member
                (:constructor +agent-shell-arena-remote--make-request-member)
                (:copier nil))
-  "One requested member in the proposed version-2 job protocol.
-KIND is candidate or judge for an arena, delegate for a delegate job.
-Only the wire decoder normalizes version-1 candidates and judge fields
-to this representation.  Status/report members remain observations.
-See docs/sketch-remote-delegate.md; existing codecs do not use this yet."
+  "One member a job asks for.
+KIND is `candidate' or `judge' for an arena, `delegate' for a delegate.
+Only the wire decoder turns a version-1 job's candidates and judge into
+these.  A status or report member is an observation instead."
   role agent kind focus)
 
-(defconst +agent-shell-arena-remote-wire-version 1
+(defconst +agent-shell-arena-remote-wire-version 2
   "Version of the records this code writes.
 It reads every version from 1 up to this one, so a laptop that updated
 mid-arena still reads an older runner's status and report.")
@@ -155,6 +173,10 @@ mid-arena still reads an older runner's status and report.")
                (:constructor +agent-shell-arena-remote--make-job)
                (:copier nil))
   "What the laptop asks a host to run.
+SHAPE is `arena' or `delegate'.  MEMBERS lists what it runs, each a
+`+agent-shell-arena-remote-request-member'; an arena's judge is the one
+of kind `judge'.  DELEGATE holds a delegate job's
+`+agent-shell-arena-remote-delegate-job', and an arena has none.
 PREFIX is the lead's subdirectory, BASE the snapshot commit and
 PREREQUISITE the commit its bundle is cut against, nil for a whole
 history.  SPARSE holds the lead's sparse-checkout patterns and PROFILE
@@ -163,15 +185,58 @@ content hash.  DEADLINE is how many seconds the runner may take once it
 starts.  READY is the host's readiness file as the laptop saw it, and
 READY-FILE where the host keeps it.  MEASURE-EGRESS is the laptop panel's
 `+agent-shell-pstack-arena-measure-egress', which the host's panel takes."
-  id panel brief rubric timeout judge-timeout candidates judge prefix base
+  id panel brief rubric timeout judge-timeout prefix base
   prerequisite sparse profile repository code deadline ready-file ready
-  measure-egress)
+  measure-egress (shape 'arena) members delegate)
 
-(cl-defstruct (+agent-shell-arena-remote-candidate
-               (:constructor +agent-shell-arena-remote--make-candidate)
+(cl-defstruct (+agent-shell-arena-remote-delegate-job
+               (:constructor +agent-shell-arena-remote--make-delegate-job)
                (:copier nil))
-  "A candidate a job asks for."
-  role agent focus)
+  "How a delegate job runs: SANDBOX says whether it is confined, and
+IDENTITY is the laptop user's `+agent-shell-arena-git-user', who authors
+and commits its work."
+  sandbox identity)
+
+(cl-defstruct (+agent-shell-arena-remote-cursor
+               (:constructor +agent-shell-arena-remote--make-cursor)
+               (:copier nil))
+  "A place in a delegate's transcript: its EPOCH, SEGMENT and byte OFFSET.
+SEQ is the last record before it, or 0."
+  epoch segment offset (seq 0))
+
+(cl-defstruct (+agent-shell-arena-remote-transcript
+               (:constructor +agent-shell-arena-remote--make-transcript)
+               (:copier nil))
+  "What a status says of its delegate's transcript: its EPOCH, the
+FIRST and LAST segments the host keeps, and the newest record's SEQ."
+  epoch first last seq)
+
+(cl-defstruct (+agent-shell-arena-remote-commit
+               (:constructor +agent-shell-arena-remote--make-commit)
+               (:copier nil))
+  "A commit a delegate's branch holds: its OID and SUBJECT."
+  oid subject)
+
+(cl-defstruct (+agent-shell-arena-remote-outcome
+               (:constructor +agent-shell-arena-remote--make-outcome)
+               (:copier nil))
+  "What a delegate left on its host, as its report gives it.
+BRANCH is its full ref and TIP the commit it points at.  COMMITS lists
+`+agent-shell-arena-remote-commit's from the base, oldest first.
+WORKSPACE is its worktree on the host.  DIRTY-PATHS names at most ten
+of its DIRTY-COUNT uncommitted paths.  FINALIZATION is `none', `empty',
+`committed' or `blocked', saying what came of a sandboxed delegate's
+one commit, with MESSAGE-ERROR or RETAINED-REASON saying why it was
+blocked."
+  branch tip commits workspace sandbox dirty-paths (dirty-count 0)
+  (finalization 'none) message-error retained-reason)
+
+(cl-defstruct (+agent-shell-arena-remote-capabilities
+               (:constructor +agent-shell-arena-remote--make-capabilities)
+               (:copier nil))
+  "What a host's setup says it can run beyond arenas: DELEGATE is the
+version of delegate support it smoke-tested, or nil."
+  delegate)
 
 (cl-defstruct (+agent-shell-arena-remote-sparse
                (:constructor +agent-shell-arena-remote--make-sparse)
@@ -186,8 +251,11 @@ READY-FILE where the host keeps it.  MEASURE-EGRESS is the laptop panel's
 PHASE is queued until the host's repository is free, then the panel's
 phase.  RESULTS says the results are written.  HEARTBEAT is when the
 runner last wrote it, and DEADLINE when it gives up.  LOGINS says how
-each agent's host login stood before any member started."
-  id phase pid heartbeat deadline arena members results error logins)
+each agent's host login stood before any member started.  SHAPE is
+the job's, and a delegate's TRANSCRIPT says what of its transcript the
+host keeps."
+  id phase pid heartbeat deadline arena members results error logins
+  shape transcript)
 
 (cl-defstruct (+agent-shell-arena-remote-member
                (:constructor +agent-shell-arena-remote--make-member)
@@ -203,8 +271,9 @@ holds its result, its diff STAT, and why its capture failed, FAILURE."
                (:copier nil))
   "A runner's results.  ARENA is the host's arena id, whose refs the
 results bundle holds; REJECTION says why the arena never ran.  READY is
-the host's readiness file as the runner read it, naming what ran."
-  id arena base rejection members ready)
+the host's readiness file as the runner read it, naming what ran.  A
+delegate's DELEGATE is its `+agent-shell-arena-remote-outcome'."
+  id arena base rejection members ready shape delegate)
 
 (cl-defstruct (+agent-shell-arena-remote-tool
                (:constructor +agent-shell-arena-remote--make-tool)
@@ -220,7 +289,7 @@ EMACS is the Emacs a runner runs on.  ADAPTERS-BIN is the folder holding
 the ACP adapters' launchers, and the other slots the tools the Linux
 sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'."
   written-at emacs adapters-bin claude-agent-acp codex-acp node bwrap unshare
-  slirp4netns)
+  slirp4netns capabilities)
 
 (cl-defstruct (+agent-shell-arena-remote-host
                (:constructor +agent-shell-arena-remote--make-host)
@@ -242,10 +311,15 @@ allows.  CANCEL-STATE is `none', `pending' until the host has the marker, then
 EXTENDED is when the workspace's stop time was last moved past.  ARENA
 is the host's arena id and EMACS the host's Emacs.
 
-The slots after ERROR are not saved."
+SHAPE is the job's.  CURSOR is where a delegate's transcript continues,
+a `+agent-shell-arena-remote-cursor', advanced once the page before it
+is in the laptop's cache.
+
+The slots from DIRECTORY to LOGINS are not saved."
   id panel session host phase (cancel-state 'none) submitted fetched delivered
   deadline extended heartbeat seen (restarts 0) arena emacs error
-  directory timer (failures 0) runner-phase ready logins)
+  directory timer (failures 0) runner-phase ready logins (shape 'arena) cursor
+  polled)
 
 (defconst +agent-shell-arena-remote--agent-regexp
   "\\`[a-z0-9][a-z0-9-]*\\'"
@@ -253,10 +327,12 @@ The slots after ERROR are not saved."
 
 (defconst +agent-shell-arena-remote--kinds
   '((job +agent-shell-arena-remote-job +agent-shell-arena-remote--make-job
-         (id "id" id) (panel "panel" id) (brief "brief" text)
+         (id "id" id) (panel "panel" id)
+         (shape "shape" (enum arena delegate)) (brief "brief" text)
          (rubric "rubric" (strings)) (timeout "timeout" natnum)
-         (judge-timeout "judge_timeout" natnum)
-         (candidates "candidates" (list candidate)) (judge "judge" agent)
+         (judge-timeout "judge_timeout" (opt natnum))
+         (members "members" (list request-member))
+         (delegate "delegate" (opt (record delegate-job)))
          (prefix "prefix" text) (base "base" sha)
          (prerequisite "prerequisite" (opt sha))
          (sparse "sparse" (opt (record sparse)))
@@ -265,9 +341,17 @@ The slots after ERROR are not saved."
          (ready-file "ready_file" (opt text))
          (ready "ready" (opt (record ready)))
          (measure-egress "measure_egress" (opt boolean)))
-    (candidate +agent-shell-arena-remote-candidate
-               +agent-shell-arena-remote--make-candidate
-               (role "role" id) (agent "agent" agent) (focus "focus" (opt text)))
+    (request-member +agent-shell-arena-remote-request-member
+                    +agent-shell-arena-remote--make-request-member
+                    (role "role" id) (agent "agent" agent)
+                    (kind "kind" (enum candidate judge delegate))
+                    (focus "focus" (opt text)))
+    (delegate-job +agent-shell-arena-remote-delegate-job
+                  +agent-shell-arena-remote--make-delegate-job
+                  (sandbox "sandbox" boolean)
+                  (identity "identity" (record identity)))
+    (identity +agent-shell-arena-git-user +agent-shell-arena-git--user
+              (name "name" text) (email "email" text))
     (sparse +agent-shell-arena-remote-sparse
             +agent-shell-arena-remote--make-sparse
             (cone "cone" boolean) (patterns "patterns" (strings)))
@@ -276,12 +360,22 @@ The slots after ERROR are not saved."
             (id "id" id)
             (phase "phase"
                    (enum queued preparing candidates capturing judging
-                         finished))
+                         delegating finalizing finished))
             (pid "pid" (opt natnum)) (heartbeat "heartbeat" number)
             (deadline "deadline" (opt number)) (arena "arena" (opt id))
             (members "members" (list member-state))
             (results "results" boolean) (error "error" (opt text))
-            (logins "logins" (list login)))
+            (logins "logins" (list login))
+            (shape "shape" (opt (enum arena delegate)))
+            (transcript "transcript" (opt (record transcript))))
+    (transcript +agent-shell-arena-remote-transcript
+                +agent-shell-arena-remote--make-transcript
+                (epoch "epoch" id) (first "first" natnum)
+                (last "last" natnum) (seq "seq" natnum))
+    (cursor +agent-shell-arena-remote-cursor
+            +agent-shell-arena-remote--make-cursor
+            (epoch "epoch" id) (segment "segment" natnum)
+            (offset "offset" natnum) (seq "seq" natnum))
     (login +agent-shell-sandbox-login-result
            +agent-shell-sandbox-login-result-create
            (agent "agent" agent) (refreshed "refreshed" boolean)
@@ -289,7 +383,7 @@ The slots after ERROR are not saved."
     (member-state +agent-shell-arena-remote-member
                   +agent-shell-arena-remote--make-member
                   (role "role" id) (agent "agent" agent)
-                  (kind "kind" (enum candidate judge))
+                  (kind "kind" (enum candidate judge delegate))
                   (state "state" (enum pending starting waiting running done
                                        error timeout))
                   (capture "capture" (opt (enum stopping stopped capturing
@@ -300,11 +394,25 @@ The slots after ERROR are not saved."
             (id "id" id) (arena "arena" (opt id)) (base "base" sha)
             (rejection "rejection" (opt text))
             (members "members" (list member-report))
-            (ready "ready" (opt (record ready))))
+            (ready "ready" (opt (record ready)))
+            (shape "shape" (opt (enum arena delegate)))
+            (delegate "delegate" (opt (record outcome))))
+    (outcome +agent-shell-arena-remote-outcome
+             +agent-shell-arena-remote--make-outcome
+             (branch "branch" text) (tip "tip" (opt sha))
+             (commits "commits" (list commit)) (workspace "workspace" text)
+             (sandbox "sandbox" boolean) (dirty-paths "dirty_paths" (strings))
+             (dirty-count "dirty_count" natnum)
+             (finalization "finalization" (enum none empty committed blocked))
+             (message-error "message_error" (opt text))
+             (retained-reason "retained_reason" (opt text)))
+    (commit +agent-shell-arena-remote-commit
+            +agent-shell-arena-remote--make-commit
+            (oid "oid" sha) (subject "subject" text))
     (member-report +agent-shell-arena-remote-member
                    +agent-shell-arena-remote--make-member
                    (role "role" id) (agent "agent" agent)
-                   (kind "kind" (enum candidate judge))
+                   (kind "kind" (enum candidate judge delegate))
                    (state "state" (enum pending starting waiting running done
                                         error timeout))
                    (capture "capture" (opt (enum stopping stopped capturing
@@ -322,7 +430,11 @@ The slots after ERROR are not saved."
            (codex-acp "codex_acp" (opt (record tool)))
            (node "node" (opt (record tool))) (bwrap "bwrap" (opt (record tool)))
            (unshare "unshare" (opt (record tool)))
-           (slirp4netns "slirp4netns" (opt (record tool))))
+           (slirp4netns "slirp4netns" (opt (record tool)))
+           (capabilities "capabilities" (opt (record capabilities))))
+    (capabilities +agent-shell-arena-remote-capabilities
+                  +agent-shell-arena-remote--make-capabilities
+                  (delegate "delegate" (opt natnum)))
     (host +agent-shell-arena-remote-host +agent-shell-arena-remote--make-host
           (kind "kind" host-kind) (name "name" text))
     (record +agent-shell-arena-remote +agent-shell-arena-remote--make
@@ -336,7 +448,9 @@ The slots after ERROR are not saved."
             (extended "extended" (opt number)) (heartbeat "heartbeat" (opt number))
             (seen "seen" (opt number)) (restarts "restarts" natnum)
             (arena "arena" (opt id)) (emacs "emacs" (opt text))
-            (error "error" (opt text))))
+            (error "error" (opt text))
+            (shape "shape" (opt (enum arena delegate)))
+            (cursor "cursor" (opt (record cursor)))))
   "Each record kind: its struct, constructor and fields.
 A field is (SLOT KEY TYPE).  TYPE is `text', any string; `id', a name
 safe in a path and a ref; `sha', a full commit id; `agent', an agent
@@ -419,10 +533,70 @@ kind.  The host's setup writes ready.json in a format of its own.")
       ('profile (+agent-shell-arena-remote--decode-profile value path))
       (_ (error "Unknown field type %S" type)))))
 
+(defun +agent-shell-arena-remote--upgrade (kind json)
+  "Return parsed JSON of top-level KIND in the newest wire layout.
+A version-1 job lists `candidates' and a `judge' agent; they become
+`members' of an arena.  Nothing else reads the old layout."
+  (if (and (eq kind 'job) (eql (alist-get 'version json) 1))
+      (let ((candidates (alist-get 'candidates json))
+            (judge (alist-get 'judge json)))
+        (unless (listp candidates)
+          (+agent-shell-arena-remote--bad "job.candidates" "a list"
+                                          candidates))
+        (append
+         `((shape . "arena")
+           (members
+            . ,(append
+                (mapcar (lambda (candidate)
+                          (if (and (listp candidate) (consp (car-safe candidate)))
+                              (cons '(kind . "candidate") candidate)
+                            candidate))
+                        candidates)
+                (list `((role . "judge") (agent . ,judge)
+                        (kind . "judge"))))))
+         (seq-remove (lambda (field)
+                       (memq (car-safe field) '(candidates judge shape members)))
+                     json)))
+    json))
+
+(defun +agent-shell-arena-remote--check-job (job path)
+  "Signal unless JOB's members and fields fit its shape; PATH names it."
+  (let* ((members (+agent-shell-arena-remote-job-members job))
+         (kinds (mapcar #'+agent-shell-arena-remote-request-member-kind members))
+         (roles (mapcar #'+agent-shell-arena-remote-request-member-role members))
+         (bad (lambda (field expected value)
+                (+agent-shell-arena-remote--bad (concat path field) expected
+                                                value))))
+    (when-let* ((duplicate (seq-find (lambda (role) (member role (cdr (member role roles))))
+                                     roles)))
+      (funcall bad ".members" "members with unique roles" duplicate))
+    (pcase (+agent-shell-arena-remote-job-shape job)
+      ('delegate
+       (unless (equal kinds '(delegate))
+         (funcall bad ".members" "one member of kind delegate" kinds))
+       (unless (+agent-shell-arena-remote-job-delegate job)
+         (funcall bad ".delegate" "present for a delegate" nil))
+       (when-let* ((identity (+agent-shell-arena-remote-delegate-job-identity
+                              (+agent-shell-arena-remote-job-delegate job)))
+                   (problem (+agent-shell-arena-git-identity-error
+                             (+agent-shell-arena-git-user-name identity)
+                             (+agent-shell-arena-git-user-email identity))))
+         (funcall bad ".delegate.identity" "a valid git identity" problem)))
+      ('arena
+       (when (+agent-shell-arena-remote-job-delegate job)
+         (funcall bad ".delegate" "absent for an arena" "present"))
+       (unless (and (= 1 (cl-count 'judge kinds)) (memq 'candidate kinds)
+                    (not (memq 'delegate kinds)))
+         (funcall bad ".members" "candidates and one judge" kinds))
+       (unless (+agent-shell-arena-remote-job-judge-timeout job)
+         (funcall bad ".judge_timeout" "present for an arena" nil))))
+    job))
+
 (defun +agent-shell-arena-remote--decode (kind json &optional path)
   "Return the record of KIND that parsed JSON holds, or signal why not.
 PATH names JSON in errors.  A top-level kind checks its version and
-kind; fields it does not know are ignored."
+kind, and older versions are upgraded first; fields it does not know
+are ignored.  A job's members must fit its shape."
   (pcase-let* ((`(,_ ,_ ,constructor . ,fields)
                 (+agent-shell-arena-remote--kind kind))
                (path (or path (symbol-name kind))))
@@ -442,20 +616,27 @@ kind; fields it does not know are ignored."
         (unless (<= 1 version newest)
           (signal '+agent-shell-arena-remote-wire
                   (list (format "%s has version %d, but this Emacs reads up \
-to %d; update it" path version newest))))))
-    (apply constructor
-           (mapcan (pcase-lambda (`(,slot ,key ,type))
-                     (let ((value (alist-get (intern key) json))
-                           (field (format "%s.%s" path key)))
-                       (when (and (+agent-shell-arena-remote--absent-p value)
-                                  (not (memq (car-safe type) '(opt strings list)))
-                                  (not (equal type '(strings)))
-                                  (not (eq type 'boolean)))
-                         (+agent-shell-arena-remote--bad field "present" value))
-                       (list (intern (format ":%s" slot))
-                             (+agent-shell-arena-remote--decode-value
-                              type value field))))
-                   fields))))
+to %d; update it" path version newest))))
+      (setq json (+agent-shell-arena-remote--upgrade kind json))))
+    (let ((record
+           (apply constructor
+                  (mapcan (pcase-lambda (`(,slot ,key ,type))
+                            (let ((value (alist-get (intern key) json))
+                                  (field (format "%s.%s" path key)))
+                              (when (and (+agent-shell-arena-remote--absent-p
+                                          value)
+                                         (not (memq (car-safe type)
+                                                    '(opt strings list)))
+                                         (not (equal type '(strings)))
+                                         (not (eq type 'boolean)))
+                                (+agent-shell-arena-remote--bad field "present"
+                                                                value))
+                              (list (intern (format ":%s" slot))
+                                    (+agent-shell-arena-remote--decode-value
+                                     type value field))))
+                          fields))))
+      (if (eq kind 'job) (+agent-shell-arena-remote--check-job record path)
+        record))))
 
 (defun +agent-shell-arena-remote--encode-value (type value)
   "Return VALUE of TYPE as `json-serialize' takes it."
@@ -996,9 +1177,10 @@ case $launcher in
   systemd)
     systemd-run --user --quiet --collect --unit \"pstack-arena-$id-$(date +%s)\" \
 --property=MemoryMax=50% --property=OOMPolicy=continue \
---working-directory \"$PWD\" --setenv=PATH=\"$PATH\" \"$@\" >\"$job/launch.log\" 2>&1 ||
+--working-directory \"$PWD\" --setenv=PATH=\"$PATH\" \
+--setenv=PSTACK_ARENA_LAUNCHER=systemd \"$@\" >\"$job/launch.log\" 2>&1 ||
       { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/launch.log\")\"; exit 0; } ;;
-  *) nohup \"$@\" >\"$job/runner.log\" 2>&1 </dev/null & ;;
+  *) PSTACK_ARENA_LAUNCHER=nohup nohup \"$@\" >\"$job/runner.log\" 2>&1 </dev/null & ;;
 esac
 touch \"$job/started\"
 echo \"pstack-arena-submit started\"
@@ -1058,13 +1240,22 @@ pid=$(cat \"$job/pid\" 2>/dev/null) && [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/de
   "job=jobs/$1
 [ -f \"$job/started\" ] || { echo \"pstack-arena-poll none\"; exit 0; }
 [ \"$2\" = cancel ] && printf '%s\\n' \"$3\" >\"$job/cancel\"
+hash=$(cat \"$job/code-hash\" 2>/dev/null)
+if [ \"${4:--}\" != - ] && [ -n \"$5\" ] && [ -n \"$hash\" ] && [ -d \"code/$hash\" ] &&
+  out=$(\"$5\" -Q --batch -L \"code/$hash\" -l \"code/$hash/+agent-shell-arena-remote.el\" \
+-f +agent-shell-arena-remote-poll-batch \"$PWD/$job\" \"$4\" 2>/dev/null); then
+  printf '%s\\n' \"$out\"; exit 0
+fi
 alive=0; pid=$(cat \"$job/pid\" 2>/dev/null) && [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null && alive=1
 cancel=0; [ -f \"$job/cancel\" ] && cancel=1
 echo \"pstack-arena-poll alive=$alive cancel=$cancel\"
 cat \"$job/status.json\" 2>/dev/null || true
 "
   "Leave a cancel marker holding reason $3 when $2 is cancel, then report
-whether job $1's runner lives, whether it has a marker, and its status.")
+whether job $1's runner lives, whether it has a marker, and its status.
+With a transcript cursor $4 other than -, a short batch Emacs $5 from the
+job's code answers instead with the version-2 envelope, which adds the
+transcript's next page; when it cannot, the plain answer follows.")
 
 (defconst +agent-shell-arena-remote--fetch-script
   "cd \"jobs/$1\" || exit 1
@@ -1349,25 +1540,34 @@ The tarball is built once per hash, under the arena directory's code/."
     (ignore-errors (agent-shell-session-id :shell-buffer lead))))
 
 (defun +agent-shell-arena-remote--job (panel base profile manifest)
-  "Return the job that runs arena PANEL over BASE with PROFILE.
-MANIFEST is the laptop's arena; its prerequisite and code come later."
-  (let ((judge (car (+agent-shell-pstack-panel--kind-members panel 'judge)))
-        (sparse (+agent-shell-arena-git-sparse base)))
+  "Return the job that runs arena or delegate PANEL over BASE with PROFILE.
+MANIFEST is the laptop's arena; its prerequisite and code come later.
+A delegate's job carries its frozen policy's sandbox and the laptop
+user's identity, and its deadline is its timeout."
+  (let ((sparse (+agent-shell-arena-git-sparse base))
+        (delegate (+agent-shell-pstack-panel--delegate-p panel)))
     (+agent-shell-arena-remote--make-job
      :id (+agent-shell-arena-git-manifest-id manifest)
      :panel (+agent-shell-pstack-panel-id panel)
+     :shape (+agent-shell-pstack-panel-shape panel)
      :brief (+agent-shell-pstack-panel-brief panel)
      :rubric (+agent-shell-pstack-panel-rubric panel)
      :timeout (+agent-shell-pstack-panel-timeout panel)
      :judge-timeout (+agent-shell-pstack-panel-judge-timeout panel)
-     :candidates
+     :members
      (mapcar (lambda (member)
-               (+agent-shell-arena-remote--make-candidate
+               (+agent-shell-arena-remote--make-request-member
                 :role (+agent-shell-pstack-panel-member-role member)
                 :agent (+agent-shell-pstack-panel-member-agent member)
+                :kind (+agent-shell-pstack-panel-member-kind member)
                 :focus (+agent-shell-pstack-panel-member-focus member)))
-             (+agent-shell-pstack-panel--kind-members panel 'candidate))
-     :judge (+agent-shell-pstack-panel-member-agent judge)
+             (+agent-shell-pstack-panel-members panel))
+     :delegate (when delegate
+                 (+agent-shell-arena-remote--make-delegate-job
+                  :sandbox (plist-get (+agent-shell-pstack-panel-delegate-options
+                                       panel)
+                                      :sandbox)
+                  :identity (+agent-shell-pstack-panel-identity panel)))
      :prefix (+agent-shell-arena-git-base-prefix base)
      :base (+agent-shell-arena-git-base-commit base)
      :sparse (when sparse
@@ -1377,27 +1577,44 @@ MANIFEST is the laptop's arena; its prerequisite and code come later."
      :profile (+agent-shell-arena-remote-plain-profile profile)
      :repository (plist-get profile :host-directory)
      :code (make-string 64 ?0)
-     :deadline (+agent-shell-pstack-panel-arena-budget
-                (+agent-shell-pstack-panel-timeout panel)
-                (+agent-shell-pstack-panel-judge-timeout panel))
-     :measure-egress (+agent-shell-pstack-panel-measure-egress panel))))
+     :deadline (if delegate (+agent-shell-pstack-panel-timeout panel)
+                 (+agent-shell-pstack-panel-arena-budget
+                  (+agent-shell-pstack-panel-timeout panel)
+                  (+agent-shell-pstack-panel-judge-timeout panel)))
+     :measure-egress (and (not delegate)
+                          (+agent-shell-pstack-panel-measure-egress panel)))))
 
 (defun +agent-shell-arena-remote--job-file (remote)
   "Return the laptop's copy of REMOTE's job."
   (expand-file-name "job.json" (+agent-shell-arena-remote-directory remote)))
 
 (defun +agent-shell-arena-remote-launch (panel base profile)
-  "Run arena PANEL over BASE on the host that PROFILE names.
-PANEL is preparing.  Keep the base alive under a ref, write the laptop's
-records, and submit the job."
-  (let* ((host (+agent-shell-arena-remote-parse-host (plist-get profile :host)))
+  "Run arena or delegate PANEL over BASE on the host that PROFILE names.
+PANEL is preparing.  A delegate's host is its frozen policy's, and its
+laptop manifest holds a delegate record without a workspace.  Keep the
+base alive under a ref, write the laptop's records, and submit the job."
+  (let* ((delegate (+agent-shell-pstack-panel--delegate-p panel))
+         (host (+agent-shell-arena-remote-parse-host
+                (if delegate
+                    (plist-get (+agent-shell-pstack-panel-delegate-options
+                                panel)
+                               :host)
+                  (plist-get profile :host))))
          (manifest (+agent-shell-arena-git-create
-                    base (+agent-shell-pstack-panel-id panel)))
+                    base (+agent-shell-pstack-panel-id panel)
+                    (when delegate
+                      (+agent-shell-arena-git--delegate
+                       :isolation 'worktree
+                       :sandbox (plist-get
+                                 (+agent-shell-pstack-panel-delegate-options
+                                  panel)
+                                 :sandbox)))))
          (remote (+agent-shell-arena-remote--make
                   :id (+agent-shell-arena-git-manifest-id manifest)
                   :panel (+agent-shell-pstack-panel-id panel)
                   :session (+agent-shell-arena-remote--session
                             (+agent-shell-pstack-panel-lead panel))
+                  :shape (+agent-shell-pstack-panel-shape panel)
                   :host host :phase 'preparing
                   :directory (+agent-shell-arena-git-manifest-directory
                               manifest))))
@@ -1529,10 +1746,20 @@ left\"."
   (when-let* ((written (+agent-shell-arena-remote-ready-written-at ready)))
     (ignore-errors (float-time (encode-time (iso8601-parse written))))))
 
-(defun +agent-shell-arena-remote--ready-error (probe repository)
+(defun +agent-shell-arena-remote--delegate-ready-p (ready)
+  "Return whether READY says its host's setup can run delegates."
+  (when-let* ((capabilities (and ready (+agent-shell-arena-remote-ready-capabilities
+                                        ready)))
+              (version (+agent-shell-arena-remote-capabilities-delegate
+                        capabilities)))
+    (>= version 1)))
+
+(defun +agent-shell-arena-remote--ready-error (probe repository
+                                                     &optional shape)
   "Return why PROBE says the host cannot run a job for REPOSITORY, or nil.
 A readiness file written before the host last booted is stale: setup
-removes it on every boot before it writes a fresh one."
+removes it on every boot before it writes a fresh one.  A job of SHAPE
+`delegate' also needs the readiness file's delegate capability."
   (let* ((ready (plist-get probe :ready))
          (written (and ready (+agent-shell-arena-remote--written ready)))
          (boot (plist-get probe :boot)))
@@ -1552,7 +1779,10 @@ at %s, so its setup has not finished since"
               (+agent-shell-arena-remote--version ready 'emacs)
               +agent-shell-arena-remote-minimum-emacs))
      ((string-empty-p (or (plist-get probe :toplevel) ""))
-      (format "it has no git checkout at %s" repository)))))
+      (format "it has no git checkout at %s" repository))
+     ((and (eq shape 'delegate)
+           (not (+agent-shell-arena-remote--delegate-ready-p ready)))
+      (format "its readiness file at %s does not list the capability \"delegate\":1, so its setup has not proved it can run delegates there.  Rerun the host's setup with delegate support, or keep delegates here with :delegate (:host local)" (plist-get probe :ready-file))))))
 
 (defun +agent-shell-arena-remote--coder-wake (name callback)
   "Check or start Coder workspace NAME, reporting wake events to CALLBACK.
@@ -1648,7 +1878,8 @@ was last wrong.  A cancel stops the wait."
                                  (+agent-shell-arena-remote--ready-error
                                   probe
                                   (+agent-shell-arena-remote-job-repository
-                                   job))))
+                                   job)
+                                  (+agent-shell-arena-remote-job-shape job))))
                     (boot (plist-get probe :boot)))
                 (cond
                  ((not problem) (funcall callback probe))
@@ -1845,7 +2076,9 @@ or nil; and a message."
      +agent-shell-arena-remote--poll-script
      (list id (if (eq (+agent-shell-arena-remote-cancel-state remote) 'pending)
                   "cancel" "-")
-           (or (+agent-shell-arena-remote--cancel-reason remote) ""))
+           (or (+agent-shell-arena-remote--cancel-reason remote) "")
+           (+agent-shell-arena-remote--cursor-argument remote)
+           (or (+agent-shell-arena-remote-emacs remote) ""))
      :timeout 120
      :callback (lambda (output error)
                  (+agent-shell-arena-remote--polled remote output error)))))
@@ -1859,9 +2092,32 @@ or nil; and a message."
            +agent-shell-arena-remote--cancel-reasons))
 
 (defun +agent-shell-arena-remote-parse-poll (output)
-  "Return (:alive BOOL :cancel BOOL :status STATUS) from a poll's OUTPUT.
+  "Return (:alive BOOL :cancel BOOL :status STATUS :tail TAIL) from OUTPUT.
 Return `none' when the host has no such job; signal when OUTPUT is
-malformed.  STATUS is nil before the runner first writes one."
+malformed.  STATUS is nil before the runner first writes one.  A
+version-2 answer is one JSON envelope, whose TAIL is a delegate's
+transcript page as parsed JSON, or nil."
+  (if-let* ((start (and output (string-match "^pstack-arena-poll 2\n" output))))
+      (let ((envelope (condition-case err
+                          (json-parse-string (substring output (match-end 0))
+                                             :object-type 'alist
+                                             :array-type 'list
+                                             :null-object nil
+                                             :false-object nil)
+                        (json-error
+                         (signal '+agent-shell-arena-remote-wire
+                                 (list (format "poll envelope is not JSON: %s"
+                                               (error-message-string err))))))))
+        (list :alive (alist-get 'alive envelope)
+              :cancel (alist-get 'cancel envelope)
+              :status (when-let* ((status (alist-get 'status envelope)))
+                        (+agent-shell-arena-remote-from-json
+                         'status (json-serialize status)))
+              :tail (alist-get 'tail envelope)))
+    (+agent-shell-arena-remote--parse-poll-1 output)))
+
+(defun +agent-shell-arena-remote--parse-poll-1 (output)
+  "Parse a version-1 poll's OUTPUT as `+agent-shell-arena-remote-parse-poll'."
   (let ((start (and output (string-match "^pstack-arena-poll \\(.*\\)$" output))))
     (unless start
       (signal '+agent-shell-arena-remote-wire
@@ -1888,9 +2144,19 @@ malformed.  STATUS is nil before the runner first writes one."
         (+agent-shell-arena-remote--trouble remote "the host has no such job"))
        (t
         (let ((status (plist-get poll :status))
-              (now (float-time)))
+              (now (float-time))
+              (more nil))
           (setf (+agent-shell-arena-remote-failures remote) 0
-                (+agent-shell-arena-remote-error remote) nil)
+                (+agent-shell-arena-remote-error remote) nil
+                (+agent-shell-arena-remote-polled remote) now)
+          (when-let* ((tail (plist-get poll :tail)))
+            (condition-case err
+                (setq more (and (not (alist-get 'error tail))
+                                (+agent-shell-arena-remote--cache-transcript
+                                 remote tail)))
+              (error (message "pstack delegate %s: transcript page refused: %s"
+                              (+agent-shell-arena-remote-id remote)
+                              (error-message-string err)))))
           (when (and (plist-get poll :cancel)
                      (eq (+agent-shell-arena-remote-cancel-state remote) 'pending))
             (setf (+agent-shell-arena-remote-cancel-state remote) 'sent))
@@ -1921,8 +2187,19 @@ malformed.  STATUS is nil before the runner first writes one."
            ((+agent-shell-arena-remote--overdue-p remote)
             (+agent-shell-arena-remote--unreachable remote))
            (t (+agent-shell-arena-remote--schedule
-               remote +agent-shell-arena-remote-poll-interval)))))))
+               remote (+agent-shell-arena-remote--interval remote more))))))))
     (+agent-shell-pstack-panels--refresh)))
+
+(defun +agent-shell-arena-remote--interval (remote more)
+  "Return the seconds until REMOTE's next poll.
+MORE says its transcript has another page waiting, fetched as soon as
+the host's queue allows; a shown transcript polls every
+`+agent-shell-arena-remote-transcript-interval' seconds."
+  (cond (more 0)
+        ((+agent-shell-arena-remote--transcript-visible-p remote)
+         (min +agent-shell-arena-remote-transcript-interval
+              +agent-shell-arena-remote-poll-interval))
+        (t +agent-shell-arena-remote-poll-interval)))
 
 (defun +agent-shell-arena-remote--overdue-p (remote)
   "Return whether REMOTE's host has gone too long without a heartbeat."
@@ -2068,7 +2345,12 @@ report, and its diff is taken here as a local arena's is."
                  (signal '+agent-shell-arena-remote-wire
                          (list "the report is for another arena")))
                (+agent-shell-arena-remote--receive-egress remote results)
-               (+agent-shell-arena-remote--land
+               (when (eq (+agent-shell-arena-remote-shape remote) 'delegate)
+                 (+agent-shell-arena-remote--reconcile-transcript remote results))
+               (funcall
+                (if (eq (+agent-shell-arena-remote-report-shape report) 'delegate)
+                    #'+agent-shell-arena-remote--land-delegate
+                  #'+agent-shell-arena-remote--land)
                 remote report (expand-file-name "results.bundle" results)
                 (lambda (results error)
                   (if error (funcall fail error)
@@ -2162,6 +2444,102 @@ reported %s" role landed commit))
           (funcall callback nil "the report names results but no host arena")
         (fetch (lambda () (compare captured nil)))))))
 
+(defun +agent-shell-arena-remote--land-delegate (remote report bundle callback)
+  "Fetch REPORT's delegate branch from BUNDLE into REMOTE's laptop repository.
+The branch lands first under the job's own refs/pstack-arena/ID/delegate,
+is checked against the report, the panel and the base, then becomes
+refs/heads/pstack/delegate/PANEL by compare-and-swap.  A branch already
+there is accepted only when it holds the same commit; otherwise it is
+left alone, the fetched ref stays for recovery and the result says so.
+Its commits are listed here, from the verified tip.  Call CALLBACK with
+an alist of the delegate's role to its result plist and nil, or nil and
+a message for a failure worth retrying."
+  (let* ((panel (+agent-shell-arena-remote--panel remote))
+         (manifest (+agent-shell-pstack-panel-arena panel))
+         (outcome (+agent-shell-arena-remote-report-delegate report))
+         (member (seq-find (lambda (member)
+                             (eq 'delegate (+agent-shell-arena-remote-member-kind
+                                            member)))
+                           (+agent-shell-arena-remote-report-members report)))
+         (role (and member (+agent-shell-arena-remote-member-role member)))
+         (base (+agent-shell-arena-git-manifest-base manifest))
+         (branch (concat "refs/heads/"
+                         (+agent-shell-arena-git-delegate-branch manifest)))
+         (temporary (+agent-shell-arena-git-ref manifest "delegate"))
+         (tip (and outcome (+agent-shell-arena-remote-outcome-tip outcome)))
+         (git (lambda (args done)
+                (+agent-shell-arena-remote--git
+                 manifest args
+                 (lambda (output error)
+                   (if error (funcall callback nil error)
+                     (funcall done output)))))))
+    (cl-labels
+        ((result (&rest plist)
+           (funcall callback
+                    (list (cons role (append (list :outcome outcome) plist)))
+                    nil))
+         (listed (published)
+           (+agent-shell-arena-git-delegate-log
+            manifest tip
+            (lambda (commits error)
+              (if error (funcall callback nil error)
+                (let ((delegate (+agent-shell-arena-git-manifest-delegate
+                                 manifest)))
+                  (setf (+agent-shell-arena-git-delegate-commits delegate)
+                        commits)
+                  (+agent-shell-arena-git-write-manifest manifest))
+                (apply #'result :tip tip :published published
+                       (unless published
+                         (list :collision
+                               (format "%s already exists here at another \
+commit, so Emacs left it alone.  The delegate's branch is at %s, which \
+%s holds."
+                                       branch tip temporary))))))))
+         (publish ()
+           (let ((existing (+agent-shell-arena-git--read-in
+                            (+agent-shell-arena-git-manifest-git-dir manifest)
+                            (+agent-shell-arena-git-manifest-toplevel manifest)
+                            "rev-parse" "--verify" "-q" branch)))
+             (cond
+              ((equal existing tip) (drop-temporary))
+              (existing (listed nil))
+              (t (funcall git (list "update-ref" branch tip "")
+                          (lambda (_) (drop-temporary)))))))
+         (drop-temporary ()
+           (funcall git (list "update-ref" "-d" temporary tip)
+                    (lambda (_) (listed t)))))
+      (cond
+       ((null role)
+        (funcall callback nil "the delegate's report names no delegate"))
+       ((null tip) (result))
+       ((not (equal (+agent-shell-arena-remote-outcome-branch outcome) branch))
+        (funcall callback nil (format "the report names branch %s, not %s"
+                                      (+agent-shell-arena-remote-outcome-branch
+                                       outcome)
+                                      branch)))
+       (t
+        (funcall
+         git (list "bundle" "verify" "-q" bundle)
+         (lambda (_)
+           (funcall
+            git (list "fetch" "-q" "--no-tags" "--no-write-fetch-head" bundle
+                      (format "+%s:%s" branch temporary))
+            (lambda (_)
+              (+agent-shell-arena-git-record manifest "delegate" tip "fetched")
+              (funcall
+               git (list "rev-parse" "--verify" "-q" temporary)
+               (lambda (landed)
+                 (if (not (equal landed tip))
+                     (funcall callback nil (format "the delegate's branch landed \
+as %s, not the reported %s" landed tip))
+                   (+agent-shell-arena-remote--git
+                    manifest (list "merge-base" "--is-ancestor" base tip)
+                    (lambda (_ error)
+                      (if error
+                          (funcall callback nil (format "the delegate's branch \
+tip %s does not descend from its base %s" tip base))
+                        (publish))))))))))))))))
+
 (defun +agent-shell-arena-remote--finish (remote report results)
   "Give REMOTE's panel REPORT's members and RESULTS, then finish it.
 The follow-up is composed as a local arena's is."
@@ -2193,53 +2571,599 @@ The follow-up is composed as a local arena's is."
     (+agent-shell-pstack-panel--finish panel)
     (+agent-shell-arena-remote--sync)))
 
-;;;; Cancel, abandon, re-attach and clean
+;;;; Delegate transcripts
 
-;;;; Remote delegate transcript design signatures
+(defvar-local +agent-shell-arena-remote--transcript-id nil
+  "Id of the remote delegate this transcript buffer shows.")
+
+(defvar-local +agent-shell-arena-remote--transcript-shown nil
+  "Sequence number of the last record this buffer shows, or nil to redraw.")
+
+(cl-defstruct (+agent-shell-arena-remote--recorder
+               (:constructor +agent-shell-arena-remote--make-recorder)
+               (:copier nil))
+  "A delegate's transcript as its runner writes it, in DIRECTORY.
+EPOCH names the stream, SEGMENT the one written, SIZE its bytes, FIRST
+the oldest kept, SEQ the last record's number.  PENDING holds agent text
+not yet written, newest first."
+  directory epoch segment (size 0) first (seq 0) pending)
+
+(defconst +agent-shell-arena-remote--transcript-kinds '("assistant" "tool"
+                                                        "notice")
+  "Kinds of record a transcript holds.")
+
+(defun +agent-shell-arena-remote--segment-file (directory segment)
+  "Return transcript SEGMENT's file in DIRECTORY."
+  (expand-file-name (format "%08d.jsonl" segment) directory))
+
+(defun +agent-shell-arena-remote--segments (directory)
+  "Return the segment numbers in transcript DIRECTORY, oldest first."
+  (sort (mapcar (lambda (file) (string-to-number (file-name-base file)))
+                (and (file-directory-p directory)
+                     (directory-files directory nil "\\`[0-9]\\{8\\}\\.jsonl\\'")))
+        #'<))
+
+(defun +agent-shell-arena-remote--read-bytes (file &optional start end)
+  "Return FILE's bytes from START to END as a unibyte string."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally file nil start end)
+    (buffer-string)))
+
+(defun +agent-shell-arena-remote--recorder-open (directory)
+  "Return the recorder of the transcript in DIRECTORY, resuming one there.
+An incomplete last line, left by a runner that died mid-write, goes, and
+numbering resumes after the last whole record."
+  (with-file-modes #o700 (make-directory directory t))
+  (let* ((epoch-file (expand-file-name "epoch" directory))
+         (epoch (or (ignore-errors
+                      (string-trim (+agent-shell-arena-remote--read-bytes
+                                    epoch-file)))
+                    (let ((epoch (format "%08x%08x" (random #x100000000)
+                                         (random #x100000000))))
+                      (with-file-modes #o600
+                        (write-region epoch nil epoch-file nil 'silent))
+                      epoch)))
+         (segments (+agent-shell-arena-remote--segments directory))
+         (recorder (+agent-shell-arena-remote--make-recorder
+                    :directory directory :epoch epoch
+                    :segment (or (car (last segments)) 1)
+                    :first (or (car segments) 1))))
+    (dolist (segment (reverse segments))
+      (let* ((file (+agent-shell-arena-remote--segment-file directory segment))
+             (bytes (+agent-shell-arena-remote--read-bytes file))
+             (end (let ((newline (string-search "\n" (reverse bytes))))
+                    (if newline (- (length bytes) newline) 0))))
+        (when (< end (length bytes))
+          (let ((coding-system-for-write 'no-conversion))
+            (write-region (substring bytes 0 end) nil file nil 'silent)))
+        (when (= segment (+agent-shell-arena-remote--recorder-segment recorder))
+          (setf (+agent-shell-arena-remote--recorder-size recorder) end))
+        (when (and (zerop (+agent-shell-arena-remote--recorder-seq recorder))
+                   (> end 0))
+          (let ((lines (split-string (decode-coding-string
+                                      (substring bytes 0 end) 'utf-8)
+                                     "\n" t)))
+            (setf (+agent-shell-arena-remote--recorder-seq recorder)
+                  (or (ignore-errors
+                        (alist-get 'seq (json-parse-string
+                                         (car (last lines))
+                                         :object-type 'alist)))
+                      0))))))
+    recorder))
+
+(defun +agent-shell-arena-remote--record-lines (recorder kind text)
+  "Return RECORDER's next records of KIND for TEXT as encoded lines.
+TEXT is split between characters so no line passes
+`+agent-shell-arena-remote-transcript-record-bytes'."
+  (let ((encode (lambda (seq text)
+                  (encode-coding-string
+                   (concat (json-serialize `((seq . ,seq)
+                                             (time . ,(float-time))
+                                             (kind . ,kind) (text . ,text)))
+                           "\n")
+                   'utf-8-unix))))
+    (cl-labels ((lines (text)
+                  (let ((line (funcall encode
+                                       (1+ (+agent-shell-arena-remote--recorder-seq
+                                            recorder))
+                                       text)))
+                    (if (or (<= (length line)
+                                +agent-shell-arena-remote-transcript-record-bytes)
+                            (< (length text) 2))
+                        (progn (cl-incf (+agent-shell-arena-remote--recorder-seq
+                                         recorder))
+                               (list line))
+                      (let ((half (/ (length text) 2)))
+                        (append (lines (substring text 0 half))
+                                (lines (substring text half))))))))
+      (lines text))))
+
+(defun +agent-shell-arena-remote--record (recorder kind text)
+  "Append a record of KIND holding TEXT to RECORDER's transcript.
+A line never spans segments: one that would overflow the current
+segment starts the next, and the oldest go once more than
+`+agent-shell-arena-remote-transcript-segments' remain."
+  (let ((directory (+agent-shell-arena-remote--recorder-directory recorder)))
+    (dolist (line (+agent-shell-arena-remote--record-lines recorder kind text))
+      (when (and (> (+agent-shell-arena-remote--recorder-size recorder) 0)
+                 (> (+ (+agent-shell-arena-remote--recorder-size recorder)
+                       (length line))
+                    +agent-shell-arena-remote-transcript-segment-bytes))
+        (cl-incf (+agent-shell-arena-remote--recorder-segment recorder))
+        (setf (+agent-shell-arena-remote--recorder-size recorder) 0))
+      (let ((coding-system-for-write 'no-conversion))
+        (with-file-modes #o600
+          (write-region line nil
+                        (+agent-shell-arena-remote--segment-file
+                         directory
+                         (+agent-shell-arena-remote--recorder-segment recorder))
+                        t 'silent)))
+      (cl-incf (+agent-shell-arena-remote--recorder-size recorder)
+               (length line)))
+    (let ((keep (- (+agent-shell-arena-remote--recorder-segment recorder)
+                   (1- +agent-shell-arena-remote-transcript-segments))))
+      (when (> keep (+agent-shell-arena-remote--recorder-first recorder))
+        (setf (+agent-shell-arena-remote--recorder-first recorder) keep)
+        (dolist (segment (+agent-shell-arena-remote--segments directory))
+          (when (< segment keep)
+            (ignore-errors
+              (delete-file (+agent-shell-arena-remote--segment-file
+                            directory segment)))))))))
+
+(defun +agent-shell-arena-remote--flush-transcript (recorder)
+  "Write the agent text RECORDER holds back as one record."
+  (when-let* ((pending (+agent-shell-arena-remote--recorder-pending recorder)))
+    (setf (+agent-shell-arena-remote--recorder-pending recorder) nil)
+    (+agent-shell-arena-remote--record recorder "assistant"
+                                       (apply #'concat (reverse pending)))))
 
 (defun +agent-shell-arena-remote--record-transcript (runner event)
   "Append the public projection of delegate EVENT to RUNNER's transcript.
-Use the existing drive watcher, never another ACP subscription.  Store
-UTF-8 JSONL with monotonic seq/time/kind/text, bounded to eight 1 MiB
-segments and 16 KiB per encoded record.  Exclude auth, permission payloads,
-environment, tool arguments and hidden reasoning.  Resume sequence
-numbers after a restart, dropping an incomplete last line.  The runner
-is the only writer; its final member report remains authoritative.
-See docs/sketch-remote-delegate.md; this signature is not wired in."
-  (ignore runner event)
-  (error "Not implemented"))
+Agent text chunks gather into assistant records, tool calls become tool
+records of their title and status, and lifecycle events notices.  Auth,
+permission payloads, environment, tool arguments, hidden reasoning and
+the final text, which the report holds, never go in.  The runner is the
+transcript's only writer."
+  (when-let* ((recorder (+agent-shell-arena-remote--runner-transcript runner)))
+    (let ((text (plist-get event :text)))
+      (pcase (plist-get event :kind)
+        ('progress
+         (pcase (plist-get event :part)
+           ('assistant
+            (push text (+agent-shell-arena-remote--recorder-pending recorder))
+            (when (> (apply #'+ (mapcar #'string-bytes
+                                        (+agent-shell-arena-remote--recorder-pending
+                                         recorder)))
+                     4096)
+              (+agent-shell-arena-remote--flush-transcript recorder)))
+           ('tool
+            (+agent-shell-arena-remote--flush-transcript recorder)
+            (+agent-shell-arena-remote--record
+             recorder "tool"
+             (concat text (when-let* ((status (plist-get event :status)))
+                            (format " (%s)" status)))))))
+        (kind
+         (when-let* ((notice
+                      (pcase kind
+                        ('init-finished "The delegate's agent started.")
+                        ('input-submitted "Emacs sent the brief.")
+                        ('turn-complete
+                         (format "The turn ended: %s."
+                                 (or (plist-get event :stop-reason) "done")))
+                        ('error (format "The agent reported an error: %s"
+                                        (or (plist-get event :message)
+                                            "no message")))
+                        ('clean-up "The delegate's shell ended."))))
+           (+agent-shell-arena-remote--flush-transcript recorder)
+           (+agent-shell-arena-remote--record recorder "notice" notice)))))))
+
+(defun +agent-shell-arena-remote--runner-transcript-state (runner)
+  "Return what RUNNER's status says of its transcript, or nil."
+  (when-let* ((recorder (+agent-shell-arena-remote--runner-transcript runner)))
+    (+agent-shell-arena-remote--make-transcript
+     :epoch (+agent-shell-arena-remote--recorder-epoch recorder)
+     :first (+agent-shell-arena-remote--recorder-first recorder)
+     :last (+agent-shell-arena-remote--recorder-segment recorder)
+     :seq (+agent-shell-arena-remote--recorder-seq recorder))))
+
+(defun +agent-shell-arena-remote--page-records (directory segments segment
+                                                          offset)
+  "Read whole records from SEGMENT at byte OFFSET on, in transcript DIRECTORY.
+SEGMENTS are those it keeps.  Return (RECORDS NEXT-SEGMENT NEXT-OFFSET
+MORE BAD): at most `+agent-shell-arena-remote-transcript-page-bytes' of
+records, where reading continues, whether more follows, and whether a
+malformed line was skipped."
+  (let ((budget +agent-shell-arena-remote-transcript-page-bytes)
+        records more bad)
+    (catch 'full
+      (while (memq segment segments)
+        (let* ((file (+agent-shell-arena-remote--segment-file directory segment))
+               (size (or (file-attribute-size (file-attributes file)) 0))
+               (bytes (if (< offset size)
+                          (+agent-shell-arena-remote--read-bytes
+                           file offset (min size (+ offset budget)))
+                        ""))
+               (start 0))
+          (while (let ((newline (string-search "\n" bytes start)))
+                   (when (and newline (<= (- (1+ newline) start) budget))
+                     (let ((line (decode-coding-string
+                                  (substring bytes start newline) 'utf-8)))
+                       (condition-case nil
+                           (push (json-parse-string line :object-type 'alist)
+                                 records)
+                         (json-error (setq bad t))))
+                     (cl-decf budget (- (1+ newline) start))
+                     (setq start (1+ newline))))
+            nil)
+          (setq offset (+ offset start))
+          (cond
+           ((< offset size) (setq more t) (throw 'full nil))
+           ((memq (1+ segment) segments)
+            (if (<= budget 0) (progn (setq more t) (throw 'full nil))
+              (setq segment (1+ segment) offset 0)))
+           (t (throw 'full nil))))))
+    (list (nreverse records) segment offset more bad)))
 
 (defun +agent-shell-arena-remote--poll-page (directory cursor)
-  "Read one version-2 poll envelope for job DIRECTORY on the host.
-CURSOR is nil or an epoch/segment/byte-offset tuple.  Include the existing
-alive/cancel/status observations and at most 64 KiB of whole transcript
-records, with next cursor, gap and more indicators.  Validate all paths
-against DIRECTORY; tolerate rotation and a partial final line.  A tail
-failure must not hide status or cancel acknowledgment.  This is called
-by the existing poll script using the shipped batch Emacs, not another
-connection or job protocol.  It never mutates runner-owned artifacts."
-  (ignore directory cursor)
-  (error "Not implemented"))
+  "Return the version-2 poll envelope for job DIRECTORY on the host.
+CURSOR is nil or (EPOCH SEGMENT OFFSET SEQ).  The envelope holds whether
+the runner lives, whether a cancel marker is there, the status as the
+runner wrote it, and a transcript tail: at most
+`+agent-shell-arena-remote-transcript-page-bytes' of whole records from
+CURSOR, the cursor after them, and whether there is a gap before them or
+more after.  A cursor the host no longer keeps resumes at the oldest
+record it does, with a gap.  Reading the tail never stops the rest, and
+nothing here writes the runner's files."
+  (let* ((directory (file-name-as-directory (expand-file-name directory)))
+         (file (lambda (name) (expand-file-name name directory)))
+         (pid (ignore-errors
+                (string-to-number (+agent-shell-arena-remote--read-bytes
+                                   (funcall file "pid")))))
+         (status (ignore-errors
+                   (json-parse-string
+                    (decode-coding-string
+                     (+agent-shell-arena-remote--read-bytes
+                      (funcall file "status.json"))
+                     'utf-8)
+                    :object-type 'alist :array-type 'list
+                    :null-object :null :false-object :false)))
+         (tail
+          (condition-case err
+              (let* ((transcript (funcall file "transcript/"))
+                     (epoch (ignore-errors
+                              (string-trim (+agent-shell-arena-remote--read-bytes
+                                            (expand-file-name "epoch"
+                                                              transcript)))))
+                     (segments (+agent-shell-arena-remote--segments transcript))
+                     (first (car segments)))
+                (when (and epoch first)
+                  (pcase-let*
+                      ((same (and cursor (equal (nth 0 cursor) epoch)
+                                  (memq (nth 1 cursor) segments)))
+                       (gap (if cursor (not same) (> first 1)))
+                       (from (if same (list (nth 1 cursor) (nth 2 cursor))
+                               (list first 0)))
+                       (`(,records ,segment ,offset ,more ,bad)
+                        (+agent-shell-arena-remote--page-records
+                         transcript segments (car from) (cadr from))))
+                    `((epoch . ,epoch) (gap . ,(if (or gap bad) t :false))
+                      (from . ((segment . ,(car from))
+                               (offset . ,(cadr from))))
+                      (next . ((segment . ,segment) (offset . ,offset)))
+                      (records . ,(vconcat records))
+                      (more . ,(if more t :false))))))
+            (error `((error . ,(error-message-string err)))))))
+    `((version . 2)
+      (alive . ,(if (and (natnump pid) (> pid 0) (process-attributes pid)) t
+                  :false))
+      (cancel . ,(if (file-exists-p (funcall file "cancel")) t :false))
+      (status . ,(or status :null))
+      (tail . ,(or tail :null)))))
+
+(defun +agent-shell-arena-remote-poll-batch ()
+  "Print the poll envelope of the job folder and cursor on the command line."
+  (let* ((directory (pop command-line-args-left))
+         (cursor (let ((words (split-string (or (pop command-line-args-left) "")
+                                            ":")))
+                   (when (= 4 (length words))
+                     (list (nth 0 words) (string-to-number (nth 1 words))
+                           (string-to-number (nth 2 words))
+                           (string-to-number (nth 3 words)))))))
+    (princ (concat "pstack-arena-poll 2\n"
+                   (json-serialize (+agent-shell-arena-remote--poll-page
+                                    directory cursor))
+                   "\n"))
+    (kill-emacs 0)))
+
+(defun +agent-shell-arena-remote--cursor-argument (remote)
+  "Return the poll script's transcript argument for REMOTE.
+A delegate asks for its tail from its cursor, or from the start; an
+arena has none."
+  (if (not (eq (+agent-shell-arena-remote-shape remote) 'delegate)) "-"
+    (if-let* ((cursor (+agent-shell-arena-remote-cursor remote)))
+        (format "%s:%d:%d:%d" (+agent-shell-arena-remote-cursor-epoch cursor)
+                (+agent-shell-arena-remote-cursor-segment cursor)
+                (+agent-shell-arena-remote-cursor-offset cursor)
+                (+agent-shell-arena-remote-cursor-seq cursor))
+      "start")))
+
+(defun +agent-shell-arena-remote--cache-file (remote)
+  "Return the laptop's cache of REMOTE's transcript."
+  (expand-file-name "transcript.jsonl"
+                    (+agent-shell-arena-remote-directory remote)))
+
+(defun +agent-shell-arena-remote--check-record (record)
+  "Return transcript RECORD, an alist, or signal that it is malformed."
+  (unless (and (listp record) (consp (car-safe record))
+               (natnump (alist-get 'seq record))
+               (numberp (alist-get 'time record))
+               (member (alist-get 'kind record)
+                       +agent-shell-arena-remote--transcript-kinds)
+               (stringp (alist-get 'text record)))
+    (signal '+agent-shell-arena-remote-wire
+            (list (format "malformed transcript record: %s"
+                          (truncate-string-to-width (format "%S" record) 60
+                                                    nil nil "...")))))
+  record)
 
 (defun +agent-shell-arena-remote--cache-transcript (remote page)
-  "Validate and durably cache REMOTE's transcript PAGE on the laptop.
-Require matching job/epoch, ordered records and bounded contiguous
-cursors.  Persist records before advancing the remote record's cursor;
-replaying a page after restart must not duplicate text.  Bound cache and
-visible text to 8 MiB, marking rotation/truncation gaps.  Update existing
-read-only views while preserving readers' scroll positions.  Tail errors
-never prevent member results from being fetched or delivered."
-  (ignore remote page)
-  (error "Not implemented"))
+  "Validate REMOTE's transcript PAGE and add it to the laptop's cache.
+PAGE is a poll's parsed tail.  Records the cache has, by sequence number,
+are skipped, so a page replayed after a restart adds nothing twice; a
+gap, or records dropped to keep the cache within
+`+agent-shell-arena-remote-transcript-cache-bytes', leaves a notice.  The
+cache is written before REMOTE's cursor moves past the page.  Shown
+transcript buffers then gain the new records.  Return whether more
+follows on the host."
+  (let* ((cursor (+agent-shell-arena-remote-cursor remote))
+         (epoch (alist-get 'epoch page))
+         (next (alist-get 'next page))
+         (records (alist-get 'records page))
+         (same (and cursor (equal epoch (+agent-shell-arena-remote-cursor-epoch
+                                         cursor))))
+         (last (if same (+agent-shell-arena-remote-cursor-seq cursor) 0)))
+    (unless (and (stringp epoch)
+                 (string-match-p +agent-shell-arena-git--name-regexp epoch)
+                 (natnump (alist-get 'segment next))
+                 (natnump (alist-get 'offset next))
+                 (listp records))
+      (signal '+agent-shell-arena-remote-wire
+              (list "malformed transcript page")))
+    (let* ((records (mapcar #'+agent-shell-arena-remote--check-record records))
+           (seqs (mapcar (lambda (record) (alist-get 'seq record)) records)))
+      (unless (equal seqs (sort (seq-uniq seqs) #'<))
+        (signal '+agent-shell-arena-remote-wire
+                (list "transcript records out of order")))
+      (let ((fresh (seq-filter (lambda (record) (> (alist-get 'seq record) last))
+                               records))
+            (gap (or (eq t (alist-get 'gap page))
+                     (and cursor (not same)))))
+        (+agent-shell-arena-remote--append-cache
+         remote
+         (append (when gap
+                   (list `((seq . 0) (time . ,(float-time)) (kind . "notice")
+                           (text . "Part of the transcript is missing here: \
+the host kept only its newest part, or its runner started a new one."))))
+                 fresh))
+        (setf (+agent-shell-arena-remote-cursor remote)
+              (+agent-shell-arena-remote--make-cursor
+               :epoch epoch :segment (alist-get 'segment next)
+               :offset (alist-get 'offset next)
+               :seq (if fresh (alist-get 'seq (car (last fresh))) last)))
+        (+agent-shell-arena-remote--save remote)
+        (+agent-shell-arena-remote--show-transcript remote)
+        (eq t (alist-get 'more page))))))
+
+(defun +agent-shell-arena-remote--append-cache (remote records)
+  "Append RECORDS to REMOTE's transcript cache, keeping it within bounds.
+Past `+agent-shell-arena-remote-transcript-cache-bytes', whole oldest
+records go, and a notice says so."
+  (when records
+    (let ((file (+agent-shell-arena-remote--cache-file remote))
+          (coding-system-for-write 'utf-8-unix))
+      (with-file-modes #o600
+        (write-region (mapconcat (lambda (record)
+                                   (concat (json-serialize record) "\n"))
+                                 records "")
+                      nil file t 'silent))
+      (when (> (or (file-attribute-size (file-attributes file)) 0)
+               +agent-shell-arena-remote-transcript-cache-bytes)
+        (let* ((bytes (+agent-shell-arena-remote--read-bytes file))
+               (keep (- (length bytes)
+                        (* 3 (/ +agent-shell-arena-remote-transcript-cache-bytes
+                                4))))
+               (start (1+ (or (string-search "\n" bytes keep) (1- (length bytes))))))
+          (let ((coding-system-for-write 'no-conversion))
+            (write-region
+             (concat (encode-coding-string
+                      (concat (json-serialize
+                               `((seq . 0) (time . ,(float-time))
+                                 (kind . "notice")
+                                 (text . "Older transcript was dropped to keep \
+it within its size bound.")))
+                              "\n")
+                      'utf-8-unix)
+                     (substring bytes start))
+             nil file nil 'silent))
+          (when-let* ((buffer (+agent-shell-arena-remote--transcript-live remote)))
+            (with-current-buffer buffer
+              (setq +agent-shell-arena-remote--transcript-shown nil))))))))
+
+(defun +agent-shell-arena-remote--cached-records (remote)
+  "Return the records in REMOTE's transcript cache, oldest first."
+  (let ((file (+agent-shell-arena-remote--cache-file remote)))
+    (when (file-readable-p file)
+      (with-temp-buffer
+        (let ((coding-system-for-read 'utf-8-unix))
+          (insert-file-contents file))
+        (seq-keep (lambda (line)
+                    (ignore-errors (json-parse-string line :object-type 'alist)))
+                  (split-string (buffer-string) "\n" t))))))
+
+(defun +agent-shell-arena-remote--reconcile-transcript (remote results)
+  "Cache what REMOTE's fetched transcript segments in RESULTS hold beyond
+the cache.  A missing or broken transcript never stops the results."
+  (with-demoted-errors "pstack delegate: transcript catch-up failed: %S"
+    (let* ((directory (expand-file-name "transcript/" results))
+           (epoch (ignore-errors
+                    (string-trim (+agent-shell-arena-remote--read-bytes
+                                  (expand-file-name "epoch" directory)))))
+           (segments (+agent-shell-arena-remote--segments directory)))
+      (when (and epoch segments)
+        (let ((cursor (+agent-shell-arena-remote-cursor remote))
+              (records nil))
+          (dolist (segment segments)
+            (dolist (line (split-string
+                           (decode-coding-string
+                            (+agent-shell-arena-remote--read-bytes
+                             (+agent-shell-arena-remote--segment-file
+                              directory segment))
+                            'utf-8)
+                           "\n" t))
+              (when-let* ((record (ignore-errors
+                                    (json-parse-string line
+                                                       :object-type 'alist))))
+                (push record records))))
+          (+agent-shell-arena-remote--cache-transcript
+           remote
+           `((epoch . ,epoch)
+             (gap . ,(if (and cursor
+                              (equal epoch (+agent-shell-arena-remote-cursor-epoch
+                                            cursor))
+                              (> (car segments)
+                                 (+agent-shell-arena-remote-cursor-segment
+                                  cursor)))
+                         t :false))
+             (next . ((segment . ,(car (last segments))) (offset . 0)))
+             (records . ,(nreverse records)))))))))
+
+;;;; The transcript buffer
+
+(defvar-keymap +agent-shell-arena-remote-transcript-mode-map
+  :doc "Keymap for `+agent-shell-arena-remote-transcript-mode'."
+  "g" #'+agent-shell-arena-remote-transcript-refresh)
+
+(define-derived-mode +agent-shell-arena-remote-transcript-mode special-mode
+  "pstack transcript"
+  "Read a remote delegate's transcript, as its host recorded it.
+The text is the host's, shown literally; nothing here sends it anything.
+\\<+agent-shell-arena-remote-transcript-mode-map>\\[+agent-shell-arena-remote-transcript-refresh] polls its host now, and \\[quit-window] closes the window."
+  (setq-local truncate-lines nil
+              buffer-undo-list t
+              header-line-format
+              '(:eval (+agent-shell-arena-remote--transcript-header))))
+
+(defun +agent-shell-arena-remote--transcript-name (remote)
+  "Return the name of REMOTE's transcript buffer."
+  (format "*pstack delegate %s transcript*" (+agent-shell-arena-remote-panel remote)))
+
+(defun +agent-shell-arena-remote--transcript-live (remote)
+  "Return REMOTE's transcript buffer when it exists, or nil."
+  (get-buffer (+agent-shell-arena-remote--transcript-name remote)))
+
+(defun +agent-shell-arena-remote--transcript-visible-p (remote)
+  "Return whether a window shows REMOTE's transcript."
+  (when-let* ((buffer (+agent-shell-arena-remote--transcript-live remote)))
+    (get-buffer-window buffer t)))
+
+(defun +agent-shell-arena-remote--transcript-header ()
+  "Return the header line of the current transcript buffer."
+  (when-let* ((remote (gethash +agent-shell-arena-remote--transcript-id
+                               +agent-shell-arena-remote--arenas)))
+    (let* ((panel (+agent-shell-arena-remote--panel remote))
+           (member (and panel (car (+agent-shell-pstack-panel-members panel))))
+           (file (+agent-shell-arena-remote--cache-file remote)))
+      (format "%s | %s | %s | read-only | last poll %s | %d KiB kept"
+              (+agent-shell-arena-remote--host-label
+               (+agent-shell-arena-remote-host remote))
+              (if member
+                  (format "%s (%s)" (+agent-shell-pstack-panel-member-role member)
+                          (+agent-shell-pstack-panel-member-agent member))
+                "delegate")
+              (if member (+agent-shell-pstack-panel-member-state member)
+                (+agent-shell-arena-remote-phase remote))
+              (if-let* ((polled (+agent-shell-arena-remote-polled remote)))
+                  (format-time-string "%H:%M:%S" polled)
+                "never")
+              (/ (or (file-attribute-size (file-attributes file)) 0) 1024)))))
+
+(defun +agent-shell-arena-remote--render-record (record)
+  "Return RECORD as the transcript buffer shows it, literally."
+  (let ((lines (split-string (alist-get 'text record) "\n")))
+    (concat (format-time-string "%H:%M:%S" (alist-get 'time record)) "  "
+            (format "%-9s  " (alist-get 'kind record))
+            (string-join lines "\n                     ")
+            "\n")))
+
+(defun +agent-shell-arena-remote--show-transcript (remote)
+  "Add REMOTE's new cached records to its transcript buffer, if it exists.
+Windows at its end follow the new text; others keep their place."
+  (when-let* ((buffer (+agent-shell-arena-remote--transcript-live remote)))
+    (with-current-buffer buffer
+      (let* ((records (+agent-shell-arena-remote--cached-records remote))
+             (shown +agent-shell-arena-remote--transcript-shown)
+             (windows (get-buffer-window-list buffer nil t))
+             (following (seq-filter (lambda (window)
+                                      (>= (window-point window) (point-max)))
+                                    windows))
+             (at-end (>= (point) (point-max)))
+             (inhibit-read-only t))
+        (save-excursion
+          (if shown
+              (setq records (seq-filter (lambda (record)
+                                          (> (alist-get 'seq record) shown))
+                                        records))
+            (erase-buffer))
+          (goto-char (point-max))
+          (dolist (record records)
+            (unless (and shown (zerop (alist-get 'seq record)))
+              (insert (+agent-shell-arena-remote--render-record record))))
+          (setq +agent-shell-arena-remote--transcript-shown
+                (or (car (last (delq 0 (mapcar (lambda (record)
+                                                 (alist-get 'seq record))
+                                               records))))
+                    shown 0)))
+        (when at-end (goto-char (point-max)))
+        (dolist (window following)
+          (set-window-point window (point-max)))
+        (force-mode-line-update)))))
 
 (defun +agent-shell-arena-remote-transcript-buffer (remote)
-  "Return REMOTE's read-only delegate transcript buffer, creating it if needed.
-Render the bounded local cache as literal text in `special-mode', with
-host, role, last poll and lifecycle/gap notices.  Never start an agent,
-remote shell or buffer-owned poll timer.  Refresh requests use REMOTE's
-existing per-host polling queue; finished jobs remain readable offline."
-  (ignore remote)
-  (error "Not implemented"))
+  "Return REMOTE's read-only transcript buffer, creating it if needed.
+It shows the laptop's bounded cache of the delegate's transcript
+literally, in `+agent-shell-arena-remote-transcript-mode', with its host,
+member and last poll in the header.  It starts no agent, shell, process
+or timer: polling stays with REMOTE's host queue, which polls sooner
+while the buffer is shown, and a finished delegate's transcript reads
+from the cache."
+  (let ((buffer (get-buffer-create
+                 (+agent-shell-arena-remote--transcript-name remote))))
+    (with-current-buffer buffer
+      (unless (derived-mode-p '+agent-shell-arena-remote-transcript-mode)
+        (+agent-shell-arena-remote-transcript-mode))
+      (setq +agent-shell-arena-remote--transcript-id
+            (+agent-shell-arena-remote-id remote)))
+    (+agent-shell-arena-remote--show-transcript remote)
+    (when (and (eq (+agent-shell-arena-remote-phase remote) 'remote)
+               (null (+agent-shell-arena-remote-timer remote)))
+      (+agent-shell-arena-remote--schedule remote 0))
+    buffer))
+
+(defun +agent-shell-arena-remote-transcript-refresh ()
+  "Poll the host of the current transcript buffer's delegate now."
+  (interactive)
+  (if-let* ((remote (gethash +agent-shell-arena-remote--transcript-id
+                             +agent-shell-arena-remote--arenas)))
+      (if (eq (+agent-shell-arena-remote-phase remote) 'remote)
+          (+agent-shell-arena-remote--schedule remote 0)
+        (+agent-shell-arena-remote--show-transcript remote)
+        (message "The delegate is %s; its transcript is all here"
+                 (+agent-shell-arena-remote-phase remote)))
+    (user-error "This transcript's delegate is no longer attached")))
+
+;;;; Cancel, abandon, re-attach and clean
+
 
 (defvar +agent-shell-arena-remote--quitting nil
   "Non-nil while Emacs quits, which never cancels a remote arena.")
@@ -2328,13 +3252,29 @@ Return the record, or nil when there is nothing left to do."
                  (+agent-shell-arena-remote-delivered remote))))
         remote))))
 
+(defun +agent-shell-arena-remote--job-options (job)
+  "Return the delegate policy JOB's runner panel works under, or nil.
+Its routing keys are cleared, so the panel can never submit itself."
+  (when-let* ((delegate (+agent-shell-arena-remote-job-delegate job)))
+    (list :host nil :isolation 'worktree
+          :sandbox (+agent-shell-arena-remote-delegate-job-sandbox delegate))))
+
 (defun +agent-shell-arena-remote--rebuild (remote job manifest)
   "Return a panel for REMOTE running JOB, whose laptop arena is MANIFEST."
   (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
          (cwd (expand-file-name (+agent-shell-arena-remote-job-prefix job)
-                                toplevel)))
+                                toplevel))
+         (delegate (+agent-shell-arena-remote-job-delegate job)))
     (+agent-shell-pstack-panel--make
-     :id (+agent-shell-arena-remote-job-panel job) :shape 'arena
+     :id (+agent-shell-arena-remote-job-panel job)
+     :shape (+agent-shell-arena-remote-job-shape job)
+     :delegate-options
+     (when delegate
+       (list :host (+agent-shell-arena-remote-host remote)
+             :isolation 'worktree
+             :sandbox (+agent-shell-arena-remote-delegate-job-sandbox delegate)))
+     :identity (and delegate
+                    (+agent-shell-arena-remote-delegate-job-identity delegate))
      :brief (+agent-shell-arena-remote-job-brief job)
      :timeout (+agent-shell-arena-remote-job-timeout job)
      :rubric (+agent-shell-arena-remote-job-rubric job)
@@ -2346,18 +3286,15 @@ Return the record, or nil when there is nothing left to do."
      :members (+agent-shell-arena-remote--members job))))
 
 (defun +agent-shell-arena-remote--members (job)
-  "Return fresh panel members for JOB's candidates and judge."
-  (append
-   (mapcar (lambda (candidate)
-             (+agent-shell-pstack-panel--make-member
-              :role (+agent-shell-arena-remote-candidate-role candidate)
-              :agent (+agent-shell-arena-remote-candidate-agent candidate)
-              :focus (+agent-shell-arena-remote-candidate-focus candidate)
-              :kind 'candidate :state 'pending))
-           (+agent-shell-arena-remote-job-candidates job))
-   (list (+agent-shell-pstack-panel--make-member
-          :role "judge" :agent (+agent-shell-arena-remote-job-judge job)
-          :kind 'judge :state 'pending))))
+  "Return fresh panel members for JOB's members, of their kinds."
+  (mapcar (lambda (member)
+            (+agent-shell-pstack-panel--make-member
+             :role (+agent-shell-arena-remote-request-member-role member)
+             :agent (+agent-shell-arena-remote-request-member-agent member)
+             :focus (+agent-shell-arena-remote-request-member-focus member)
+             :kind (+agent-shell-arena-remote-request-member-kind member)
+             :state 'pending))
+          (+agent-shell-arena-remote-job-members job)))
 
 ;;;###autoload
 (defun +agent-shell-arena-remote-reattach-all ()
@@ -2508,9 +3445,15 @@ DIRECTORY is the job folder and ROOT the host state folder.  PHASE is
 queued until this runner holds the repository LOCK, then the panel's.
 PREVIOUS is the status an earlier runner left unfinished.  PANEL holds
 the deadline and how each agent's host login stood.  EXPIRED says the
-deadline cancelled the panel."
+deadline cancelled the panel.  TRANSCRIPT is a delegate's transcript
+writer, a `+agent-shell-arena-remote--recorder'.  QUARANTINE says why
+its delegate's writers could not be shown to have stopped, which keeps
+the repository's lock held."
   job directory root panel (phase 'queued) lock previous done
-  cancelled expired (written "") (beat 0) error ready)
+  cancelled expired (written "") (beat 0) error ready transcript quarantine)
+
+(defvar +agent-shell-arena-remote--runner nil
+  "The runner this batch Emacs runs, or nil.")
 
 (defun +agent-shell-arena-remote--runner-file (runner name)
   "Return file NAME in RUNNER's job folder."
@@ -2542,16 +3485,31 @@ deadline cancelled the panel."
 RESULTS says the results are written, which finishes the status."
   (let* ((panel (+agent-shell-arena-remote--runner-panel runner))
          (manifest (and panel (+agent-shell-pstack-panel-arena panel)))
+         (job (+agent-shell-arena-remote--runner-job runner))
+         (delegate (eq (+agent-shell-arena-remote-job-shape job) 'delegate))
          (phase (cond (results 'finished)
                       ;; Finished only once the results are written.
                       ((null panel)
                        (+agent-shell-arena-remote--runner-phase runner))
                       ((eq (+agent-shell-pstack-panel-phase panel) 'finished)
-                       'judging)
+                       (if delegate 'finalizing 'judging))
+                      ((and delegate
+                            (eq (+agent-shell-pstack-panel-phase panel)
+                                'delegating)
+                            (memq (+agent-shell-pstack-panel-member-capture
+                                   (car (+agent-shell-pstack-panel-members
+                                         panel)))
+                                  '(stopped capturing captured failed)))
+                       'finalizing)
+                      ((memq (+agent-shell-pstack-panel-phase panel)
+                             '(running interrupting))
+                       'preparing)
                       (t (+agent-shell-pstack-panel-phase panel))))
          (status (+agent-shell-arena-remote--make-status
-                  :id (+agent-shell-arena-remote-job-id
-                       (+agent-shell-arena-remote--runner-job runner))
+                  :id (+agent-shell-arena-remote-job-id job)
+                  :shape (+agent-shell-arena-remote-job-shape job)
+                  :transcript (+agent-shell-arena-remote--runner-transcript-state
+                               runner)
                   :phase phase :pid (emacs-pid) :heartbeat 0
                   :deadline (and panel
                                  (+agent-shell-pstack-panel-deadline panel))
@@ -2593,7 +3551,9 @@ RESULTS says the results are written, which finishes the status."
 (defun +agent-shell-arena-remote-acquire (lock id)
   "Take LOCK, a folder, for job ID; return whether it was taken.
 A lock whose owner no longer runs is stale and is taken over: it is
-renamed aside first, so only one waiter can win it."
+renamed aside first, so only one waiter can win it.  A quarantined one,
+whose delegate's writers were never shown to stop, never is; see
+`+agent-shell-arena-remote--quarantine'."
   (make-directory (file-name-directory (directory-file-name lock)) t)
   (condition-case nil
       (progn (make-directory lock)
@@ -2603,6 +3563,7 @@ renamed aside first, so only one waiter can win it."
     (file-already-exists
      (let ((owner (+agent-shell-arena-remote--lock-owner lock)))
        (when (and (natnump owner)
+                  (not (file-exists-p (expand-file-name "quarantine" lock)))
                   (/= owner (emacs-pid))
                   (not (process-attributes owner)))
          (let ((aside (format "%s.stale-%d" (directory-file-name lock)
@@ -2622,8 +3583,14 @@ renamed aside first, so only one waiter can win it."
          (repository (+agent-shell-arena-remote--repository job))
          (cwd (expand-file-name (+agent-shell-arena-remote-job-prefix job)
                                 repository))
+         (delegate (+agent-shell-arena-remote-job-delegate job))
          (panel (+agent-shell-pstack-panel--make
-                 :id (+agent-shell-arena-remote-job-panel job) :shape 'arena
+                 :id (+agent-shell-arena-remote-job-panel job)
+                 :shape (+agent-shell-arena-remote-job-shape job)
+                 :delegate-options (+agent-shell-arena-remote--job-options job)
+                 :identity (and delegate
+                                (+agent-shell-arena-remote-delegate-job-identity
+                                 delegate))
                  :brief (+agent-shell-arena-remote-job-brief job)
                  :timeout (+agent-shell-arena-remote-job-timeout job)
                  :rubric (+agent-shell-arena-remote-job-rubric job)
@@ -2634,12 +3601,49 @@ renamed aside first, so only one waiter can win it."
                  :members (+agent-shell-arena-remote--members job)
                  :measure-egress
                  (+agent-shell-arena-remote-job-measure-egress job)
+                 :runner
+                 (when delegate
+                   (list :observer
+                         (lambda (_member event)
+                           (+agent-shell-arena-remote--record-transcript
+                            runner event))
+                         :lease
+                         (lambda (member)
+                           (+agent-shell-arena-remote--runner-lease
+                            runner member))))
                  :sink (lambda (panel)
                          (+agent-shell-arena-remote--runner-finish
                           runner panel)))))
+    (when (and delegate (not (+agent-shell-arena-remote--runner-transcript runner)))
+      (let ((recorder (+agent-shell-arena-remote--recorder-open
+                       (+agent-shell-arena-remote--runner-file
+                        runner "transcript/"))))
+        (setf (+agent-shell-arena-remote--runner-transcript runner) recorder)
+        (+agent-shell-arena-remote--record
+         recorder "notice"
+         (if (+agent-shell-arena-remote--runner-previous runner)
+             "The runner restarted; it recovers what the delegate left and \
+never reruns it."
+           "The runner started."))))
     (puthash (+agent-shell-pstack-panel-id panel) panel
              +agent-shell-pstack-panel--panels)
     (setf (+agent-shell-arena-remote--runner-panel runner) panel)))
+
+(defun +agent-shell-arena-remote--lease-file (runner role)
+  "Return RUNNER's durable launch record for member ROLE."
+  (+agent-shell-arena-remote--runner-file runner (format "leases/%s.json" role)))
+
+(defun +agent-shell-arena-remote--runner-lease (runner member)
+  "Return the process lease RUNNER's delegate MEMBER starts under.
+Under systemd it is a scope of its own, named for the job and role; a
+local host's runner records the adapter's pid and start time instead."
+  (let ((role (+agent-shell-pstack-panel-member-role member)))
+    (list :file (+agent-shell-arena-remote--lease-file runner role)
+          :unit (when (+agent-shell-arena-remote--runner-scoped-p runner)
+                  (format "pstack-delegate-%s-%s"
+                          (+agent-shell-arena-remote-job-id
+                           (+agent-shell-arena-remote--runner-job runner))
+                          role)))))
 
 (defun +agent-shell-arena-remote--repository (job)
   "Return the host checkout JOB names, as an absolute folder name."
@@ -2662,20 +3666,51 @@ before any member starts, as a local arena's does."
     (condition-case err
         (if previous
             (+agent-shell-arena-remote--recover panel previous)
-          (let ((sparse (+agent-shell-arena-remote-job-sparse job)))
-            (+agent-shell-pstack-panel--provision
-             panel
-             (+agent-shell-arena-git-base-at
-              (+agent-shell-arena-remote--repository job)
-              (+agent-shell-arena-remote-job-base job)
-              (+agent-shell-arena-remote-job-prefix job)
-              (when sparse
-                (list :cone (+agent-shell-arena-remote-sparse-cone sparse)
-                      :patterns (+agent-shell-arena-remote-sparse-patterns
-                                 sparse)))))))
+          (let* ((sparse (+agent-shell-arena-remote-job-sparse job))
+                 (base (+agent-shell-arena-git-base-at
+                        (+agent-shell-arena-remote--repository job)
+                        (+agent-shell-arena-remote-job-base job)
+                        (+agent-shell-arena-remote-job-prefix job)
+                        (when sparse
+                          (list :cone (+agent-shell-arena-remote-sparse-cone
+                                       sparse)
+                                :patterns
+                                (+agent-shell-arena-remote-sparse-patterns
+                                 sparse))))))
+            (if (+agent-shell-pstack-panel--delegate-p panel)
+                (progn
+                  (when-let* ((refusal (+agent-shell-arena-remote--delegate-refusal
+                                        runner)))
+                    (user-error "%s" refusal))
+                  (+agent-shell-pstack-panel--provision-delegate panel base))
+              (+agent-shell-pstack-panel--provision panel base))))
       (error (+agent-shell-pstack-panel--fail-preparation
               panel (error-message-string err))))
     (+agent-shell-arena-remote--runner-status runner)))
+
+(defun +agent-shell-arena-remote--delegate-refusal (runner)
+  "Return why RUNNER's host cannot run its delegate, or nil.
+Its readiness file must list the delegate capability, a sandboxed
+delegate needs a sandbox backend, and under systemd each member runs in
+a scope of its own, so systemd-run must be there."
+  (let ((job (+agent-shell-arena-remote--runner-job runner)))
+    (cond
+     ((not (+agent-shell-arena-remote--delegate-ready-p
+            (+agent-shell-arena-remote--runner-ready runner)))
+      "The host's readiness file does not list the capability \"delegate\":1, so its setup has not proved it can run delegates.")
+     ((and (+agent-shell-arena-remote-delegate-job-sandbox
+            (+agent-shell-arena-remote-job-delegate job))
+           (not +agent-shell-sandbox-backend))
+      (format "A sandboxed delegate needs a sandbox, and this host runs on %s."
+              system-type))
+     ((and (+agent-shell-arena-remote--runner-scoped-p runner)
+           (not (executable-find "systemd-run")))
+      "The host has no systemd-run, so the delegate could not run in a systemd scope of its own; Emacs never runs it uncontained."))))
+
+(defun +agent-shell-arena-remote--runner-scoped-p (_runner)
+  "Return whether this runner starts each delegate in a systemd scope.
+A runner started by systemd does, as the launch script says."
+  (equal (getenv "PSTACK_ARENA_LAUNCHER") "systemd"))
 
 (defun +agent-shell-arena-remote--report-text (directory role)
   "Return ROLE's report text from the panel reports in DIRECTORY, or nil."
@@ -2695,7 +3730,16 @@ timed out; the judge does not run."
                   (expand-file-name arena +agent-shell-pstack-arena-directory)))))
          (reports (expand-file-name (+agent-shell-pstack-panel-id panel)
                                     +agent-shell-pstack-panel-directory)))
-    (if (or (null manifest)
+    (if (+agent-shell-pstack-panel--delegate-p panel)
+        (+agent-shell-arena-remote--recover-delegate panel previous manifest)
+      (+agent-shell-arena-remote--recover-arena panel previous manifest
+                                                reports))))
+
+(defun +agent-shell-arena-remote--recover-arena (panel previous manifest
+                                                       reports)
+  "Recover arena PANEL as `+agent-shell-arena-remote--recover' says.
+MANIFEST is its host arena, or nil, and REPORTS its reports folder."
+  (if (or (null manifest)
             (eq (+agent-shell-arena-remote-status-phase previous) 'preparing))
         (progn
           (when manifest
@@ -2741,7 +3785,88 @@ was captured as it stood when the runner restarted."))
       (setf (+agent-shell-pstack-panel-phase panel) 'capturing)
       (+agent-shell-arena-remote--drop-checkouts
        manifest (+agent-shell-arena-git-manifest-roles manifest)
-       (lambda () (+agent-shell-pstack-panel--advance panel))))))
+       (lambda () (+agent-shell-pstack-panel--advance panel)))))
+
+(defun +agent-shell-arena-remote--recover-delegate (panel previous manifest)
+  "Recover delegate PANEL, whose earlier runner left status PREVIOUS.
+MANIFEST is its host manifest, or nil.  A delegate is never run again.
+Whatever its durable launch record owns is stopped first; until that is
+proved, the work stays and the repository's lock stays quarantined.  A
+member that had not settled counts as done only when its saved final
+response has a matching successful-final marker, and as interrupted
+otherwise.  Then collection resumes, finishing a sandboxed delegate's
+one commit from the same intent; see
+`+agent-shell-arena-git-finalize-delegate'."
+  (let* ((runner +agent-shell-arena-remote--runner)
+         (member (car (+agent-shell-pstack-panel-members panel)))
+         (role (+agent-shell-pstack-panel-member-role member))
+         (lease (and runner (+agent-shell-arena-remote--lease-file runner role)))
+         (launched (and lease (file-exists-p lease)))
+         (old (car (+agent-shell-arena-remote-status-members previous))))
+    (cond
+     ((and (null manifest) (not launched))
+      (+agent-shell-pstack-panel--fail-preparation
+       panel "The runner stopped while it prepared the delegate, before it \
+started.  Request the delegate again."))
+     ((null manifest)
+      (+agent-shell-arena-remote--quarantine
+       runner "The runner stopped with a delegate launched but no manifest.")
+      (+agent-shell-pstack-panel--fail-preparation
+       panel "The runner stopped with the delegate launched but its record \
+lost, so Emacs kept the repository locked until someone checks the host."))
+     ((not launched)
+      ;; Its worktree may exist, but no agent ever ran there.
+      (setf (+agent-shell-pstack-panel-arena panel) manifest)
+      (+agent-shell-pstack-panel--fail-preparation
+       panel "The runner stopped while it prepared the delegate, before it \
+started.  Request the delegate again."))
+     (t
+      (setf (+agent-shell-pstack-panel-arena panel) manifest
+            (+agent-shell-pstack-panel-phase panel) 'delegating
+            (+agent-shell-pstack-panel-member-capture member) 'stopping)
+      (+agent-shell-drive-reap-lease
+       lease
+       (lambda (survivors)
+         (when survivors
+           (+agent-shell-arena-remote--quarantine
+            runner (format "Processes %s the delegate started could not be \
+shown to have stopped." survivors)))
+         (let ((final (+agent-shell-pstack-panel--final-text panel member))
+               (state (and old (+agent-shell-arena-remote-member-state old))))
+           (setf (+agent-shell-pstack-panel-member-text member)
+                 (or final (+agent-shell-arena-remote--report-text
+                            (expand-file-name
+                             (+agent-shell-pstack-panel-id panel)
+                             +agent-shell-pstack-panel-directory)
+                            role)))
+           (cond
+            (final (setf (+agent-shell-pstack-panel-member-state member)
+                         (if (memq state '(error timeout)) state 'done)
+                         (+agent-shell-pstack-panel-member-error member)
+                         (and old (+agent-shell-arena-remote-member-error old))))
+            ((memq state +agent-shell-pstack-panel--settled)
+             (setf (+agent-shell-pstack-panel-member-state member) state
+                   (+agent-shell-pstack-panel-member-error member)
+                   (+agent-shell-arena-remote-member-error old)))
+            (t (setf (+agent-shell-pstack-panel-member-state member) 'error
+                     (+agent-shell-pstack-panel-member-error member)
+                     "The runner stopped while the delegate ran; Emacs did \
+not run it again.")))
+           (setf (+agent-shell-pstack-panel-member-capture member) 'stopped
+                 (+agent-shell-pstack-panel-member-result member)
+                 (when survivors (list :survivors survivors)))
+           (+agent-shell-pstack-panel--advance panel))))))))
+
+(defun +agent-shell-arena-remote--quarantine (runner reason)
+  "Keep RUNNER's repository lock held because of REASON.
+A quarantined lock is never taken over as stale, even after its owner
+exits, until someone removes it on the host."
+  (when runner
+    (setf (+agent-shell-arena-remote--runner-quarantine runner) reason)
+    (when-let* ((lock (+agent-shell-arena-remote--runner-lock runner))
+                ((file-directory-p lock)))
+      (with-temp-file (expand-file-name "quarantine" lock)
+        (insert reason "\n")))))
 
 (defun +agent-shell-arena-remote--drop-checkouts (manifest roles done)
   "Remove the judge checkouts ROLES of MANIFEST have, then call DONE.
@@ -2769,6 +3894,10 @@ is nil."
          (manifest (and panel (+agent-shell-pstack-panel-arena panel))))
     (+agent-shell-arena-remote--make-report
      :id (+agent-shell-arena-remote-job-id job)
+     :shape (+agent-shell-arena-remote-job-shape job)
+     :delegate (and manifest
+                    (+agent-shell-arena-git-manifest-delegate manifest)
+                    (+agent-shell-arena-remote--outcome manifest))
      :arena (and manifest (+agent-shell-arena-git-manifest-id manifest))
      :base (+agent-shell-arena-remote-job-base job)
      :rejection (or (and panel (+agent-shell-pstack-panel-rejection panel))
@@ -2793,16 +3922,53 @@ is nil."
           (+agent-shell-pstack-panel-members panel))
        (+agent-shell-arena-remote--runner-members runner)))))
 
+(defun +agent-shell-arena-remote--outcome (manifest)
+  "Return what MANIFEST's delegate left on this host, as its report says."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (branch (concat "refs/heads/"
+                         (+agent-shell-arena-git-delegate-branch manifest)))
+         (role (car (+agent-shell-arena-git-manifest-roles manifest)))
+         (finalization (+agent-shell-arena-git-delegate-finalization delegate))
+         (dirty (+agent-shell-arena-git-delegate-dirty delegate))
+         (state (plist-get finalization :state)))
+    (+agent-shell-arena-remote--make-outcome
+     :branch branch
+     :tip (+agent-shell-arena-git--read-in
+           (+agent-shell-arena-git-manifest-git-dir manifest)
+           (+agent-shell-arena-git-manifest-toplevel manifest)
+           "rev-parse" "--verify" "-q" branch)
+     :commits (mapcar (pcase-lambda (`(,oid . ,subject))
+                        (+agent-shell-arena-remote--make-commit
+                         :oid oid :subject subject))
+                      (+agent-shell-arena-git-delegate-commits delegate))
+     :workspace (or (and role (+agent-shell-arena-git-role-worktree role)) "")
+     :sandbox (+agent-shell-arena-git-delegate-sandbox delegate)
+     :dirty-paths (seq-take dirty 10) :dirty-count (length dirty)
+     :finalization (if (memq state '(empty committed blocked)) state 'none)
+     :retained-reason (when (eq state 'blocked)
+                        (plist-get finalization :reason)))))
+
 (defun +agent-shell-arena-remote--runner-files (runner panel)
-  "Write results.files, the files RUNNER's fetch sends, for measured PANEL.
-They are the report, the results bundle when there is one, and each
-member's egress record that exists, by their names in the job folder."
+  "Write results.files, the files RUNNER's fetch sends, for PANEL.
+They are the report, the results bundle when there is one, each
+member's egress record that exists and a delegate's transcript, by
+their names in the job folder."
   (let* ((directory (+agent-shell-arena-remote--runner-directory runner))
+         (transcript (expand-file-name "transcript/" directory))
          (files (append
                  (list "report.json")
                  (when (file-exists-p (expand-file-name "results.bundle"
                                                         directory))
                    (list "results.bundle"))
+                 (when (file-exists-p (expand-file-name "epoch" transcript))
+                   (cons "transcript/epoch"
+                         (mapcar (lambda (segment)
+                                   (file-relative-name
+                                    (+agent-shell-arena-remote--segment-file
+                                     transcript segment)
+                                    directory))
+                                 (+agent-shell-arena-remote--segments
+                                  transcript))))
                  (seq-keep
                   (lambda (member)
                     (when-let* ((file (+agent-shell-pstack-panel-member-egress-file
@@ -2817,13 +3983,39 @@ member's egress record that exists, by their names in the job folder."
 
 (defun +agent-shell-arena-remote--runner-finish (runner panel)
   "Write RUNNER's results for finished PANEL, then its final status.
-The results bundle and report land before the status that names them."
+The results bundle and report land before the status that names them.
+An arena's bundle holds its result refs over the base; a delegate's its
+branch over the base's parent, so even a branch still at the base
+travels.  Nothing here commits."
   (let* ((manifest (and panel (+agent-shell-pstack-panel-arena panel)))
-         (refs (and manifest
-                    (seq-keep (lambda (role)
-                                (and (+agent-shell-arena-git-role-commit role)
-                                     (+agent-shell-arena-git-role-ref role)))
-                              (+agent-shell-arena-git-manifest-roles manifest))))
+         (delegate (and manifest (+agent-shell-arena-git-manifest-delegate
+                                  manifest)))
+         (base (and manifest (+agent-shell-arena-git-manifest-base manifest)))
+         (refs (cond
+                ((null manifest) nil)
+                (delegate
+                 (let ((branch (concat "refs/heads/"
+                                       (+agent-shell-arena-git-delegate-branch
+                                        manifest))))
+                   (when (+agent-shell-arena-git--read-in
+                          (+agent-shell-arena-git-manifest-git-dir manifest)
+                          (+agent-shell-arena-git-manifest-toplevel manifest)
+                          "rev-parse" "--verify" "-q" branch)
+                     (list branch))))
+                (t (seq-keep (lambda (role)
+                               (and (+agent-shell-arena-git-role-commit role)
+                                    (+agent-shell-arena-git-role-ref role)))
+                             (+agent-shell-arena-git-manifest-roles manifest)))))
+         (exclude (if delegate
+                      (when-let* ((parent (+agent-shell-arena-git--read-in
+                                           (+agent-shell-arena-git-manifest-git-dir
+                                            manifest)
+                                           (+agent-shell-arena-git-manifest-toplevel
+                                            manifest)
+                                           "rev-parse" "--verify" "-q"
+                                           (concat base "^"))))
+                        (list (concat "^" parent)))
+                    (and base (list (concat "^" base)))))
          (bundle (+agent-shell-arena-remote--runner-file runner "results.bundle"))
          (report
           (lambda (&optional error)
@@ -2832,20 +4024,27 @@ The results bundle and report land before the status that names them."
             (+agent-shell-arena-remote--write-json
              (+agent-shell-arena-remote--runner-file runner "report.json")
              'report (+agent-shell-arena-remote--runner-report runner panel))
-            (when (+agent-shell-arena-remote-job-measure-egress
-                   (+agent-shell-arena-remote--runner-job runner))
+            (when-let* ((recorder (+agent-shell-arena-remote--runner-transcript
+                                   runner)))
+              (+agent-shell-arena-remote--flush-transcript recorder)
+              (+agent-shell-arena-remote--record
+               recorder "notice" "The runner published the delegate's results."))
+            (when (or (+agent-shell-arena-remote-job-measure-egress
+                       (+agent-shell-arena-remote--runner-job runner))
+                      (eq 'delegate (+agent-shell-arena-remote-job-shape
+                                     (+agent-shell-arena-remote--runner-job
+                                      runner))))
               (+agent-shell-arena-remote--runner-files runner panel))
             (+agent-shell-arena-remote--runner-status runner t)
-            (+agent-shell-arena-remote--release
-             (+agent-shell-arena-remote--runner-lock runner))
+            (unless (+agent-shell-arena-remote--runner-quarantine runner)
+              (+agent-shell-arena-remote--release
+               (+agent-shell-arena-remote--runner-lock runner)))
             (setf (+agent-shell-arena-remote--runner-done runner) t))))
     (if (null refs) (funcall report)
       (let ((partial (concat bundle ".partial")))
         (+agent-shell-arena-git-command
          manifest
-         (append (list "bundle" "create" "-q" partial) refs
-                 (list (concat "^" (+agent-shell-arena-git-manifest-base
-                                    manifest))))
+         (append (list "bundle" "create" "-q" partial) refs exclude)
          (lambda (_ error)
            (if error (funcall report (format "The results bundle failed: %s"
                                              error))
@@ -2895,6 +4094,8 @@ The results bundle and report land before the status that names them."
                        (+agent-shell-arena-remote-job-deadline
                         (+agent-shell-arena-remote--runner-job runner)))
          'timeout))))
+    (when-let* ((recorder (+agent-shell-arena-remote--runner-transcript runner)))
+      (+agent-shell-arena-remote--flush-transcript recorder))
     (unless (+agent-shell-arena-remote--runner-done runner)
       (+agent-shell-arena-remote--runner-status runner))))
 
@@ -2906,9 +4107,6 @@ The results bundle and report land before the status that names them."
             (+agent-shell-pstack-panel-member-error member) reason))
     (setf (+agent-shell-pstack-panel-phase panel) 'finished)
     (+agent-shell-arena-remote--runner-finish runner panel)))
-
-(defvar +agent-shell-arena-remote--runner nil
-  "The runner this batch Emacs runs, or nil.")
 
 (defun +agent-shell-arena-remote--refuse (&rest _)
   "Refuse to prompt, since nobody can answer a runner."
@@ -2992,8 +4190,9 @@ unfinished."
                   (accept-process-output nil 0.1)))
               0)
           (when timer (cancel-timer timer))
-          (+agent-shell-arena-remote--release
-           (+agent-shell-arena-remote--runner-lock runner)))))))
+          (unless (+agent-shell-arena-remote--runner-quarantine runner)
+            (+agent-shell-arena-remote--release
+             (+agent-shell-arena-remote--runner-lock runner))))))))
 
 (defun +agent-shell-arena-remote-runner-batch ()
   "Run the job whose folder is the next command-line argument, then exit."

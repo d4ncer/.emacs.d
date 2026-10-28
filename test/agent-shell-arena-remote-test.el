@@ -79,11 +79,14 @@
   (+agent-shell-arena-remote--make-job
    :id "abc-12345678" :panel "abc" :brief "Do \"it\"\nnow"
    :rubric '("one" "two" "three") :timeout 60 :judge-timeout 30
-   :candidates (list (+agent-shell-arena-remote--make-candidate
-                      :role "opus" :agent 'claude-code :focus nil)
-                     (+agent-shell-arena-remote--make-candidate
-                      :role "codex" :agent 'codex :focus "Short"))
-   :judge 'codex :prefix "sub/" :base (make-string 40 ?a)
+   :shape 'arena
+   :members (list (+agent-shell-arena-remote--make-request-member
+                   :role "opus" :agent 'claude-code :kind 'candidate)
+                  (+agent-shell-arena-remote--make-request-member
+                   :role "codex" :agent 'codex :kind 'candidate :focus "Short")
+                  (+agent-shell-arena-remote--make-request-member
+                   :role "judge" :agent 'codex :kind 'judge))
+   :prefix "sub/" :base (make-string 40 ?a)
    :prerequisite (make-string 40 ?b)
    :sparse (+agent-shell-arena-remote--make-sparse
             :cone t :patterns '("/*" "!/*/" "/src/"))
@@ -138,7 +141,15 @@
                  'job (+agent-shell-arena-remote-to-json
                        'job (+arena-remote-test--job)))))
       (should (equal "Do \"it\"\nnow" (+agent-shell-arena-remote-job-brief back)))
-      (should (eq 'codex (+agent-shell-arena-remote-job-judge back)))
+      (should (equal '((judge . codex))
+                     (mapcan (lambda (member)
+                               (when (eq 'judge
+                                         (+agent-shell-arena-remote-request-member-kind
+                                          member))
+                                 (list (cons 'judge
+                                             (+agent-shell-arena-remote-request-member-agent
+                                              member)))))
+                             (+agent-shell-arena-remote-job-members back))))
       (should (equal '(:shared ("vendor") :files (("cfg" . "tmp=@TMP@\n"))
                                :write ("/tmp/x" (regexp . "^/private/tmp/diff\\."))
                                :env ("A=1"))
@@ -164,7 +175,7 @@
     (funcall refuse (lambda (json) (setf (alist-get 'heartbeat json) "soon") json)
              "status\\.heartbeat must be a number")
     (funcall refuse (lambda (json) (setf (alist-get 'version json) 99) json)
-             "version 99, but this Emacs reads up to 1")
+             "version 99, but this Emacs reads up to 2")
     (funcall refuse (lambda (json) (setf (alist-get 'kind json) "report") json)
              "status\\.kind must be \"status\"")
     (funcall refuse (lambda (json) (assq-delete-all 'heartbeat json))

@@ -105,14 +105,19 @@ matches applies.  PROFILE is a plist with any of these keys:
           docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md.
 :host-directory  The repository's checkout on the host, such as
           \"~/src/big-repo\".  Required with :host.
-:delegate A plist whose only key is :isolation, `worktree' (the default)
-          or `branch'.  `worktree' gives a pstack delegate a worktree of
-          its own on a new branch, provisioned from :shared, :private
-          and :copy, with the lead's copies of the :files paths.
-          `branch' has it work on a new branch in the lead's own
-          checkout instead, for a repository too large for a second
-          worktree; Emacs refuses the request unless the checkout is
-          clean.  A delegate always runs locally, whatever :host says.
+:delegate A plist of how pstack delegates run here; see
+          `+agent-shell-arena-git-delegate-options'.  :isolation is
+          `worktree' (the default) or `branch'.  `worktree' gives a
+          delegate a worktree of its own on a new branch, provisioned
+          from :shared, :private and :copy, with the lead's copies of
+          the :files paths.  `branch' has it work on a new branch in
+          the lead's own checkout instead, for a repository too large
+          for a second worktree; Emacs refuses the request unless the
+          checkout is clean.  A delegate runs on the profile's :host
+          when it names one, in a worktree there; :host `local' keeps
+          it on this machine.  :sandbox t confines it to its worktree,
+          where it cannot commit: Emacs makes its one commit, as your
+          git identity, from the message its final response proposes.
 
 Paths in :shared, :private, :copy and :files are relative to the top
 level and stay inside it.  Each element of :write and :read is an
@@ -176,10 +181,17 @@ before the delegate's branch took it over.  COMMITS lists (OID . SUBJECT)
 from the base to the branch tip, oldest first.  RESTORE is nil until
 Emacs tries to return the checkout, then `restored', `dirty', `changed',
 `missing' or `unneeded'; a worktree never needs it.  NOTE says what Emacs
-found, for the user."
-  isolation origin commits restore note)
+found, for the user.  SANDBOX says the delegate ran confined, so Emacs
+makes its one commit.  FINALIZATION is nil until that is tried, then a
+plist whose :state is `prepared' or `committed', with the commit's fixed
+:parent, :tree, :message, :name, :email, :author-date, :committer-date
+and, once made, :oid; or `empty' or `blocked', with a :reason.  DIRTY
+lists the worktree's uncommitted paths when it was last collected."
+  isolation origin commits restore note sandbox finalization dirty)
 
-(defconst +agent-shell-arena-git--manifest-version 1)
+(defconst +agent-shell-arena-git--manifest-version 2
+  "Layout this code writes manifests in.  Version 1 lacks a delegate's
+sandbox and finalization, which then read as nil.")
 
 (defconst +agent-shell-arena-git--identity
   '("GIT_AUTHOR_NAME=pstack arena" "GIT_AUTHOR_EMAIL=pstack-arena@localhost"
@@ -535,8 +547,8 @@ nil, or nil and a message saying why there is no base."
                  (+agent-shell-arena-git--manifest-file directory))
                 (json-parse-buffer :object-type 'alist :array-type 'list
                                    :null-object nil :false-object nil))))
-    (unless (eql (alist-get 'version json)
-                 +agent-shell-arena-git--manifest-version)
+    (unless (memql (alist-get 'version json)
+                   (number-sequence 1 +agent-shell-arena-git--manifest-version))
       (error "Unknown arena manifest version in %s" directory))
     (+agent-shell-arena-git--manifest
      :id (alist-get 'id json)
@@ -575,7 +587,18 @@ nil, or nil and a message saying why there is no base."
                             delegate))))
       (restore . ,(funcall symbol
                            (+agent-shell-arena-git-delegate-restore delegate)))
-      (note . ,(or (+agent-shell-arena-git-delegate-note delegate) :null)))))
+      (note . ,(or (+agent-shell-arena-git-delegate-note delegate) :null))
+      (sandbox . ,(if (+agent-shell-arena-git-delegate-sandbox delegate) t
+                    :false))
+      (dirty . ,(vconcat (+agent-shell-arena-git-delegate-dirty delegate)))
+      (finalization
+       . ,(if-let* ((finalization (+agent-shell-arena-git-delegate-finalization
+                                   delegate)))
+              (cl-loop for (key value) on finalization by #'cddr
+                       collect (cons (intern (substring (symbol-name key) 1))
+                                     (if (symbolp value) (symbol-name value)
+                                       value)))
+            :null)))))
 
 (defun +agent-shell-arena-git--read-delegate (json)
   "Return the `+agent-shell-arena-git-delegate' that JSON, an alist, holds."
@@ -587,7 +610,14 @@ nil, or nil and a message saying why there is no base."
      :commits (mapcar (lambda (commit) (cons (car commit) (cadr commit)))
                       (alist-get 'commits json))
      :restore (funcall symbol (alist-get 'restore json))
-     :note (alist-get 'note json))))
+     :note (alist-get 'note json)
+     :sandbox (and (alist-get 'sandbox json) t)
+     :dirty (alist-get 'dirty json)
+     :finalization
+     (when-let* ((finalization (alist-get 'finalization json)))
+       (cl-loop for (key . value) in finalization
+                append (list (intern (format ":%s" key))
+                             (if (eq key 'state) (intern value) value)))))))
 
 (defun +agent-shell-arena-git-arenas ()
   "Return the manifests of arenas under `+agent-shell-pstack-arena-directory'.
@@ -730,19 +760,36 @@ with ~/" value)))
                      (funcall fail key "a plist" value))
                    (let ((options (cl-loop for (option) on value by #'cddr
                                            collect option)))
-                     (when-let* ((unknown (seq-find (lambda (option)
-                                                      (not (eq option
-                                                               :isolation)))
-                                                    options)))
+                     (when-let* ((unknown (seq-find
+                                           (lambda (option)
+                                             (not (memq option
+                                                        '(:isolation :host
+                                                                     :sandbox))))
+                                           options)))
                        (user-error "Arena profile for %s: unknown :delegate \
 key %S" toplevel unknown))
-                     (when (cdr options)
+                     (when-let* ((twice (seq-find (lambda (option)
+                                                    (memq option
+                                                          (cdr (memq option
+                                                                     options))))
+                                                  options)))
                        (user-error "Arena profile for %s: :delegate names \
-:isolation more than once" toplevel))
-                     (unless (or (null options)
-                                 (memq (cadr value) '(worktree branch)))
-                       (funcall fail ":delegate :isolation"
-                                "`worktree' or `branch'" (cadr value)))))
+%s more than once" toplevel twice))
+                     (cl-loop
+                      for (option setting) on value by #'cddr
+                      do (pcase option
+                           (:isolation
+                            (unless (memq setting '(worktree branch))
+                              (funcall fail ":delegate :isolation"
+                                       "`worktree' or `branch'" setting)))
+                           (:host
+                            (unless (eq setting 'local)
+                              (funcall fail ":delegate :host" "`local', \
+since a delegate otherwise runs on the profile's :host" setting)))
+                           (:sandbox
+                            (unless (memq setting '(t nil))
+                              (funcall fail ":delegate :sandbox" "t or nil"
+                                       setting)))))))
                   (_ (user-error "Arena profile for %s: unknown key %S"
                                  toplevel key))))
     (when (and (plist-get profile :host)
@@ -1181,8 +1228,6 @@ and a message."
 
 ;;;; Delegates
 
-;;;; Remote delegate design signatures
-
 (cl-defstruct (+agent-shell-arena-git-user
                (:constructor +agent-shell-arena-git--user)
                (:copier nil))
@@ -1193,39 +1238,237 @@ Both author and committer use this identity; host config is no fallback."
 
 (defun +agent-shell-arena-git-delegate-options (profile)
   "Resolve delegate execution policy from validated repository PROFILE.
-Return explicit :host, :isolation and :sandbox values.  Absent :host
-inherits PROFILE's registered host pair; only the symbol `local' may
-override it, resolving to nil.  Reject remote
-branch isolation before any resource is created.  Sandbox defaults nil.
-This is the sole resolver; freeze its result for launch and recovery.
-See docs/sketch-remote-delegate.md; this signature is not wired in."
-  (ignore profile)
-  (error "Not implemented"))
+Return (:host HOST :isolation ISOLATION :sandbox SANDBOX).  Absent
+:delegate :host inherits PROFILE's registered host pair; only the symbol
+`local' overrides it, resolving to nil.  ISOLATION defaults to `worktree'
+and SANDBOX to nil.  Signal `user-error' for branch isolation on a host,
+before any resource is created.  This is the sole resolver; launch and
+recovery read its frozen result."
+  (let* ((delegate (plist-get profile :delegate))
+         (host (unless (eq (plist-get delegate :host) 'local)
+                 (plist-get profile :host)))
+         (isolation (or (plist-get delegate :isolation) 'worktree)))
+    (when (and host (eq isolation 'branch))
+      (user-error "Remote delegates require :isolation worktree; use \
+:delegate (:host local)
+to use :isolation branch on the laptop."))
+    (list :host host :isolation isolation
+          :sandbox (and (plist-get delegate :sandbox) t))))
+
+(defun +agent-shell-arena-git-identity-error (name email)
+  "Return why NAME and EMAIL are not a usable git identity, or nil."
+  (let ((bad (lambda (value)
+               (or (not (stringp value))
+                   (string-blank-p value)
+                   (string-match-p "[<>[:cntrl:]]" value)
+                   (not (equal value (string-trim value)))))))
+    (cond ((funcall bad name) (format "user.name %S" name))
+          ((funcall bad email) (format "user.email %S" email)))))
 
 (defun +agent-shell-arena-git-user-identity (directory callback)
   "Read DIRECTORY's repository-effective git user config on the laptop.
-Honor conditional includes; ignore inherited author/committer variables.
-Call CALLBACK asynchronously with a `+agent-shell-arena-git-user' and
-nil, or nil and an actionable error.  Never substitute host or arena
-capture identity when name or email is missing or invalid."
-  (ignore directory callback)
-  (error "Not implemented"))
+Honor conditional includes; inherited GIT_AUTHOR_* and GIT_COMMITTER_*
+variables never stand in for it.  Call CALLBACK, never before this
+returns, with a `+agent-shell-arena-git-user' and nil, or nil and an
+actionable error.  No other identity substitutes for a missing one."
+  (let* ((process-environment
+          (seq-remove (lambda (entry)
+                        (string-match-p "\\`GIT_\\(AUTHOR\\|COMMITTER\\)_"
+                                        entry))
+                      process-environment))
+         (read (lambda (key done)
+                 (+agent-shell-arena-git--run
+                  (list "git" "-C" (expand-file-name directory) "config"
+                        "--includes" "--get" key)
+                  directory nil (lambda (_) (funcall done nil))
+                  (lambda (output) (funcall done (string-trim-right
+                                                  output "\n")))))))
+    (funcall
+     read "user.name"
+     (lambda (name)
+       (funcall
+        read "user.email"
+        (lambda (email)
+          (if-let* ((problem (+agent-shell-arena-git-identity-error
+                              name email)))
+              (funcall callback nil
+                       (format "A delegate commits as your git identity, but \
+%s's %s is missing or invalid.  Set user.name and user.email with git config \
+there, then request the delegate again."
+                               (abbreviate-file-name
+                                (directory-file-name directory))
+                               problem))
+            (funcall callback (+agent-shell-arena-git--user :name name
+                                                            :email email)
+                     nil))))))))
+
+(defun +agent-shell-arena-git-block-delegate (manifest reason)
+  "Record that MANIFEST's sandboxed delegate gets no commit, for REASON.
+A commit already made or found unneeded stays recorded as it was."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (finalization (+agent-shell-arena-git-delegate-finalization delegate)))
+    (unless (memq (plist-get finalization :state) '(committed empty))
+      (setf (+agent-shell-arena-git-delegate-finalization delegate)
+            (plist-put (plist-put (copy-sequence finalization) :state 'blocked)
+                       :reason reason))
+      (+agent-shell-arena-git-write-manifest manifest))
+    delegate))
 
 (defun +agent-shell-arena-git-finalize-delegate
     (manifest identity message callback)
-  "Make at most one user commit for MANIFEST's stopped sandboxed delegate.
-IDENTITY is the frozen laptop user; MESSAGE is its validated terminal
-commit subject and body.  The caller must establish that all writers
-stopped.  Require the recorded branch at base, snapshot through a private
-index, and preserve sparse/generated-path semantics.  Persist intent
-and oid before compare-and-swap publication; recovery reuses that oid.
-An unchanged tree makes no commit.  Never use arena capture authorship,
-append trailers, sign, or overwrite moved refs.  Reconcile the worktree
-index without overwriting files.  Only this function writes finalization
-intent in the delegate manifest.  CALLBACK receives its delegate record
-and nil, or nil and an error; it runs asynchronously and exactly once."
-  (ignore manifest identity message callback)
-  (error "Not implemented"))
+  "Make at most one commit of MANIFEST's stopped sandboxed delegate's work.
+IDENTITY, a `+agent-shell-arena-git-user', authors and commits it, and
+MESSAGE is its exact message.  The caller has established that no writer
+runs.  The workspace must still be on the delegate's branch, at the base.
+Its files are snapshotted through a private index as a candidate's are,
+keeping the base's content for shared and generated paths.  An unchanged
+tree records `empty' and makes no commit.
+
+The intent, with fixed dates, is saved before the commit is made, and the
+commit before the branch moves to it by compare-and-swap, so a rerun
+after a crash reuses or remakes the same commit and never makes a second.
+Neither arena authorship, trailers nor a signature is added, and a branch
+that moved is never overwritten.  The workspace's index then matches the
+commit, its files untouched.  A failure, or a moved branch, records
+`blocked' with why and leaves the work where it is.  CALLBACK gets the
+delegate record and nil, once, never before this returns."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (base (+agent-shell-arena-git-manifest-base manifest))
+         (ref (concat "refs/heads/"
+                      (+agent-shell-arena-git-delegate-branch manifest)))
+         (role (when (eq 'worktree (+agent-shell-arena-git-delegate-isolation
+                                    delegate))
+                 (car (+agent-shell-arena-git-manifest-roles manifest))))
+         (git-dir (if role (+agent-shell-arena-git-role-git-dir role)
+                    (+agent-shell-arena-git-manifest-git-dir manifest)))
+         (work-tree (if role (+agent-shell-arena-git-role-worktree role)
+                      (+agent-shell-arena-git-manifest-toplevel manifest)))
+         (read (lambda (&rest args)
+                 (apply #'+agent-shell-arena-git--read-in git-dir work-tree
+                        args)))
+         (finished nil)
+         (finish (lambda ()
+                   (unless finished
+                     (setq finished t)
+                     (+agent-shell-arena-git--later callback delegate nil))))
+         (block (lambda (reason)
+                  (+agent-shell-arena-git-block-delegate manifest reason)
+                  (funcall finish)))
+         (save (lambda (finalization)
+                 (setf (+agent-shell-arena-git-delegate-finalization delegate)
+                       finalization)
+                 (+agent-shell-arena-git-write-manifest manifest)
+                 finalization))
+         (git (lambda (args done &optional env input)
+                (+agent-shell-arena-git--git
+                 git-dir work-tree args
+                 (lambda (message)
+                   (funcall block (format "Emacs made no commit: %s" message)))
+                 done env input))))
+    (cl-labels
+        ((reconcile (intent)
+           (funcall git '("reset" "-q")
+                    (lambda (_)
+                      (funcall save (plist-put (copy-sequence intent)
+                                               :state 'committed))
+                      (funcall finish))))
+         (publish (intent oid)
+           (let ((intent (plist-put (copy-sequence intent) :oid oid)))
+             (funcall save intent)
+             (funcall git (list "update-ref" "-m" "pstack delegate commit"
+                                ref oid base)
+                      (lambda (_) (reconcile intent)))))
+         (make (intent)
+           (let ((name (plist-get intent :name))
+                 (email (plist-get intent :email)))
+             (funcall
+              git (list "-c" "commit.gpgSign=false"
+                        "-c" "i18n.commitEncoding=UTF-8"
+                        "commit-tree" "--no-gpg-sign"
+                        "-p" (plist-get intent :parent)
+                        "-F" "-" (plist-get intent :tree))
+              (lambda (output) (publish intent (string-trim output)))
+              (list (concat "GIT_AUTHOR_NAME=" name)
+                    (concat "GIT_AUTHOR_EMAIL=" email)
+                    (concat "GIT_AUTHOR_DATE=" (plist-get intent :author-date))
+                    (concat "GIT_COMMITTER_NAME=" name)
+                    (concat "GIT_COMMITTER_EMAIL=" email)
+                    (concat "GIT_COMMITTER_DATE="
+                            (plist-get intent :committer-date)))
+              (plist-get intent :message))))
+         (recover (intent)
+           (let ((tip (funcall read "rev-parse" "--verify" "-q" ref))
+                 (oid (plist-get intent :oid)))
+             (cond
+              ((and oid (equal tip oid)) (reconcile intent))
+              ((not (equal tip base))
+               (funcall block (format "%s moved to %s while Emacs committed \
+the delegate's work, so it made no commit" ref (or tip "nothing"))))
+              ((and oid (funcall read "cat-file" "-t" oid)) (publish intent oid))
+              (t (make intent)))))
+         (snapshot ()
+           (let ((own-index (expand-file-name "index" git-dir)))
+             (+agent-shell-arena-git--snapshot
+              git-dir work-tree
+              (lambda (index fail done)
+                (let ((read-tree
+                       (lambda (_)
+                         (+agent-shell-arena-git--git
+                          git-dir work-tree (list "read-tree" "--reset" base)
+                          fail (lambda (_) (funcall done))
+                          (list (concat "GIT_INDEX_FILE=" index))))))
+                  (if (file-exists-p own-index)
+                      (+agent-shell-arena-git--run
+                       (list "/bin/cp" "-p" own-index index) work-tree nil fail
+                       read-tree)
+                    (funcall read-tree nil))))
+              (cons +agent-shell-arena-git--agent-shell-exclude
+                    (mapcar (lambda (path) (concat ":(exclude,literal)" path))
+                            (and role (+agent-shell-arena-git-role-shared role))))
+              (cons base (and role (+agent-shell-arena-git-role-generated role)))
+              (lambda (message)
+                (funcall block (format "Emacs could not snapshot the \
+delegate's work: %s" message)))
+              (lambda (tree)
+                (if (equal tree (funcall read "rev-parse" (concat base "^{tree}")))
+                    (progn (funcall save (list :state 'empty))
+                           (funcall finish))
+                  (let ((date (format "%d +0000" (floor (float-time)))))
+                    (make (funcall save
+                                   (list :state 'prepared :parent base :tree tree
+                                         :message message
+                                         :name (+agent-shell-arena-git-user-name
+                                                identity)
+                                         :email (+agent-shell-arena-git-user-email
+                                                 identity)
+                                         :author-date date
+                                         :committer-date date))))))))))
+      (condition-case err
+          (let ((finalization (+agent-shell-arena-git-delegate-finalization
+                               delegate)))
+            (pcase (plist-get finalization :state)
+              ((or 'committed 'empty) (funcall finish))
+              ('prepared (recover finalization))
+              (_
+               (let ((head (funcall read "symbolic-ref" "-q" "HEAD"))
+                     (tip (funcall read "rev-parse" "--verify" "-q" ref)))
+                 (cond
+                  ((not (equal head ref))
+                   (funcall block (format "The workspace is on %s, not %s, so \
+Emacs made no commit" (or head "a detached HEAD") ref)))
+                  ((not (equal tip base))
+                   (funcall block (format "%s moved from its base %s to %s, \
+so Emacs made no commit" ref base (or tip "nothing"))))
+                  ((null (and identity
+                              (not (+agent-shell-arena-git-identity-error
+                                    (+agent-shell-arena-git-user-name identity)
+                                    (+agent-shell-arena-git-user-email
+                                     identity)))))
+                   (funcall block "The delegate has no valid git identity to \
+commit as"))
+                  (t (snapshot)))))))
+        (error (funcall block (format "Emacs made no commit: %s"
+                                      (error-message-string err))))))))
 
 (defun +agent-shell-arena-git-delegate-branch (manifest)
   "Return the branch MANIFEST's pstack delegate commits on.
@@ -1380,6 +1623,26 @@ went, or nil when it stays, and nil; or nil and a message."
           git-dir toplevel (list "update-ref" "-d" ref base) fail
           (lambda (_) (funcall callback branch nil))))))))
 
+(defun +agent-shell-arena-git-delegate-log (manifest tip callback)
+  "Call CALLBACK with the commits from MANIFEST's base to TIP, and nil.
+They are (OID . SUBJECT), oldest first; or CALLBACK gets nil and a
+message.  Local collection and a remote delegate's landing both list
+a delegate's branch this way."
+  (+agent-shell-arena-git--git
+   (+agent-shell-arena-git-manifest-git-dir manifest)
+   (+agent-shell-arena-git-manifest-toplevel manifest)
+   (list "log" "--reverse" "--format=%H %s"
+         (format "%s..%s" (+agent-shell-arena-git-manifest-base manifest) tip))
+   (lambda (message) (funcall callback nil message))
+   (lambda (output)
+     (funcall callback
+              (mapcar (lambda (line)
+                        (let ((space (string-search " " line)))
+                          (cons (substring line 0 space)
+                                (substring line (1+ space)))))
+                      (split-string output "\n" t))
+              nil))))
+
 (defun +agent-shell-arena-git-finish-delegate (manifest hold callback)
   "Record what MANIFEST's stopped delegate left in its delegate record.
 List its commits since the base.  In a worktree, note uncommitted
@@ -1389,25 +1652,17 @@ stay.  Once the checkout is back, forget the record on disk, as
 `+agent-shell-arena-git-clean' would.  Call CALLBACK with the record and
 nil, or nil and a message."
   (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
-         (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
-         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
          (fail (lambda (message) (funcall callback nil message)))
          (log
           (lambda (&rest _)
-            (+agent-shell-arena-git--git
-             git-dir toplevel
-             (list "log" "--reverse" "--format=%H %s"
-                   (format "%s..refs/heads/%s"
-                           (+agent-shell-arena-git-manifest-base manifest)
-                           (+agent-shell-arena-git-delegate-branch manifest)))
-             fail
-             (lambda (output)
+            (+agent-shell-arena-git-delegate-log
+             manifest
+             (concat "refs/heads/"
+                     (+agent-shell-arena-git-delegate-branch manifest))
+             (lambda (commits error)
+               (if error (funcall fail error)
                (setf (+agent-shell-arena-git-delegate-commits delegate)
-                     (mapcar (lambda (line)
-                               (let ((space (string-search " " line)))
-                                 (cons (substring line 0 space)
-                                       (substring line (1+ space)))))
-                             (split-string output "\n" t)))
+                     commits)
                (if (memq (+agent-shell-arena-git-delegate-restore delegate)
                          '(restored unneeded))
                    (+agent-shell-arena-git--remove
@@ -1415,7 +1670,7 @@ nil, or nil and a message."
                                (funcall callback (unless error delegate)
                                         error)))
                  (+agent-shell-arena-git-write-manifest manifest)
-                 (funcall callback delegate nil)))))))
+                 (funcall callback delegate nil))))))))
     (cond
      ((eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
       (let ((role (car (+agent-shell-arena-git-manifest-roles manifest))))
@@ -1426,7 +1681,8 @@ nil, or nil and a message."
                  (+agent-shell-arena-git-role-generated role))
          (lambda (paths error)
            (if error (funcall fail error)
-             (setf (+agent-shell-arena-git-delegate-note delegate)
+             (setf (+agent-shell-arena-git-delegate-dirty delegate) paths
+                   (+agent-shell-arena-git-delegate-note delegate)
                    (when paths
                      (format "The worktree has uncommitted changes: %s."
                              (+agent-shell-arena-git-describe-paths paths))))

@@ -62,6 +62,7 @@
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-pstack-delegate-test"
    "-l" "agent-shell-arena-git-test"
    "-l" "agent-shell-arena-remote-test"
+   "-l" "agent-shell-pstack-remote-delegate-test"
    "-l" "agent-shell-pstack-arena-sandbox-test"
    "-l" "agent-shell-pstack-arena-trace-test"
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"

@@ -167,7 +167,9 @@ nil for now.")
   (read-only nil :read-only t
              :documentation "Whether the agent may write only its private \
 folders, not ROOT.")
-  (egress nil :documentation "Its `+agent-shell-egress' session, or nil."))
+  (egress nil :documentation "Its `+agent-shell-egress' session, or nil.")
+  (protect nil :read-only t
+           :documentation "Git metadata it may never write."))
 
 (declare-function +agent-shell-egress-launch-environment "+agent-shell-egress")
 
@@ -359,21 +361,34 @@ and a (regexp . RE) pattern names no path")
          "an absolute path or a (regexp . RE) pattern")))
 
 (defun +agent-shell-sandbox--check-protected-paths (root paths)
-  "Validate proposed write-protected PATHS inside writable sandbox ROOT.
-Return canonical paths for immutable git pointer files and git metadata
-directories, including metadata outside ROOT.  Reject a path that would
-make ROOT itself unwritable or an ambiguous symlink target.  The create
-function stores these paths; both backend renderers enforce them after
-profile write allowances, so an overlapping allowance cannot enable git
-commits.  This validates policy, not the current filesystem permissions.
-See docs/sketch-remote-delegate.md; this signature is not wired in."
-  (ignore root paths)
-  (error "Not implemented"))
+  "Return PATHS, write-protected inside writable sandbox ROOT, as true names.
+They are git pointer files and git metadata folders, which may lie
+outside ROOT.  Signal `user-error' for a relative path, one that is ROOT
+or holds it, which would leave ROOT unwritable, or a dangling symlink,
+whose target is ambiguous.  `+agent-shell-sandbox-create' stores the
+result, and both backends enforce it after every write allowance, so an
+overlapping allowance cannot let git commit.  This checks policy, not
+what the filesystem permits now."
+  (let ((root (+agent-shell-sandbox--path root)))
+    (delete-dups
+     (mapcar (lambda (path)
+               (unless (and (stringp path) (file-name-absolute-p path))
+                 (user-error "Sandbox protected path must be absolute, not %S"
+                             path))
+               (when (and (file-symlink-p path) (not (file-exists-p path)))
+                 (user-error "Sandbox protected path %s is a dangling symlink"
+                             path))
+               (let ((true (+agent-shell-sandbox--path path)))
+                 (when (+agent-shell-sandbox--under-p root (list true))
+                   (user-error "Sandbox protected path %s would leave the root \
+%s unwritable" path root))
+                 true))
+             paths))))
 
 (cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
                                              allow-metadata allow-writes
                                              allow-connects env trace
-                                             deadline read-only)
+                                             deadline read-only protect)
   "Return a sandbox writing to ROOT, creating its private folders.
 With READ-ONLY non-nil the agent works in ROOT but writes only its
 private temp and config folders and ALLOW-WRITES.
@@ -414,7 +429,11 @@ patterns are refused, each of ALLOW-CONNECTS must be an existing socket,
 and TRACE is refused.
 
 On either backend, the injected access token must strictly outlast
-DEADLINE, an absolute time, or the present when it is nil."
+DEADLINE, an absolute time, or the present when it is nil.
+
+PROTECT lists paths, such as a worktree's git pointer and git folders,
+the agent may never write even where ALLOW-WRITES or ROOT would let it;
+see `+agent-shell-sandbox--check-protected-paths'."
   (unless +agent-shell-sandbox-backend
     (user-error "No sandbox on %s: agents run confined only on macOS and \
 GNU/Linux" system-type))
@@ -425,6 +444,7 @@ available on Linux"))
     (user-error "Sandbox root %s is not a directory" root))
   (let* ((tmp (+agent-shell-sandbox--path (+agent-shell-sandbox--make-tmp)))
          (tag (format "pa-sandbox-%08x" (random #x100000000)))
+         (protect (+agent-shell-sandbox--check-protected-paths root protect))
          (config (+agent-shell-sandbox--path
                   (make-temp-file
                    (expand-file-name "pa-config-"
@@ -441,7 +461,7 @@ available on Linux"))
                         :allow-metadata (mapcar #'+agent-shell-sandbox--path
                                                 allow-metadata)
                         :tag tag :trace (and trace t) :deadline deadline
-                        :read-only (and read-only t)
+                        :read-only (and read-only t) :protect protect
                         resolved)))
          (provisional (funcall make))
          (allowances
@@ -637,6 +657,9 @@ report instead."
               (format " (literal %s)"
                       (+agent-shell-sandbox--string
                        (concat (+agent-shell-sandbox-root sandbox) "/.git"))))
+     ;; After every allowance, so none can reopen git's metadata.
+     (when-let* ((protect (+agent-shell-sandbox-protect sandbox)))
+       (funcall refuse "file-write*" (+agent-shell-sandbox--filters protect)))
      (funcall refuse "file-read*" (+agent-shell-sandbox--filters
                                    (+agent-shell-sandbox--read-denials
                                     sandbox)))
@@ -978,8 +1001,9 @@ The agent sees `+agent-shell-sandbox-linux-system' read-only with
 `+agent-shell-sandbox-linux-masks' empty, and fresh /proc, /dev, /tmp
 and /run.  Where /etc/resolv.conf leads it finds a file naming
 slirp4netns's DNS server.  Its root, temp and config folders are
-writable but for ROOT/.git, or only the latter two when the sandbox is
-read-only, its read and write allowances that exist and
+writable but for ROOT/.git and its protected paths, which stay read-only
+however deep a write allowance reaches, or only the latter two when the
+sandbox is read-only, its read and write allowances that exist and
 READS, more paths, are read-only and writable binds, and its sockets are
 bound in."
   (let ((root (+agent-shell-sandbox-root sandbox))
@@ -1005,9 +1029,15 @@ bound in."
         (funcall binds 'ro (list root)))
       (funcall binds 'rw (+agent-shell-sandbox-own-writes sandbox))
       (funcall binds 'ro (list (concat root "/.git")))
-      (funcall binds 'rw (+agent-shell-sandbox-allow-writes sandbox))
+      (funcall binds 'rw (seq-remove
+                          (lambda (path)
+                            (+agent-shell-sandbox--under-p
+                             path (+agent-shell-sandbox-protect sandbox)))
+                          (+agent-shell-sandbox-allow-writes sandbox)))
       (mapcar (lambda (socket) (list 'rw socket socket))
-              (+agent-shell-sandbox-allow-connects sandbox)))
+              (+agent-shell-sandbox-allow-connects sandbox))
+      ;; Last at each depth, and nothing writable lies below them.
+      (funcall binds 'ro (+agent-shell-sandbox-protect sandbox)))
      :key (lambda (mount) (length (split-string (cadr mount) "/" t))))))
 
 (defun +agent-shell-sandbox-linux-visible-p (path mounts)
