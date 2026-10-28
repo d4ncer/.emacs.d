@@ -878,5 +878,236 @@ Cleanup removes the checkout with the worktree."
                                             repo "worktree" "list"
                                             "--porcelain")))))))))))
 
+;;;; Delegates
+
+(defun +arena-git-test--delegate (repo isolation)
+  "Return a delegate manifest for REPO's HEAD in ISOLATION, on its branch.
+A worktree delegate's role is called work."
+  (let* ((base (+arena-git-test--ok
+                (lambda (done) (+agent-shell-arena-git-repository repo done))))
+         (manifest
+          (+agent-shell-arena-git-create
+           base (format "%012x" (random #xffffffffffff))
+           (+agent-shell-arena-git--delegate
+            :isolation isolation
+            :origin (if-let* ((ref (+agent-shell-arena-git-base-branch base)))
+                        (cons 'branch ref)
+                      (cons 'detached (+agent-shell-arena-git-base-head
+                                       base)))))))
+    (if (eq isolation 'worktree)
+        (+arena-git-test--ok
+         (lambda (done)
+           (+agent-shell-arena-git-provision
+            manifest "work" done
+            (+agent-shell-arena-git-delegate-branch manifest))))
+      (+arena-git-test--ok
+       (lambda (done) (+agent-shell-arena-git-take manifest done))))
+    manifest))
+
+(defun +arena-git-test--commit (directory file)
+  "Commit a new FILE in DIRECTORY with the subject Add FILE."
+  (+arena-git-test--write (expand-file-name file directory) "new\n")
+  (+arena-git-test--git directory "add" file)
+  (+arena-git-test--git directory "commit" "-q" "-m" (concat "Add " file)))
+
+(defun +arena-git-test--finish (manifest &optional hold)
+  "Finish MANIFEST's delegate, holding the checkout with HOLD."
+  (+arena-git-test--ok
+   (lambda (done)
+     (+agent-shell-arena-git-finish-delegate manifest hold done))))
+
+(defun +arena-git-test--restore (manifest)
+  "Restore MANIFEST's checkout and return its delegate record's RESTORE."
+  (+agent-shell-arena-git-delegate-restore
+   (+arena-git-test--ok
+    (lambda (done) (+agent-shell-arena-git-restore manifest done)))))
+
+(defun +arena-git-test--head (repo)
+  "Return the branch REPO's checkout is on, or its commit when detached."
+  (+arena-git-test--git repo "rev-parse" "--abbrev-ref" "HEAD"))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-profile ()
+  "Accept only :isolation worktree or branch in a profile's :delegate."
+  (+arena-git-test--with-scratch
+    (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
+      (pcase-dolist (`(,delegate ,message)
+                     '((branch ":delegate must be a plist")
+                       ((:isolation) ":delegate must be a plist")
+                       ((:isolation tree) ":delegate :isolation must be")
+                       ((:mode branch) "unknown :delegate key :mode")
+                       ((:isolation branch :isolation worktree)
+                        "names :isolation more than once")))
+        (setq +agent-shell-pstack-arena-profiles
+              `((,repo :delegate ,delegate)))
+        (should (string-search
+                 message (cadr (should-error
+                                (+agent-shell-arena-git-profile repo)
+                                :type 'user-error)))))
+      (dolist (delegate '(nil (:isolation worktree) (:isolation branch)))
+        (setq +agent-shell-pstack-arena-profiles
+              `((,repo :delegate ,delegate)))
+        (should (equal delegate (plist-get (+agent-shell-arena-git-profile repo)
+                                           :delegate)))))))
+
+(ert-deftest +agent-shell-arena-git-test-changes ()
+  "List changed and untracked paths, without transcripts or exclusions."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "b.txt" "b\n"))
+           (git-dir (expand-file-name ".git" repo))
+           (changes (lambda (&optional excludes)
+                      (+arena-git-test--ok
+                       (lambda (done)
+                         (+agent-shell-arena-git-changes git-dir repo excludes
+                                                         done))))))
+      (+arena-git-test--write (expand-file-name ".agent-shell/log" repo) "x\n")
+      (should-not (funcall changes))
+      (+arena-git-test--write (expand-file-name "a.txt" repo) "changed\n")
+      (+arena-git-test--write (expand-file-name "deps/x" repo) "x\n")
+      (+arena-git-test--git repo "mv" "b.txt" "c.txt")
+      (should (equal '("a.txt" "c.txt" "deps/") (sort (funcall changes))))
+      (should (equal '("a.txt" "c.txt") (sort (funcall changes '("deps")))))
+      (should (equal "0, 1, 2, 3, 4, 5, 6, 7, 8, 9 and 2 more"
+                     (+agent-shell-arena-git-describe-paths
+                      (mapcar #'number-to-string (number-sequence 0 11))))))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-worktree ()
+  "Give a worktree delegate its branch, list its commits, keep the branch."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (manifest (+arena-git-test--delegate repo 'worktree))
+           (base (+agent-shell-arena-git-manifest-base manifest))
+           (branch (+agent-shell-arena-git-delegate-branch manifest))
+           (worktree (+agent-shell-arena-git-role-worktree
+                      (+agent-shell-arena-git-role manifest "work"))))
+      (should (equal (concat "pstack/delegate/"
+                             (substring (+agent-shell-arena-git-manifest-id
+                                         manifest)
+                                        0 12))
+                     branch))
+      (should (equal branch (+arena-git-test--head worktree)))
+      (should (equal "main" (+arena-git-test--head repo)))
+      (+arena-git-test--commit worktree "one.txt")
+      (+arena-git-test--commit worktree "two.txt")
+      (+arena-git-test--write (expand-file-name "loose.txt" worktree) "x\n")
+      (let ((delegate (+arena-git-test--finish manifest)))
+        (should (equal '("Add one.txt" "Add two.txt")
+                       (mapcar #'cdr (+agent-shell-arena-git-delegate-commits
+                                      delegate))))
+        (should (equal (+arena-git-test--git worktree "rev-parse" "HEAD")
+                       (car (car (last (+agent-shell-arena-git-delegate-commits
+                                        delegate))))))
+        (should (equal "The worktree has uncommitted changes: loose.txt."
+                       (+agent-shell-arena-git-delegate-note delegate)))
+        (should-not (+agent-shell-arena-git-delegate-restore delegate)))
+      (let ((saved (+agent-shell-arena-git-read-manifest
+                    (+agent-shell-arena-git-manifest-directory manifest))))
+        (should (equal (+agent-shell-arena-git-manifest-delegate manifest)
+                       (+agent-shell-arena-git-manifest-delegate saved)))
+        (should-not (+arena-git-test--ok
+                     (lambda (done) (+agent-shell-arena-git-clean saved done)))))
+      (should-not (file-exists-p worktree))
+      (should (equal "2" (+arena-git-test--git
+                          repo "rev-list" "--count"
+                          (format "%s..%s" base branch)))))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-branch ()
+  "Take a clean checkout, return it when clean, and leave it when dirty."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (manifest (+arena-git-test--delegate repo 'branch))
+           (branch (+agent-shell-arena-git-delegate-branch manifest))
+           (directory (+agent-shell-arena-git-manifest-directory manifest)))
+      (should (equal branch (+arena-git-test--head repo)))
+      (should-not (+agent-shell-arena-git-delegate-restore
+                   (+agent-shell-arena-git-manifest-delegate
+                    (+agent-shell-arena-git-read-manifest directory))))
+      (+arena-git-test--commit repo "one.txt")
+      (+arena-git-test--write (expand-file-name "loose.txt" repo) "x\n")
+      (let ((delegate (+arena-git-test--finish manifest)))
+        (should (equal '("Add one.txt")
+                       (mapcar #'cdr (+agent-shell-arena-git-delegate-commits
+                                      delegate))))
+        (should (eq 'dirty (+agent-shell-arena-git-delegate-restore delegate)))
+        (should (equal "The checkout has uncommitted changes: loose.txt."
+                       (+agent-shell-arena-git-delegate-note delegate))))
+      (should (equal branch (+arena-git-test--head repo)))
+      (should (string-search
+               (concat "stays on " branch)
+               (cadr (+arena-git-test--wait
+                      (lambda (done)
+                        (+agent-shell-arena-git-clean manifest done))))))
+      (should (file-exists-p directory))
+      (delete-file (expand-file-name "loose.txt" repo))
+      (should-not (+arena-git-test--ok
+                   (lambda (done) (+agent-shell-arena-git-clean manifest done))))
+      (should (equal "main" (+arena-git-test--head repo)))
+      (should-not (file-exists-p directory))
+      (should (equal "Add one.txt"
+                     (+arena-git-test--git repo "log" "-1" "--format=%s"
+                                           branch))))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-restore ()
+  "Restore an interrupted record once, and only from the delegate branch."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (manifest (+arena-git-test--delegate repo 'branch))
+           (branch (+agent-shell-arena-git-delegate-branch manifest))
+           (saved (+agent-shell-arena-git-read-manifest
+                   (+agent-shell-arena-git-manifest-directory manifest))))
+      (should (eq 'restored (+arena-git-test--restore saved)))
+      (should (equal "main" (+arena-git-test--head repo)))
+      (+arena-git-test--git repo "switch" "-q" branch)
+      (should (eq 'restored (+arena-git-test--restore saved)))
+      (should (equal branch (+arena-git-test--head repo)))
+      (should (eq 'restored
+                  (+agent-shell-arena-git-delegate-restore
+                   (+agent-shell-arena-git-manifest-delegate
+                    (+agent-shell-arena-git-read-manifest
+                     (+agent-shell-arena-git-manifest-directory saved))))))))
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (fresh (lambda ()
+                    (+agent-shell-arena-git-read-manifest
+                     (+agent-shell-arena-git-manifest-directory
+                      (+arena-git-test--delegate repo 'branch))))))
+      (let ((manifest (funcall fresh)))
+        (+arena-git-test--git repo "switch" "-q" "-c" "other")
+        (should (eq 'changed (+arena-git-test--restore manifest)))
+        (should (string-search "is on other, not pstack/delegate/"
+                               (+agent-shell-arena-git-delegate-note
+                                (+agent-shell-arena-git-manifest-delegate
+                                 manifest))))
+        (should (equal "other" (+arena-git-test--head repo))))
+      (+arena-git-test--git repo "switch" "-q" "main")
+      (let ((manifest (funcall fresh)))
+        (+arena-git-test--git repo "switch" "-q" "main")
+        (should (eq 'unneeded (+arena-git-test--restore manifest))))
+      (+arena-git-test--git repo "switch" "-q" "--detach" "main")
+      (let ((manifest (funcall fresh))
+            (head (+arena-git-test--git repo "rev-parse" "main")))
+        (should (equal (cons 'detached head)
+                       (+agent-shell-arena-git-delegate-origin
+                        (+agent-shell-arena-git-manifest-delegate manifest))))
+        (should (eq 'restored (+arena-git-test--restore manifest)))
+        (should (equal "HEAD" (+arena-git-test--head repo)))
+        (should (equal head (+arena-git-test--git repo "rev-parse" "HEAD"))))
+      (+arena-git-test--git repo "switch" "-q" "main")
+      (let ((manifest (funcall fresh)))
+        (+arena-git-test--git repo "branch" "-q" "-m" "main" "renamed")
+        (should (eq 'missing (+arena-git-test--restore manifest)))
+        (+arena-git-test--git repo "branch" "-q" "-m" "renamed" "main")))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-hold ()
+  "Keep a held checkout on the delegate branch, with the reason noted."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (manifest (+arena-git-test--delegate repo 'branch))
+           (delegate (+arena-git-test--finish manifest "Process 42 lives.")))
+      (should-not (+agent-shell-arena-git-delegate-restore delegate))
+      (should (equal "Process 42 lives."
+                     (+agent-shell-arena-git-delegate-note delegate)))
+      (should (equal (+agent-shell-arena-git-delegate-branch manifest)
+                     (+arena-git-test--head repo))))))
+
 (provide 'agent-shell-arena-git-test)
 ;;; agent-shell-arena-git-test.el ends here

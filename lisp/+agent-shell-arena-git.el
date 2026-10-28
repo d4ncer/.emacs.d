@@ -32,7 +32,7 @@
   :type 'directory)
 
 (defcustom +agent-shell-pstack-arena-profiles nil
-  "How arena candidates get set up in each repository.
+  "How arena candidates and pstack delegates get set up in each repository.
 Each entry is (MATCHER . PROFILE).  MATCHER is a directory, matching the
 repository whose top level has the same true name, or a function called
 with the top level, a true name ending in a slash.  The first entry that
@@ -64,6 +64,14 @@ matches applies.  PROFILE is a plist with any of these keys:
           docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md.
 :host-directory  The repository's checkout on the host, such as
           \"~/src/big-repo\".  Required with :host.
+:delegate A plist whose only key is :isolation, `worktree' (the default)
+          or `branch'.  `worktree' gives a pstack delegate a worktree of
+          its own on a new branch, provisioned from :shared, :private
+          and :copy, with the lead's copies of the :files paths.
+          `branch' has it work on a new branch in the lead's own
+          checkout instead, for a repository too large for a second
+          worktree; Emacs refuses the request unless the checkout is
+          clean.  A delegate always runs locally, whatever :host says.
 
 Paths in :shared, :private, :copy and :files are relative to the top
 level and stay inside it.  Each element of :write and :read is an
@@ -92,8 +100,10 @@ yet, and its true name is what the profile allows."
   "A lead's repository and the commit snapshotting its working tree.
 SPARSE, when non-nil, is (:cone BOOL :patterns LINES): sparse-checkout
 patterns each candidate's worktree gets in place of the repository's
-own, for a base made elsewhere; see `+agent-shell-arena-git-base-at'."
-  git-dir toplevel prefix head commit sparse)
+own, for a base made elsewhere; see `+agent-shell-arena-git-base-at'.
+BRANCH is the full ref HEAD was on when the repository was located, or
+nil when it was detached."
+  git-dir toplevel prefix head commit sparse branch)
 
 (cl-defstruct (+agent-shell-arena-git-role
                (:constructor +agent-shell-arena-git--role)
@@ -110,8 +120,23 @@ GENERATED lists the paths its profile's :copy and :files wrote."
   "An arena's record.  Cleanup trusts nothing else.
 SPARSE, when non-nil, holds sparse-checkout patterns as a base's SPARSE
 does; each new worktree then gets them in place of the repository's own.
-It is not saved."
-  id directory git-dir toplevel prefix base roles sparse)
+It is not saved.  DELEGATE holds a `+agent-shell-arena-git-delegate'
+when the record is a pstack delegate's, whose BASE is the commit it
+started from."
+  id directory git-dir toplevel prefix base roles sparse delegate)
+
+(cl-defstruct (+agent-shell-arena-git-delegate
+               (:constructor +agent-shell-arena-git--delegate)
+               (:copier nil))
+  "A pstack delegate's part of its manifest.
+ISOLATION is `worktree' or `branch'.  In branch isolation, ORIGIN is
+\(branch . FULL-REF) or (detached . OID), where the lead's checkout was
+before the delegate's branch took it over.  COMMITS lists (OID . SUBJECT)
+from the base to the branch tip, oldest first.  RESTORE is nil until
+Emacs tries to return the checkout, then `restored', `dirty', `changed',
+`missing' or `unneeded'; a worktree never needs it.  NOTE says what Emacs
+found, for the user."
+  isolation origin commits restore note)
 
 (defconst +agent-shell-arena-git--manifest-version 1)
 
@@ -296,7 +321,8 @@ arena" toplevel))
         (user-error "%s has submodules, which arenas do not support"
                     toplevel))
       (+agent-shell-arena-git--base
-       :git-dir git-dir :toplevel toplevel :prefix (nth 2 lines) :head head))))
+       :git-dir git-dir :toplevel toplevel :prefix (nth 2 lines) :head head
+       :branch (funcall read "symbolic-ref" "-q" "HEAD")))))
 
 (defun +agent-shell-arena-git-sparse (base)
   "Return the sparse-checkout patterns of BASE's checkout, or nil.
@@ -356,6 +382,21 @@ Call CALLBACK with the output and nil, or nil and a message."
            (funcall fail (format "%s has submodules, which arenas do not \
 support" (directory-file-name toplevel)))
          (funcall done))))))
+
+(defun +agent-shell-arena-git-repository (directory callback)
+  "Locate the repository at DIRECTORY as a base at HEAD, without a snapshot.
+Call CALLBACK with a `+agent-shell-arena-git-base' whose COMMIT is HEAD
+and nil, or nil and a message, for the reasons an arena's base fails."
+  (let ((fail (lambda (message) (funcall callback nil message))))
+    (condition-case err
+        (let ((base (+agent-shell-arena-git--locate directory)))
+          (+agent-shell-arena-git--check-index
+           base fail
+           (lambda ()
+             (setf (+agent-shell-arena-git-base-commit base)
+                   (+agent-shell-arena-git-base-head base))
+             (funcall callback base nil))))
+      (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
 (defun +agent-shell-arena-git-capture-base (directory callback)
   "Snapshot the working tree of the lead at DIRECTORY as a base commit.
@@ -436,7 +477,11 @@ nil, or nil and a message saying why there is no base."
                       (generated
                        . ,(vconcat
                            (+agent-shell-arena-git-role-generated role)))))
-                  (+agent-shell-arena-git-manifest-roles manifest)))))))
+                  (+agent-shell-arena-git-manifest-roles manifest))))
+            ,@(when-let* ((delegate (+agent-shell-arena-git-manifest-delegate
+                                     manifest)))
+                `((delegate
+                   . ,(+agent-shell-arena-git--delegate-json delegate)))))))
     (with-temp-file temporary
       (insert (json-serialize json) "\n"))
     (rename-file temporary file t)
@@ -471,7 +516,37 @@ nil, or nil and a message saying why there is no base."
                        :state (alist-get 'state role)
                        :checkout (alist-get 'checkout role)
                        :generated (alist-get 'generated role)))
-                    (alist-get 'roles json)))))
+                    (alist-get 'roles json))
+     :delegate (when-let* ((delegate (alist-get 'delegate json)))
+                 (+agent-shell-arena-git--read-delegate delegate)))))
+
+(defun +agent-shell-arena-git--delegate-json (delegate)
+  "Return DELEGATE as an alist for `json-serialize'."
+  (let ((origin (+agent-shell-arena-git-delegate-origin delegate))
+        (symbol (lambda (value) (if value (symbol-name value) :null))))
+    `((isolation . ,(funcall symbol
+                             (+agent-shell-arena-git-delegate-isolation
+                              delegate)))
+      (origin . ,(if origin (list (cons (car origin) (cdr origin))) :null))
+      (commits . ,(vconcat
+                   (mapcar (lambda (commit) (vector (car commit) (cdr commit)))
+                           (+agent-shell-arena-git-delegate-commits
+                            delegate))))
+      (restore . ,(funcall symbol
+                           (+agent-shell-arena-git-delegate-restore delegate)))
+      (note . ,(or (+agent-shell-arena-git-delegate-note delegate) :null)))))
+
+(defun +agent-shell-arena-git--read-delegate (json)
+  "Return the `+agent-shell-arena-git-delegate' that JSON, an alist, holds."
+  (let ((symbol (lambda (value) (and value (intern value))))
+        (origin (car (alist-get 'origin json))))
+    (+agent-shell-arena-git--delegate
+     :isolation (funcall symbol (alist-get 'isolation json))
+     :origin (when (memq (car origin) '(branch detached)) origin)
+     :commits (mapcar (lambda (commit) (cons (car commit) (cadr commit)))
+                      (alist-get 'commits json))
+     :restore (funcall symbol (alist-get 'restore json))
+     :note (alist-get 'note json))))
 
 (defun +agent-shell-arena-git-arenas ()
   "Return the manifests of arenas under `+agent-shell-pstack-arena-directory'.
@@ -501,10 +576,11 @@ Unreadable manifests are reported and skipped."
   "\\`[[:alnum:]][[:alnum:]_-]*\\'"
   "Names usable as a directory and a ref component.")
 
-(defun +agent-shell-arena-git-create (base panel-id)
+(defun +agent-shell-arena-git-create (base panel-id &optional delegate)
   "Create a directory for a new arena of PANEL-ID over BASE.
-Write and return its manifest.  The arena id is PANEL-ID plus a random
-suffix, so a repeated request never meets an earlier arena's leftovers."
+Write and return its manifest, holding DELEGATE for a pstack delegate.
+The arena id is PANEL-ID plus a random suffix, so a repeated request
+never meets an earlier arena's leftovers."
   (unless (string-match-p +agent-shell-arena-git--name-regexp panel-id)
     (error "Invalid arena panel id: %S" panel-id))
   (let* ((root (file-name-as-directory
@@ -520,7 +596,8 @@ suffix, so a repeated request never meets an earlier arena's leftovers."
       :toplevel (+agent-shell-arena-git-base-toplevel base)
       :prefix (+agent-shell-arena-git-base-prefix base)
       :base (+agent-shell-arena-git-base-commit base)
-      :sparse (+agent-shell-arena-git-base-sparse base)))))
+      :sparse (+agent-shell-arena-git-base-sparse base)
+      :delegate delegate))))
 
 (defun +agent-shell-arena-git--matches-p (matcher toplevel)
   "Return whether profile MATCHER selects the repository at TOPLEVEL."
@@ -605,6 +682,24 @@ function" value)))
                                                 value))
                      (funcall fail key "an absolute path or one starting \
 with ~/" value)))
+                  (:delegate
+                   (unless (and (proper-list-p value) (cl-evenp (length value)))
+                     (funcall fail key "a plist" value))
+                   (let ((options (cl-loop for (option) on value by #'cddr
+                                           collect option)))
+                     (when-let* ((unknown (seq-find (lambda (option)
+                                                      (not (eq option
+                                                               :isolation)))
+                                                    options)))
+                       (user-error "Arena profile for %s: unknown :delegate \
+key %S" toplevel unknown))
+                     (when (cdr options)
+                       (user-error "Arena profile for %s: :delegate names \
+:isolation more than once" toplevel))
+                     (unless (or (null options)
+                                 (memq (cadr value) '(worktree branch)))
+                       (funcall fail ":delegate :isolation"
+                                "`worktree' or `branch'" (cadr value)))))
                   (_ (user-error "Arena profile for %s: unknown key %S"
                                  toplevel key))))
     (when (and (plist-get profile :host)
@@ -691,11 +786,15 @@ The role lists the profile's paths present in the lead and the paths its
     (+agent-shell-arena-git-write-manifest manifest)
     role))
 
-(defun +agent-shell-arena-git-provision (manifest name callback)
+(defun +agent-shell-arena-git-provision (manifest name callback &optional
+                                                  branch)
   "Add candidate NAME to MANIFEST's arena: a worktree at the base commit.
 Link and clone its dependency paths and clone the generated paths the
 lead has and the worktree lacks, then call CALLBACK with the candidate's
 working directory and nil, or nil and a message.
+
+With BRANCH, the worktree is on that new branch instead of detached, so
+a pstack delegate can commit there.
 
 Run from the lead's git directory, git worktree add copies the lead's
 sparse-checkout patterns and per-worktree config before it checks out, so
@@ -726,7 +825,8 @@ match the same paths as cone ones."
                             "\n")))))
             (+agent-shell-arena-git--git
              (+agent-shell-arena-git-manifest-git-dir manifest) toplevel
-             (append '("worktree" "add" "--detach")
+             (append '("worktree" "add")
+                     (if branch (list "-b" branch) '("--detach"))
                      (when sparse '("--no-checkout"))
                      (list (directory-file-name worktree)
                            (+agent-shell-arena-git-manifest-base manifest)))
@@ -1036,6 +1136,188 @@ and a message."
                                         "\n"))
                               paths ""))))))))))))
 
+;;;; Delegates
+
+(defun +agent-shell-arena-git-delegate-branch (manifest)
+  "Return the branch MANIFEST's pstack delegate commits on.
+It is named for the panel, whose id is the arena id without its suffix."
+  (concat "pstack/delegate/"
+          (replace-regexp-in-string
+           "-[[:xdigit:]]\\{8\\}\\'" ""
+           (+agent-shell-arena-git-manifest-id manifest))))
+
+(defun +agent-shell-arena-git-describe-paths (paths)
+  "Return PATHS as a short series, naming at most ten."
+  (concat (string-join (seq-take paths 10) ", ")
+          (when (nthcdr 10 paths)
+            (format " and %d more" (- (length paths) 10)))))
+
+(defun +agent-shell-arena-git-origin-name (origin)
+  "Return a name for ORIGIN, a delegate's (branch . REF) or (detached . OID)."
+  (pcase origin
+    (`(branch . ,ref) (string-remove-prefix "refs/heads/" ref))
+    (`(detached . ,oid) (format "commit %s" oid))))
+
+(defun +agent-shell-arena-git-changes (git-dir work-tree excludes callback)
+  "Call CALLBACK with the paths git status reports in WORK-TREE.
+Leave out agent-shell transcripts and EXCLUDES, paths relative to the top
+level.  CALLBACK gets the paths, nil when nothing changed, and nil; or
+nil and a message."
+  (+agent-shell-arena-git--git
+   git-dir work-tree
+   (append (list "status" "--porcelain=v1" "-z" "--untracked-files=normal"
+                 "--" ":/" +agent-shell-arena-git--agent-shell-exclude)
+           (mapcar (lambda (path) (concat ":(exclude,literal)" path))
+                   excludes))
+   (lambda (message) (funcall callback nil message))
+   (lambda (output)
+     (let ((entries (split-string output "\0" t)) paths)
+       (while entries
+         (let ((entry (pop entries)))
+           (push (substring entry 3) paths)
+           ;; A rename or copy names its source in the next entry.
+           (when (memq (aref entry 0) '(?R ?C)) (pop entries))))
+       (funcall callback (nreverse paths) nil)))))
+
+(defun +agent-shell-arena-git-take (manifest callback)
+  "Put the lead's checkout on MANIFEST's new delegate branch at the base.
+Call CALLBACK with the branch and nil, or nil and a message."
+  (let ((branch (+agent-shell-arena-git-delegate-branch manifest)))
+    (+agent-shell-arena-git--git
+     (+agent-shell-arena-git-manifest-git-dir manifest)
+     (+agent-shell-arena-git-manifest-toplevel manifest)
+     (list "switch" "-q" "-c" branch
+           (+agent-shell-arena-git-manifest-base manifest))
+     (lambda (message) (funcall callback nil message))
+     (lambda (_) (funcall callback branch nil)))))
+
+(defun +agent-shell-arena-git-restore (manifest callback)
+  "Return the lead's checkout from MANIFEST's delegate branch to its origin.
+Switch only when the checkout is still on the branch with nothing
+changed, and record the outcome, or why not, in the delegate record.  A
+record already `restored' or `unneeded' stays as it is.  Call CALLBACK
+with the record and nil, or nil and a message."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (branch (+agent-shell-arena-git-delegate-branch manifest))
+         (origin (+agent-shell-arena-git-delegate-origin delegate))
+         (name (+agent-shell-arena-git-origin-name origin))
+         (read (lambda (&rest args)
+                 (apply #'+agent-shell-arena-git--read-in git-dir toplevel
+                        args)))
+         (fail (lambda (message) (funcall callback nil message)))
+         (end (lambda (restore note)
+                (condition-case err
+                    (progn
+                      (setf (+agent-shell-arena-git-delegate-restore delegate)
+                            restore
+                            (+agent-shell-arena-git-delegate-note delegate)
+                            note)
+                      (+agent-shell-arena-git-write-manifest manifest)
+                      (+agent-shell-arena-git--later callback delegate nil))
+                  (error (+agent-shell-arena-git--later
+                          fail (error-message-string err)))))))
+    (condition-case err
+        (let ((head (funcall read "symbolic-ref" "-q" "HEAD"))
+              (oid (funcall read "rev-parse" "-q" "--verify" "HEAD")))
+          (cond
+           ((or (memq (+agent-shell-arena-git-delegate-restore delegate)
+                      '(restored unneeded))
+                (not (eq (+agent-shell-arena-git-delegate-isolation delegate)
+                         'branch)))
+            (+agent-shell-arena-git--later callback delegate nil))
+           ((pcase origin
+              (`(branch . ,ref) (equal head ref))
+              (`(detached . ,commit) (and (null head) (equal oid commit))))
+            (funcall end 'unneeded (format "The checkout was already back on \
+%s." name)))
+           ((not (equal head (concat "refs/heads/" branch)))
+            (funcall end 'changed
+                     (format "The checkout is on %s, not %s, so Emacs left it."
+                             (if head (string-remove-prefix "refs/heads/" head)
+                               (format "commit %s" oid))
+                             branch)))
+           (t
+            (+agent-shell-arena-git-changes
+             git-dir toplevel nil
+             (lambda (paths error)
+               (cond
+                (error (funcall fail error))
+                (paths
+                 (funcall end 'dirty
+                          (format "The checkout has uncommitted changes: %s."
+                                  (+agent-shell-arena-git-describe-paths
+                                   paths))))
+                ((not (funcall read "rev-parse" "-q" "--verify"
+                               (concat (cdr origin) "^{commit}")))
+                 (funcall end 'missing (format "Emacs left the checkout on \
+%s, since %s no longer exists." branch name)))
+                (t
+                 (+agent-shell-arena-git--git
+                  git-dir toplevel
+                  (pcase origin
+                    (`(branch . ,_) (list "switch" "-q" name))
+                    (`(detached . ,commit)
+                     (list "switch" "-q" "--detach" commit)))
+                  fail
+                  (lambda (_)
+                    (funcall end 'restored
+                             (format "Switched the checkout back to %s."
+                                     name)))))))))))
+      (error (+agent-shell-arena-git--later fail (error-message-string err))))))
+
+(defun +agent-shell-arena-git-finish-delegate (manifest hold callback)
+  "Record what MANIFEST's stopped delegate left in its delegate record.
+List its commits since the base.  In a worktree, note uncommitted
+changes; in branch isolation, return the lead's checkout with
+`+agent-shell-arena-git-restore' unless HOLD, a note saying why it must
+stay.  Call CALLBACK with the record and nil, or nil and a message."
+  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (fail (lambda (message) (funcall callback nil message)))
+         (log
+          (lambda (&rest _)
+            (+agent-shell-arena-git--git
+             git-dir toplevel
+             (list "log" "--reverse" "--format=%H %s"
+                   (format "%s..refs/heads/%s"
+                           (+agent-shell-arena-git-manifest-base manifest)
+                           (+agent-shell-arena-git-delegate-branch manifest)))
+             fail
+             (lambda (output)
+               (setf (+agent-shell-arena-git-delegate-commits delegate)
+                     (mapcar (lambda (line)
+                               (let ((space (string-search " " line)))
+                                 (cons (substring line 0 space)
+                                       (substring line (1+ space)))))
+                             (split-string output "\n" t)))
+               (+agent-shell-arena-git-write-manifest manifest)
+               (funcall callback delegate nil))))))
+    (cond
+     ((eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
+      (let ((role (car (+agent-shell-arena-git-manifest-roles manifest))))
+        (+agent-shell-arena-git-changes
+         (+agent-shell-arena-git-role-git-dir role)
+         (+agent-shell-arena-git-role-worktree role)
+         (append (+agent-shell-arena-git-role-shared role)
+                 (+agent-shell-arena-git-role-generated role))
+         (lambda (paths error)
+           (if error (funcall fail error)
+             (setf (+agent-shell-arena-git-delegate-note delegate)
+                   (when paths
+                     (format "The worktree has uncommitted changes: %s."
+                             (+agent-shell-arena-git-describe-paths paths))))
+             (funcall log))))))
+     (hold
+      (setf (+agent-shell-arena-git-delegate-note delegate) hold)
+      (+agent-shell-arena-git--later log))
+     (t
+      (+agent-shell-arena-git-restore
+       manifest (lambda (_ error) (if error (funcall fail error)
+                                    (funcall log))))))))
+
 ;;;; Cleanup
 
 (defun +agent-shell-arena-git-clean (manifest callback)
@@ -1047,8 +1329,38 @@ directory too.  Call CALLBACK with a list of messages naming what
 stayed, and nil; or, when a step failed, nil and a message naming each
 failure and then what stayed.
 
+A pstack delegate's branch always stays.  A delegate that worked in the
+lead's own checkout first returns it with `+agent-shell-arena-git-restore';
+when that cannot, nothing is removed and the message says why.
+
 Trees go as `+agent-shell-sandbox-delete' deletes them, so read-only
 folders a candidate's tools made do not stop the cleanup."
+  (let ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+        (returned-p (lambda (delegate)
+                      (memq (+agent-shell-arena-git-delegate-restore delegate)
+                            '(restored unneeded)))))
+    (if (or (null delegate)
+            (eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
+            (funcall returned-p delegate))
+        (+agent-shell-arena-git--remove manifest callback)
+      (+agent-shell-arena-git-restore
+       manifest
+       (lambda (delegate error)
+         (cond
+          (error (funcall callback nil error))
+          ((funcall returned-p delegate)
+           (+agent-shell-arena-git--remove manifest callback))
+          (t (funcall callback nil
+                      (format "%s stays on %s, so Emacs kept its record: %s"
+                              (directory-file-name
+                               (+agent-shell-arena-git-manifest-toplevel
+                                manifest))
+                              (+agent-shell-arena-git-delegate-branch manifest)
+                              (+agent-shell-arena-git-delegate-note
+                               delegate))))))))))
+
+(defun +agent-shell-arena-git--remove (manifest callback)
+  "Remove what MANIFEST records, as `+agent-shell-arena-git-clean' says."
   (let* ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
          (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
          (left nil)
