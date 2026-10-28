@@ -2878,10 +2878,15 @@ nothing here writes the runner's files."
                      (list (nth 0 words) (string-to-number (nth 1 words))
                            (string-to-number (nth 2 words))
                            (string-to-number (nth 3 words)))))))
-    (princ (concat "pstack-arena-poll 2\n"
-                   (json-serialize (+agent-shell-arena-remote--poll-page
-                                    directory cursor))
-                   "\n"))
+    ;; `princ' would encode json-serialize's UTF-8 bytes a second time.
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (insert "pstack-arena-poll 2\n"
+              (json-serialize (+agent-shell-arena-remote--poll-page
+                               directory cursor))
+              "\n")
+      (let ((coding-system-for-write 'no-conversion))
+        (write-region nil nil "/dev/stdout" nil 'silent)))
     (kill-emacs 0)))
 
 (defun +agent-shell-arena-remote--cursor-argument (remote)

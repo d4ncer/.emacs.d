@@ -1093,6 +1093,35 @@ version-1 answer still parses."
                                (+agent-shell-arena-remote--cached-records
                                 remote))))))))
 
+;;;; Poll output
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-poll-batch-utf-8 ()
+  "The host's poll prints valid UTF-8 the laptop parses, non-ASCII included."
+  (+remote-delegate-test--with-transcript
+    (+agent-shell-arena-remote--record recorder "assistant" "caf\u00e9 \u2014 ok")
+    (let* ((output
+            (with-temp-buffer
+              (let ((coding-system-for-read 'utf-8-unix))
+                (should (eql 0 (apply
+                                #'call-process
+                                (expand-file-name invocation-name
+                                                  invocation-directory)
+                                nil t nil "-Q" "--batch"
+                                "--eval" "(setq load-prefer-newer t)"
+                                (append
+                                 (mapcan (lambda (dir) (list "-L" dir))
+                                         (seq-filter #'stringp load-path))
+                                 (list "-l" "+agent-shell-arena-remote"
+                                       "-f" "+agent-shell-arena-remote-poll-batch"
+                                       job ""))))))
+              (buffer-string)))
+           (poll (+agent-shell-arena-remote-parse-poll output)))
+      (+agent-shell-arena-remote--cache-transcript remote (plist-get poll :tail))
+      (should (member "caf\u00e9 \u2014 ok"
+                      (mapcar (lambda (record) (alist-get 'text record))
+                              (+agent-shell-arena-remote--cached-records
+                               remote)))))))
+
 ;;;; Process leases
 
 (defmacro +remote-delegate-test--with-systemd (&rest body)
