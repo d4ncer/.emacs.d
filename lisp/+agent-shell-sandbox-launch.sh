@@ -44,10 +44,13 @@ egress_start() {
   # Live capture spools packets to a temporary file in TMPDIR, so it
   # goes in the private folder, which Emacs deletes on close.  The size
   # limit bounds that file and the events; past it tshark gets SIGXFSZ.
+  # Without a HOME, tshark running as the namespace's root reads root's
+  # Wireshark settings, is refused, and crashes.
   (
     ulimit -c 0
     ulimit -f 65536
     exec env -i PATH="$egress_path" LANG=C.UTF-8 TMPDIR="$dir/tmp" \
+      HOME="$dir/tmp" \
       "$nsenter" --target "$inner" --user --net --preserve-credentials -- \
       "$tshark" -l -n -i tap0 -s 4096 -f "$egress_filter" -a duration:21600 \
       -T fields -E separator=/t -E occurrence=a -E aggregator=, "${fields[@]}"
