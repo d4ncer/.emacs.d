@@ -26,6 +26,12 @@
 ;; sandbox-exec, or bwrap on Linux, in the agent's full-access mode,
 ;; rejects every permission request and keeps no transcript.  Stop it with
 ;; `+agent-shell-drive-stop', which also ends every process it started.
+;;
+;; A `full-access' shell runs unconfined, as an ordinary one does, but in
+;; the agent's full-access mode from `+agent-shell-sandbox-agents'.  A
+;; permission request rejects and ends it, since that mode should never
+;; ask.  Stop it with `+agent-shell-drive-stop-unconfined', which ends the
+;; adapter's process tree and process groups and nothing else.
 
 ;;; Code:
 
@@ -140,6 +146,16 @@ Return nil, leaving the dialog to the user, only when no option fits."
   "Reject PERMISSION."
   (+agent-shell-drive--answer permission nil))
 
+(defun +agent-shell-drive--end (permission)
+  "Reject PERMISSION and kill this full-access shell, which should not ask."
+  (let ((shell (current-buffer))
+        (title (or (map-nested-elt permission '(:tool-call :title)) "a tool")))
+    (+agent-shell-drive--reject permission)
+    (run-at-time 0 nil #'+agent-shell-drive-kill shell
+                 (format "The agent asked permission for %s, which its \
+full-access mode should never need." title))
+    t))
+
 (defun +agent-shell-drive--refusal (shell)
   "Return why SHELL is not in the mode its policy requires, or nil."
   (require 'agent-shell-config)
@@ -168,7 +184,7 @@ agent-shell serves these requests itself, outside any sandbox-exec profile
 and before any permission prompt, so the policy is enforced here too."
   (let ((path (+agent-shell-sandbox--path path)))
     (pcase policy
-      ('nil t)
+      ((or 'nil 'full-access) t)
       ('read-only (not write))
       ((pred +agent-shell-sandbox-p)
        (if write
@@ -223,11 +239,12 @@ and before any permission prompt, so the policy is enforced here too."
   "Start a new shell from CONFIG pinned to DIRECTORY, without displaying it.
 POLICY nil starts an ordinary shell.  With `read-only', the shell runs in its
 agent's mode from `+agent-shell-drive-read-only-modes' with a responder that
-rejects everything but reads.  With a `+agent-shell-sandbox', its adapter
-runs confined to the sandbox in the agent's full-access mode from
-`+agent-shell-sandbox-agents', every permission request is rejected, and no
-transcript is kept.  A shell with a policy is hidden from
-`agent-shell-buffers'."
+rejects everything but reads.  With `full-access', the shell runs unconfined
+in its agent's full-access mode from `+agent-shell-sandbox-agents', and a
+permission request is rejected and kills it.  With a `+agent-shell-sandbox',
+its adapter runs confined to the sandbox in that mode, every permission
+request is rejected, and no transcript is kept.  A shell with a policy is
+hidden from `agent-shell-buffers'."
   (require 'agent-shell)
   (let* ((config (+agent-shell-drive-config config))
          (agent (map-elt config :identifier))
@@ -236,7 +253,7 @@ transcript is kept.  A shell with a policy is hidden from
                  ('read-only
                   (or (alist-get agent +agent-shell-drive-read-only-modes)
                       (user-error "No read-only mode for agent %s" agent)))
-                 ((pred +agent-shell-sandbox-p)
+                 ((or 'full-access (pred +agent-shell-sandbox-p))
                   (+agent-shell-sandbox-mode agent))
                  (_ (error "Unknown shell policy %S" policy))))
          (sandboxed (+agent-shell-sandbox-p policy))
@@ -259,8 +276,10 @@ transcript is kept.  A shell with a policy is hidden from
                   (setq-local +agent-shell-drive--policy policy
                               +agent-shell-drive--mode mode
                               agent-shell-permission-responder-function
-                              (if sandboxed #'+agent-shell-drive--reject
-                                #'+agent-shell-drive--respond)))
+                              (pcase policy
+                                ('read-only #'+agent-shell-drive--respond)
+                                ('full-access #'+agent-shell-drive--end)
+                                (_ #'+agent-shell-drive--reject))))
                 (when sandboxed
                   (setq-local agent-shell-transcript-file-path-function nil))))
          (shell
@@ -338,6 +357,62 @@ to be killed outright."
              (+agent-shell-sandbox-kill-tree pid))
            (+agent-shell-drive-kill shell reason)
            (+agent-shell-sandbox-sweep sandbox finish)))))))
+
+(defun +agent-shell-drive--processes ()
+  "Return (PID PPID PGID ZOMBIE) for every process."
+  (mapcar (lambda (line)
+            (pcase-let ((`(,pid ,ppid ,pgid ,state) (split-string line)))
+              (list (string-to-number pid) (string-to-number ppid)
+                    (string-to-number pgid) (string-prefix-p "Z" state))))
+          (+agent-shell-sandbox--lines "/bin/ps" "-axo"
+                                       "pid=,ppid=,pgid=,stat=")))
+
+(defun +agent-shell-drive--tree (pid groups processes)
+  "Return the live pids in PID's tree or GROUPS among PROCESSES.
+PROCESSES is a list from `+agent-shell-drive--processes'."
+  (let ((found (+agent-shell-sandbox--descendants
+                pid (mapcar (lambda (process) (cons (nth 0 process)
+                                                    (nth 1 process)))
+                            processes))))
+    (dolist (process processes)
+      (when (memql (nth 2 process) groups)
+        (cl-pushnew (nth 0 process) found)))
+    (seq-remove (lambda (found)
+                  (or (eql found (emacs-pid))
+                      (nth 3 (assq found processes))
+                      (not (assq found processes))))
+                found)))
+
+(defun +agent-shell-drive-stop-unconfined (shell &optional reason callback)
+  "Stop unconfined SHELL and every process its adapter started.
+Kill the adapter's descendants and every process in their process groups,
+which holds what they left behind after their parents ended, then kill
+SHELL as `+agent-shell-drive-kill' does with REASON.  Nothing outside
+the adapter's tree and groups is signalled.  Recheck from a timer until
+none remain, then call CALLBACK with the pids that survived.  The work
+runs from a timer, so SHELL's own event callbacks may call this."
+  (run-at-time
+   0 nil
+   (lambda ()
+     (let* ((pid (+agent-shell-drive--adapter shell))
+            (processes (and pid (+agent-shell-drive--processes)))
+            (tree (and pid (+agent-shell-drive--tree pid nil processes)))
+            (group (lambda (member) (nth 2 (assq member processes))))
+            (groups (and pid (delete (funcall group (emacs-pid))
+                                     (seq-uniq (mapcar group (cons pid tree))))))
+            (finish (lambda (survivors)
+                      (when callback (funcall callback survivors)))))
+       (cl-labels ((sweep (rounds)
+                     (let ((pids (and pid (+agent-shell-drive--tree
+                                           pid groups
+                                           (+agent-shell-drive--processes)))))
+                       (if (or (null pids) (<= rounds 0))
+                           (funcall finish pids)
+                         (+agent-shell-sandbox--kill pids)
+                         (run-at-time 0.2 nil #'sweep (1- rounds))))))
+         (+agent-shell-sandbox--kill tree)
+         (+agent-shell-drive-kill shell reason)
+         (sweep +agent-shell-sandbox--sweeps))))))
 
 (defun +agent-shell-drive-pinned-p (shell directory)
   "Return whether live SHELL works in DIRECTORY."

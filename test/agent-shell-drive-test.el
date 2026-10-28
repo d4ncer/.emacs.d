@@ -631,5 +631,134 @@ mode full")
             (delete-directory (+agent-shell-sandbox-tmp each) t)
             (delete-directory (+agent-shell-sandbox-config each) t)))))))
 
+;;;; Full-access shells
+
+(ert-deftest +agent-shell-drive-test-full-access-start ()
+  "Run unconfined in the full-access mode, hidden, ending on any request."
+  (require 'agent-shell)
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (let ((+agent-shell-sandbox-agents '((codex :mode "full"))))
+        (should-error (+agent-shell-drive-start :config 'gemini
+                                                :directory directory
+                                                :policy 'full-access)
+                      :type 'user-error)
+        (let* ((shell (+agent-shell-drive-start :config 'codex
+                                                :directory directory
+                                                :policy 'full-access))
+               (config (car started))
+               (request (+agent-shell-drive-test--permission
+                         "execute" '("allow_once" "reject_once")))
+               (reasons nil))
+          (with-current-buffer shell
+            (setq major-mode 'agent-shell-mode)
+            (setq-local shell-maker--config '((:name . "stub")))
+            (add-hook 'kill-buffer-hook
+                      (lambda () (emit shell '((:event . clean-up))))
+                      nil t))
+          (+agent-shell-drive-watch shell 'a 1
+                                    (lambda (e)
+                                      (push (plist-get e :reason) reasons)))
+          (should (equal "full" (funcall (map-elt config
+                                                  :default-session-mode-id))))
+          (should-not (map-elt config :client-maker))
+          (should (eq 'full-access (+agent-shell-drive-policy shell)))
+          (should-not (memq shell (agent-shell-buffers)))
+          (should-not (local-variable-p
+                       'agent-shell-transcript-file-path-function shell))
+          (with-current-buffer shell
+            (should (funcall agent-shell-permission-responder-function
+                             (cdr request))))
+          (should (equal "reject_once" (caar request)))
+          (should (buffer-live-p shell))
+          (accept-process-output nil 0.05)
+          (should-not (buffer-live-p shell))
+          (should (equal '("The agent asked permission for a tool, which its \
+full-access mode should never need.")
+                         reasons)))))))
+
+(ert-deftest +agent-shell-drive-test-full-access-mode-mismatch ()
+  "Kill a full-access shell left outside its full-access mode."
+  (require 'agent-shell)
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-start
+      (let* ((+agent-shell-sandbox-agents '((codex :mode "full")))
+             (shell (+agent-shell-drive-start :config 'codex
+                                              :directory directory
+                                              :policy 'full-access))
+             (reasons nil))
+        (with-current-buffer shell
+          (add-hook 'kill-buffer-hook
+                    (lambda () (emit shell '((:event . clean-up))))
+                    nil t)
+          (setf (map-elt (map-elt agent-shell--state :session) :mode-id)
+                "default"))
+        (+agent-shell-drive-watch shell 'a 1
+                                  (lambda (e)
+                                    (push (plist-get e :reason) reasons)))
+        (emit shell '((:event . init-finished)))
+        (accept-process-output nil 0.05)
+        (should-not (buffer-live-p shell))
+        (should (equal '("Session mode is default, not the full-access mode \
+full")
+                       reasons))))))
+
+(ert-deftest +agent-shell-drive-test-full-access-files ()
+  "Let a full-access shell write where a read-only one may not."
+  (should (+agent-shell-drive--file-allowed-p 'full-access t "/tmp/x"))
+  (should-not (+agent-shell-drive--file-allowed-p 'read-only t "/tmp/x")))
+
+(defun +agent-shell-drive-test--alive-p (pid)
+  "Return whether PID runs and is not a zombie."
+  (when-let* ((process (assq pid (+agent-shell-drive--processes))))
+    (not (nth 3 process))))
+
+(ert-deftest +agent-shell-drive-test-stop-unconfined ()
+  "End the adapter's tree and the orphans in its group, and nothing else."
+  (+agent-shell-drive-test--with-shells (shell)
+    (let* ((pids (make-temp-file "drive-pids-"))
+           (adapter (make-process
+                     :name "drive-adapter" :noquery t :connection-type 'pipe
+                     :command
+                     (list "/bin/sh" "-c"
+                           "sleep 60 & echo $! >> \"$1\"
+(sleep 60 & echo $! >> \"$1\") &
+wait" "sh" pids)))
+           (bystander (make-process :name "drive-bystander" :noquery t
+                                    :connection-type 'pipe
+                                    :command '("sleep" "60")))
+           (survivors 'unset))
+      (unwind-protect
+          (let ((deadline (+ (float-time) 10)))
+            (while (and (< (length (split-string
+                                    (with-temp-buffer
+                                      (insert-file-contents pids)
+                                      (buffer-string))))
+                           2)
+                        (< (float-time) deadline))
+              (accept-process-output nil 0.05))
+            (let ((children (mapcar #'string-to-number
+                                    (split-string
+                                     (with-temp-buffer
+                                       (insert-file-contents pids)
+                                       (buffer-string))))))
+              (should (= 2 (length children)))
+              (should (seq-every-p #'+agent-shell-drive-test--alive-p children))
+              (cl-letf (((symbol-function '+agent-shell-drive--adapter)
+                         (lambda (_) (process-id adapter))))
+                (+agent-shell-drive-stop-unconfined
+                 shell nil (lambda (left) (setq survivors left)))
+                (setq deadline (+ (float-time) 10))
+                (while (and (eq survivors 'unset) (< (float-time) deadline))
+                  (accept-process-output nil 0.05)))
+              (should-not survivors)
+              (should-not (buffer-live-p shell))
+              (should-not (seq-some #'+agent-shell-drive-test--alive-p
+                                    children))
+              (should (process-live-p bystander))))
+        (when (process-live-p adapter) (delete-process adapter))
+        (delete-process bystander)
+        (delete-file pids)))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here
