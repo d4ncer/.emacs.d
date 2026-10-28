@@ -451,8 +451,9 @@ to ten of them. A clean checkout switches to the delegate's branch until
 the delegate finishes. Leave it alone meanwhile; the panels view and the
 lead's mode-line help say so. When the delegate has finished, Emacs
 switches the checkout back to the branch or commit it was on, but only if
-the checkout is clean and still on the delegate's branch. Otherwise it
-leaves the checkout where it is and says why.
+the checkout is clean and still on the delegate's branch, and then forgets
+the delegate's record. Otherwise it leaves the checkout where it is, keeps
+the record and says why.
 
 #### The panels view
 
@@ -487,6 +488,16 @@ back. A timeout or a cancellation keeps every commit the delegate made. A
 worktree's uncommitted changes are named, since cleaning the workspace up
 loses them.
 
+A delegate that made no commits leaves an empty branch. Emacs deletes it
+when the branch still points exactly at the commit the delegate started
+from and no worktree has it checked out, and the follow-up says so in
+place of the review and merge lines. A branch-mode delegate's branch goes
+once the checkout is back; a worktree delegate's stays with its worktree.
+When preparation fails after the branch was made, Emacs discards what it
+made, deletes the branch under the same rules, and the rejection says
+so. A branch with commits of its own, or one moved since the start, always
+stays.
+
 #### Recovery
 
 Every delegate keeps a manifest under `+agent-shell-pstack-arena-directory`.
@@ -494,9 +505,10 @@ A branch-mode manifest records where the checkout was before Emacs switched
 it, and is written before the switch and again after Emacs tries to switch
 back. If Emacs exits while a branch-mode delegate runs, the next Emacs lists
 it in `C-c P` as interrupted, and `x` returns the checkout under the same
-rules. Returning it twice does nothing the second time. A process that
-outlived the delegate's stop also keeps the checkout on the branch, and the
-panels view names it.
+rules. Returning it twice does nothing the second time. A record whose
+checkout came back is gone, so `C-c P` lists only the ones still left on
+the branch. A process that outlived the delegate's stop also keeps the
+checkout on the branch, and the panels view names it.
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and

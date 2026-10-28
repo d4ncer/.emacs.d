@@ -855,8 +855,9 @@ there, press x on its line in the pstack panels view to switch back to %s."
   (let* ((member (car (+agent-shell-pstack-panel-members panel)))
          (role (+agent-shell-pstack-panel-member-role member))
          (manifest (+agent-shell-pstack-panel-arena panel))
-         (error (plist-get (+agent-shell-pstack-panel-member-result member)
-                           :error)))
+         (result (+agent-shell-pstack-panel-member-result member))
+         (error (plist-get result :error))
+         (dropped (plist-get result :dropped)))
     (if (not (and manifest (+agent-shell-pstack-panel-member-shell member)))
         (format "pstack panel %s (delegate) ended before its delegate \
 started: %s"
@@ -877,10 +878,14 @@ started: %s"
            (format "%s\n" error))
          (when error
            (format "Emacs could not collect what it left: %s\n" error))
-         (format "Branch: %s, %d commit%s since %s, the commit it started \
+         (if dropped
+             (format "Branch: none.  The delegate made no commits since %s, \
+the commit it started from, so Emacs removed its empty branch %s.\n"
+                     base branch)
+           (format "Branch: %s, %d commit%s since %s, the commit it started \
 from%s\n"
-                 branch (length commits) (if (= 1 (length commits)) "" "s")
-                 base (if commits ":" "."))
+                   branch (length commits) (if (= 1 (length commits)) "" "s")
+                   base (if commits ":" ".")))
          (mapconcat (lambda (commit)
                       (format "  %s %s\n" (substring (car commit) 0 12)
                               (cdr commit)))
@@ -897,8 +902,9 @@ from%s\n"
                    branch (+agent-shell-pstack-panel--return-text manifest)))
          (format "Report:\n%s\n"
                  (+agent-shell-pstack-panel--rationale member))
-         (format "\nTo review: git log %s..%s\nTo merge: git merge --ff-only \
-%s, or push it and open a pull request.\n" base branch branch)
+         (unless dropped
+           (format "\nTo review: git log %s..%s\nTo merge: git merge \
+--ff-only %s, or push it and open a pull request.\n" base branch branch))
          (when worktree
            "The workspace stays until you clean it up: press x on its line in \
 the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
@@ -1407,7 +1413,9 @@ A usable result also gets a checkout of its own for the judge to read."
 (defun +agent-shell-pstack-panel--collect-delegate (panel member)
   "Record what stopped delegate MEMBER of PANEL left, then advance PANEL.
 A process that outlived the stop keeps the lead's checkout on the
-delegate's branch; see `+agent-shell-arena-git-finish-delegate'."
+delegate's branch; see `+agent-shell-arena-git-finish-delegate'.  A
+branch without commits of its own goes; see
+`+agent-shell-arena-git-drop-branch'."
   (let ((survivors (plist-get (+agent-shell-pstack-panel-member-result member)
                               :survivors)))
     (cl-flet ((end (capture &optional error)
@@ -1426,8 +1434,20 @@ delegate's branch; see `+agent-shell-arena-git-finish-delegate'."
            (when survivors
              (format "Processes %s outlived the delegate."
                      (mapconcat #'number-to-string survivors ", ")))
-           (lambda (_ error)
-             (if error (end 'failed error) (end 'captured))))
+           (lambda (delegate error)
+             (cond
+              (error (end 'failed error))
+              ((+agent-shell-arena-git-delegate-commits delegate)
+               (end 'captured))
+              (t (+agent-shell-arena-git-drop-branch
+                  (+agent-shell-pstack-panel-arena panel)
+                  (lambda (branch error)
+                    (when branch
+                      (setf (+agent-shell-pstack-panel-member-result member)
+                            (append (+agent-shell-pstack-panel-member-result
+                                     member)
+                                    (list :dropped branch))))
+                    (end 'captured error)))))))
         (error (end 'failed (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
@@ -1592,25 +1612,52 @@ Return the panel, or nil when TEXT requests none or one already seen."
 
 ;;;; Arenas
 
-(defun +agent-shell-pstack-panel--discard-arena (panel)
-  "Remove PANEL's arena from disk; no candidate in it ever ran."
-  (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
-    (setf (+agent-shell-pstack-panel-arena panel) nil)
-    (+agent-shell-arena-git-clean
-     manifest (lambda (left error)
-                (when (or left error)
-                  (message "pstack arena %s: cleanup left %s"
-                           (+agent-shell-arena-git-manifest-id manifest)
-                           (or error (string-join left "; "))))))))
+(defun +agent-shell-pstack-panel--discard-arena (panel &optional done)
+  "Remove PANEL's arena from disk; no candidate in it ever ran.
+A delegate's branch goes too while it is empty; see
+`+agent-shell-arena-git-drop-branch'.  Then call DONE, when non-nil,
+with the branch removed or nil."
+  (if-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
+      (let ((id (+agent-shell-arena-git-manifest-id manifest)))
+        (setf (+agent-shell-pstack-panel-arena panel) nil)
+        (+agent-shell-arena-git-clean
+         manifest
+         (lambda (left error)
+           (when (or left error)
+             (message "pstack arena %s: cleanup left %s"
+                      id (or error (string-join left "; "))))
+           (if (+agent-shell-arena-git-manifest-delegate manifest)
+               (+agent-shell-arena-git-drop-branch
+                manifest (lambda (branch error)
+                           (when error
+                             (message "pstack arena %s: %s" id error))
+                           (when done (funcall done branch))))
+             (when done (funcall done nil))))))
+    (when done (funcall done nil))))
 
 (defun +agent-shell-pstack-panel--fail-preparation (panel reason)
-  "End PANEL, whose arena could not be prepared, because of REASON."
-  (setf (+agent-shell-pstack-panel-rejection panel) reason)
-  (dolist (member (+agent-shell-pstack-panel-members panel))
-    (+agent-shell-pstack-panel--settle panel member 'error nil reason))
-  (+agent-shell-pstack-panel--discard-arena panel)
-  (+agent-shell-pstack-panel--finish panel)
-  (+agent-shell-pstack-panels--refresh))
+  "End PANEL, whose arena could not be prepared, because of REASON.
+A delegate's rejection waits for its arena to go, so it can say whether
+its empty branch went too."
+  (cl-flet ((end (branch)
+              (setf (+agent-shell-pstack-panel-rejection panel)
+                    (if branch
+                        (format "%s  Emacs removed the delegate's empty \
+branch %s." reason branch)
+                      reason))
+              (dolist (member (+agent-shell-pstack-panel-members panel))
+                (+agent-shell-pstack-panel--settle
+                 panel member 'error nil reason))))
+    (if (+agent-shell-pstack-panel--delegate-p panel)
+        (+agent-shell-pstack-panel--discard-arena
+         panel (lambda (branch)
+                 (end branch)
+                 (+agent-shell-pstack-panel--finish panel)
+                 (+agent-shell-pstack-panels--refresh)))
+      (end nil)
+      (+agent-shell-pstack-panel--discard-arena panel)
+      (+agent-shell-pstack-panel--finish panel)
+      (+agent-shell-pstack-panels--refresh))))
 
 (defun +agent-shell-pstack-panel--preparing (panel error next)
   "Continue preparing PANEL by calling NEXT, unless ERROR or it has ended.
@@ -2011,7 +2058,12 @@ exited mid-run."
                 (+agent-shell-arena-git-delegate-origin delegate))))
     (if (memq (+agent-shell-arena-git-delegate-restore delegate)
               '(restored unneeded))
-        (format "back on %s  (x forgets its record)" name)
+        ;; Its record goes once it is back, unless removing it failed.
+        (format "back on %s%s" name
+                (if (file-exists-p (+agent-shell-arena-git-manifest-directory
+                                    manifest))
+                    "  (x forgets its record)"
+                  ""))
       (format "%s(x switches it back to %s)"
               (if-let* ((note (+agent-shell-arena-git-delegate-note delegate)))
                   (concat note "  ")
@@ -2261,6 +2313,10 @@ Ask for confirmation first."
      ((not (eq (+agent-shell-pstack-panel-phase panel) 'finished))
       (user-error "Arena %s is still %s" (+agent-shell-pstack-panel-id panel)
                   (+agent-shell-pstack-panel-phase panel)))
+     ((not (file-exists-p (+agent-shell-arena-git-manifest-directory
+                           (+agent-shell-pstack-panel-arena panel))))
+      (user-error "Panel %s left nothing to clean up"
+                  (+agent-shell-pstack-panel-id panel)))
      (t (+agent-shell-pstack-arena--clean
          (+agent-shell-pstack-panel-arena panel))))))
 

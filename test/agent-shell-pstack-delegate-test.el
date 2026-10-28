@@ -332,7 +332,54 @@ while it ran.  Your checkout was clean, so Emacs switched it back to main.\n"
                                        branch)
                                text)))
       (should (equal "main" (git "branch" "--show-current")))
-      (should (equal "Add one.txt" (git "log" "-1" "--format=%s" branch))))))
+      (should (equal "Add one.txt" (git "log" "-1" "--format=%s" branch)))
+      (should-not (+agent-shell-arena-git-arenas))
+      (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                            "Isolation: back on main")
+        (should-not (string-search "x forgets" (buffer-string)))
+        (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-no-commits-drops-branch ()
+  "Remove the empty branch of a delegate that made no commits."
+  (+agent-shell-pstack-delegate-test--with
+    (setq +agent-shell-pstack-arena-profiles
+          `((,repo :delegate (:isolation branch))))
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (member-event "builder" :kind 'turn-complete :text "Nothing to do.")
+      (let ((text (followup)))
+        (should (string-search (format "Branch: none.  The delegate made no \
+commits since %s, the commit it started from, so Emacs removed its empty \
+branch %s.\n" (git "rev-parse" "HEAD") branch)
+                               text))
+        (should-not (string-search "To merge" text)))
+      (should (equal "main" (git "branch" "--show-current")))
+      (should (equal "" (git "branch" "--list" branch)))
+      (should-not (+agent-shell-arena-git-arenas)))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-failed-preparation-drops-branch ()
+  "Remove the empty branch a failed preparation left, and say so."
+  (+agent-shell-pstack-delegate-test--with
+    (cl-letf* ((populate (symbol-function '+agent-shell-arena-git--populate))
+               ((symbol-function '+agent-shell-arena-git--populate)
+                (lambda (manifest role toplevel fail _callback)
+                  (funcall populate manifest role toplevel fail
+                           (lambda (_directory _error)
+                             (funcall fail "Linking failed."))))))
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-delegate-test--message
+                         (+agent-shell-pstack-delegate-test--request)))
+      (let ((branch (concat "pstack/delegate/"
+                            (+agent-shell-pstack-panel-id
+                             (car (+agent-shell-pstack-panel-list))))))
+        (should (string-search (format "Emacs rejected your pstack-panel \
+request: Linking failed.  Emacs removed the delegate's empty branch %s.\n\
+No panel started." branch)
+                               (followup)))
+        (should-not started)
+        (should (equal "" (git "branch" "--list" branch)))
+        (should (= 1 (length (split-string (git "worktree" "list") "\n"))))
+        (wait-for (lambda () (not (+agent-shell-arena-git-arenas))))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-branch-left-dirty ()
   "Leave a dirty checkout on the delegate branch until x returns it."

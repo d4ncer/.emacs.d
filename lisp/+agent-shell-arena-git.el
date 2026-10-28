@@ -1267,12 +1267,38 @@ with the record and nil, or nil and a message."
                                      name)))))))))))
       (error (+agent-shell-arena-git--later fail (error-message-string err))))))
 
+(defun +agent-shell-arena-git-drop-branch (manifest callback)
+  "Delete MANIFEST's delegate branch when it has no commit of its own.
+Only a branch that still points exactly at the base, and that no
+worktree has checked out, goes.  Call CALLBACK with the branch when it
+went, or nil when it stays, and nil; or nil and a message."
+  (let* ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (base (+agent-shell-arena-git-manifest-base manifest))
+         (branch (+agent-shell-arena-git-delegate-branch manifest))
+         (ref (concat "refs/heads/" branch))
+         (fail (lambda (message) (funcall callback nil message))))
+    (+agent-shell-arena-git--git
+     git-dir toplevel '("worktree" "list" "--porcelain" "-z") fail
+     (lambda (output)
+       (if (or (member (concat "branch " ref) (split-string output "\0" t))
+               (not (equal base (+agent-shell-arena-git--read-in
+                                 git-dir toplevel
+                                 "rev-parse" "-q" "--verify" ref))))
+           (funcall callback nil nil)
+         ;; The old value makes git refuse a branch that moved meanwhile.
+         (+agent-shell-arena-git--git
+          git-dir toplevel (list "update-ref" "-d" ref base) fail
+          (lambda (_) (funcall callback branch nil))))))))
+
 (defun +agent-shell-arena-git-finish-delegate (manifest hold callback)
   "Record what MANIFEST's stopped delegate left in its delegate record.
 List its commits since the base.  In a worktree, note uncommitted
 changes; in branch isolation, return the lead's checkout with
 `+agent-shell-arena-git-restore' unless HOLD, a note saying why it must
-stay.  Call CALLBACK with the record and nil, or nil and a message."
+stay.  Once the checkout is back, forget the record on disk, as
+`+agent-shell-arena-git-clean' would.  Call CALLBACK with the record and
+nil, or nil and a message."
   (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
          (git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
          (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
@@ -1293,8 +1319,14 @@ stay.  Call CALLBACK with the record and nil, or nil and a message."
                                  (cons (substring line 0 space)
                                        (substring line (1+ space)))))
                              (split-string output "\n" t)))
-               (+agent-shell-arena-git-write-manifest manifest)
-               (funcall callback delegate nil))))))
+               (if (memq (+agent-shell-arena-git-delegate-restore delegate)
+                         '(restored unneeded))
+                   (+agent-shell-arena-git--remove
+                    manifest (lambda (_ error)
+                               (funcall callback (unless error delegate)
+                                        error)))
+                 (+agent-shell-arena-git-write-manifest manifest)
+                 (funcall callback delegate nil)))))))
     (cond
      ((eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
       (let ((role (car (+agent-shell-arena-git-manifest-roles manifest))))

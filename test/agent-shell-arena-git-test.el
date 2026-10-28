@@ -1030,6 +1030,9 @@ A worktree delegate's role is called work."
         (should (eq 'dirty (+agent-shell-arena-git-delegate-restore delegate)))
         (should (equal "The checkout has uncommitted changes: loose.txt."
                        (+agent-shell-arena-git-delegate-note delegate))))
+      (should (eq 'dirty (+agent-shell-arena-git-delegate-restore
+                          (+agent-shell-arena-git-manifest-delegate
+                           (+agent-shell-arena-git-read-manifest directory)))))
       (should (equal branch (+arena-git-test--head repo)))
       (should (string-search
                (concat "stays on " branch)
@@ -1045,6 +1048,74 @@ A worktree delegate's role is called work."
       (should (equal "Add one.txt"
                      (+arena-git-test--git repo "log" "-1" "--format=%s"
                                            branch))))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-forget ()
+  "Forget a branch-mode record once its checkout is back, and only then."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (manifest (+arena-git-test--delegate repo 'branch))
+           (directory (+agent-shell-arena-git-manifest-directory manifest)))
+      (+arena-git-test--commit repo "one.txt")
+      (should (eq 'restored (+agent-shell-arena-git-delegate-restore
+                             (+arena-git-test--finish manifest))))
+      (should (equal "main" (+arena-git-test--head repo)))
+      (should-not (file-exists-p directory))
+      (should-not (+agent-shell-arena-git-arenas))
+      (let* ((manifest (+arena-git-test--delegate repo 'branch))
+             (directory (+agent-shell-arena-git-manifest-directory manifest)))
+        (+arena-git-test--git repo "switch" "-q" "main")
+        (should (eq 'unneeded (+agent-shell-arena-git-delegate-restore
+                               (+arena-git-test--finish manifest))))
+        (should-not (file-exists-p directory))))))
+
+(ert-deftest +agent-shell-arena-git-test-delegate-drop-branch ()
+  "Delete a delegate branch only while it is empty and checked out nowhere."
+  (+arena-git-test--with-scratch
+    (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
+           (drop (lambda (manifest)
+                   (+arena-git-test--ok
+                    (lambda (done)
+                      (+agent-shell-arena-git-drop-branch manifest done)))))
+           (exists (lambda (branch)
+                     (not (string-empty-p
+                           (+arena-git-test--git repo "branch" "--list"
+                                                 branch))))))
+      ;; Empty, but its worktree holds it until cleaned.
+      (let* ((manifest (+arena-git-test--delegate repo 'worktree))
+             (branch (+agent-shell-arena-git-delegate-branch manifest)))
+        (+arena-git-test--finish manifest)
+        (should-not (funcall drop manifest))
+        (should (funcall exists branch))
+        (should-not (+arena-git-test--ok
+                     (lambda (done)
+                       (+agent-shell-arena-git-clean manifest done))))
+        (should (equal branch (funcall drop manifest)))
+        (should-not (funcall exists branch))
+        (should-not (funcall drop manifest)))
+      ;; Empty in branch mode, once the checkout is back.
+      (let* ((manifest (+arena-git-test--delegate repo 'branch))
+             (branch (+agent-shell-arena-git-delegate-branch manifest)))
+        (should-not (funcall drop manifest))
+        (+arena-git-test--finish manifest)
+        (should (equal "main" (+arena-git-test--head repo)))
+        (should (equal branch (funcall drop manifest)))
+        (should-not (funcall exists branch)))
+      ;; A branch with commits of its own stays.
+      (let* ((manifest (+arena-git-test--delegate repo 'branch))
+             (branch (+agent-shell-arena-git-delegate-branch manifest)))
+        (+arena-git-test--commit repo "one.txt")
+        (+arena-git-test--finish manifest)
+        (should-not (funcall drop manifest))
+        (should (funcall exists branch)))
+      ;; So does one moved elsewhere since the delegate started.
+      (let* ((manifest (+arena-git-test--delegate repo 'branch))
+             (branch (+agent-shell-arena-git-delegate-branch manifest)))
+        (+arena-git-test--finish manifest)
+        (+arena-git-test--commit repo "two.txt")
+        (+arena-git-test--git repo "branch" "-f" branch "main")
+        (should-not (funcall drop manifest))
+        (should (equal (+arena-git-test--git repo "rev-parse" "main")
+                       (+arena-git-test--git repo "rev-parse" branch)))))))
 
 (ert-deftest +agent-shell-arena-git-test-delegate-restore ()
   "Restore an interrupted record once, and only from the delegate branch."
