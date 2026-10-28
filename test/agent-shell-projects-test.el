@@ -722,12 +722,40 @@
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-projects-test--wait-for (predicate)
-  "Wait for asynchronous PREDICATE while draining the real operation inbox."
+  "Wait for asynchronous PREDICATE while draining the real operation inbox.
+Resume in the selected window's buffer, as the command loop would after
+a timer changes the displayed buffer."
   (let ((deadline (+ (float-time) 12)))
     (while (and (not (funcall predicate)) (< (float-time) deadline))
       (accept-process-output nil 0.03)
       (+agent-shell-projects-poll))
+    (set-buffer (window-buffer (selected-window)))
     (should (funcall predicate))))
+
+(ert-deftest +agent-shell-projects-test-timer-draft-is-current-after-wait ()
+  "Edit and accept a draft a timer displayed, after waiting for it."
+  (+agent-shell-projects-test--isolated
+    (save-window-excursion
+      (with-temp-buffer
+        (switch-to-buffer (current-buffer))
+        (let (draft accepted timer)
+          (unwind-protect
+              (progn
+                (setq timer
+                      (run-at-time
+                       0 nil
+                       (lambda ()
+                         (+agent-shell-projects-compose
+                          (list :project (plist-get project :id)) "Draft"
+                          (lambda (body) (setq accepted body)))
+                         (setq draft (current-buffer)))))
+                (+agent-shell-projects-test--wait-for (lambda () draft))
+                (should (eq (current-buffer) draft))
+                (goto-char (point-max))
+                (insert " reviewed")
+                (call-interactively (key-binding (kbd "C-c C-c")))
+                (should (equal accepted "Draft reviewed")))
+            (when timer (cancel-timer timer))))))))
 
 (ert-deftest +agent-shell-projects-test-real-acp-feedback-and-side-outcome ()
   (+agent-shell-projects-test--isolated
