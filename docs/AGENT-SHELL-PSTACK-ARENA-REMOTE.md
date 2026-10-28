@@ -600,10 +600,12 @@ A delegate whose profile's effective host is set, as
 `+agent-shell-arena-git-delegate-options` resolves it, is the job's
 other shape: the same submit, poll, fetch and clean calls, code by hash,
 `remote.json` and host kinds, with no second protocol or runner. The
-laptop locates the lead's repository at `HEAD`, reads the laptop user's
-identity, and pins `HEAD` as the base; no snapshot of the lead's tree is
-made. The job's deadline is the delegate's timeout, counted from when its
-runner holds the repository lock, as an arena's budget is.
+laptop locates the lead's repository, reads the laptop user's identity,
+and snapshots the lead's tree as an arena does, so the base is `HEAD`
+when the tree is clean and otherwise a snapshot commit on top of it,
+which travels in the base bundle like an arena's. The job's deadline is
+the delegate's timeout, counted from when its runner holds the repository
+lock, as an arena's budget is.
 
 The runner rebuilds a panel of the job's shape with its policy's routing
 keys cleared, so it can never submit itself, and refuses the job unless

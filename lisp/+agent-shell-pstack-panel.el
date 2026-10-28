@@ -906,6 +906,30 @@ uncommitted %s.\n"
                      "Emacs never reached its commit.")
                  where)))))
 
+(defun +agent-shell-pstack-panel--snapshot-text (manifest)
+  "Return the line naming MANIFEST's snapshot base, or nil without one."
+  (when-let* ((head (+agent-shell-arena-git-delegate-head
+                     (+agent-shell-arena-git-manifest-delegate manifest))))
+    (format "Started from: your uncommitted work, which Emacs snapshotted as \
+commit %s on top of %s, your HEAD then.  Your own checkout, index and stash \
+are unchanged.\n"
+            (+agent-shell-arena-git-manifest-base manifest) head)))
+
+(defun +agent-shell-pstack-panel--review-text (manifest)
+  "Return how to review and merge MANIFEST's delegate branch."
+  (let ((base (+agent-shell-arena-git-manifest-base manifest))
+        (branch (+agent-shell-arena-git-delegate-branch manifest)))
+    (if-let* ((head (+agent-shell-arena-git-delegate-head
+                     (+agent-shell-arena-git-manifest-delegate manifest))))
+        (format "\nTo review the delegate's own commits: git log %s..%s\n\
+To review everything, the snapshot included: git log %s..%s\n\
+To merge: merging the branch also brings the snapshot commit %s, so commit \
+your own work first, or rebase the delegate's commits onto yours with \
+git rebase --onto HEAD %s %s.\n"
+                base branch head branch base base branch)
+      (format "\nTo review: git log %s..%s\nTo merge: git merge --ff-only \
+%s, or push it and open a pull request.\n" base branch branch))))
+
 (defun +agent-shell-pstack-panel--remote-delegate-text (panel)
   "Return the outcome part of the follow-up of PANEL's delegate on a host."
   (let* ((member (car (+agent-shell-pstack-panel-members panel)))
@@ -951,6 +975,7 @@ from%s\n"
        (format "Branch: not fetched.  %s\n" (plist-get result :collision)))
       (t (format "Branch: not fetched: %s\n"
                  (or (plist-get result :error) "the results had none"))))
+     (+agent-shell-pstack-panel--snapshot-text manifest)
      (when outcome
        (pcase (+agent-shell-arena-remote-outcome-finalization outcome)
          ('committed "Sandboxed: Emacs made its one commit on the host as \
@@ -982,8 +1007,7 @@ the host, apart from the branch; cleaning the workspace up loses them.\n"
                "Partial text, not a final response:")
              (+agent-shell-pstack-panel--rationale member))
      (when (and published commits)
-       (format "\nTo review: git log %s..%s\nTo merge: git merge --ff-only %s, \
-or push it and open a pull request.\n" base branch branch))
+       (+agent-shell-pstack-panel--review-text manifest))
      "The host workspace stays until you clean it up: press x on its line in \
 the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
 branch stays either way.\n"
@@ -1036,6 +1060,7 @@ from%s\n"
                       (format "  %s %s\n" (substring (car commit) 0 12)
                               (cdr commit)))
                     commits "")
+         (+agent-shell-pstack-panel--snapshot-text manifest)
          (when (+agent-shell-arena-git-delegate-sandbox delegate)
            (+agent-shell-pstack-panel--finalization-text
             delegate (if worktree "in its workspace"
@@ -1053,8 +1078,7 @@ from%s\n"
          (format "Report:\n%s\n"
                  (+agent-shell-pstack-panel--rationale member))
          (unless dropped
-           (format "\nTo review: git log %s..%s\nTo merge: git merge \
---ff-only %s, or push it and open a pull request.\n" base branch branch))
+           (+agent-shell-pstack-panel--review-text manifest))
          (when worktree
            "The workspace stays until you clean it up: press x on its line in \
 the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
@@ -2328,9 +2352,10 @@ Its policy comes from the repository's profile, once; see
 `+agent-shell-arena-git-delegate-options'.  On a host it runs as
 `+agent-shell-arena-remote-launch' says.  Here it gets a worktree of its
 own or, with :delegate (:isolation branch), the lead's checkout, which
-must be clean.  A sandboxed or remote delegate needs the laptop user's
-git identity first.  The panel's timeout starts now and covers this
-preparation too."
+must be clean.  A worktree, here or on a host, starts from the snapshot
+of the lead's working tree an arena takes, or HEAD when that is clean.
+A sandboxed or remote delegate needs the laptop user's git identity
+first.  The panel's timeout starts now and covers this preparation too."
   (setf (+agent-shell-pstack-panel-phase panel) 'preparing
         (+agent-shell-pstack-panel-deadline panel)
         (+ (float-time) (+agent-shell-pstack-panel-timeout panel)))
@@ -2345,14 +2370,22 @@ preparation too."
                (options (+agent-shell-arena-git-delegate-options profile))
                (route
                 (lambda ()
-                  (cond
-                   ((plist-get options :host)
-                    (require '+agent-shell-arena-remote)
-                    (+agent-shell-arena-remote-launch panel base profile))
-                   ((eq (plist-get options :isolation) 'branch)
-                    (+agent-shell-pstack-panel--take-checkout panel base))
-                   (t (+agent-shell-pstack-panel--provision-delegate
-                       panel base))))))
+                  (if (eq (plist-get options :isolation) 'branch)
+                      (+agent-shell-pstack-panel--take-checkout panel base)
+                    (+agent-shell-arena-git-capture-base
+                     (+agent-shell-pstack-panel-cwd panel)
+                     (lambda (snapshot error)
+                       (+agent-shell-pstack-panel--preparing
+                        panel error
+                        (lambda ()
+                          (if (plist-get options :host)
+                              (progn
+                                (require '+agent-shell-arena-remote)
+                                (+agent-shell-arena-remote-launch
+                                 panel snapshot profile))
+                            (+agent-shell-pstack-panel--provision-delegate
+                             panel snapshot)))))
+                     t)))))
           (setf (+agent-shell-pstack-panel-delegate-options panel) options)
           (when (and (plist-get options :sandbox)
                      (not (plist-get options :host))

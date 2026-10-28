@@ -274,7 +274,13 @@ worktree of your own." branch)
 To merge: git merge --ff-only %s, or push it" base branch branch)
                                  text))
           (should (string-search "Review the branch before you merge it"
-                                 text)))
+                                 text))
+          (should-not (string-search "Started from:" text)))
+        (should (equal base (+agent-shell-arena-git-manifest-base
+                             (+agent-shell-pstack-panel-arena panel))))
+        (should-not (+agent-shell-arena-git-delegate-head
+                     (+agent-shell-arena-git-manifest-delegate
+                      (+agent-shell-pstack-panel-arena panel))))
         (should (equal (list shell) stopped))
         (should (equal "main" (git "branch" "--show-current")))
         (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
@@ -284,6 +290,80 @@ To merge: git merge --ff-only %s, or push it" base branch branch)
         (wait-for (lambda () (not (file-exists-p directory))))
         (should (equal "Add two.txt" (git "log" "-1" "--format=%s" branch)))
         (should (= 1 (length (split-string (git "worktree" "list") "\n"))))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-worktree-snapshot ()
+  "Start a worktree delegate from a snapshot of the lead's uncommitted work.
+The lead's checkout, index and stash stay as they were."
+  (+agent-shell-pstack-delegate-test--with
+    (with-temp-file (expand-file-name ".gitignore" repo) (insert "ignored\n"))
+    (git "add" ".gitignore")
+    (git "commit" "-q" "-m" "Ignore")
+    (with-temp-file (expand-file-name "staged.txt" repo) (insert "staged\n"))
+    (git "add" "staged.txt")
+    (with-temp-file (expand-file-name "README" repo) (insert "Unstaged\n"))
+    (with-temp-file (expand-file-name "untracked.txt" repo) (insert "new\n"))
+    (with-temp-file (expand-file-name "ignored" repo) (insert "secret\n"))
+    (let ((head (git "rev-parse" "HEAD"))
+          (status (git "status" "--porcelain" "--untracked-files=all"
+                       "--ignored"))
+          (index (git "ls-files" "-s"))
+          (stash (git "stash" "list")))
+      (+agent-shell-pstack-delegate-test--started
+        (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+               (snapshot (+agent-shell-arena-git-manifest-base manifest))
+               (read (lambda (file)
+                       (with-temp-buffer
+                         (insert-file-contents
+                          (expand-file-name file directory))
+                         (buffer-string)))))
+          (should-not (equal head snapshot))
+          (should (equal head (git "rev-parse" (concat snapshot "^"))))
+          (should (equal snapshot (git "rev-parse" branch)))
+          (should (equal "pstack arena <pstack-arena@localhost>"
+                         (git "log" "-1" "--format=%an <%ae>" snapshot)))
+          (should (equal head (+agent-shell-arena-git-delegate-head
+                               (+agent-shell-arena-git-manifest-delegate
+                                manifest))))
+          (should (equal "staged\n" (funcall read "staged.txt")))
+          (should (equal "Unstaged\n" (funcall read "README")))
+          (should (equal "new\n" (funcall read "untracked.txt")))
+          (should-not (file-exists-p (expand-file-name "ignored" directory)))
+          (member-event "builder" :kind 'init-finished)
+          (+agent-shell-pstack-delegate-test--commit directory "one.txt")
+          (should (equal snapshot (git "rev-parse" (concat branch "^1"))))
+          (member-event "builder" :kind 'turn-complete :text "Built it.")
+          (let ((text (followup)))
+            (should (string-search
+                     (format "Branch: %s, 1 commit since %s, the commit it \
+started from:\n" branch snapshot)
+                     text))
+            (should (string-search
+                     (format "Started from: your uncommitted work, which Emacs \
+snapshotted as commit %s on top of %s, your HEAD then.  Your own checkout, \
+index and stash are unchanged.\n" snapshot head)
+                     text))
+            (should (string-search
+                     (format "To review the delegate's own commits: git log \
+%s..%s\nTo review everything, the snapshot included: git log %s..%s\n"
+                             snapshot branch head branch)
+                     text))
+            (should (string-search
+                     (format "merging the branch also brings the snapshot \
+commit %s, so commit your own work first, or rebase the delegate's commits \
+onto yours with git rebase --onto HEAD %s %s.\n" snapshot snapshot branch)
+                     text))
+            (should-not (string-search "--ff-only" text)))
+          (should (equal head (git "rev-parse" "HEAD")))
+          (should (equal "main" (git "branch" "--show-current")))
+          (should (equal status (git "status" "--porcelain"
+                                     "--untracked-files=all" "--ignored")))
+          (should (equal index (git "ls-files" "-s")))
+          (should (equal stash (git "stash" "list")))
+          (should (equal "Unstaged\n"
+                         (with-temp-buffer
+                           (insert-file-contents
+                            (expand-file-name "README" repo))
+                           (buffer-string)))))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-branch-dirty-start ()
   "Refuse a branch-mode delegate in a dirty checkout, creating nothing."

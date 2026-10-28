@@ -186,8 +186,10 @@ makes its one commit.  FINALIZATION is nil until that is tried, then a
 plist whose :state is `prepared' or `committed', with the commit's fixed
 :parent, :tree, :message, :name, :email, :author-date, :committer-date
 and, once made, :oid; or `empty' or `blocked', with a :reason.  DIRTY
-lists the worktree's uncommitted paths when it was last collected."
-  isolation origin commits restore note sandbox finalization dirty)
+lists the worktree's uncommitted paths when it was last collected.
+HEAD is the lead's HEAD when the base is a snapshot of its uncommitted
+work on top of it, and nil when the base is HEAD itself."
+  isolation origin commits restore note sandbox finalization dirty head)
 
 (defconst +agent-shell-arena-git--manifest-version 2
   "Layout this code writes manifests in.  Version 1 lacks a delegate's
@@ -451,11 +453,14 @@ and nil, or nil and a message, for the reasons an arena's base fails."
              (funcall callback base nil))))
       (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
-(defun +agent-shell-arena-git-capture-base (directory callback)
+(defun +agent-shell-arena-git-capture-base (directory callback
+                                                      &optional reuse-head)
   "Snapshot the working tree of the lead at DIRECTORY as a base commit.
 The commit's parent is HEAD and its tree holds tracked and untracked,
-non-ignored files.  Call CALLBACK with a `+agent-shell-arena-git-base' and
-nil, or nil and a message saying why there is no base."
+non-ignored files.  With REUSE-HEAD non-nil, a tree equal to HEAD's
+makes HEAD itself the base.  Call CALLBACK with a
+`+agent-shell-arena-git-base' and nil, or nil and a message saying why
+there is no base."
   (let ((fail (lambda (message) (funcall callback nil message))))
     (condition-case err
         (let* ((base (+agent-shell-arena-git--locate directory))
@@ -480,11 +485,17 @@ nil, or nil and a message saying why there is no base."
               (list +agent-shell-arena-git--agent-shell-exclude) nil
               fail
               (lambda (tree)
-                (+agent-shell-arena-git--commit
-                 git-dir toplevel tree head "pstack arena base" fail
-                 (lambda (commit)
-                   (setf (+agent-shell-arena-git-base-commit base) commit)
-                   (funcall callback base nil))))))))
+                (if (and reuse-head
+                         (equal tree (+agent-shell-arena-git--read-in
+                                      git-dir toplevel "rev-parse"
+                                      (concat head "^{tree}"))))
+                    (progn (setf (+agent-shell-arena-git-base-commit base) head)
+                           (funcall callback base nil))
+                  (+agent-shell-arena-git--commit
+                   git-dir toplevel tree head "pstack arena base" fail
+                   (lambda (commit)
+                     (setf (+agent-shell-arena-git-base-commit base) commit)
+                     (funcall callback base nil)))))))))
       (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
 ;;;; Manifest
@@ -591,6 +602,7 @@ nil, or nil and a message saying why there is no base."
       (sandbox . ,(if (+agent-shell-arena-git-delegate-sandbox delegate) t
                     :false))
       (dirty . ,(vconcat (+agent-shell-arena-git-delegate-dirty delegate)))
+      (head . ,(or (+agent-shell-arena-git-delegate-head delegate) :null))
       (finalization
        . ,(if-let* ((finalization (+agent-shell-arena-git-delegate-finalization
                                    delegate)))
@@ -613,6 +625,7 @@ nil, or nil and a message saying why there is no base."
      :note (alist-get 'note json)
      :sandbox (and (alist-get 'sandbox json) t)
      :dirty (alist-get 'dirty json)
+     :head (alist-get 'head json)
      :finalization
      (when-let* ((finalization (alist-get 'finalization json)))
        (cl-loop for (key . value) in finalization
@@ -649,11 +662,16 @@ Unreadable manifests are reported and skipped."
 
 (defun +agent-shell-arena-git-create (base panel-id &optional delegate)
   "Create a directory for a new arena of PANEL-ID over BASE.
-Write and return its manifest, holding DELEGATE for a pstack delegate.
+Write and return its manifest, holding DELEGATE for a pstack delegate,
+whose HEAD records BASE's HEAD when BASE is a snapshot on top of it.
 The arena id is PANEL-ID plus a random suffix, so a repeated request
 never meets an earlier arena's leftovers."
   (unless (string-match-p +agent-shell-arena-git--name-regexp panel-id)
     (error "Invalid arena panel id: %S" panel-id))
+  (when (and delegate (not (equal (+agent-shell-arena-git-base-commit base)
+                                  (+agent-shell-arena-git-base-head base))))
+    (setf (+agent-shell-arena-git-delegate-head delegate)
+          (+agent-shell-arena-git-base-head base)))
   (let* ((root (file-name-as-directory
                 (expand-file-name +agent-shell-pstack-arena-directory)))
          (id (format "%s-%08x" panel-id (random #x100000000)))

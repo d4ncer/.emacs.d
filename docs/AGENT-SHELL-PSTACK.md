@@ -442,10 +442,15 @@ A permission request rejects and ends it, since its mode should never ask.
 #### Isolation
 
 By default the delegate gets a git worktree of its own under
-`+agent-shell-pstack-arena-directory`, on its new branch at the lead's
-`HEAD`. The repository's profile provisions it as it would an arena
-candidate: `:shared` links, `:private` and `:copy` clones, and the lead's
-own copies of the `:files` paths.
+`+agent-shell-pstack-arena-directory`, on its new branch at a snapshot of
+the lead's working tree, taken as an arena's base is: staged, unstaged
+and untracked files that are not ignored, after the lead's interrupted
+turn has ended. So the delegate sees what the lead sees. A clean tree's
+snapshot is `HEAD` itself; otherwise it is a commit on top of `HEAD`,
+made with the arena's identity, and the lead's checkout, index and
+stash stay as they were. The repository's profile provisions the
+worktree as it would an arena candidate: `:shared` links, `:private`
+and `:copy` clones, and the lead's own copies of the `:files` paths.
 
 A repository too large for a second worktree can have the delegate work in
 the lead's own checkout instead. Its profile in
@@ -519,8 +524,9 @@ moved meanwhile is left alone.
 #### On a remote host
 
 A delegate whose profile names a `:host` runs there in a worktree of the
-host's checkout, on `pstack/delegate/<panel-id>` at the laptop's `HEAD`.
-It does not get the lead's uncommitted files. The job travels as an
+host's checkout, on `pstack/delegate/<panel-id>` at the same snapshot of
+the lead's working tree a local worktree gets, which reaches the host in
+the job's base bundle. The job travels as an
 arena's does, through the same submit, poll, fetch and clean calls; see
 `docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md`. The host's readiness file must
 list the capability `"delegate":1`.
@@ -570,6 +576,14 @@ Report:
 To review: git log <start>..pstack/delegate/3f9a0cd2e701
 To merge: git merge --ff-only pstack/delegate/3f9a0cd2e701, or push it and open a pull request.
 ```
+
+A delegate that started from a snapshot of uncommitted work says so in a
+`Started from:` line naming the snapshot commit and the `HEAD` under it.
+Its review lines then separate the delegate's own commits,
+`git log <snapshot>..<branch>`, from everything including the snapshot,
+`git log <head>..<branch>`. Merging the branch also brings the snapshot
+commit, so the follow-up says to commit your own work first or rebase
+the delegate's commits onto yours with `git rebase --onto`.
 
 A branch-mode follow-up says instead whether Emacs switched the checkout
 back. A sandboxed delegate's says whether Emacs made its commit, and if

@@ -328,7 +328,14 @@ follow-up names where it ran, once."
            (followup (+agent-shell-pstack-panel-followup panel))
            (host-arena (+agent-shell-arena-remote-arena remote)))
       (should (eq 'delegate (+agent-shell-arena-remote-shape remote)))
-      (should (equal base (funcall lead-git "rev-parse" "HEAD")))
+      ;; The lead's uncommitted README edit reached the host in the bundle,
+      ;; as a snapshot commit on top of its unpushed HEAD.
+      (should (equal (funcall lead-git "rev-parse" "HEAD")
+                     (funcall lead-git "rev-parse" (concat base "^"))))
+      (should (equal "Scratch\nAn uncommitted edit"
+                     (funcall host-git "show" (concat branch ":README"))))
+      (should (equal "Lead" (funcall host-git "show" (concat branch
+                                                            ":lead.txt"))))
       (should (equal '(("Add builder.txt" "Laptop Person <laptop@example.com>"
                         "Laptop Person <laptop@example.com>"))
                      (+remote-delegate-acp-test--branch-commits
@@ -352,8 +359,17 @@ follow-up names where it ran, once."
                                       (format "arenas/%s/builder/" host-arena)
                                       host-root))
                              followup))
-      (should (string-search (format "To merge: git merge --ff-only %s" branch)
+      (should (string-search
+               (format "Started from: your uncommitted work, which Emacs \
+snapshotted as commit %s on top of %s"
+                       base (funcall lead-git "rev-parse" "HEAD"))
+               followup))
+      (should (string-search (format "git log %s..%s" base branch) followup))
+      (should (string-search (format "git log %s..%s"
+                                     (funcall lead-git "rev-parse" "HEAD")
+                                     branch)
                              followup))
+      (should-not (string-search "--ff-only" followup))
       ;; The transcript came over the polls and the final fetch.
       (let ((records (+agent-shell-arena-remote--cached-records remote)))
         (should (seq-find (lambda (record)

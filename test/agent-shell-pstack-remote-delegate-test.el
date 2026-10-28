@@ -189,6 +189,115 @@ worktree; use :delegate (:host local)\nto use :isolation branch on the laptop\\.
       (should (equal "" (+remote-delegate-test--git
                          repo "branch" "--list" "pstack/*"))))))
 
+;;;; Snapshot base
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-snapshot-base ()
+  "A remote delegate's base snapshots the lead's uncommitted work, and the
+base bundle carries it to a repository holding only the lead's HEAD."
+  (+remote-delegate-test--with-scratch
+    (let* ((repo (+remote-delegate-test--repo scratch))
+           (head (+remote-delegate-test--git repo "rev-parse" "HEAD"))
+           (+agent-shell-pstack-arena-profiles
+            `((,repo :host (coder . "example-workspace")
+                     :host-directory "~/src/big-repo")))
+           (panel (+agent-shell-pstack-panel--make
+                   :id "abc123def456" :shape 'delegate :brief "Do it"
+                   :timeout 60 :cwd repo :phase 'preparing
+                   :members (list (+agent-shell-pstack-panel--make-member
+                                   :role "builder" :agent 'codex
+                                   :kind 'delegate :state 'pending))))
+           (submitted nil))
+      (+remote-delegate-test--write (expand-file-name "keep.txt" repo)
+                                    "staged\n")
+      (+remote-delegate-test--git repo "add" "keep.txt")
+      (+remote-delegate-test--write (expand-file-name "gone.txt" repo)
+                                    "unstaged\n")
+      (+remote-delegate-test--write (expand-file-name "new.txt" repo) "new\n")
+      (puthash "abc123def456" panel +agent-shell-pstack-panel--panels)
+      (cl-letf (((symbol-function '+agent-shell-arena-remote--submit)
+                 (lambda (remote job) (setq submitted (cons remote job)))))
+        (+agent-shell-pstack-panel--prepare-delegate panel)
+        (let ((deadline (+ (float-time) 30)))
+          (while (and (not submitted)
+                      (not (+agent-shell-pstack-panel-rejection panel))
+                      (< (float-time) deadline))
+            (accept-process-output nil 0.02))))
+      (should-not (+agent-shell-pstack-panel-rejection panel))
+      (should submitted)
+      (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+             (snapshot (+agent-shell-arena-git-manifest-base manifest))
+             (copy (expand-file-name "copy/" scratch))
+             (bundle (expand-file-name "base.bundle" scratch)))
+        (should-not (equal head snapshot))
+        (should (equal snapshot (+agent-shell-arena-remote-job-base
+                                 (cdr submitted))))
+        (should (equal head (+remote-delegate-test--git
+                             repo "rev-parse" (concat snapshot "^"))))
+        (should (equal head (+agent-shell-arena-git-delegate-head
+                             (+agent-shell-arena-git-manifest-delegate
+                              (+agent-shell-arena-git-read-manifest
+                               (+agent-shell-arena-git-manifest-directory
+                                manifest))))))
+        (should (string-search
+                 (format "commit %s on top of %s" snapshot head)
+                 (+agent-shell-pstack-panel--snapshot-text manifest)))
+        (should (equal '("keep.txt" "gone.txt" "new.txt")
+                       (list (+remote-delegate-test--git
+                              repo "diff" "--cached" "--name-only")
+                             (+remote-delegate-test--git
+                              repo "diff" "--name-only")
+                             (+remote-delegate-test--git
+                              repo "ls-files" "--others"
+                              "--exclude-standard"))))
+        (should (equal (list bundle nil)
+                       (+remote-delegate-test--wait
+                        (lambda (done)
+                          (+agent-shell-arena-remote-bundle
+                           manifest head bundle done)))))
+        (+remote-delegate-test--git scratch "clone" "-q" "--no-checkout"
+                                    repo copy)
+        (+remote-delegate-test--git
+         copy "fetch" "-q" bundle
+         (concat (+agent-shell-arena-remote--base-ref manifest) ":refs/base"))
+        (should (equal snapshot (+remote-delegate-test--git
+                                 copy "rev-parse" "refs/base")))
+        (should (equal '("staged" "unstaged" "new")
+                       (mapcar (lambda (file)
+                                 (+remote-delegate-test--git
+                                  copy "show" (concat "refs/base:" file)))
+                               '("keep.txt" "gone.txt" "new.txt"))))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-test-clean-base-is-head ()
+  "A remote delegate over a clean tree starts from HEAD itself."
+  (+remote-delegate-test--with-scratch
+    (let* ((repo (+remote-delegate-test--repo scratch))
+           (+agent-shell-pstack-arena-profiles
+            `((,repo :host (coder . "example-workspace")
+                     :host-directory "~/src/big-repo")))
+           (panel (+agent-shell-pstack-panel--make
+                   :id "abc123def456" :shape 'delegate :brief "Do it"
+                   :timeout 60 :cwd repo :phase 'preparing
+                   :members (list (+agent-shell-pstack-panel--make-member
+                                   :role "builder" :agent 'codex
+                                   :kind 'delegate :state 'pending))))
+           (submitted nil))
+      (puthash "abc123def456" panel +agent-shell-pstack-panel--panels)
+      (cl-letf (((symbol-function '+agent-shell-arena-remote--submit)
+                 (lambda (_remote job) (setq submitted job))))
+        (+agent-shell-pstack-panel--prepare-delegate panel)
+        (let ((deadline (+ (float-time) 30)))
+          (while (and (not submitted) (< (float-time) deadline))
+            (accept-process-output nil 0.02))))
+      (let ((manifest (+agent-shell-pstack-panel-arena panel)))
+        (should (equal (+remote-delegate-test--git repo "rev-parse" "HEAD")
+                       (+agent-shell-arena-remote-job-base submitted)))
+        (should-not (+agent-shell-arena-git-delegate-head
+                     (+agent-shell-arena-git-manifest-delegate manifest)))
+        (should-not (+agent-shell-pstack-panel--snapshot-text manifest))
+        (should (string-search "To merge: git merge --ff-only"
+                               (+agent-shell-pstack-panel--review-text
+                                manifest)))))))
+
 ;;;; Wire
 
 (defconst +remote-delegate-test--identity
