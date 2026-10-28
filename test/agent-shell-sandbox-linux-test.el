@@ -192,6 +192,27 @@ deadline, and refuse it once it does not."
         (should-error (+agent-shell-sandbox-prepare-claude sandbox)
                       :type 'user-error)))))
 
+(ert-deftest +agent-shell-sandbox-linux-test-claude-login-string-expiry ()
+  "Read a Claude Code login whose expiresAt is a string of milliseconds,
+as Claude Code has written it on Linux."
+  (let* ((file (make-temp-file "pa-claude-" nil ".json"))
+         (+agent-shell-sandbox-backend 'bwrap)
+         (+agent-shell-sandbox-claude-credentials file)
+         (expires (+ (truncate (float-time)) 3600)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert (json-serialize
+                     `((claudeAiOauth
+                        (accessToken . "fixture-claude-access")
+                        (refreshToken . "fixture-claude-refresh")
+                        (expiresAt . ,(format "%d000" expires)))))))
+          (let ((login (+agent-shell-sandbox--claude-login)))
+            (should (equal "fixture-claude-access"
+                           (+agent-shell-sandbox--login-access login)))
+            (should (= expires (+agent-shell-sandbox--login-expires login)))))
+      (delete-file file))))
+
 (ert-deftest +agent-shell-sandbox-linux-test-codex-login ()
   "Give Codex a private login without a refresh token, and copy nothing
 back.  Refuse a token that expires before the deadline."

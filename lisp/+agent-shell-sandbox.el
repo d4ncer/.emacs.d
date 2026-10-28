@@ -1222,7 +1222,12 @@ login Keychain; %s" relogin)))
             "Claude Code")
            'claudeAiOauth))
          (access (+agent-shell-sandbox--json-get oauth 'accessToken))
-         (expires (+agent-shell-sandbox--json-get oauth 'expiresAt)))
+         (expires (+agent-shell-sandbox--json-get oauth 'expiresAt))
+         ;; Claude Code has written it as a string of digits as well.
+         (expires (if (and (stringp expires)
+                           (string-match-p "\\`[0-9]+\\'" expires))
+                      (string-to-number expires)
+                    expires)))
     (unless (and (stringp access) (not (string-empty-p access))
                  (+agent-shell-sandbox--finite-p expires))
       (user-error "Claude Code's host login has no access token with an \
@@ -1422,6 +1427,9 @@ again.  Waiting is bounded at twice `+agent-shell-sandbox-refresh-timeout'."
 failed: " failure)))
                    ((+agent-shell-sandbox--enough-p check read)
                     (release-with read t))
+                   ((not (car read))
+                    (release-with read nil "it still could not be read \
+after a refresh"))
                    (t (release-with read nil "its CLI kept the current \
 token, since it renews a login only close to expiry; shorter timeouts \
 would fit")))))
