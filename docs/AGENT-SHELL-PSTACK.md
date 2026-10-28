@@ -153,6 +153,15 @@ a schema number, `+agent-shell-pstack-panel--schema`. Loading the library
 again drops in-memory panels from another schema, with a message, rather
 than letting a changed struct break them.
 
+### Reloading live
+
+After editing pstack code, run `M-x +agent-shell-pstack-reload`. It reloads
+the already loaded libraries in dependency order and adopts changed option
+defaults when the current value still equals the old default. Other option
+values and enabled global minor modes are preserved. The summary names the
+libraries reloaded and options reset, and counts panels dropped by the schema
+guard. If panels were dropped, kill their member shells by hand.
+
 ### Run an arena
 
 An arena runs arena's Fan out and Cross-judge phases; the lead keeps Frame,

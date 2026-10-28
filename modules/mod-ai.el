@@ -265,6 +265,10 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-perf-mode 1))
 
+(use-package +agent-shell-pstack-reload
+  :ensure nil
+  :commands (+agent-shell-pstack-reload))
+
 (use-package +agent-shell-pstack
   :ensure nil
   :after agent-shell
