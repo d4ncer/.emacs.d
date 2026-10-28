@@ -456,6 +456,30 @@ The writer would write a file two seconds after the stop."
           (delete-process process)
           (kill-buffer (process-buffer process)))))))
 
+(ert-deftest +agent-shell-sandbox-linux-test-egress-launch ()
+  "Give only the launcher an egress session's folder, and only with one."
+  (require '+agent-shell-egress)
+  (+agent-shell-sandbox-linux-test--with (root) nil
+    (cl-flet ((launch ()
+                (let ((client (+agent-shell-sandbox-linux-test--client
+                               sandbox "true")))
+                  (cons (nth 1 (alist-get :command-params client))
+                        (alist-get :environment-variables client)))))
+      (pcase-let ((`(,names . ,environment) (launch)))
+        (should-not (seq-find (lambda (entry)
+                                (string-prefix-p "PA_SANDBOX_EGRESS=" entry))
+                              environment))
+        (+agent-shell-egress-open
+         sandbox (expand-file-name "opus.egress.json" root)
+         '(:panel "p1" :arena nil :role "opus" :kind candidate))
+        (pcase-let ((`(,measured . ,measured-environment) (launch)))
+          (should (equal names measured))
+          (should-not (string-search "PA_SANDBOX_EGRESS" measured))
+          (should (equal (list (concat "PA_SANDBOX_EGRESS=" root
+                                       "/opus.egress.json.d"))
+                         (seq-difference measured-environment
+                                         environment))))))))
+
 (ert-deftest +agent-shell-sandbox-linux-test-egress ()
   "Record the HTTPS destination a member reaches, named by its DNS
 question and SNI, but neither the request path nor the agent's login.

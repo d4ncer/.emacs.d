@@ -13,6 +13,7 @@
 (require 'json)
 (require 'agent-shell)
 (require '+agent-shell-pstack-panel)
+(require '+agent-shell-egress)
 
 (defvar +agent-shell-pstack-arena-acp-test--fixture
   (expand-file-name "fixtures/agent-shell-projects-agent.py"
@@ -58,203 +59,277 @@
 {\"role\":\"codex\",\"agent\":\"fixture-codex\",\"focus\":\"Keep it short\"}]}"
   "The arena the fixture lead requests.")
 
+(defmacro +agent-shell-pstack-arena-acp-test--with (environment &rest body)
+  "Run BODY once a fixture lead in a scratch repository requests an arena.
+Each member's environment gains the entries ENVIRONMENT evaluates to.
+BODY sees `scratch', `repo', `reports', `git' and `lead', and `panel'
+once its follow-up was delivered.  `note-capture' records each capture
+start in `capture-starts'."
+  (declare (indent 1))
+  `(let* ((scratch (file-name-as-directory
+                    (file-truename (make-temp-file "pstack-arena-acp-" t))))
+          (repo (expand-file-name "repo/" scratch))
+          (reports (expand-file-name "reports/" scratch))
+          (gitconfig (expand-file-name "gitconfig" scratch))
+          (process-environment (append (list (concat "GIT_CONFIG_GLOBAL="
+                                                     gitconfig)
+                                             "GIT_CONFIG_NOSYSTEM=1")
+                                       process-environment))
+          (+agent-shell-pstack-arena-directory
+           (expand-file-name "arenas/" scratch))
+          (+agent-shell-pstack-arena-profiles nil)
+          (+agent-shell-pstack-panel-directory reports)
+          (agent-shell-show-welcome-message nil)
+          (shell-maker-prompt-before-killing-buffer nil)
+          (agent-shell-show-config-icons nil)
+          (agent-shell-prefer-viewport-interaction nil)
+          (agent-shell-mcp-servers nil)
+          (agent-shell-transcript-file-path-function nil)
+          (agent-shell-agent-configs
+           (list (+agent-shell-pstack-arena-acp-test--config 'fixture-codex)
+                 (+agent-shell-pstack-arena-acp-test--config 'fixture-claude)))
+          (+agent-shell-drive-read-only-modes
+           '((fixture-codex . "read-only") (fixture-claude . "plan")))
+          (environment ,environment)
+          (prepare (lambda (_)
+                     (cons (concat "PA_LEAD=" (expand-file-name "README" repo))
+                           environment)))
+          (login (lambda (agent)
+                   (lambda ()
+                     (+agent-shell-sandbox--make-login
+                      :agent agent :access "fixture-access"
+                      :expires (+ (float-time) 86400)))))
+          (+agent-shell-sandbox-agents
+           `((fixture-codex :mode "agent-full-access" :prepare ,prepare
+                            :login ,(funcall login 'fixture-codex))
+             (fixture-claude :mode "agent-full-access" :prepare ,prepare
+                             :login ,(funcall login 'fixture-claude))))
+          (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
+          (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+          (+agent-shell-drive--watchers (make-hash-table :test #'equal))
+          (+agent-shell-drive--shells (make-hash-table :test #'eq))
+          (+agent-shell-pstack-prime-texts nil)
+          (+agent-shell-pstack-reminder-texts nil)
+          (+agent-shell-pstack-mode-hook nil)
+          (+agent-shell-pstack-panel-mode nil)
+          (git (lambda (&rest args)
+                 (apply #'+agent-shell-pstack-arena-acp-test--git repo args)))
+          (lead nil) (panel nil)
+          (capture-starts nil)
+          (note-capture
+           (lambda (manifest name _callback)
+             (push (list name
+                         (seq-every-p
+                          (lambda (candidate)
+                            (and (+agent-shell-pstack-panel--settled-p
+                                  candidate)
+                                 (not (buffer-live-p
+                                       (+agent-shell-pstack-panel-member-shell
+                                        candidate)))))
+                          (butlast (+agent-shell-pstack-panel-members
+                                    (car (+agent-shell-pstack-panel-list)))))
+                         (funcall git "for-each-ref"
+                                  (format "refs/pstack-arena/%s/"
+                                          (+agent-shell-arena-git-manifest-id
+                                           manifest))))
+                   capture-starts))))
+     (with-temp-file gitconfig
+       (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
+               "[init]\n\tdefaultBranch = main\n"))
+     (make-directory repo)
+     (funcall git "init" "-q")
+     (with-temp-file (expand-file-name "README" repo) (insert "Scratch\n"))
+     (funcall git "add" "-A")
+     (funcall git "commit" "-q" "-m" "initial")
+     (unwind-protect
+         (save-window-excursion
+           (+agent-shell-pstack-panel-mode 1)
+           (advice-add '+agent-shell-arena-git-capture :before note-capture)
+           (setq lead (+agent-shell-drive-start :config 'fixture-codex
+                                                :directory repo))
+           (+agent-shell-pstack-arena-acp-test--wait-for
+            (lambda () (and (agent-shell-session-id :shell-buffer lead)
+                            (eq (agent-shell-status :shell-buffer lead)
+                                'ready))))
+           (with-current-buffer lead (+agent-shell-pstack-mode 1))
+           (should (+agent-shell-drive-send
+                    lead (concat "PSTACK-LEAD "
+                                 +agent-shell-pstack-arena-acp-test--request)))
+           (+agent-shell-pstack-arena-acp-test--wait-for
+            (lambda ()
+              (setq panel (car (+agent-shell-pstack-panel-list)))
+              (and panel (+agent-shell-pstack-panel-delivered panel))))
+           ,@body)
+       (advice-remove '+agent-shell-arena-git-capture note-capture)
+       (+agent-shell-pstack-panel-mode -1)
+       (when panel
+         (dolist (member (+agent-shell-pstack-panel-members panel))
+           (when-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox
+                                 member)))
+             (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
+             (delete-directory (+agent-shell-sandbox-config sandbox) t))
+           (+agent-shell-drive-kill
+            (+agent-shell-pstack-panel-member-shell member))))
+       (+agent-shell-drive-kill lead)
+       (when (get-buffer "*pstack panels*") (kill-buffer "*pstack panels*"))
+       (delete-directory scratch t))))
+
+(defun +agent-shell-pstack-arena-acp-test--available-p ()
+  "Return whether this host can run the arena end to end."
+  (and (eq system-type 'darwin)
+       (file-executable-p "/usr/bin/sandbox-exec")
+       (executable-find "python3")))
+
 (ert-deftest +agent-shell-pstack-arena-acp-test-end-to-end ()
-  "Run two sandboxed candidates and a judge, hand back the results, clean up."
-  (skip-unless (and (eq system-type 'darwin)
-                    (file-executable-p "/usr/bin/sandbox-exec")
-                    (executable-find "python3")))
-  (let* ((scratch (file-name-as-directory
-                   (file-truename (make-temp-file "pstack-arena-acp-" t))))
-         (repo (expand-file-name "repo/" scratch))
-         (gitconfig (expand-file-name "gitconfig" scratch))
-         (process-environment (append (list (concat "GIT_CONFIG_GLOBAL="
-                                                    gitconfig)
-                                            "GIT_CONFIG_NOSYSTEM=1")
-                                      process-environment))
-         (+agent-shell-pstack-arena-directory
-          (expand-file-name "arenas/" scratch))
-         (+agent-shell-pstack-arena-profiles nil)
-         (+agent-shell-pstack-panel-directory
-          (expand-file-name "reports/" scratch))
-         (agent-shell-show-welcome-message nil)
-         (shell-maker-prompt-before-killing-buffer nil)
-         (agent-shell-show-config-icons nil)
-         (agent-shell-prefer-viewport-interaction nil)
-         (agent-shell-mcp-servers nil)
-         (agent-shell-transcript-file-path-function nil)
-         (agent-shell-agent-configs
-          (list (+agent-shell-pstack-arena-acp-test--config 'fixture-codex)
-                (+agent-shell-pstack-arena-acp-test--config 'fixture-claude)))
-         (+agent-shell-drive-read-only-modes
-          '((fixture-codex . "read-only") (fixture-claude . "plan")))
-         (prepare (lambda (_)
-                    (list (concat "PA_LEAD=" (expand-file-name "README"
-                                                               repo)))))
-         (+agent-shell-sandbox-agents
-          `((fixture-codex :mode "agent-full-access" :prepare ,prepare
-             :login ,(lambda ()
-                       (+agent-shell-sandbox--make-login
-                        :agent 'fixture-codex :access "fixture-access"
-                        :expires (+ (float-time) 86400))))
-            (fixture-claude :mode "agent-full-access" :prepare ,prepare
-             :login ,(lambda ()
-                       (+agent-shell-sandbox--make-login
-                        :agent 'fixture-claude :access "fixture-access"
-                        :expires (+ (float-time) 86400))))))
-         (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
-         (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
-         (+agent-shell-drive--watchers (make-hash-table :test #'equal))
-         (+agent-shell-drive--shells (make-hash-table :test #'eq))
-         (+agent-shell-pstack-prime-texts nil)
-         (+agent-shell-pstack-reminder-texts nil)
-         (+agent-shell-pstack-mode-hook nil)
-         (+agent-shell-pstack-panel-mode nil)
-         (git (lambda (&rest args)
-                (apply #'+agent-shell-pstack-arena-acp-test--git repo args)))
-         (lead nil) (panel nil)
-         (capture-starts nil)
-         (note-capture
-          (lambda (manifest name _callback)
-            (push (list name
-                        (seq-every-p
-                         (lambda (candidate)
-                           (and (+agent-shell-pstack-panel--settled-p
-                                 candidate)
-                                (not (buffer-live-p
-                                      (+agent-shell-pstack-panel-member-shell
-                                       candidate)))))
-                         (butlast (+agent-shell-pstack-panel-members
-                                   (car (+agent-shell-pstack-panel-list)))))
-                        (funcall git "for-each-ref"
-                                 (format "refs/pstack-arena/%s/"
-                                         (+agent-shell-arena-git-manifest-id
-                                          manifest))))
-                  capture-starts))))
-    (with-temp-file gitconfig
-      (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
-              "[init]\n\tdefaultBranch = main\n"))
-    (make-directory repo)
-    (funcall git "init" "-q")
-    (with-temp-file (expand-file-name "README" repo) (insert "Scratch\n"))
-    (funcall git "add" "-A")
-    (funcall git "commit" "-q" "-m" "initial")
-    (unwind-protect
-        (save-window-excursion
-          (+agent-shell-pstack-panel-mode 1)
-          (advice-add '+agent-shell-arena-git-capture :before note-capture)
-          (setq lead (+agent-shell-drive-start :config 'fixture-codex
-                                               :directory repo))
-          (+agent-shell-pstack-arena-acp-test--wait-for
-           (lambda () (and (agent-shell-session-id :shell-buffer lead)
-                           (eq (agent-shell-status :shell-buffer lead)
-                               'ready))))
-          (with-current-buffer lead (+agent-shell-pstack-mode 1))
-          (should (+agent-shell-drive-send
-                   lead (concat "PSTACK-LEAD "
-                                +agent-shell-pstack-arena-acp-test--request)))
-          (+agent-shell-pstack-arena-acp-test--wait-for
-           (lambda ()
-             (setq panel (car (+agent-shell-pstack-panel-list)))
-             (and panel (+agent-shell-pstack-panel-delivered panel))))
-          (let* ((manifest (+agent-shell-pstack-panel-arena panel))
-                 (arena (+agent-shell-arena-git-manifest-directory manifest))
-                 (base (+agent-shell-arena-git-manifest-base manifest))
-                 (members (+agent-shell-pstack-panel-members panel))
-                 (candidates (butlast members))
-                 (judge (car (last members)))
-                 (followup (+agent-shell-pstack-panel-followup panel))
-                 (report (+agent-shell-pstack-arena-acp-test--read
-                          (+agent-shell-pstack-panel-member-report judge))))
-            (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
-            (should (equal '(done done done)
-                           (mapcar #'+agent-shell-pstack-panel-member-state
-                                   members)))
-            ;; Each capture began with both candidates stopped and no
-            ;; result ref yet.
-            (should (equal '(("codex" t "") ("opus" t ""))
-                           (sort capture-starts :key #'car)))
-            (dolist (candidate candidates)
-              (let* ((role (+agent-shell-pstack-panel-member-role candidate))
-                     (result (+agent-shell-pstack-panel-member-result
-                              candidate))
-                     (ref (format "refs/pstack-arena/%s/%s"
-                                  (+agent-shell-arena-git-manifest-id manifest)
-                                  role))
-                     (sandbox (+agent-shell-pstack-panel-member-sandbox
-                               candidate)))
-                (should (eq 'captured
-                            (+agent-shell-pstack-panel-member-capture
-                             candidate)))
-                (should (equal ref (plist-get result :ref)))
-                (should (equal (concat role ".txt")
-                               (funcall git "diff" "--name-only" base ref)))
-                (should (equal (concat role "\n")
-                               (+agent-shell-pstack-arena-acp-test--read
-                                (expand-file-name (concat role ".txt")
-                                                  (plist-get result
-                                                             :checkout)))))
-                (should (string-prefix-p
-                         (format "RATIONALE role=%s mode=agent-full-access \
+  "Run two sandboxed candidates and a judge, hand back the results, clean up.
+Egress is not measured, so no record is written."
+  (skip-unless (+agent-shell-pstack-arena-acp-test--available-p))
+  (+agent-shell-pstack-arena-acp-test--with nil
+    (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+           (arena (+agent-shell-arena-git-manifest-directory manifest))
+           (base (+agent-shell-arena-git-manifest-base manifest))
+           (members (+agent-shell-pstack-panel-members panel))
+           (candidates (butlast members))
+           (judge (car (last members)))
+           (followup (+agent-shell-pstack-panel-followup panel))
+           (report (+agent-shell-pstack-arena-acp-test--read
+                    (+agent-shell-pstack-panel-member-report judge))))
+      (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+      (should (equal '(done done done)
+                     (mapcar #'+agent-shell-pstack-panel-member-state
+                             members)))
+      ;; Each capture began with both candidates stopped and no
+      ;; result ref yet.
+      (should (equal '(("codex" t "") ("opus" t ""))
+                     (sort capture-starts :key #'car)))
+      (dolist (candidate candidates)
+        (let* ((role (+agent-shell-pstack-panel-member-role candidate))
+               (result (+agent-shell-pstack-panel-member-result
+                        candidate))
+               (ref (format "refs/pstack-arena/%s/%s"
+                            (+agent-shell-arena-git-manifest-id manifest)
+                            role))
+               (sandbox (+agent-shell-pstack-panel-member-sandbox
+                         candidate)))
+          (should (eq 'captured
+                      (+agent-shell-pstack-panel-member-capture
+                       candidate)))
+          (should (equal ref (plist-get result :ref)))
+          (should (equal (concat role ".txt")
+                         (funcall git "diff" "--name-only" base ref)))
+          (should (equal (concat role "\n")
+                         (+agent-shell-pstack-arena-acp-test--read
+                          (expand-file-name (concat role ".txt")
+                                            (plist-get result
+                                                       :checkout)))))
+          (should (string-prefix-p
+                   (format "RATIONALE role=%s mode=agent-full-access \
 rubric=unseen lead=denied git=ok." role)
-                         (+agent-shell-pstack-panel-member-text candidate)))
-                (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
-                (should (string-match-p
-                         (regexp-quote
-                          (format "git diff --binary %s %s | git apply --3way"
-                                  base (plist-get result :commit)))
-                         followup))))
-            ;; The judge reads the checkouts from its read-only sandbox.
-            (should (string-prefix-p "SCORES mode=agent-full-access \
+                   (+agent-shell-pstack-panel-member-text candidate)))
+          (should-not (file-exists-p (+agent-shell-sandbox-tmp sandbox)))
+          (should (string-match-p
+                   (regexp-quote
+                    (format "git diff --binary %s %s | git apply --3way"
+                            base (plist-get result :commit)))
+                   followup))))
+      ;; The judge reads the checkouts from its read-only sandbox.
+      (should (string-prefix-p "SCORES mode=agent-full-access \
 lead=denied checkout=ok write=denied\n" report))
-            (let ((sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
-              (should (+agent-shell-sandbox-read-only sandbox))
-              (+agent-shell-pstack-arena-acp-test--wait-for
-               (lambda ()
-                 (not (file-exists-p (+agent-shell-sandbox-tmp sandbox))))))
-            (dolist (expected '("## Candidate A\nIt finished its turn."
-                                "## Candidate B\nIt finished its turn."
-                                "1. RUBRIC-ONE correctness"
-                                "3. RUBRIC-THREE tests"
-                                "RATIONALE role=opus"
-                                "RATIONALE role=codex"))
-              (should (string-search expected report)))
-            (should (string-search (expand-file-name "checkouts/opus/" arena)
-                                   report))
-            (should (string-match-p "## judge (fixture-claude): done" followup))
-            (should (string-match-p "Pick, graft and verify" followup))
-            (+agent-shell-pstack-arena-acp-test--wait-for
-             (lambda () (with-current-buffer lead
-                          (save-excursion
-                            (goto-char (point-min))
-                            (search-forward "TRIAGED" nil t)))))
-            (should (string-match-p "pstack-arena"
-                                    (funcall git "worktree" "list")))
-            (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
-              (+agent-shell-pstack-panels)
-              (with-current-buffer "*pstack panels*"
-                (goto-char (point-min))
-                (search-forward "Arena:")
-                (+agent-shell-pstack-panels-clean)))
-            (+agent-shell-pstack-arena-acp-test--wait-for
-             (lambda () (not (file-exists-p arena))))
-            (should (equal "" (funcall git "for-each-ref" "refs/pstack-arena/")))
-            (should (equal 1 (length (split-string
-                                      (funcall git "worktree" "list")
-                                      "\n" t))))
-            (should (equal "" (funcall git "status" "--porcelain")))))
-      (advice-remove '+agent-shell-arena-git-capture note-capture)
-      (+agent-shell-pstack-panel-mode -1)
-      (when panel
-        (dolist (member (+agent-shell-pstack-panel-members panel))
-          (when-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox
-                                member)))
-            (delete-directory (+agent-shell-sandbox-tmp sandbox) t)
-            (delete-directory (+agent-shell-sandbox-config sandbox) t))
-          (+agent-shell-drive-kill
-           (+agent-shell-pstack-panel-member-shell member))))
-      (+agent-shell-drive-kill lead)
-      (when (get-buffer "*pstack panels*") (kill-buffer "*pstack panels*"))
-      (delete-directory scratch t))))
+      (let ((sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
+        (should (+agent-shell-sandbox-read-only sandbox))
+        (+agent-shell-pstack-arena-acp-test--wait-for
+         (lambda ()
+           (not (file-exists-p (+agent-shell-sandbox-tmp sandbox))))))
+      (dolist (expected '("## Candidate A\nIt finished its turn."
+                          "## Candidate B\nIt finished its turn."
+                          "1. RUBRIC-ONE correctness"
+                          "3. RUBRIC-THREE tests"
+                          "RATIONALE role=opus"
+                          "RATIONALE role=codex"))
+        (should (string-search expected report)))
+      (should (string-search (expand-file-name "checkouts/opus/" arena)
+                             report))
+      (should (string-match-p "## judge (fixture-claude): done" followup))
+      (should (string-match-p "Pick, graft and verify" followup))
+      (+agent-shell-pstack-arena-acp-test--wait-for
+       (lambda () (with-current-buffer lead
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "TRIAGED" nil t)))))
+      (should (string-match-p "pstack-arena"
+                              (funcall git "worktree" "list")))
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (+agent-shell-pstack-panels)
+        (with-current-buffer "*pstack panels*"
+          (goto-char (point-min))
+          (search-forward "Arena:")
+          (+agent-shell-pstack-panels-clean)))
+      (+agent-shell-pstack-arena-acp-test--wait-for
+       (lambda () (not (file-exists-p arena))))
+      (should (equal "" (funcall git "for-each-ref" "refs/pstack-arena/")))
+      (should (equal 1 (length (split-string
+                                (funcall git "worktree" "list")
+                                "\n" t))))
+      (should (equal "" (funcall git "status" "--porcelain")))
+      (should-not (directory-files-recursively reports "egress")))))
+
+(ert-deftest +agent-shell-pstack-arena-acp-test-egress ()
+  "Record the loopback connection each member opens, by socket samples,
+beside its report, without the canary it sends, and name the records."
+  (skip-unless (+agent-shell-pstack-arena-acp-test--available-p))
+  (let* ((+agent-shell-pstack-arena-measure-egress t)
+         (+agent-shell-egress-interval 0.25)
+         (canary "CANARY-91c4aa")
+         (received "")
+         (server (make-network-process
+                  :name "pstack-egress-server" :server t :host "127.0.0.1"
+                  :service t :noquery t
+                  :filter (lambda (_ text)
+                            (setq received (concat received text)))))
+         (port (process-contact server :service)))
+    (unwind-protect
+        (+agent-shell-pstack-arena-acp-test--with
+            (list (format "PA_EGRESS_PORT=%d" port)
+                  (concat "PA_EGRESS_CANARY=" canary))
+          (let* ((id (+agent-shell-pstack-panel-id panel))
+                 (followup (+agent-shell-pstack-panel-followup panel)))
+            (should (string-search canary received))
+            (should (string-match-p
+                     (format "^Egress (partial): opus 1 destination, codex 1 \
+destination, judge 1 destination; records: %s\\.$"
+                             (regexp-quote
+                              (expand-file-name (concat id "/*.egress.json")
+                                                reports)))
+                     followup))
+            (should (string-match-p "^Egress limits: sampled-sockets, " followup))
+            (dolist (member (+agent-shell-pstack-panel-members panel))
+              (let* ((role (+agent-shell-pstack-panel-member-role member))
+                     (file (expand-file-name (format "%s/%s.egress.json" id role)
+                                             reports))
+                     (record (+agent-shell-egress-read
+                              file (list :panel id :role role
+                                         :kind (+agent-shell-pstack-panel-member-kind
+                                                member))))
+                     (destination (car (+agent-shell-egress-record-destinations
+                                        record))))
+                (should (equal file (+agent-shell-pstack-panel-member-egress-file
+                                     member)))
+                (should (eq 'partial (+agent-shell-egress-record-state record)))
+                (should (= 1 (length (+agent-shell-egress-record-destinations
+                                      record))))
+                (should (equal (list "127.0.0.1" port 'tcp 'lsof)
+                               (list (+agent-shell-egress-destination-ip
+                                      destination)
+                                     (+agent-shell-egress-destination-port
+                                      destination)
+                                     (+agent-shell-egress-destination-protocol
+                                      destination)
+                                     (+agent-shell-egress-destination-source
+                                      destination))))
+                (should-not (string-search
+                             canary
+                             (+agent-shell-pstack-arena-acp-test--read file)))))))
+      (delete-process server))))
 
 (provide 'agent-shell-pstack-arena-acp-test)
 ;;; agent-shell-pstack-arena-acp-test.el ends here

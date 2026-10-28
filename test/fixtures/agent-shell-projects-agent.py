@@ -92,6 +92,19 @@ def chunk(session_id, text):
 PLAN = "# Plan\nRead the drive library, then report on its watchers."
 
 
+def reach_egress_server():
+    """Hold a connection to PA_EGRESS_PORT on loopback, if set, long enough
+    for socket samples to see it, sending PA_EGRESS_CANARY over it."""
+    port = os.environ.get("PA_EGRESS_PORT")
+    if not port:
+        return
+    import socket
+    with socket.create_connection(("127.0.0.1", int(port)), timeout=5) as s:
+        s.sendall(b"GET /" + os.environ.get("PA_EGRESS_CANARY", "").encode()
+                  + b" HTTP/1.1\r\nHost: example.com\r\n\r\n")
+        time.sleep(float(os.environ.get("PA_EGRESS_HOLD", "2.5")))
+
+
 def handle_pstack_prompt(message, text, state):
     """Answer pstack panel traffic; return the reply, or None if unrelated.
 
@@ -104,6 +117,7 @@ def handle_pstack_prompt(message, text, state):
     if candidate:
         role = candidate[1]
         Path(state["cwd"], role + ".txt").write_text(role + "\n")
+        reach_egress_server()
         if "HANG" in text:
             chunk(session_id, f"PARTIAL role={role}")
             return False
@@ -124,6 +138,7 @@ def handle_pstack_prompt(message, text, state):
                 f" lead={lead} git={git}."
                 " Considered editing in place; rejected it for a new file.")
     if "judge of a pstack arena" in text:
+        reach_egress_server()
         lead = "none"
         if os.environ.get("PA_LEAD"):
             try:

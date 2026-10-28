@@ -526,8 +526,9 @@ joins its names and COUNT, 1 by default, its count."
 IDENTITY is a plist of :panel, :arena, :role and :kind.  Return the
 session and keep it in SANDBOX's egress slot for its launch to use.
 With SANDBOX nil the member never started: save a not-started record
-and return a closed session.  A failure to observe is recorded, never
-signalled."
+and return a closed session.  A record already in FILE is kept instead,
+since an earlier runner made it; one still observing is marked
+interrupted.  A failure to observe is recorded, never signalled."
   (let* ((backend (and sandbox (if (eq +agent-shell-sandbox-backend 'bwrap)
                                    'linux-tshark
                                  'macos-lsof)))
@@ -539,7 +540,8 @@ signalled."
                                       +agent-shell-egress--backend-limits))))
          (session (+agent-shell-egress--make-session
                    :record record :file file :closed (null sandbox))))
-    (when sandbox
+    (if (null sandbox)
+        (+agent-shell-egress--recover session)
       (setf (+agent-shell-egress-record-started-at record)
             (+agent-shell-egress--time (float-time))
             (+agent-shell-egress-record-observers record)
@@ -550,6 +552,8 @@ signalled."
           (if (eq backend 'linux-tshark)
               (let ((directory (concat file ".d")))
                 (when (file-exists-p directory)
+                  (+agent-shell-egress--reap
+                   (expand-file-name "lease" directory))
                   (delete-directory directory t))
                 (make-directory directory t)
                 (set-file-modes directory #o700)
@@ -565,8 +569,28 @@ signalled."
                     (run-at-time 0 +agent-shell-egress-interval
                                  #'+agent-shell-egress--sample session))))
         (error (+agent-shell-egress--fail session 'observer-not-started))))
-    (+agent-shell-egress--write record file)
+    (+agent-shell-egress--write (+agent-shell-egress--session-record session)
+                                file)
     session))
+
+(defun +agent-shell-egress--recover (session)
+  "Take over the record an earlier runner left in SESSION's file."
+  (let* ((file (+agent-shell-egress--session-file session))
+         (directory (concat file ".d"))
+         (identity (+agent-shell-egress-record-identity
+                    (+agent-shell-egress--session-record session))))
+    (when-let* ((record (ignore-errors
+                          (+agent-shell-egress-read file identity))))
+      (when (eq (+agent-shell-egress-record-state record) 'observing)
+        (dolist (observer (+agent-shell-egress-record-observers record))
+          (setf (+agent-shell-egress-observer-state observer) 'interrupted))
+        (setf (+agent-shell-egress-record-state record) 'partial
+              (+agent-shell-egress-record-reason record) 'observer-interrupted))
+      (setf (+agent-shell-egress--session-record session) record))
+    (when (file-directory-p directory)
+      (ignore-errors
+        (+agent-shell-egress--reap (expand-file-name "lease" directory))
+        (delete-directory directory t)))))
 
 (defun +agent-shell-egress--fail (session reason)
   "Mark SESSION's observer unavailable for REASON."

@@ -110,10 +110,21 @@ arena's :judge ends its judge's prompt."
   "Seconds an arena's judge may run when the request names none."
   :type 'natnum)
 
+(defcustom +agent-shell-pstack-arena-measure-egress nil
+  "Whether new arenas record where each candidate and the judge connect.
+Each member's record goes beside its report as ROLE.egress.json, and
+the follow-up gains two lines about them.  A remote arena takes the
+value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
+  :type 'boolean
+  :group '+agent-shell-pstack-panel)
+
+(defconst +agent-shell-pstack-panel--egress-wait 30
+  "Seconds a measured arena's follow-up waits for its members' records.")
+
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 7
+(defconst +agent-shell-pstack-panel--schema 8
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -132,7 +143,9 @@ REMOTE holds a `+agent-shell-arena-remote' when a host runs the arena."
   rubric judge-timeout arena sink remote
   (deadline nil :documentation "Absolute time an arena should end, set once.")
   (login-check nil :documentation "Cancels login admission until it ends.")
-  (logins nil :documentation "Each agent's login result, as admitted."))
+  (logins nil :documentation "Each agent's login result, as admitted.")
+  (measure-egress nil :documentation "Whether its members' egress is \
+recorded."))
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")
@@ -163,6 +176,14 @@ Candidates run in parallel, so their timeout counts once."
   (when-let* ((deadline (+agent-shell-pstack-panel-deadline panel)))
     (+ deadline +agent-shell-pstack-panel-arena-grace)))
 
+(declare-function +agent-shell-egress-open "+agent-shell-egress")
+(declare-function +agent-shell-egress-close "+agent-shell-egress")
+(declare-function +agent-shell-egress-record-state "+agent-shell-egress")
+(declare-function +agent-shell-egress-record-reason "+agent-shell-egress")
+(declare-function +agent-shell-egress-record-limits "+agent-shell-egress")
+(declare-function +agent-shell-egress-record-written "+agent-shell-egress")
+(declare-function +agent-shell-egress-record-destinations
+                  "+agent-shell-egress")
 (declare-function +agent-shell-arena-remote-launch "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-cancel "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-abandon "+agent-shell-arena-remote")
@@ -188,7 +209,9 @@ A candidate has a SANDBOX.  Once settled, its CAPTURE moves from
 started fails once stopped.  RESULT then holds :commit, :ref, :changed,
 :stat and :checkout, or :error."
   role agent focus shell (state 'starting) text error report (kind 'member)
-  sandbox capture result)
+  sandbox capture result
+  (egress-file nil :documentation "Where its egress record is saved.")
+  (egress-record nil :documentation "Its final `+agent-shell-egress-record'."))
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -385,6 +408,7 @@ macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s" system-type))
             (+agent-shell-pstack-panel--make
              :shape shape :brief brief :timeout timeout :rubric rubric
              :judge-timeout judge-timeout :phase 'preparing
+             :measure-egress +agent-shell-pstack-arena-measure-egress
              :members (append members (list judge)))))))))
 
 ;;;; Prompts
@@ -705,9 +729,156 @@ directory: %s\n"
                     (+agent-shell-pstack-panel--candidate-text panel candidate))
                   candidates "")
        (+agent-shell-pstack-panel--member-text judge)
+       (+agent-shell-pstack-panel--egress-text panel)
        "\n" (+agent-shell-pstack-panel--shape panel :triage)
        "\nThe results stay until you clean the arena up: press x on its line \
 in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean."))))
+
+;;;; Egress
+
+(defun +agent-shell-pstack-panel--egress-members (panel)
+  "Return arena PANEL's candidates and judge."
+  (seq-remove (lambda (member)
+                (eq 'member (+agent-shell-pstack-panel-member-kind member)))
+              (+agent-shell-pstack-panel-members panel)))
+
+(defun +agent-shell-pstack-panel--egress-file (panel member)
+  "Return where MEMBER of PANEL keeps its egress record, and note it."
+  (setf (+agent-shell-pstack-panel-member-egress-file member)
+        (expand-file-name
+         (concat (+agent-shell-pstack-panel-member-role member) ".egress.json")
+         (expand-file-name (+agent-shell-pstack-panel-id panel)
+                           +agent-shell-pstack-panel-directory))))
+
+(defun +agent-shell-pstack-panel--egress-identity (panel member)
+  "Return the identity MEMBER of PANEL's egress record carries."
+  (list :panel (+agent-shell-pstack-panel-id panel)
+        :arena (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
+                 (+agent-shell-arena-git-manifest-id manifest))
+        :role (+agent-shell-pstack-panel-member-role member)
+        :kind (+agent-shell-pstack-panel-member-kind member)))
+
+(defun +agent-shell-pstack-panel--egress-session (member)
+  "Return sandboxed MEMBER's egress session, or nil."
+  (when-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
+    (+agent-shell-sandbox-egress sandbox)))
+
+(defun +agent-shell-pstack-panel--keep-egress (member)
+  "Return a function keeping the record it gets as MEMBER's."
+  (lambda (record)
+    (setf (+agent-shell-pstack-panel-member-egress-record member) record)))
+
+(defun +agent-shell-pstack-panel--close-egress (panel callback)
+  "Call CALLBACK once every member of measured PANEL has its egress record.
+A member that never launched gets a not-started record.  A sandboxed
+member's record comes when its stop closes its session; past
+`+agent-shell-pstack-panel--egress-wait' the session is closed here.  A
+panel that measures nothing, or ran on a host, calls CALLBACK at once:
+a host's records arrive with its results."
+  (if (or (not (+agent-shell-pstack-panel-measure-egress panel))
+          (+agent-shell-pstack-panel-remote panel))
+      (funcall callback)
+    (require '+agent-shell-egress)
+    (let ((members (+agent-shell-pstack-panel--egress-members panel))
+          (deadline (+ (float-time) +agent-shell-pstack-panel--egress-wait))
+          (forced nil))
+      (dolist (member members)
+        (unless (or (+agent-shell-pstack-panel--egress-session member)
+                    (+agent-shell-pstack-panel-member-egress-record member))
+          (+agent-shell-egress-close
+           (+agent-shell-egress-open
+            nil (+agent-shell-pstack-panel--egress-file panel member)
+            (+agent-shell-pstack-panel--egress-identity panel member))
+           (+agent-shell-pstack-panel--keep-egress member))))
+      (cl-labels
+          ((check ()
+             (if-let* ((waiting
+                        (seq-remove
+                         #'+agent-shell-pstack-panel-member-egress-record
+                         members)))
+                 (progn
+                   (when (and (not forced) (> (float-time) deadline))
+                     (setq forced t)
+                     (dolist (member waiting)
+                       (when-let* ((session
+                                    (+agent-shell-pstack-panel--egress-session
+                                     member)))
+                         (+agent-shell-egress-close
+                          session
+                          (+agent-shell-pstack-panel--keep-egress member)))))
+                   (run-at-time 0.1 nil #'check))
+               (funcall callback))))
+        (check)))))
+
+(defun +agent-shell-pstack-panel--egress-phrase (member)
+  "Return what MEMBER's egress record says, in a few words."
+  (let* ((role (+agent-shell-pstack-panel-member-role member))
+         (record (+agent-shell-pstack-panel-member-egress-record member))
+         (reason (and record (+agent-shell-egress-record-reason record))))
+    (pcase (and record (+agent-shell-egress-record-state record))
+      ('nil (format "%s unavailable (artifact-missing)" role))
+      ('not-started (format "%s not started" role))
+      ('unavailable (format "%s unavailable (%s)" role reason))
+      (_ (let ((count (length (+agent-shell-egress-record-destinations
+                               record))))
+           (format "%s %d destination%s%s" role count (if (= count 1) "" "s")
+                   (if (+agent-shell-egress-record-written record) ""
+                     " (record-write-failed)")))))))
+
+(defun +agent-shell-pstack-panel--egress-text (panel)
+  "Return the lines about measured PANEL's egress records, or nil.
+They give each member's destination count or why it has none, where
+the records are, and what the observed ones cannot show, never an
+address or a name."
+  (when (+agent-shell-pstack-panel-measure-egress panel)
+    (let* ((members (+agent-shell-pstack-panel--egress-members panel))
+           (records (delq nil (mapcar
+                               #'+agent-shell-pstack-panel-member-egress-record
+                               members)))
+           (states (delq 'not-started
+                         (mapcar #'+agent-shell-egress-record-state records)))
+           (limits (seq-uniq
+                    (mapcan (lambda (record)
+                              (when (memq (+agent-shell-egress-record-state
+                                           record)
+                                          '(partial finished))
+                                (copy-sequence
+                                 (+agent-shell-egress-record-limits record))))
+                            records)))
+           (partial (seq-keep
+                     (lambda (member)
+                       (when-let* ((record
+                                    (+agent-shell-pstack-panel-member-egress-record
+                                     member))
+                                   ((eq 'partial
+                                        (+agent-shell-egress-record-state
+                                         record)))
+                                   (reason (+agent-shell-egress-record-reason
+                                            record)))
+                         (format "%s %s"
+                                 (+agent-shell-pstack-panel-member-role member)
+                                 reason)))
+                     members)))
+      (concat
+       (format "\nEgress (%s): %s; records: %s.\n"
+               (cond ((and states (seq-every-p (lambda (state)
+                                                 (eq state 'unavailable))
+                                               states))
+                      "unavailable")
+                     ((or (memq 'partial states) (memq 'unavailable states)
+                          (length< records (length members)))
+                      "partial")
+                     (t "finished"))
+               (mapconcat #'+agent-shell-pstack-panel--egress-phrase members
+                          ", ")
+               (expand-file-name "*.egress.json"
+                                 (expand-file-name
+                                  (+agent-shell-pstack-panel-id panel)
+                                  +agent-shell-pstack-panel-directory)))
+       (when (or limits partial)
+         (format "Egress limits: %s.\n"
+                 (string-join (append (mapcar #'symbol-name limits) partial)
+                              ", ")))))))
 
 ;;;; Lifecycle
 
@@ -774,13 +945,18 @@ for it to end; see `+agent-shell-pstack-panel--launch'."
 
 (defun +agent-shell-pstack-panel--finalize (panel)
   "Compose finished PANEL's follow-up and deliver it.
-A panel with a sink hands itself to the sink instead."
-  (setf (+agent-shell-pstack-panel-followup panel)
-        (+agent-shell-pstack-panel-followup-text panel))
-  (if-let* ((sink (+agent-shell-pstack-panel-sink panel)))
-      (funcall sink panel)
-    (+agent-shell-pstack-panel--deliver-to
-     (+agent-shell-pstack-panel-lead panel))))
+A panel with a sink hands itself to the sink instead.  A measured arena
+first waits for its members' egress records; see
+`+agent-shell-pstack-panel--close-egress'."
+  (+agent-shell-pstack-panel--close-egress
+   panel
+   (lambda ()
+     (setf (+agent-shell-pstack-panel-followup panel)
+           (+agent-shell-pstack-panel-followup-text panel))
+     (if-let* ((sink (+agent-shell-pstack-panel-sink panel)))
+         (funcall sink panel)
+       (+agent-shell-pstack-panel--deliver-to
+        (+agent-shell-pstack-panel-lead panel))))))
 
 (defun +agent-shell-pstack-panel--kind-members (panel kind)
   "Return PANEL's members of KIND."
@@ -901,22 +1077,33 @@ judge.")
 
 (defun +agent-shell-pstack-panel--stop (member callback)
   "Stop settled sandboxed MEMBER and every process it started.
-Then call CALLBACK while its sandbox's private folders are deleted, a
-failure to delete them reported with `message'."
+Then close its egress session, if any, and call CALLBACK while its
+sandbox's private folders are deleted, a failure to delete them reported
+with `message'."
   (if-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
       (let* ((shell (+agent-shell-pstack-panel-member-shell member))
              (role (+agent-shell-pstack-panel-member-role member))
+             (discard (lambda ()
+                        (+agent-shell-sandbox-discard
+                         sandbox
+                         (lambda (error)
+                           (when error
+                             (message "pstack arena: %s's private folders \
+stayed: %s" role error))))
+                        (funcall callback)))
              (done (lambda (survivors)
                      (when survivors
                        (message "pstack arena: processes %s outlived %s"
                                 survivors role))
-                     (+agent-shell-sandbox-discard
-                      sandbox
-                      (lambda (error)
-                        (when error
-                          (message "pstack arena: %s's private folders \
-stayed: %s" role error))))
-                     (funcall callback))))
+                     (if-let* ((session (+agent-shell-sandbox-egress sandbox)))
+                         (+agent-shell-egress-close
+                          session
+                          (lambda (record)
+                            (funcall (+agent-shell-pstack-panel--keep-egress
+                                      member)
+                                     record)
+                            (funcall discard)))
+                       (funcall discard)))))
         (if (buffer-live-p shell)
             (+agent-shell-drive-stop shell nil done)
           ;; Its adapter is gone, so only the sweep can find what it left.
@@ -1084,6 +1271,12 @@ Do nothing once the panel has left PHASE."
   (let ((id (+agent-shell-pstack-panel-id panel))
         (role (+agent-shell-pstack-panel-member-role member))
         (sandbox (+agent-shell-pstack-panel-member-sandbox member)))
+    (when (and sandbox (+agent-shell-pstack-panel-measure-egress panel))
+      (with-demoted-errors "pstack arena: egress measurement failed: %S"
+        (require '+agent-shell-egress)
+        (+agent-shell-egress-open
+         sandbox (+agent-shell-pstack-panel--egress-file panel member)
+         (+agent-shell-pstack-panel--egress-identity panel member))))
     (condition-case err
         (let ((shell (+agent-shell-drive-start
                       :config (+agent-shell-pstack-panel-member-agent member)

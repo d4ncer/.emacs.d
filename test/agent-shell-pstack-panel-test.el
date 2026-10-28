@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-pstack-panel nil t)
+(require '+agent-shell-egress)
 (require 'agent-shell-sandbox-test)
 
 (defun +agent-shell-pstack-panel-test--login (agent)
@@ -1729,6 +1730,103 @@ pointers.*graft such a file by hand\\.$"
       (should-not (string-match-p
                    "LFS" (+agent-shell-pstack-panel-test--candidate-section
                           followup "A"))))))
+
+(defun +agent-shell-pstack-panel-test--judged (finish member-event)
+  "End both candidates with FINISH, then the judge with MEMBER-EVENT."
+  (funcall finish "opus" "Rationale A")
+  (funcall finish "codex" "Rationale B")
+  (+agent-shell-pstack-panel-test--drain)
+  (funcall member-event "judge" :kind 'init-finished)
+  (funcall member-event "judge" :kind 'turn-complete :text "A wins."))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-egress-off ()
+  "Measure nothing by default: no observer, record, launch entry or line."
+  (let ((processes nil))
+    (cl-letf* ((make-process (symbol-function 'make-process))
+               ((symbol-function 'make-process)
+                (lambda (&rest arguments)
+                  (push (plist-get arguments :name) processes)
+                  (apply make-process arguments))))
+      (+agent-shell-pstack-panel-test--with-arena
+        (+agent-shell-pstack-panel-test--judged #'finish #'member-event)
+        (should-not (+agent-shell-pstack-panel-measure-egress panel))
+        (let ((followup (car (+agent-shell-pstack-panel-test--followups
+                              sent lead))))
+          (should followup)
+          (should-not (string-search "Egress" followup)))
+        (dolist (member (+agent-shell-pstack-panel-members panel))
+          (should-not (+agent-shell-sandbox-egress
+                       (+agent-shell-pstack-panel-member-sandbox member)))
+          (should-not (+agent-shell-pstack-panel-member-egress-file member)))
+        (+agent-shell-pstack-panel-test--drain)
+        (should-not (directory-files-recursively directory "egress"))
+        (should-not (member "pa-egress" processes))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-egress ()
+  "Record every member's egress, hold the follow-up until the stops
+have closed the records, and sum them up in two lines.  An observer
+that cannot run changes nothing else about the arena."
+  (let ((+agent-shell-pstack-arena-measure-egress t)
+        (+agent-shell-egress--lsof "/nonexistent/lsof"))
+    (+agent-shell-pstack-panel-test--with-arena
+      (let ((id (+agent-shell-pstack-panel-id panel)))
+        (should (+agent-shell-pstack-panel-measure-egress panel))
+        (+agent-shell-pstack-panel-test--judged #'finish #'member-event)
+        (should (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+        (should-not (+agent-shell-pstack-panel-test--followups sent lead))
+        (let ((deadline (+ (float-time) 10)))
+          (while (and (not (+agent-shell-pstack-panel-delivered panel))
+                      (< (float-time) deadline))
+            (accept-process-output nil 0.05)))
+        (should (equal '(done done done)
+                       (mapcar #'+agent-shell-pstack-panel-member-state
+                               (+agent-shell-pstack-panel-members panel))))
+        (let* ((followup (car (+agent-shell-pstack-panel-test--followups
+                               sent lead)))
+               (lines (seq-filter (lambda (line)
+                                    (string-prefix-p "Egress" line))
+                                  (split-string followup "\n"))))
+          (should (= 1 (length lines)))
+          (should (string-match-p
+                   (format "\\`Egress (unavailable): opus unavailable (%s), \
+codex unavailable (%s), judge unavailable (%s); records: %s\\.\\'"
+                           "\\(helper-missing\\|observer-not-started\\)"
+                           "\\(helper-missing\\|observer-not-started\\)"
+                           "\\(helper-missing\\|observer-not-started\\)"
+                           (regexp-quote
+                            (expand-file-name (concat id "/*.egress.json")
+                                              directory)))
+                   (car lines)))
+          (should (string-search "\n\nPick, graft and verify" followup)))
+        (dolist (role '("opus" "codex" "judge"))
+          (let ((file (expand-file-name (format "%s/%s.egress.json" id role)
+                                        directory)))
+            (should (eq 'unavailable
+                        (+agent-shell-egress-record-state
+                         (+agent-shell-egress-read
+                          file (list :panel id :role role
+                                     :kind (if (equal role "judge") 'judge
+                                             'candidate))))))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-arena-egress-unlaunched ()
+  "Save a not-started record for a judge that never ran."
+  (let ((+agent-shell-pstack-arena-measure-egress t)
+        (+agent-shell-egress--lsof "/nonexistent/lsof"))
+    (+agent-shell-pstack-panel-test--with-arena
+      (setq unchanged '("opus" "codex"))
+      (finish "opus" "Nothing")
+      (finish "codex" "Nothing")
+      (let ((deadline (+ (float-time) 10)))
+        (while (and (not (+agent-shell-pstack-panel-delivered panel))
+                    (< (float-time) deadline))
+          (accept-process-output nil 0.05)))
+      (should (string-match-p
+               ", judge not started; records: "
+               (car (+agent-shell-pstack-panel-test--followups sent lead))))
+      (should (eq 'not-started
+                  (+agent-shell-egress-record-state
+                   (+agent-shell-pstack-panel-member-egress-record
+                    (+agent-shell-pstack-panel-test--judge panel))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-view-and-clean ()
   "Show an arena's phase and directory, and clean it with x once finished."

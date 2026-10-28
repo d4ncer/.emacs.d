@@ -124,6 +124,24 @@ missing source."
 
 ;;;; Linux
 
+(ert-deftest +agent-shell-egress-test-recovers-interrupted ()
+  "Keep the record a runner that died while observing left, as
+interrupted, and remove its observer's folder."
+  (+agent-shell-egress-test--with
+    (let ((+agent-shell-sandbox-backend 'bwrap)
+          (file (expand-file-name "p1/opus.egress.json" directory)))
+      (+agent-shell-egress-open sandbox file identity)
+      (should (file-directory-p (concat file ".d")))
+      (let ((record (+agent-shell-egress-test--close
+                     (+agent-shell-egress-open nil file identity))))
+        (should (equal '(partial observer-interrupted linux-tshark)
+                       (list (+agent-shell-egress-record-state record)
+                             (+agent-shell-egress-record-reason record)
+                             (+agent-shell-egress-record-backend record))))
+        (should (eq 'partial (+agent-shell-egress-record-state
+                              (+agent-shell-egress-read file identity))))
+        (should-not (file-exists-p (concat file ".d")))))))
+
 (defun +agent-shell-egress-test--linux (sandbox file identity status events)
   "Close a Linux session for SANDBOX at FILE whose launcher left STATUS.
 EVENTS are lines of tshark field output; nil STATUS leaves no status.
