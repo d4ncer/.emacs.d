@@ -159,14 +159,15 @@ was delivered."
                       (apply #'+remote-delegate-acp-test--git host-repo args)))
           (lead nil)
           (delegated
-           (lambda (brief &optional wait)
+           (lambda (brief &optional wait timeout)
              (let ((before (+agent-shell-pstack-panel-list)) (panel nil))
                (should (+agent-shell-drive-send
                         lead
                         (concat "PSTACK-LEAD "
                                 (json-serialize
                                  `((version . 1) (shape . "delegate")
-                                   (brief . ,brief) (timeout . 120)
+                                   (brief . ,brief)
+                                   (timeout . ,(or timeout 120))
                                    (members . [((role . "builder")
                                                 (agent . "fixture-codex"))]))))))
                (+remote-delegate-acp-test--wait-for
@@ -463,6 +464,39 @@ the panel." followup))
         (should (string-search "1 commit since" followup))
         (should (equal "Add builder.txt"
                        (funcall lead-git "log" "-1" "--format=%s" branch)))))))
+
+(ert-deftest +agent-shell-pstack-remote-delegate-acp-test-remote-timeout ()
+  "A sandboxed delegate on the host that times out without a final response
+gets no commit; its work stays uncommitted on the host, and the
+follow-up says where."
+  (+remote-delegate-acp-test--skip t)
+  (+remote-delegate-acp-test--with
+      `(:host (local . ,host-root) :host-directory ,host-repo
+              :delegate (:sandbox t))
+    (let* ((panel (funcall delegated "Add the builder file. HANG" nil 6))
+           (followup (+agent-shell-pstack-panel-followup panel))
+           (branch (concat "pstack/delegate/"
+                           (+agent-shell-pstack-panel-id panel)))
+           (workspace (expand-file-name
+                       (format "arenas/%s/builder/"
+                               (+agent-shell-arena-remote-arena
+                                (+agent-shell-pstack-panel-remote panel)))
+                       host-root)))
+      (should (string-search "builder (fixture-codex): timeout." followup))
+      (should (string-search "Sandboxed: No commit created.  The delegate's \
+turn did not end with a successful final response" followup))
+      (should (string-search (format "Its changes stay uncommitted in %s"
+                                     workspace)
+                             followup))
+      (should (string-search "The host worktree has 1 uncommitted path: \
+builder.txt." followup))
+      (should (string-search (format "Branch: %s, 0 commits since" branch)
+                             followup))
+      (should-not (string-search "To merge:" followup))
+      (should (string-search "Partial text, not a final response:" followup))
+      (should (equal "builder\n" (+remote-delegate-acp-test--read
+                                  (expand-file-name "builder.txt"
+                                                    workspace)))))))
 
 (ert-deftest +agent-shell-pstack-remote-delegate-acp-test-killed-runner ()
   "A runner killed mid-run restarts, stops what the delegate left, never

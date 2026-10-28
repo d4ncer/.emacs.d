@@ -963,8 +963,12 @@ the host, apart from the branch; cleaning the workspace up loses them.\n"
      (when workspace (format "Workspace on host: %s\n" workspace))
      (when-let* ((report (+agent-shell-pstack-panel-member-report member)))
        (format "Report saved at: %s\n" report))
-     (format "Report:\n%s\n" (+agent-shell-pstack-panel--rationale member))
-     (when published
+     (format "%s\n%s\n"
+             (if (eq 'done (+agent-shell-pstack-panel-member-state member))
+                 "Report:"
+               "Partial text, not a final response:")
+             (+agent-shell-pstack-panel--rationale member))
+     (when (and published commits)
        (format "\nTo review: git log %s..%s\nTo merge: git merge --ff-only %s, \
 or push it and open a pull request.\n" base branch branch))
      "The host workspace stays until you clean it up: press x on its line in \
