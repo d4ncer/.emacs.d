@@ -17,6 +17,7 @@
 (require 'agent-shell)
 (require '+agent-shell-pstack-panel)
 (require '+agent-shell-arena-remote)
+(require '+agent-shell-egress)
 
 (defvar +agent-shell-pstack-arena-remote-acp-test--fixture
   (expand-file-name "fixtures/agent-shell-projects-agent.py"
@@ -434,6 +435,63 @@ left.\n"
                                       (funcall host-git "worktree" "list")
                                       "\n" t)))))
         (advice-remove '+agent-shell-arena-remote--mirror note)))))
+
+(ert-deftest +agent-shell-pstack-arena-remote-acp-test-egress ()
+  "Ship the egress switch to the host, which records every member, and
+bring each record back beside the laptop's reports."
+  (+agent-shell-pstack-arena-remote-acp-test--skip)
+  (let ((+agent-shell-pstack-arena-measure-egress t))
+    (+agent-shell-pstack-arena-remote-acp-test--with
+      (let* ((panel (funcall request
+                             (+agent-shell-pstack-arena-remote-acp-test--request)))
+             (followup (funcall delivered panel))
+             (id (+agent-shell-pstack-panel-id panel))
+             (job (expand-file-name
+                   (concat "jobs/" (+agent-shell-arena-remote-id
+                                    (+agent-shell-pstack-panel-remote panel)))
+                   host-root)))
+        (should (string-match-p
+                 ;; A member faster than the first sample has none.
+                 (format "^Egress ([a-z]+): opus %s, codex %s, judge %s; \
+records: %s\\.$"
+                         "\\(0 destinations\\|unavailable (no-samples)\\)"
+                         "\\(0 destinations\\|unavailable (no-samples)\\)"
+                         "\\(0 destinations\\|unavailable (no-samples)\\)"
+                         (regexp-quote
+                          (expand-file-name
+                           (concat id "/*.egress.json")
+                           +agent-shell-pstack-panel-directory)))
+                 followup))
+        (should (equal
+                 (cl-list* "report.json" "results.bundle"
+                           (mapcar (lambda (role)
+                                     (format "reports/%s/%s.egress.json" id
+                                             role))
+                                   '("opus" "codex" "judge")))
+                 (split-string (+agent-shell-pstack-arena-remote-acp-test--read
+                                (expand-file-name "results.files" job))
+                               "\n" t)))
+        (dolist (member (+agent-shell-pstack-panel-members panel))
+          (let* ((role (+agent-shell-pstack-panel-member-role member))
+                 (host (expand-file-name
+                        (format "reports/%s/%s.egress.json" id role) job))
+                 (laptop (+agent-shell-pstack-panel-member-egress-file member))
+                 (identity (list :panel id :role role
+                                 :kind (+agent-shell-pstack-panel-member-kind
+                                        member))))
+            (should (equal laptop (expand-file-name
+                                   (format "%s/%s.egress.json" id role)
+                                   +agent-shell-pstack-panel-directory)))
+            (should (memq (+agent-shell-egress-record-state
+                           (+agent-shell-egress-read laptop identity))
+                          '(partial unavailable)))
+            (should (equal (plist-get (+agent-shell-egress-record-identity
+                                       (+agent-shell-egress-read host identity))
+                                      :arena)
+                           (plist-get (+agent-shell-egress-record-identity
+                                       (+agent-shell-egress-read
+                                        laptop identity))
+                                      :arena)))))))))
 
 (ert-deftest +agent-shell-pstack-arena-remote-acp-test-cancel-before-start ()
   "A cancel that reaches a queued runner ends the arena before candidates."

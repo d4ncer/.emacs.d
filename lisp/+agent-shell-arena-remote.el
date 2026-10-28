@@ -34,6 +34,7 @@
 (require '+agent-shell-pstack-panel)
 
 (declare-function agent-shell-session-id "agent-shell")
+(declare-function +agent-shell-egress-import "+agent-shell-egress")
 
 (defvar agent-shell--state)
 (defvar agent-shell-inhibit-system-sleep)
@@ -105,7 +106,8 @@ A local host's is ready.json in its state folder."
 
 (defcustom +agent-shell-arena-remote-libraries
   '(+agent-shell-arena-remote +agent-shell-pstack-panel +agent-shell-pstack
-    +agent-shell-drive +agent-shell-sandbox +agent-shell-arena-git)
+    +agent-shell-drive +agent-shell-sandbox +agent-shell-arena-git
+    +agent-shell-egress)
   "Local libraries a runner loads, shipped to the host with each job."
   :type '(repeat symbol))
 
@@ -149,9 +151,11 @@ history.  SPARSE holds the lead's sparse-checkout patterns and PROFILE
 the repository profile as plain data.  CODE names the runner's code by
 content hash.  DEADLINE is how many seconds the runner may take once it
 starts.  READY is the host's readiness file as the laptop saw it, and
-READY-FILE where the host keeps it."
+READY-FILE where the host keeps it.  MEASURE-EGRESS is the laptop panel's
+`+agent-shell-pstack-arena-measure-egress', which the host's panel takes."
   id panel brief rubric timeout judge-timeout candidates judge prefix base
-  prerequisite sparse profile repository code deadline ready-file ready)
+  prerequisite sparse profile repository code deadline ready-file ready
+  measure-egress)
 
 (cl-defstruct (+agent-shell-arena-remote-candidate
                (:constructor +agent-shell-arena-remote--make-candidate)
@@ -249,7 +253,8 @@ The slots after ERROR are not saved."
          (profile "profile" (opt profile)) (repository "repository" text)
          (code "code" sha) (deadline "deadline" natnum)
          (ready-file "ready_file" (opt text))
-         (ready "ready" (opt (record ready))))
+         (ready "ready" (opt (record ready)))
+         (measure-egress "measure_egress" (opt boolean)))
     (candidate +agent-shell-arena-remote-candidate
                +agent-shell-arena-remote--make-candidate
                (role "role" id) (agent "agent" agent) (focus "focus" (opt text)))
@@ -1020,10 +1025,13 @@ whether job $1's runner lives, whether it has a marker, and its status.")
 
 (defconst +agent-shell-arena-remote--fetch-script
   "cd \"jobs/$1\" || exit 1
+if [ -f results.files ]; then exec tar -cf - -T results.files; fi
 if [ -f results.bundle ]; then exec tar -cf - report.json results.bundle; fi
 exec tar -cf - report.json
 "
-  "Write job $1's report and results bundle as a tar stream.")
+  "Write job $1's report and results bundle as a tar stream.
+A measured arena's runner lists them in results.files with the egress
+records.")
 
 (defconst +agent-shell-arena-remote--clean-script
   "job=jobs/$1
@@ -1328,7 +1336,8 @@ MANIFEST is the laptop's arena; its prerequisite and code come later."
      :code (make-string 64 ?0)
      :deadline (+agent-shell-pstack-panel-arena-budget
                 (+agent-shell-pstack-panel-timeout panel)
-                (+agent-shell-pstack-panel-judge-timeout panel)))))
+                (+agent-shell-pstack-panel-judge-timeout panel))
+     :measure-egress (+agent-shell-pstack-panel-measure-egress panel))))
 
 (defun +agent-shell-arena-remote--job-file (remote)
   "Return the laptop's copy of REMOTE's job."
@@ -1992,6 +2001,7 @@ report, and its diff is taken here as a local arena's is."
                               (+agent-shell-arena-remote-id remote))
                  (signal '+agent-shell-arena-remote-wire
                          (list "the report is for another arena")))
+               (+agent-shell-arena-remote--receive-egress remote results)
                (+agent-shell-arena-remote--land
                 remote report (expand-file-name "results.bundle" results)
                 (lambda (results error)
@@ -1999,6 +2009,24 @@ report, and its diff is taken here as a local arena's is."
                     (+agent-shell-arena-remote--finish remote report results)))))
            ((error +agent-shell-arena-remote-wire)
             (funcall fail (error-message-string err)))))))))
+
+(defun +agent-shell-arena-remote--receive-egress (remote results)
+  "Give REMOTE's measured panel the egress records unpacked in RESULTS.
+Each is checked and saved under the laptop's own panel folder; a missing
+or invalid one is saved as unavailable, and never stops the results."
+  (when-let* ((panel (+agent-shell-arena-remote--panel remote))
+              ((+agent-shell-pstack-panel-measure-egress panel)))
+    (require '+agent-shell-egress)
+    (with-demoted-errors "pstack arena: egress records failed: %S"
+      (dolist (member (+agent-shell-pstack-panel--egress-members panel))
+        (let ((name (concat (+agent-shell-pstack-panel-member-role member)
+                            ".egress.json"))
+              (id (+agent-shell-pstack-panel-id panel)))
+          (setf (+agent-shell-pstack-panel-member-egress-record member)
+                (+agent-shell-egress-import
+                 (expand-file-name (format "reports/%s/%s" id name) results)
+                 (+agent-shell-pstack-panel--egress-identity panel member)
+                 (+agent-shell-pstack-panel--egress-file panel member))))))))
 
 (defun +agent-shell-arena-remote--land (remote report bundle callback)
   "Fetch REPORT's results from BUNDLE into REMOTE's laptop refs.
@@ -2202,6 +2230,7 @@ Return the record, or nil when there is nothing left to do."
      :phase (+agent-shell-arena-remote-phase remote)
      :cwd (if (file-directory-p cwd) cwd toplevel)
      :arena manifest :remote remote
+     :measure-egress (+agent-shell-arena-remote-job-measure-egress job)
      :members (+agent-shell-arena-remote--members job))))
 
 (defun +agent-shell-arena-remote--members (job)
@@ -2491,6 +2520,8 @@ renamed aside first, so only one waiter can win it."
                  :cwd (file-name-as-directory
                        (if (file-directory-p cwd) cwd repository))
                  :members (+agent-shell-arena-remote--members job)
+                 :measure-egress
+                 (+agent-shell-arena-remote-job-measure-egress job)
                  :sink (lambda (panel)
                          (+agent-shell-arena-remote--runner-finish
                           runner panel)))))
@@ -2650,6 +2681,28 @@ is nil."
           (+agent-shell-pstack-panel-members panel))
        (+agent-shell-arena-remote--runner-members runner)))))
 
+(defun +agent-shell-arena-remote--runner-files (runner panel)
+  "Write results.files, the files RUNNER's fetch sends, for measured PANEL.
+They are the report, the results bundle when there is one, and each
+member's egress record that exists, by their names in the job folder."
+  (let* ((directory (+agent-shell-arena-remote--runner-directory runner))
+         (files (append
+                 (list "report.json")
+                 (when (file-exists-p (expand-file-name "results.bundle"
+                                                        directory))
+                   (list "results.bundle"))
+                 (seq-keep
+                  (lambda (member)
+                    (when-let* ((file (+agent-shell-pstack-panel-member-egress-file
+                                       member))
+                                ((file-regular-p file))
+                                ((not (file-symlink-p file)))
+                                ((file-in-directory-p file directory)))
+                      (file-relative-name file directory)))
+                  (and panel (+agent-shell-pstack-panel-members panel))))))
+    (with-temp-file (expand-file-name "results.files" directory)
+      (insert (mapconcat (lambda (file) (concat file "\n")) files "")))))
+
 (defun +agent-shell-arena-remote--runner-finish (runner panel)
   "Write RUNNER's results for finished PANEL, then its final status.
 The results bundle and report land before the status that names them."
@@ -2667,6 +2720,9 @@ The results bundle and report land before the status that names them."
             (+agent-shell-arena-remote--write-json
              (+agent-shell-arena-remote--runner-file runner "report.json")
              'report (+agent-shell-arena-remote--runner-report runner panel))
+            (when (+agent-shell-arena-remote-job-measure-egress
+                   (+agent-shell-arena-remote--runner-job runner))
+              (+agent-shell-arena-remote--runner-files runner panel))
             (+agent-shell-arena-remote--runner-status runner t)
             (+agent-shell-arena-remote--release
              (+agent-shell-arena-remote--runner-lock runner))

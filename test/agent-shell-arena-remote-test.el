@@ -262,12 +262,37 @@ turns placeholders back into functions of its own sandbox."
                 :type '+agent-shell-arena-remote-wire)))
       (should (string-match-p (nth 2 case) (cadr err))))))
 
+(ert-deftest +agent-shell-arena-remote-test-egress-switch ()
+  "A job carries its panel's egress switch to the host's panel, whatever
+the host's own setting; a job without the field measures nothing."
+  (let* ((job (+arena-remote-test--job))
+         (round (lambda (job)
+                  (+agent-shell-arena-remote-from-json
+                   'job (+agent-shell-arena-remote-to-json 'job job)))))
+    (should-not (+agent-shell-arena-remote-job-measure-egress
+                 (funcall round job)))
+    (setf (+agent-shell-arena-remote-job-measure-egress job) t)
+    (should (+agent-shell-arena-remote-job-measure-egress (funcall round job)))
+    (should-not (+agent-shell-arena-remote-job-measure-egress
+                 (+agent-shell-arena-remote-from-json
+                  'job (json-serialize
+                        (assq-delete-all
+                         'measure_egress
+                         (json-parse-string
+                          (+agent-shell-arena-remote-to-json 'job job)
+                          :object-type 'alist))))))
+    (let ((+agent-shell-pstack-arena-measure-egress nil)
+          (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal)))
+      (should (+agent-shell-pstack-panel-measure-egress
+               (+agent-shell-arena-remote--runner-panel-for
+                (+agent-shell-arena-remote--make-runner :job job)))))))
+
 (ert-deftest +agent-shell-arena-remote-test-code-files ()
   "The runner's code holds the libraries, the packages and the launcher."
   (let ((names (mapcar #'car (+agent-shell-arena-remote--code-files))))
     (dolist (name '("+agent-shell-arena-remote.el" "+agent-shell-sandbox.el"
-                    "+agent-shell-sandbox-launch.sh" "agent-shell.el" "acp.el"
-                    "shell-maker.el"))
+                    "+agent-shell-egress.el" "+agent-shell-sandbox-launch.sh"
+                    "agent-shell.el" "acp.el" "shell-maker.el"))
       (should (member name names)))
     (should-not (seq-some (lambda (name) (string-match-p "autoloads" name))
                           names))))
