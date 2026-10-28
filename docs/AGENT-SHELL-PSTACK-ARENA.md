@@ -475,6 +475,91 @@ also passes `-c core.hooksPath=/dev/null` and `-c core.fsmonitor=false`.
   instructions. It never suggests `git checkout <ref> -- PATH`, which would
   overwrite edits the lead made after the base.
 
+## Measuring egress
+
+An arena can record where each candidate and the judge connect, to
+inform a later network policy. It is off by default. Turn it on for
+arenas requested from then on:
+
+```elisp
+(setq +agent-shell-pstack-arena-measure-egress t)
+```
+
+Each arena copies the value when it is requested, and a remote arena
+ships it to its runner. With it off, nothing changes: no observer runs,
+no file is written, the launch environment and sandbox profile are the
+same, and the follow-up has no egress lines.
+
+With it on, `+agent-shell-egress` opens a record for each sandboxed
+member before its adapter starts and closes it once the member's stop has
+run. The follow-up waits for every record, up to 30 seconds past the
+stops, then gains two lines:
+
+```text
+Egress (partial): opus 2 destinations, codex 1 destination, judge 1 destination; records: <reports>/<panel>/*.egress.json.
+Egress limits: sampled-sockets, names-unknown, unconnected-udp, direction-unknown, delegated-traffic.
+```
+
+The lines hold counts, fixed reason codes and the records' folder, never
+an address or a name. Each record is `<role>.egress.json` beside the
+member's report under `+agent-shell-pstack-panel-directory`, mode 0600 in
+a 0700 folder. A member that never launched, such as a judge with nothing
+to judge, gets a `not-started` record. A record holds the member's
+identity, the backend, a state (`partial`, `finished`, `unavailable` or
+`not-started`), a reason code, the observation's start and end, the
+observer's outcome, fixed limit codes, and the destinations. A
+destination is a numeric address, port and protocol (`tcp`, `udp` or
+`dns`), the names seen for it with their source (`dns` or `sni`), when it
+was first and last seen, a count, and the method that saw it. A record
+never holds a payload, a URL path, a header, a token or raw tool output.
+
+Measurement never stops, delays past a short bounded wait, or changes a
+member. A missing tool, a refused namespace, an observer that dies, or a
+file that cannot be written becomes a reason code: `helper-missing`,
+`namespace-entry-failed`, `capture-permission-denied`,
+`readiness-timeout`, `observer-exited`, `observer-not-started`,
+`observer-interrupted`, `capacity-exceeded`, `no-samples`, or, for a
+remote record that did not arrive intact, `artifact-missing` or
+`artifact-invalid`. Observers run with an environment of their own, never
+the agent's, which holds its login.
+
+**On Linux**, the launcher starts `tshark` in the member's outer user and
+network namespaces through `nsenter --user --net --preserve-credentials`,
+after slirp4netns attaches and before bwrap starts. It captures on `tap0`
+before slirp4netns translates the traffic. A capture filter keeps TCP
+connection starts, TLS ClientHellos, DNS, and UDP the member sends, with
+4096-byte snapshots. tshark writes only chosen header fields, and its
+environment holds only `PATH`, `LANG` and a `TMPDIR` in the member's
+private 0700 observer folder, `<role>.egress.json.d`, which Emacs deletes
+on close. The folder bounds files at 64 MiB, since live capture spools
+packets to a temporary file there. The launcher waits up to 3 seconds for
+the capture to start, then starts the member regardless.
+
+It sees every TCP connection attempt and UDP datagram the member sends,
+DNS questions and answers, and the SNI of TLS and QUIC ClientHellos. A
+destination's name comes from a DNS answer the member received or the
+SNI it sent. It misses names hidden by encrypted DNS or Encrypted Client
+Hello, the origin behind an HTTPS proxy or tunnel, and anything the member
+delegates through an allowed Unix socket, a host daemon or a remote build
+service. A query to `10.0.2.3` is the member's resolver, not where
+slirp4netns resolves it. This path needs `tshark` and `nsenter` on the
+host. It was checked by hand on one host, not by a test on this machine.
+
+**On macOS**, Emacs samples the sockets of the adapter's process tree
+with `lsof` once a second, keeping descendants it has seen even after they
+are reparented. Every fifth sample it also adds processes working in the
+sandbox's root or temp folder, as the stop's sweep does. A destination
+only such a process held has source `lsof-cwd` and the record gains
+`uncertain-attribution`. Sampling sees connected sockets that last at
+least one interval. It misses shorter ones, unconnected UDP, every name,
+and whether a socket was opened or accepted. A count is the distinct
+sockets seen. No sandbox profile rule is added and no system DNS log is
+read.
+
+The record is diagnostic evidence, not an attestation. A member can forge
+DNS or SNI or open a name that encodes data, and an unseen destination is
+not proof one is unnecessary.
+
 ## Cleanup
 
 `x` in the panels view and the command `+agent-shell-pstack-arena-clean`
@@ -648,6 +733,20 @@ None. Every probe above was run on this machine.
   - cleanup removes worktrees, refs and directories.
 - **Profile tests** run `sandbox-exec` against the generated profile, as the
   probes did.
+- **Egress tests** cover:
+  - no observer, record, launch entry or follow-up line with the switch
+    off;
+  - records for every member, the follow-up held until they exist, and
+    an observer that cannot run changing nothing else;
+  - tshark field output folded into named destinations, and each way a
+    Linux observer can end;
+  - a canary sent in traffic never reaching a record;
+  - observer processes getting none of Emacs's environment;
+  - the local arena ACP test's members, which connect to a loopback
+    server, appearing in their sampled records, and the remote ACP test
+    bringing records back from its host.
+  The Linux test that runs tshark in a real namespace skips without
+  tshark, nsenter or the bwrap backend.
 - **A live check** with real Claude Code and Codex candidates on a scratch
   repository.
 

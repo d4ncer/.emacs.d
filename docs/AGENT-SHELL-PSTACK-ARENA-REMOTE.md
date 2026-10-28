@@ -293,7 +293,8 @@ field, such as `status.members[0].agent`.
 - **The job**, `job.json`: the panel id, brief, rubric, timeouts,
   candidates, judge, the lead's prefix, the base, its prerequisite, the
   lead's sparse patterns, the profile as plain data, the host checkout,
-  the code hash, and the runner's deadline in seconds.
+  the code hash, the runner's deadline in seconds, and `measure_egress`,
+  the panel's egress switch. A job without that field measures nothing.
 - **The status**, `status.json`: the runner's phase (`queued`, then the
   panel's), its pid, heartbeat and deadline, the host's arena id, each
   member's state, capture and error, and whether results are written.
@@ -379,7 +380,7 @@ this code installed:
 | submit | id, checkout, Emacs, launcher | Unpacks the upload on standard input into `jobs/<id>/`. Installs the code under `code/<hash>/` if new. Verifies the bundle, fetching the prerequisite from `origin` if missing. Fetches the base into `refs/pstack-arena/<id>/base`. Starts the runner. Answers `started`, `missing`, `code` or `failed`. A started job answers `started` again. |
 | poll | id, cancel, reason | Writes the cancel marker when asked, then reports whether the runner lives, whether a marker exists, and the status. |
 | resume | id, Emacs, launcher | Starts the runner again unless it runs. |
-| fetch | id | Writes the report and results bundle as a tar stream. |
+| fetch | id | Writes the report and results bundle as a tar stream, or the files `results.files` lists when a measured runner wrote it. |
 | clean | id, Emacs | Waits up to 20 s for a finished runner to exit. Then removes the host's arena through its manifest, the base ref and the job folder, unless the runner still runs. |
 
 The runner starts through `systemd-run --user` on an SSH host and through
@@ -407,10 +408,10 @@ since the host would lack their contents. A result that changes one is
 flagged in the follow-up as locally, with a note that the contents stayed
 on the host.
 
-The runner's code is the libraries in `+agent-shell-arena-remote-libraries`
-plus every source file of the packages in
-`+agent-shell-arena-remote-packages` (agent-shell, acp, shell-maker), as
-this Emacs loads them. Its hash is the SHA-256 of their names and
+The runner's code is the libraries in `+agent-shell-arena-remote-libraries`,
+`+agent-shell-egress` among them, plus every source file of the packages
+in `+agent-shell-arena-remote-packages` (agent-shell, acp, shell-maker),
+as this Emacs loads them. Its hash is the SHA-256 of their names and
 contents, and the tarball is built once per hash under
 `<arena directory>/code/`.
 
@@ -436,7 +437,10 @@ Then the runner:
 6. At its deadline, settles the running members as timed out. Two
    minutes later it reports regardless.
 7. When the panel finishes, bundles every result ref against the base,
-   writes `report.json`, and only then writes the final status.
+   writes `report.json`, and only then writes the final status. A
+   measured panel first waits for its members' egress records, and the
+   runner lists the report, the bundle and each record that exists,
+   `reports/<panel>/<role>.egress.json`, in `results.files`.
 
 It never prompts and never asks the host to stay awake: it binds
 `agent-shell-inhibit-system-sleep` to nil, since the host's D-Bus refuses
@@ -492,7 +496,10 @@ When the runner has stopped unfinished and its heartbeat is older than
 at most twice. After fetching, the laptop lands each result in
 `refs/pstack-arena/<id>/<role>` and checks it against the report. It
 takes each diff locally, so `:outside` and `:lfs` use the lead's sparse
-patterns and attributes. Then it composes the follow-up with the local
+patterns and attributes. For a measured arena it reads each member's
+egress record from the results, checks it and saves it beside the
+laptop's reports; a missing or invalid one is saved as unavailable and
+never blocks the results. Then it composes the follow-up with the local
 arena's code. The only addition is a line naming the host.
 
 `+agent-shell-arena-remote-mode` re-attaches every record on disk that
