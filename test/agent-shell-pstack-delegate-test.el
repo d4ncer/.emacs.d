@@ -537,21 +537,20 @@ Commit or stash, then run git switch main." (followup)))
                                  branch))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-timeout-keeps-commits ()
-  "Collect what a timed-out delegate committed."
+  "Collect a delegate's commits when its timer expires after preparation."
   (+agent-shell-pstack-delegate-test--with
-    (lead-event :kind 'turn-complete :session "s1"
-                :text (+agent-shell-pstack-delegate-test--message
-                       (+agent-shell-pstack-delegate-test--request
-                        :timeout 1)))
-    (wait-for (lambda () started))
-    (+agent-shell-pstack-delegate-test--commit (nth 3 (car started)) "one.txt")
-    (member-event "builder" :kind 'init-finished)
-    (let ((text (followup)))
-      (should (string-search "builder (codex): timeout.\nNo report within the \
+    (+agent-shell-pstack-delegate-test--started
+      (+agent-shell-pstack-delegate-test--commit directory "one.txt")
+      (member-event "builder" :kind 'init-finished)
+      (setf (+agent-shell-pstack-panel-timeout panel) 1
+            (+agent-shell-pstack-panel-deadline panel) (float-time))
+      (+agent-shell-pstack-panel--arm panel 0)
+      (let ((text (followup)))
+        (should (string-search "builder (codex): timeout.\nNo report within the \
 1-second timeout.\nBranch: " text))
-      (should (string-search "1 commit since" text))
-      (should (string-search "Add one.txt" text))
-      (should (string-search "Report:\npartial" text)))))
+        (should (string-search "1 commit since" text))
+        (should (string-search "Add one.txt" text))
+        (should (string-search "Report:\npartial" text))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-cancel-keeps-commits ()
   "Collect a cancelled delegate's commits and return a branch-mode checkout."
