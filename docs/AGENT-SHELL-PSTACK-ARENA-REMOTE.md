@@ -351,6 +351,74 @@ back to `remote`. A failed fetch goes back to `remote` and is retried.
 The panel shows the phase, and members take the states the status gives
 without the local settle and halt path.
 
+### Host kinds
+
+A profile's `:host` is `(KIND . NAME)`. The alist
+`+agent-shell-arena-remote-host-kinds` defines the accepted kinds and
+their transport callbacks. The defaults are `(coder . "example-workspace")`,
+`(ssh . "build-host")`, and `(local . "/tmp/arena-host")`. Profile
+validation reads the registry without loading the remote library.
+
+Each kind's plist has these properties:
+
+- `:exec` is a function of `NAME` and a command argument list. It returns
+  the local command list the transport runs, with input and output
+  streams passed through. The command runs in the host's state folder.
+  The transport passes `("sh" "-c" SCRIPT "sh" ARG...)`.
+- `:label` is a function of `NAME` that returns the host's message text.
+- `:wake` is nil or a function of `NAME` and a callback. A nil value
+  proceeds directly to the readiness probe.
+- `:extend` is nil or a function of `NAME`, seconds, and a callback.
+  The callback receives nil on success or an error message. A nil
+  property skips extension and completes asynchronously with nil.
+
+The optional `:local t` property treats `NAME` as an absolute local state
+directory. It normalizes the directory, creates it before transport
+calls, reads its `ready.json`, and uses `nohup` to launch the runner.
+Other kinds accept the existing host name syntax, use
+`+agent-shell-arena-remote-ready-file`, and launch through systemd.
+
+Coder's callbacks use the `coder.NAME` SSH alias, start stopped
+workspaces, wait for their agents, and extend their lifetime with
+`coder schedule extend`. Coder and SSH share
+`+agent-shell-arena-remote-ssh-options`, including ControlMaster.
+
+To add a backend, register one entry after the remote library loads.
+This example uses a hypothetical `host-run` command that enters the
+host's state folder before it executes the arguments after `--`:
+
+```elisp
+(with-eval-after-load '+agent-shell-arena-remote
+  (add-to-list
+   '+agent-shell-arena-remote-host-kinds
+   `(example :exec ,(lambda (name args)
+                      (append (list "host-run" name "--") args))
+             :wake nil :extend nil
+             :label ,(lambda (name) (format "example host %s" name)))))
+```
+
+A profile can then use `:host (example . "build-host")`. Jobs and remote
+records keep their existing JSON fields and wire version. A record's
+host kind is a string validated against the current registry, so keep
+its entry registered while records still need it.
+
+A wake function calls its callback with `(EVENT DETAIL NEXT)`. `NEXT` is
+a function of no arguments that continues the wake check and retains
+backend state. The submission owns the retry timer, timeout, and cancel
+checks. Wake events have these meanings:
+
+| Event | Effect |
+|---|---|
+| `ready` | Probe readiness now. Use `NEXT` for subsequent wake checks if a probe needs a retry. |
+| `wait` | Record `DETAIL` as the host's state and retry `NEXT` after the wake interval. |
+| `retry` | Retry `NEXT` if already waiting. Otherwise probe readiness, preserving the SSH fallback when the Coder CLI is unavailable. |
+| `starting` | Record that the host was stopped, display its label, and invoke `NEXT` to start it immediately. |
+| `check` | Run `NEXT` through the submission's phase and cancel checks immediately. |
+| `error` | Reject the submission with `DETAIL`. |
+
+A backend that is already reachable can call `(funcall callback 'ready
+nil nil)`. A backend that needs retries supplies a `NEXT` continuation.
+
 ### Transport
 
 Each call runs `sh -c SCRIPT` in the host's state folder: through `ssh

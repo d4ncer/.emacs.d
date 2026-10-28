@@ -409,6 +409,176 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
              (push (list directory command done) spawned))))
      ,@body))
 
+(ert-deftest +agent-shell-arena-remote-test-registered-host ()
+  "A registered host validates in profiles and survives the existing wire form."
+  (let* ((+agent-shell-arena-remote-host-kinds
+          '((fake :exec ignore :wake nil :extend nil :label identity)))
+         (host (+agent-shell-arena-remote-parse-host '(fake . "build-host")))
+         (record (+arena-remote-test--record host))
+         (json (+agent-shell-arena-remote-to-json 'record record)))
+    (should (+agent-shell-arena-git-host-p '(fake . "build-host")))
+    (should (equal '(:host (fake . "build-host") :host-directory "~/src/repo")
+                   (+agent-shell-arena-git--check-profile
+                    "/tmp/" '(:host (fake . "build-host")
+                                    :host-directory "~/src/repo"))))
+    (should (equal "build-host" (+agent-shell-arena-remote--host-label host)))
+    (should (string-match-p
+             "\"host\":{\"kind\":\"fake\",\"name\":\"build-host\"}" json))
+    (should (equal host (+agent-shell-arena-remote-host
+                         (+agent-shell-arena-remote-from-json 'record json))))
+    (should-not (+agent-shell-arena-git-host-p '(ssh . "build-host")))
+    (dolist (value '(nil (fake . "") (fake . "bad name") (fake . 1)
+                        (unknown . "build-host")))
+      (should-not (+agent-shell-arena-git-host-p value)))))
+
+(ert-deftest +agent-shell-arena-remote-test-unknown-host ()
+  "Unknown kinds name exactly the registered kinds in each validation error."
+  (let ((+agent-shell-arena-remote-host-kinds '((fake) (other))))
+    (dolist (check
+             (list (lambda ()
+                     (+agent-shell-arena-remote-parse-host
+                      '(unknown . "build-host")))
+                   (lambda ()
+                     (+agent-shell-arena-git--check-profile
+                      "/tmp/" '(:host (unknown . "build-host"))))
+                   (lambda ()
+                     (+agent-shell-arena-remote--decode
+                      'host '((kind . "unknown") (name . "build-host"))))))
+      (let ((message (error-message-string (should-error (funcall check)))))
+        (should (string-match-p "fake" message))
+        (should (string-match-p "other" message))
+        (should-not (string-match-p "coder\\|ssh\\|local" message))))))
+
+(ert-deftest +agent-shell-arena-remote-test-registered-exec ()
+  "The transport runs the command returned by the kind's exec callback."
+  (+arena-remote-test--with-scratch
+    (+arena-remote-test--with-spawns
+      (let* ((received nil)
+             (answer nil)
+             (+agent-shell-arena-remote-host-kinds
+              `((fake :exec ,(lambda (name args)
+                               (setq received (cons name args))
+                               (append (list "fake-exec" name "--") args))
+                      :label ,(lambda (name) (concat "test host " name)))))
+             (host (+agent-shell-arena-remote-parse-host
+                    '(fake . "build-host"))))
+        (+agent-shell-arena-remote--call
+         host "printf '%s' \"$1\"" '("two words")
+         :callback (lambda (output error) (setq answer (list output error))))
+        (should (equal '("build-host" "sh" "-c" "printf '%s' \"$1\""
+                                     "sh" "two words") received))
+        (should (equal (append '("fake-exec" "build-host" "--") (cdr received))
+                       (nth 1 (car spawned))))
+        (funcall (nth 2 (car spawned)) 1 "" "unreachable")
+        (should (equal '(nil "test host build-host: unreachable") answer))))))
+
+(ert-deftest +agent-shell-arena-remote-test-optional-host-hooks ()
+  "Kinds without wake or extend probe directly and finish extensions locally."
+  (+arena-remote-test--with-scratch
+    (+arena-remote-test--with-spawns
+      (let* ((+agent-shell-arena-remote-host-kinds
+              '((fake :exec ignore :wake nil :extend nil :label identity)))
+             (host (+agent-shell-arena-remote-parse-host '(fake . "build-host")))
+             (remote (+arena-remote-test--record host))
+             (ready (list :toplevel "/tmp/repo"
+                          :ready (+agent-shell-arena-remote-from-json
+                                  'ready +arena-remote-test--ready)))
+             (probed nil)
+             (answer nil))
+        (setf (+agent-shell-arena-remote-phase remote) 'submitting)
+        (cl-letf (((symbol-function '+agent-shell-arena-remote--probe)
+                   (lambda (_remote _job done)
+                     (setq probed t)
+                     (funcall done ready nil))))
+          (+agent-shell-arena-remote--await
+           remote (+arena-remote-test--job) (lambda (probe) (setq answer probe))))
+        (should probed)
+        (should (eq ready answer))
+        (should (equal '(nil)
+                       (+arena-remote-test--wait
+                        (lambda (done)
+                          (+agent-shell-arena-remote--extend host 120 done)))))
+        (should-not spawned)))))
+
+(ert-deftest +agent-shell-arena-remote-test-registered-host-hooks ()
+  "A custom kind supplies its own wake and extension callbacks."
+  (+arena-remote-test--with-scratch
+    (let* ((events nil)
+           (+agent-shell-arena-remote-host-kinds
+            `((fake :exec ignore :label identity
+                    :wake ,(lambda (name done)
+                             (push (list 'wake name) events)
+                             (funcall done 'ready nil nil))
+                    :extend ,(lambda (name seconds done)
+                               (push (list 'extend name seconds) events)
+                               (funcall done "extension refused")))))
+           (host (+agent-shell-arena-remote-parse-host '(fake . "build-host")))
+           (remote (+arena-remote-test--record host))
+           (probed nil))
+      (setf (+agent-shell-arena-remote-phase remote) 'submitting)
+      (cl-letf (((symbol-function '+agent-shell-arena-remote--probe)
+                 (lambda (_remote _job done)
+                   (funcall done
+                            (list :toplevel "/tmp/repo"
+                                  :ready (+agent-shell-arena-remote-from-json
+                                          'ready +arena-remote-test--ready))
+                            nil))))
+        (+agent-shell-arena-remote--await
+         remote (+arena-remote-test--job) (lambda (_) (setq probed t))))
+      (should probed)
+      (should (equal '("extension refused")
+                     (+arena-remote-test--wait
+                      (lambda (done)
+                        (+agent-shell-arena-remote--extend host 121 done)))))
+      (should (equal '((extend "build-host" 121) (wake "build-host")) events)))))
+
+(ert-deftest +agent-shell-arena-remote-test-default-host-kinds ()
+  "Default kinds retain SSH options, local paths, labels and extension units."
+  (+arena-remote-test--with-scratch
+    (+arena-remote-test--with-spawns
+      (let ((script "printf '%s' \"$1\"")
+            (args '("two words")))
+        (dolist (value '((coder . "example-workspace") (ssh . "build-host")))
+          (let* ((host (+agent-shell-arena-remote-parse-host value))
+                 (target (if (eq (car value) 'coder)
+                             "coder.example-workspace" "build-host"))
+                 (command (+agent-shell-arena-remote--command host script args)))
+            (should (equal (expand-file-name "~/") (car command)))
+            (should (equal
+                     (append (list "ssh") +agent-shell-arena-remote-ssh-options
+                             (list target "--"
+                                   (+agent-shell-arena-remote-remote-command
+                                    script args)))
+                     (cdr command)))
+            (should (equal "systemd" (+agent-shell-arena-remote--launcher host)))
+            (should (equal +agent-shell-arena-remote-ready-file
+                           (+agent-shell-arena-remote--ready-file host)))))
+        (let* ((directory (expand-file-name "host/" scratch))
+               (host (+agent-shell-arena-remote-parse-host
+                      (cons 'local (directory-file-name directory)))))
+          (should (equal directory (+agent-shell-arena-remote-host-name host)))
+          (should (equal (cons directory (append (list "/bin/sh" "-c" script "sh")
+                                                args))
+                         (+agent-shell-arena-remote--command host script args)))
+          (should (file-directory-p directory))
+          (should (equal "nohup" (+agent-shell-arena-remote--launcher host)))
+          (should (equal (expand-file-name "ready.json" directory)
+                         (+agent-shell-arena-remote--ready-file host)))
+          (should (equal (format "local host %s"
+                                 (abbreviate-file-name
+                                  (directory-file-name directory)))
+                         (+agent-shell-arena-remote--host-label host)))))
+      (let ((host (+agent-shell-arena-remote-parse-host
+                   '(coder . "example-workspace")))
+            (answer nil))
+        (+agent-shell-arena-remote--extend
+         host 121 (lambda (error) (setq answer (list error))))
+        (should (equal (list +agent-shell-arena-remote-coder "schedule" "extend"
+                             "example-workspace" "3m")
+                       (nth 1 (car spawned))))
+        (funcall (nth 2 (car spawned)) 0 "" "")
+        (should (equal '(nil) answer))))))
+
 (ert-deftest +agent-shell-arena-remote-test-one-call-per-host ()
   "Calls to one host wait their turn; calls to another host do not."
   (+arena-remote-test--with-scratch

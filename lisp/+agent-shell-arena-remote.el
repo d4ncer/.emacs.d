@@ -216,8 +216,8 @@ sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'."
                (:constructor +agent-shell-arena-remote--make-host)
                (:copier nil))
   "Where a remote arena runs.
-KIND is `coder', `ssh' or `local'; NAME is the Coder workspace, the SSH
-host or the local state folder."
+KIND is registered in `+agent-shell-arena-remote-host-kinds'; NAME is
+its backend's host name or local state folder."
   kind name)
 
 (cl-defstruct (+agent-shell-arena-remote
@@ -314,7 +314,7 @@ The slots after ERROR are not saved."
            (unshare "unshare" (opt (record tool)))
            (slirp4netns "slirp4netns" (opt (record tool))))
     (host +agent-shell-arena-remote-host +agent-shell-arena-remote--make-host
-          (kind "kind" (enum coder ssh local)) (name "name" text))
+          (kind "kind" host-kind) (name "name" text))
     (record +agent-shell-arena-remote +agent-shell-arena-remote--make
             (id "id" id) (panel "panel" id) (session "session" (opt text))
             (host "host" (record host))
@@ -330,7 +330,8 @@ The slots after ERROR are not saved."
   "Each record kind: its struct, constructor and fields.
 A field is (SLOT KEY TYPE).  TYPE is `text', any string; `id', a name
 safe in a path and a ref; `sha', a full commit id; `agent', an agent
-identifier read as a symbol; `natnum', `number' or `boolean'; (enum
+identifier read as a symbol; `host-kind', a registered host kind;
+`natnum', `number' or `boolean'; (enum
 SYMBOL...); (strings); (list KIND) or (record KIND) of another kind;
 `profile', a repository profile as plain data; or (opt TYPE), which may be
 absent or null.")
@@ -377,6 +378,9 @@ kind.  The host's setup writes ready.json in a format of its own.")
                       "\\`\\(?:[0-9a-f]\\{40\\}\\|[0-9a-f]\\{64\\}\\)\\'" value))
                 value
               (funcall bad "a full hex object id")))
+      ('host-kind
+       (+agent-shell-arena-remote--decode-value
+        (cons 'enum (+agent-shell-arena-git-host-kinds)) value path))
       ('agent (if (and (stringp value)
                        (string-match-p +agent-shell-arena-remote--agent-regexp
                                        value))
@@ -449,7 +453,7 @@ to %d; update it" path version newest))))))
     (`(opt ,inner) (if (null value) :null
                    (+agent-shell-arena-remote--encode-value inner value)))
     ((or 'text 'id 'sha 'natnum 'number) value)
-    ((or 'agent `(enum . ,_)) (symbol-name value))
+    ((or 'agent 'host-kind `(enum . ,_)) (symbol-name value))
     ('boolean (if value t :false))
     ('(strings) (vconcat value))
     (`(list ,kind) (vconcat (mapcar (lambda (element)
@@ -686,11 +690,12 @@ A value holding a placeholder becomes a function of the sandbox."
 (defun +agent-shell-arena-remote-parse-host (value)
   "Return the host a profile's :host VALUE names, or signal `user-error'."
   (unless (+agent-shell-arena-git-host-p value)
-    (user-error "Arena host must be (coder . NAME), (ssh . HOST) or (local \
-. DIRECTORY), not %S" value))
+    (user-error "Arena host must be %s, not %S"
+                (+agent-shell-arena-git-host-description) value))
   (+agent-shell-arena-remote--make-host
    :kind (car value)
-   :name (if (eq (car value) 'local)
+   :name (if (plist-get (alist-get (car value)
+                                   +agent-shell-arena-remote-host-kinds) :local)
              (file-name-as-directory (expand-file-name (cdr value)))
            (cdr value))))
 
@@ -699,37 +704,63 @@ A value holding a placeholder becomes a function of the sandbox."
   (format "%s:%s" (+agent-shell-arena-remote-host-kind host)
           (+agent-shell-arena-remote-host-name host)))
 
+(defun +agent-shell-arena-remote--host-option (host option)
+  "Return OPTION from HOST's registered kind."
+  (plist-get (alist-get (+agent-shell-arena-remote-host-kind host)
+                        +agent-shell-arena-remote-host-kinds)
+             option))
+
+(defun +agent-shell-arena-remote--coder-label (name)
+  "Return the message label for Coder workspace NAME."
+  (format "Coder workspace %s" name))
+
+(defun +agent-shell-arena-remote--ssh-label (name)
+  "Return the message label for SSH host NAME."
+  (format "SSH host %s" name))
+
+(defun +agent-shell-arena-remote--local-label (name)
+  "Return the message label for local state directory NAME."
+  (format "local host %s" (abbreviate-file-name (directory-file-name name))))
+
 (defun +agent-shell-arena-remote--host-label (host)
   "Return HOST as a reader would name it."
-  (let ((name (+agent-shell-arena-remote-host-name host)))
-    (pcase (+agent-shell-arena-remote-host-kind host)
-      ('coder (format "Coder workspace %s" name))
-      ('ssh (format "SSH host %s" name))
-      ('local (format "local host %s" (abbreviate-file-name
-                                       (directory-file-name name)))))))
+  (funcall (+agent-shell-arena-remote--host-option host :label)
+           (+agent-shell-arena-remote-host-name host)))
+
+(defun +agent-shell-arena-remote--ssh-exec (name args)
+  "Return the local SSH command running ARGS on host NAME."
+  (append (list "ssh") +agent-shell-arena-remote-ssh-options
+          (list name "--" (+agent-shell-arena-remote--shell-command args))))
+
+(defun +agent-shell-arena-remote--coder-exec (name args)
+  "Return the local SSH command running ARGS on Coder workspace NAME."
+  (+agent-shell-arena-remote--ssh-exec (concat "coder." name) args))
+
+(defun +agent-shell-arena-remote--local-exec (_name args)
+  "Return the local shell command running ARGS."
+  (cons "/bin/sh" (cdr args)))
 
 (defun +agent-shell-arena-remote--command (host script args)
   "Return (DIRECTORY . COMMAND) running sh SCRIPT with ARGS on HOST.
 The script runs in HOST's state folder."
-  (let ((name (+agent-shell-arena-remote-host-name host)))
-    (if (eq (+agent-shell-arena-remote-host-kind host) 'local)
-        (progn (make-directory name t)
-               (cons name (append (list "/bin/sh" "-c" script "sh") args)))
-      (cons (expand-file-name "~/")
-            (append
-             (list "ssh") +agent-shell-arena-remote-ssh-options
-             (list (if (eq (+agent-shell-arena-remote-host-kind host) 'coder)
-                       (concat "coder." name)
-                     name)
-                   "--" (+agent-shell-arena-remote-remote-command script args)))))))
+  (let* ((name (+agent-shell-arena-remote-host-name host))
+         (directory (if (+agent-shell-arena-remote--host-option host :local)
+                        (progn (make-directory name t) name)
+                      (expand-file-name "~/"))))
+    (cons directory
+          (funcall (+agent-shell-arena-remote--host-option host :exec)
+                   name (append (list "sh" "-c" script "sh") args)))))
+
+(defun +agent-shell-arena-remote--shell-command (args)
+  "Return the shell command running ARGS in a remote host's state folder."
+  (let ((root (shell-quote-argument +agent-shell-arena-remote-host-root)))
+    (format "mkdir -p %s && cd %s && exec %s" root root
+            (mapconcat #'shell-quote-argument args " "))))
 
 (defun +agent-shell-arena-remote-remote-command (script args)
   "Return the shell command an SSH host runs for SCRIPT with ARGS."
-  (let ((root (shell-quote-argument +agent-shell-arena-remote-host-root)))
-    (format "mkdir -p %s && cd %s && exec sh -c %s sh%s" root root
-            (shell-quote-argument script)
-            (mapconcat (lambda (arg) (concat " " (shell-quote-argument arg)))
-                       args ""))))
+  (+agent-shell-arena-remote--shell-command
+   (append (list "sh" "-c" script "sh") args)))
 
 ;;;; Transport
 
@@ -883,16 +914,18 @@ Call CALLBACK with its output and nil, or nil and a message."
                                        (format "exit status %s" status))
                                       (t stderr))))))))
 
+(defun +agent-shell-arena-remote--coder-extend (name seconds callback)
+  "Extend Coder workspace NAME by SECONDS, then call CALLBACK with an error."
+  (+agent-shell-arena-remote--coder
+   (list "schedule" "extend" name (format "%dm" (ceiling seconds 60)))
+   60 (lambda (_output error) (funcall callback error))))
+
 (defun +agent-shell-arena-remote--extend (host seconds callback)
   "Move HOST's stop time to at least SECONDS from now, then call CALLBACK.
-Only a Coder workspace stops by itself; CALLBACK gets nil, or a message
-saying why the extension failed."
-  (if (not (eq (+agent-shell-arena-remote-host-kind host) 'coder))
-      (run-at-time 0 nil callback nil)
-    (+agent-shell-arena-remote--coder
-     (list "schedule" "extend" (+agent-shell-arena-remote-host-name host)
-           (format "%dm" (ceiling seconds 60)))
-     60 (lambda (_output error) (funcall callback error)))))
+CALLBACK gets nil, or a message saying why the extension failed."
+  (if-let* ((extend (+agent-shell-arena-remote--host-option host :extend)))
+      (funcall extend (+agent-shell-arena-remote-host-name host) seconds callback)
+    (run-at-time 0 nil callback nil)))
 
 (defun +agent-shell-arena-remote--workspace (output name)
   "Return (STATUS . AGENT) for workspace NAME in coder list -o json OUTPUT.
@@ -1062,7 +1095,7 @@ echo \"pstack-arena-clean done\"
 
 (defun +agent-shell-arena-remote--launcher (host)
   "Return how HOST starts a runner that outlives the call: systemd or nohup."
-  (if (eq (+agent-shell-arena-remote-host-kind host) 'local) "nohup" "systemd"))
+  (if (+agent-shell-arena-remote--host-option host :local) "nohup" "systemd"))
 
 ;;;; Laptop phases
 
@@ -1442,7 +1475,7 @@ malformed: %s" (cadr err)))))))))))
 
 (defun +agent-shell-arena-remote--ready-file (host)
   "Return where HOST's setup writes its readiness file."
-  (if (eq (+agent-shell-arena-remote-host-kind host) 'local)
+  (if (+agent-shell-arena-remote--host-option host :local)
       (expand-file-name "ready.json" (+agent-shell-arena-remote-host-name host))
     +agent-shell-arena-remote-ready-file))
 
@@ -1511,6 +1544,43 @@ at %s, so its setup has not finished since"
      ((string-empty-p (or (plist-get probe :toplevel) ""))
       (format "it has no git checkout at %s" repository)))))
 
+(defun +agent-shell-arena-remote--coder-wake (name callback)
+  "Check or start Coder workspace NAME, reporting wake events to CALLBACK.
+NEXT continuations retain whether this submission already started it."
+  (let ((started nil))
+    (cl-labels
+        ((report (event &optional detail next)
+           (funcall callback event detail (or next #'status)))
+         (status ()
+           (+agent-shell-arena-remote--coder
+            '("list" "-o" "json") 60
+            (lambda (output error)
+              (pcase (and output (condition-case nil
+                                     (list (+agent-shell-arena-remote--workspace
+                                            output name))
+                                   (json-error nil)))
+                ('nil (report 'retry (or error "coder list is not JSON")))
+                ('(nil) (report 'error
+                                (format "coder list shows no workspace %s" name)))
+                (`((,"running" . ,(or "connected" 'nil))) (report 'ready))
+                (`((,"running" . ,agent))
+                 (report 'wait (format "running with its agent %s" agent)))
+                (`((,(or "stopped" "canceled") . ,_))
+                 (if started (report 'wait "still stopped")
+                   (report 'starting nil #'start)))
+                (`((,(and state (or "pending" "starting" "stopping"
+                                    "canceling")) . ,_))
+                 (report 'wait state))
+                (`((,state . ,_))
+                 (report 'error (format "its status is %s" state)))))))
+         (start ()
+           (setq started t)
+           (+agent-shell-arena-remote--coder
+            (list "start" "--yes" name) 900
+            (lambda (_output error)
+              (if error (report 'error error) (report 'check))))))
+      (status))))
+
 (defun +agent-shell-arena-remote--await (remote job callback)
   "Call CALLBACK with a probe of REMOTE's host once it can run JOB.
 A stopped Coder workspace is started first.  A host that was not running,
@@ -1520,10 +1590,9 @@ it runs, answers and has a readiness file written since it booted.
 Otherwise, or once that timeout has passed, REMOTE is rejected with what
 was last wrong.  A cancel stops the wait."
   (let* ((host (+agent-shell-arena-remote-host remote))
-         (name (+agent-shell-arena-remote-host-name host))
+         (wake (+agent-shell-arena-remote--host-option host :wake))
          (deadline (+ (float-time) +agent-shell-arena-remote-wake-timeout))
-         (woke nil)
-         (started nil))
+         (woke nil))
     (cl-labels
         ((reject (reason)
            (+agent-shell-arena-remote--reject
@@ -1545,41 +1614,22 @@ was last wrong.  A cancel stops the wait."
             ((not (eq (+agent-shell-arena-remote-cancel-state remote) 'none))
              (+agent-shell-arena-remote--reject
               remote (+agent-shell-arena-remote--cancel-reason remote)))
-            ((eq (+agent-shell-arena-remote-host-kind host) 'coder) (status))
+            (wake (funcall wake))
             (t (probe))))
-         (status ()
-           (+agent-shell-arena-remote--coder
-            '("list" "-o" "json") 60
-            (lambda (output error)
-              (pcase (and output (condition-case nil
-                                     (list (+agent-shell-arena-remote--workspace
-                                            output name))
-                                   (json-error nil)))
-                ('nil (if woke (retry (or error "coder list is not JSON"))
-                        ;; Without a working Coder CLI, SSH alone decides.
-                        (probe)))
-                ('(nil) (reject (format "coder list shows no workspace %s"
-                                        name)))
-                (`((,"running" . ,(or "connected" 'nil))) (probe))
-                (`((,"running" . ,agent))
-                 (wait (format "running with its agent %s" agent)))
-                (`((,(or "stopped" "canceled") . ,_))
-                 (if started (retry "it is still stopped") (start)))
-                (`((,(and state (or "pending" "starting" "stopping"
-                                    "canceling"))
-                    . ,_))
-                 (wait state))
-                (`((,state . ,_))
-                 (reject (format "its status is %s" state)))))))
-         (start ()
-           (setq started t
-                 woke "it was stopped, so Emacs started it")
-           (message "pstack arena %s: starting Coder workspace %s"
-                    (+agent-shell-arena-remote-id remote) name)
-           (+agent-shell-arena-remote--coder
-            (list "start" "--yes" name) 900
-            (lambda (_output error)
-              (if error (reject error) (check)))))
+         (awakened (event detail next)
+           (setq wake next)
+           (pcase event
+             ('ready (probe))
+             ('retry (if woke (retry detail) (probe)))
+             ('wait (wait detail))
+             ('starting
+              (setq woke "it was stopped, so Emacs started it")
+              (message "pstack arena %s: starting %s"
+                       (+agent-shell-arena-remote-id remote)
+                       (+agent-shell-arena-remote--host-label host))
+              (funcall next))
+             ('check (check))
+             ('error (reject detail))))
          (probe ()
            (+agent-shell-arena-remote--probe
             remote job
@@ -1598,6 +1648,12 @@ was last wrong.  A cancel stops the wait."
                               +agent-shell-arena-remote-wake-timeout)))
                   (retry problem))
                  (t (reject problem))))))))
+      (when wake
+        (let ((function wake))
+          (setq wake (lambda ()
+                       (funcall function
+                                (+agent-shell-arena-remote-host-name host)
+                                #'awakened)))))
       (check))))
 
 (defun +agent-shell-arena-remote--submit (remote job)

@@ -26,6 +26,46 @@
   "Candidate workspaces for pstack arena panels."
   :group 'tools)
 
+(defcustom +agent-shell-arena-remote-host-kinds
+  '((coder :exec +agent-shell-arena-remote--coder-exec
+           :wake +agent-shell-arena-remote--coder-wake
+           :extend +agent-shell-arena-remote--coder-extend
+           :label +agent-shell-arena-remote--coder-label)
+    (ssh :exec +agent-shell-arena-remote--ssh-exec
+         :wake nil :extend nil :label +agent-shell-arena-remote--ssh-label)
+    (local :exec +agent-shell-arena-remote--local-exec
+           :wake nil :extend nil :label +agent-shell-arena-remote--local-label
+           :local t))
+  "Host kinds accepted by arena profiles and remote records.
+Each entry is (KIND . PLIST).  :exec is a function of NAME and a command
+argument list, returning the local command that runs it on the host in
+its state folder.  :label is a function of NAME returning message text.
+:extend is nil or a function of NAME, SECONDS and CALLBACK, called with
+nil on success or an error message.
+
+:wake is nil or a function of NAME and CALLBACK.  It calls CALLBACK with
+(EVENT DETAIL NEXT), where EVENT is `ready', `wait', `retry', `starting',
+`check' or `error'.  DETAIL describes a wait or error.  NEXT is a function
+of no arguments that continues the wake check, retaining backend state.
+The submission controls retries, timeout and cancellation.  See the
+remote host documentation for the event meanings.
+
+:local, when non-nil, makes NAME an absolute local state directory,
+uses its ready.json and starts the runner with nohup instead of systemd.
+The remote library implements the default callbacks; defining this
+option here lets profile validation run without loading that library."
+  :group '+agent-shell-pstack-arena
+  :type '(alist :key-type symbol :value-type plist))
+
+(defun +agent-shell-arena-git-host-kinds ()
+  "Return the registered arena host kinds, in registry order."
+  (mapcar #'car +agent-shell-arena-remote-host-kinds))
+
+(defun +agent-shell-arena-git-host-description ()
+  "Return the registered host forms for validation messages."
+  (mapconcat (lambda (kind) (format "(%s . NAME)" kind))
+             (+agent-shell-arena-git-host-kinds) ", "))
+
 (defcustom +agent-shell-pstack-arena-directory
   (expand-file-name "~/.local/state/pstack-arena/")
   "Directory holding one subdirectory per arena."
@@ -60,7 +100,8 @@ matches applies.  PROFILE is a plist with any of these keys:
           (coder . NAME) for the Coder workspace NAME, reached as
           ssh coder.NAME; (ssh . HOST) for a plain SSH host; or
           (local . DIRECTORY), which runs the host's side as local
-          processes with DIRECTORY as its state folder.  See
+          processes with DIRECTORY as its state folder.  Kinds come from
+          `+agent-shell-arena-remote-host-kinds'.  See
           docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md.
 :host-directory  The repository's checkout on the host, such as
           \"~/src/big-repo\".  Required with :host.
@@ -609,11 +650,13 @@ function, not %S" matcher))))
 
 (defun +agent-shell-arena-git-host-p (value)
   "Return whether VALUE names a host as a profile's :host does."
-  (pcase value
-    (`(,(or 'coder 'ssh) . ,(and (pred stringp) name))
-     (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'" name))
-    (`(local . ,(and (pred stringp) directory))
-     (file-name-absolute-p directory))))
+  (and (consp value)
+       (assq (car value) +agent-shell-arena-remote-host-kinds)
+       (stringp (cdr value))
+       (if (plist-get (alist-get (car value)
+                                +agent-shell-arena-remote-host-kinds) :local)
+           (file-name-absolute-p (cdr value))
+         (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'" (cdr value)))))
 
 (defun +agent-shell-arena-git--check-profile (toplevel profile)
   "Return PROFILE, the arena profile for TOPLEVEL, with :env as a list.
@@ -674,8 +717,8 @@ functions"
 function" value)))
                   (:host
                    (unless (+agent-shell-arena-git-host-p value)
-                     (funcall fail key "(coder . NAME), (ssh . HOST) or \
-(local . DIRECTORY)" value)))
+                     (funcall fail key (+agent-shell-arena-git-host-description)
+                              value)))
                   (:host-directory
                    (unless (and (stringp value)
                                 (string-match-p "\\`\\(?:~/\\|/\\)[^\n]*\\'"
