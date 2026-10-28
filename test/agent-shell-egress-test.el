@@ -70,6 +70,21 @@
         (should (equal identity (+agent-shell-egress-record-identity read)))
         (should-not (+agent-shell-egress-record-destinations read))))))
 
+(ert-deftest +agent-shell-egress-test-write-fails ()
+  "Keep a record that cannot be saved in memory, marked unsaved."
+  (+agent-shell-egress-test--with
+    (let* ((locked (expand-file-name "locked" directory))
+           (file (expand-file-name "p1/opus.egress.json" locked)))
+      (make-directory locked)
+      (set-file-modes locked #o500)
+      (unwind-protect
+          (let ((record (+agent-shell-egress-test--close
+                         (+agent-shell-egress-open nil file identity))))
+            (should (eq 'not-started (+agent-shell-egress-record-state record)))
+            (should-not (+agent-shell-egress-record-written record))
+            (should-not (file-exists-p file)))
+        (set-file-modes locked #o700)))))
+
 (ert-deftest +agent-shell-egress-test-read-refuses ()
   "Refuse a record of another member, an unknown field and a link,
 without quoting what the file held."

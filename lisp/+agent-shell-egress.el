@@ -184,13 +184,14 @@ it."
 (defun +agent-shell-egress--write (record file)
   "Save RECORD to FILE, 0600 in a 0700 folder, through a rename.
 Return whether it was saved; a failure leaves RECORD only in memory."
-  (setf (+agent-shell-egress-record-written record)
-        (condition-case nil
-            (let ((directory (file-name-directory file)))
-              (make-directory directory t)
-              (set-file-modes directory #o700)
-              (let ((temporary (make-temp-file
-                                (expand-file-name ".egress-" directory))))
+  (let ((temporary nil))
+    (setf (+agent-shell-egress-record-written record)
+          (condition-case nil
+              (let ((directory (file-name-directory file)))
+                (make-directory directory t)
+                (set-file-modes directory #o700)
+                (setq temporary (make-temp-file
+                                 (expand-file-name ".egress-" directory)))
                 (set-file-modes temporary #o600)
                 (let ((coding-system-for-write 'utf-8-unix))
                   (write-region (concat (json-serialize
@@ -198,8 +199,9 @@ Return whether it was saved; a failure leaves RECORD only in memory."
                                         "\n")
                                 nil temporary nil 'silent))
                 (rename-file temporary file t)
-                t))
-          (error nil))))
+                t)
+            (error (when temporary (ignore-errors (delete-file temporary)))
+                   nil)))))
 
 (defconst +agent-shell-egress--name-regexp
   (rx bos (+ (any "a-z0-9_-")) (* "." (+ (any "a-z0-9_-"))) eos)
