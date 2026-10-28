@@ -10,6 +10,7 @@
 (require 'cl-lib)
 (require '+agent-shell-pstack-panel nil t)
 (require '+agent-shell-egress)
+(require '+agent-shell-pstack-reload)
 (require 'agent-shell-sandbox-test)
 
 (defun +agent-shell-pstack-panel-test--login (agent)
@@ -796,8 +797,9 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
                             (car (+agent-shell-pstack-panel-members panel))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-schema-guard ()
-  "Drop panels from an older struct layout when the file loads again.
-That includes a panel whose arena manifest has an older layout."
+  "Drop finished panels from an older struct layout when the file loads again.
+Keep unfinished ones, including one whose arena manifest has an older
+layout, and say that `+agent-shell-pstack-reload' carries them over."
   (+agent-shell-pstack-panel-test--with
     (lead-event :kind 'turn-complete :session "s1"
                 :text (+agent-shell-pstack-panel-test--message
@@ -808,7 +810,8 @@ That includes a panel whose arena manifest has an older layout."
                +agent-shell-pstack-panel--panels)
       (puthash "older"
                (let ((panel (copy-sequence current)))
-                 (setf (+agent-shell-pstack-panel-schema panel) 1)
+                 (setf (+agent-shell-pstack-panel-schema panel) 1
+                       (+agent-shell-pstack-panel-phase panel) 'finished)
                  panel)
                +agent-shell-pstack-panel--panels)
       (puthash "old-manifest"
@@ -821,8 +824,23 @@ That includes a panel whose arena manifest has an older layout."
                  (lambda (format &rest args)
                    (push (apply #'format-message format args) messages))))
         (load (locate-library "+agent-shell-pstack-panel.el") nil t t))
-      (should (equal (list current) (+agent-shell-pstack-panel-list)))
-      (should (string-prefix-p "Dropped 3 pstack panels" (car messages)))
+      (let ((ids (hash-table-keys +agent-shell-pstack-panel--panels)))
+        (remhash "old" +agent-shell-pstack-panel--panels)
+        (remhash "old-manifest" +agent-shell-pstack-panel--panels)
+        (should (equal '("current" "old" "old-manifest")
+                     (sort (mapcar (lambda (id)
+                                     (if (equal id (+agent-shell-pstack-panel-id
+                                                    current))
+                                         "current"
+                                       id))
+                                   ids)
+                             #'string<))))
+      (should (equal (reverse messages)
+                     (list "Dropped 1 finished pstack panel made before the \
+panel code changed"
+                           (format-message "Kept 2 unfinished pstack panels \
+(old, old-manifest) made with an older layout; `+agent-shell-pstack-reload' \
+carries them over"))))
       (setq messages nil)
       (cl-letf (((symbol-function 'message)
                  (lambda (format &rest args)
@@ -832,6 +850,21 @@ That includes a panel whose arena manifest has an older layout."
       (member-event "a" :kind 'init-finished)
       (member-event "a" :kind 'turn-complete :text "Still works")
       (should (string-match-p "Still works" (cdar sent))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-schema-guard-carrying ()
+  "Leave every panel alone while `+agent-shell-pstack-reload' loads."
+  (+agent-shell-pstack-panel-test--with
+    (puthash "old" (record '+agent-shell-pstack-panel "old" 'how "b" 900)
+             +agent-shell-pstack-panel--panels)
+    (let ((+agent-shell-pstack-reload--carrying t)
+          (messages nil))
+      (cl-letf (((symbol-function 'message)
+                 (lambda (format &rest args)
+                   (push (apply #'format-message format args) messages))))
+        (load (locate-library "+agent-shell-pstack-panel.el") nil t t))
+      (should-not messages)
+      (should (gethash "old" +agent-shell-pstack-panel--panels))
+      (remhash "old" +agent-shell-pstack-panel--panels))))
 
 (defun +agent-shell-pstack-panel-test--arena (&rest fields)
   "Return an arena request with FIELDS, an alist overriding the defaults."

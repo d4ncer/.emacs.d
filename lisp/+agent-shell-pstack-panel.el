@@ -266,6 +266,8 @@ when collecting failed; what it left is in its panel's manifest."
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
 
+(defvar +agent-shell-pstack-reload--carrying)
+
 (defun +agent-shell-pstack-panel--current-p (panel)
   "Return whether PANEL and its arena manifest have the current structs.
 A manifest carries no schema, so its slot count stands in for one."
@@ -278,16 +280,26 @@ A manifest carries no schema, so its slot count stands in for one."
                          '+agent-shell-arena-git-manifest)))))))
 
 ;; A reload that changed a struct would break every older record in place.
-(let ((stale (seq-remove
-              #'+agent-shell-pstack-panel--current-p
-              (hash-table-values +agent-shell-pstack-panel--panels))))
-  (when stale
-    (dolist (id (hash-table-keys +agent-shell-pstack-panel--panels))
-      (unless (+agent-shell-pstack-panel--current-p
-               (gethash id +agent-shell-pstack-panel--panels))
-        (remhash id +agent-shell-pstack-panel--panels)))
-    (message "Dropped %d pstack panel%s made before the panel code changed; \
-kill their member shells by hand" (length stale) (if (cdr stale) "s" ""))))
+;; `+agent-shell-pstack-reload' carries them over instead, so it skips this.
+(unless (bound-and-true-p +agent-shell-pstack-reload--carrying)
+  (let (dropped kept)
+    (maphash (lambda (id panel)
+               (unless (+agent-shell-pstack-panel--current-p panel)
+                 (if (eq 'finished
+                         (ignore-errors (+agent-shell-pstack-panel-phase panel)))
+                     (push id dropped)
+                   (push id kept))))
+             +agent-shell-pstack-panel--panels)
+    (dolist (id dropped)
+      (remhash id +agent-shell-pstack-panel--panels))
+    (when dropped
+      (message "Dropped %d finished pstack panel%s made before the panel \
+code changed" (length dropped) (if (cdr dropped) "s" "")))
+    (when kept
+      (message "Kept %d unfinished pstack panel%s (%s) made with an older \
+layout; `+agent-shell-pstack-reload' carries them over"
+               (length kept) (if (cdr kept) "s" "")
+               (string-join (sort kept #'string<) ", ")))))
 
 (defconst +agent-shell-pstack-panel--settled '(done error timeout)
   "Member states that end a member.")

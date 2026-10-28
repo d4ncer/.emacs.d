@@ -150,17 +150,22 @@ in the lead's checkout leaves a record that lets Emacs return the checkout
 later; see [Delegate panels](#delegate-panels). Killing the lead
 stops its unfinished panels. The panel and member structs only gain slots at the end and carry
 a schema number, `+agent-shell-pstack-panel--schema`. Loading the library
-again drops in-memory panels from another schema, with a message, rather
-than letting a changed struct break them.
+again outside the reload command drops finished panels from another schema,
+with a message, rather than letting a changed struct break them. It keeps
+unfinished ones and names them; run the reload command to carry them over.
 
 ### Reloading live
 
 After editing pstack code, run `M-x +agent-shell-pstack-reload`. It reloads
 the already loaded libraries in dependency order and adopts changed option
 defaults when the current value still equals the old default. Other option
-values and enabled global minor modes are preserved. The summary names the
-libraries reloaded and options reset, and counts panels dropped by the schema
-guard. If panels were dropped, kill their member shells by hand.
+values and enabled global minor modes are preserved. Panels and remote
+records carry over to changed struct layouts slot by slot by name: new slots
+take their defaults, and records whose layout is unchanged keep their
+identity. If an unfinished panel holds a value in a slot the new code
+removes or renames, the command loads nothing and names the panels; retry
+after they finish. The summary names the libraries reloaded and options
+reset, and counts the panels carried over.
 
 ### Run an arena
 
