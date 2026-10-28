@@ -105,6 +105,31 @@ def reach_egress_server():
         time.sleep(float(os.environ.get("PA_EGRESS_HOLD", "2.5")))
 
 
+def pstack_delegate(role, text, state):
+    """Commit a file as a delegate, optionally start a writer, and report.
+
+    WRITER LOG PIDFILE leaves an orphaned loop appending to LOG, with its
+    pid in PIDFILE; LEAVE-DIRTY leaves an uncommitted file behind."""
+    cwd = state["cwd"]
+    git = lambda *args: subprocess.run(["git", *args], cwd=cwd, check=True,
+                                       capture_output=True, text=True)
+    Path(cwd, role + ".txt").write_text(role + "\n")
+    git("add", role + ".txt")
+    git("commit", "-q", "-m", f"Add {role}.txt")
+    writer = re.search(r"WRITER (\S+) (\S+)", text)
+    if writer:
+        subprocess.Popen(
+            ["/bin/sh", "-c",
+             '(while :; do date >> "$1"; sleep 0.1; done) & echo $! > "$2"',
+             "sh", writer[1], writer[2]],
+            cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL).wait()
+    if "LEAVE-DIRTY" in text:
+        Path(cwd, "loose.txt").write_text("loose\n")
+    branch = git("branch", "--show-current").stdout.strip()
+    return f"DELEGATE role={role} mode={state['mode']} branch={branch}"
+
+
 def handle_pstack_prompt(message, text, state):
     """Answer pstack panel traffic; return the reply, or None if unrelated.
 
@@ -113,6 +138,9 @@ def handle_pstack_prompt(message, text, state):
     # A follow-up can quote member briefs, so recognise it first.
     if "has finished:" in text and "pstack panel" in text:
         return f"TRIAGED {text.count(chr(10) + '## ')}"
+    delegate = re.search(r"You are the (\S+) delegate of a pstack panel", text)
+    if delegate:
+        return pstack_delegate(delegate[1], text, state)
     candidate = re.search(r"You are the (\S+) candidate of a pstack arena", text)
     if candidate:
         role = candidate[1]

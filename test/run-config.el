@@ -80,6 +80,8 @@
                          "-l" "run-agent-shell-sandbox")
   (+config-check-process "pstack arenas over ACP"
                          "-l" "run-agent-shell-pstack-arena")
+  (+config-check-process "pstack delegates over ACP"
+                         "-l" "run-agent-shell-pstack-delegate")
   (+config-check-process "Remote pstack arenas over ACP"
                          "-l" "run-agent-shell-pstack-arena-remote")
   (+config-check-process "agent-shell workarounds over ACP" "-l" "run-agent-shell-perf")
