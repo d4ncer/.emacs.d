@@ -2897,9 +2897,12 @@ arena has none."
       "start")))
 
 (defun +agent-shell-arena-remote--cache-file (remote)
-  "Return the laptop's cache of REMOTE's transcript."
-  (expand-file-name "transcript.jsonl"
-                    (+agent-shell-arena-remote-directory remote)))
+  "Return the laptop's cache of REMOTE's transcript, beside its reports.
+Cleaning the delegate's job up leaves it, as it leaves the reports."
+  (let ((directory (expand-file-name (+agent-shell-arena-remote-panel remote)
+                                     +agent-shell-pstack-panel-directory)))
+    (make-directory directory t)
+    (expand-file-name "transcript.jsonl" directory)))
 
 (defun +agent-shell-arena-remote--check-record (record)
   "Return transcript RECORD, an alist, or signal that it is malformed."

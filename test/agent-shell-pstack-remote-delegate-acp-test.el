@@ -408,7 +408,8 @@ follow-up names where it ran, once."
       (should (equal "Add builder.txt"
                      (funcall lead-git "log" "-1" "--format=%s" branch)))
       (should (equal "Add builder.txt"
-                     (funcall host-git "log" "-1" "--format=%s" branch))))))
+                     (funcall host-git "log" "-1" "--format=%s" branch)))
+      (should (+agent-shell-arena-remote--cached-records remote)))))
 
 (ert-deftest +agent-shell-pstack-remote-delegate-acp-test-remote-sandboxed ()
   "A sandboxed delegate on the host: refused git writes there, one commit

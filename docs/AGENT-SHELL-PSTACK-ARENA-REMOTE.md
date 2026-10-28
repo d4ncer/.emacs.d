@@ -663,7 +663,8 @@ answer follows, so status and cancels never wait on a transcript. An
 arena's poll passes no cursor.
 
 The laptop validates each page, appends records it lacks to
-`transcript.jsonl` in the laptop's arena folder, at most 8 MiB, with a
+`transcript.jsonl` beside the panel's reports, which cleanup leaves, at
+most 8 MiB, with a
 notice for each gap or truncation, and only then saves the advanced
 cursor, so a replayed page adds nothing. It fetches the next page at once
 when there is more, and polls every
