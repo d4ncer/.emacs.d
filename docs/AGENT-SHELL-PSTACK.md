@@ -154,6 +154,36 @@ again outside the reload command drops finished panels from another schema,
 with a message, rather than letting a changed struct break them. It keeps
 unfinished ones and names them; run the reload command to carry them over.
 
+### Provider failures
+
+ACP has no stop reason for a turn the provider failed, so an adapter may end
+it with `end_turn` and the provider's error as its text. Every member, in
+every shape and on a host too, classifies each finished or failed turn with
+`+agent-shell-drive-failure`, from the first of:
+
+- a JSON-RPC error on the prompt whose data names an `errorKind` (Claude
+  Code) or a `codexErrorInfo` (Codex);
+- a turn that saw Codex's `_meta.codex.error` warning and ends with exactly
+  that error's message;
+- a whole final message matching the agent's `:failure-patterns` in
+  `+agent-shell-sandbox-agents`, such as Codex's capacity line. A report that
+  merely mentions such a line does not match.
+
+The drive library advises agent-shell's error and notification handlers, for
+the shells it watches only, so the error data and Codex's warnings reach it.
+Kinds are `rate_limited`, `quota_exhausted`, `overloaded`, `transport_lost`,
+`auth_required`, `context_exhausted`, `budget_exhausted`, `policy_denied`,
+`internal_error` and `provider_error`.
+
+A `rate_limited`, `overloaded`, `transport_lost` or `internal_error` failure
+is retried once: after `+agent-shell-pstack-panel-retry-delay` seconds, 60
+by default, Emacs asks the same shell to continue where it left off. No retry
+starts past the phase's timeout or an arena's deadline. Any other kind, a
+second failure, or a retry that does not fit settles the member as `error`.
+It keeps its text, report, commits and transcript, and the follow-up says
+what failed, such as `Codex was overloaded: Selected model is at capacity.`
+A host's status and report carry each member's `failure_kind`.
+
 ### Reloading live
 
 After editing pstack code, run `M-x +agent-shell-pstack-reload`. It reloads
