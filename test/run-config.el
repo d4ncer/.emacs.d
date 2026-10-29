@@ -62,6 +62,7 @@
    "-l" "agent-shell-pstack-delegate-test"
    "-l" "agent-shell-arena-git-test"
    "-l" "agent-shell-arena-remote-test"
+   "-l" "agent-shell-arena-remote-protocol-test"
    "-l" "agent-shell-pstack-remote-delegate-test"
    "-l" "agent-shell-pstack-arena-sandbox-test"
    "-l" "agent-shell-pstack-arena-trace-test"

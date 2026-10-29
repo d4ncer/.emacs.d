@@ -19,7 +19,8 @@
 ;; Calls to a host run one at a time per host; see
 ;; `+agent-shell-arena-remote--call'.
 ;;
-;; See docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md.
+;; docs/PSTACK-REMOTE-PROTOCOL.md is the protocol; see
+;; docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md for its design.
 
 ;;; Code:
 

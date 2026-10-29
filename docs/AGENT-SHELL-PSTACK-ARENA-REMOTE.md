@@ -1,5 +1,11 @@
 # pstack arena panels on a remote host: design
 
+This document is design history: why remote jobs are shaped as they are,
+what was measured, and how the implementation got here. The normative
+protocol, with the record schemas, the host contract and its
+capabilities, is [PSTACK-REMOTE-PROTOCOL.md](PSTACK-REMOTE-PROTOCOL.md);
+where the two disagree, the spec wins.
+
 Status: revision 2, implemented except the Linux sandbox; delegates run
 on hosts too, as [Delegates on a host](#delegates-on-a-host) says. The
 transport,
