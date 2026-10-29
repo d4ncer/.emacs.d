@@ -311,6 +311,28 @@ with `DETAIL`. The submission owns the timer, the wake timeout and
 cancellation. A record's host kind is validated against the registry
 when read, so a kind must stay registered while records name it.
 
+### Adding a backend
+
+A host kind supplies transport only. Three things are fixed today and a
+new backend cannot change them through the registry:
+
+1. **Launching the runner.** `+agent-shell-arena-remote--launcher` picks
+   `nohup` for a `:local` kind and `systemd-run --user` for every other,
+   which also holds the runner's memory limit.
+2. **Containing a delegate.** A remote delegate's adapter runs in its own
+   `systemd-run --user --scope` unit, and stopping it means stopping that
+   unit. There is no other way to contain one.
+3. **The sandbox.** Every non-`:local` kind is assumed to be Linux with the
+   bwrap sandbox.
+
+A backend without a systemd user manager is therefore refused before
+anything is shipped, with `systemd_user` named as missing, rather than
+half run. To support one, add `:launch` and `:contain` properties to the
+host kind, each a function with systemd as the default, give the
+capability check a property saying which capabilities the kind's own
+launch and containment need, and extend this section and the capability
+table to match.
+
 ## Record schemas
 
 `job.json` and `report.json` are in each job's folder, `status.json` too,
