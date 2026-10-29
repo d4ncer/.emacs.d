@@ -53,7 +53,12 @@ remote host documentation for the event meanings.
 :local, when non-nil, makes NAME an absolute local state directory,
 uses its ready.json and starts the runner with nohup instead of systemd.
 The remote library implements the default callbacks; defining this
-option here lets profile validation run without loading that library."
+option here lets profile validation run without loading that library.
+
+A kind supplies transport only.  Starting the runner, containing a
+remote delegate and the sandbox still assume a Linux host with a systemd
+user manager, so a backend without one needs more than an entry here;
+see \"Adding a backend\" in docs/PSTACK-REMOTE-PROTOCOL.md."
   :group '+agent-shell-pstack-arena
   :type '(alist :key-type symbol :value-type plist))
 

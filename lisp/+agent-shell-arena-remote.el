@@ -1365,7 +1365,9 @@ echo \"pstack-arena-clean done\"
       (string-trim (substring line (length prefix))))))
 
 (defun +agent-shell-arena-remote--launcher (host)
-  "Return how HOST starts a runner that outlives the call: systemd or nohup."
+  "Return how HOST starts a runner that outlives the call: systemd or nohup.
+Host kinds cannot choose another way yet; see \"Adding a backend\" in
+docs/PSTACK-REMOTE-PROTOCOL.md."
   (if (+agent-shell-arena-remote--host-option host :local) "nohup" "systemd"))
 
 ;;;; Laptop phases

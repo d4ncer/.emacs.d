@@ -14,6 +14,10 @@ Guidance for changing this Emacs configuration.
   state). Feature-specific bindings may live in their module.
 - `templates/` contains file templates. `docs/MODULES.md` is a longer
   architecture overview; verify details against `init.el` and the modules.
+- `docs/PSTACK-REMOTE-PROTOCOL.md` is the normative protocol for running
+  pstack arenas and delegates on a remote host. Read its "Adding a
+  backend" section before adding a host kind: kinds supply transport
+  only, and launching and containment still assume systemd.
 
 ## Making changes
 
