@@ -672,6 +672,17 @@ unfinished panel. Below the panels it lists each branch-mode delegate an
 earlier Emacs left unreturned. The buffer redraws whenever a panel changes.
 The decision trail and plan views are planned.
 
+If a lead's latest turn contains a block that starts no panel, `C-c P`
+shows a **Last request** line with the outcome. Press `l` on that line or
+on a panel's row to run `+agent-shell-pstack-panel-log` for its lead. You
+can also run the command from the lead shell. The read-only log shows the
+last 50 handled events per lead, newest first, with time, session, final
+text length, whether it ends in a fenced block, and the outcome or error.
+It records when a split final part was recovered from the whole turn.
+The log stays in memory and retains at most 200 characters of message text
+and 200 characters of the block's first line per event. Request errors
+also appear in `*Messages*`.
+
 While a lead has a panel running, its mode line shows `panel 1/3`, the
 settled and total member counts, next to `pstack`. Hovering lists each
 member's role, agent and state, and `mouse-1` opens the panels view. The item

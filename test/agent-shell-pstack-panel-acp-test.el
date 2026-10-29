@@ -73,6 +73,9 @@ sees `cwd' and `reports', the panel report root."
           (+agent-shell-pstack-panel-retry-delay 0)
           (+agent-shell-pstack-panel-directory reports)
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+          (+agent-shell-pstack-panel--logs (make-hash-table :test #'eq))
+          (+agent-shell-pstack-panel--request-digests
+           (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
           (+agent-shell-drive--shells (make-hash-table :test #'eq))
           (+agent-shell-pstack-prime-texts nil)
@@ -191,6 +194,53 @@ the drive.\",\"members\":[{\"role\":\"data-flow\",\"agent\":\"fixture-codex\"},\
                                       lead))
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 2")
       (+agent-shell-pstack-panel-acp-test--members-gone panel))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-split-final ()
+  "Start a panel when an ACP tool update splits its opening fence."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let* ((panel (+agent-shell-pstack-panel-acp-test--request
+                   lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"
+                   nil "SPLIT-PANEL "))
+           (entries (ring-elements
+                     (gethash lead +agent-shell-pstack-panel--logs)))
+           (entry (seq-find (lambda (e) (eq 'started (plist-get e :outcome)))
+                            entries)))
+      (should (= 1 (length (+agent-shell-pstack-panel-list))))
+      (should (equal (+agent-shell-pstack-panel-id panel) (plist-get entry :id)))
+      (should (eq 'turn-text (plist-get entry :source)))
+      (should-not (plist-get entry :ends-with-block))
+      (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
+      (+agent-shell-pstack-panel-acp-test--members-gone panel))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-queued-input ()
+  "Keep a request when a real shell callback immediately starts another turn."
+  (dolist (boundary '(turn-complete finish-output))
+    (+agent-shell-pstack-panel-acp-test--with-lead
+      (let* ((attempted nil)
+             (queued nil)
+             (queue-next (lambda (&rest _)
+                           (unless attempted
+                             (setq attempted t
+                                   queued (+agent-shell-drive-send
+                                           lead "Next prompt"))))))
+        (if (eq boundary 'turn-complete)
+            (agent-shell-subscribe-to :shell-buffer lead :event 'turn-complete
+                                      :on-event queue-next)
+          (with-current-buffer lead
+            (add-hook 'shell-maker-finish-output-hook queue-next nil t)))
+        (let* ((panel (+agent-shell-pstack-panel-acp-test--request
+                       lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"))
+               (entry (seq-find
+                       (lambda (e) (eq 'started (plist-get e :outcome)))
+                       (ring-elements
+                        (gethash lead +agent-shell-pstack-panel--logs)))))
+          (should queued)
+          (should (= 1 (length (+agent-shell-pstack-panel-list))))
+          (should (equal (+agent-shell-pstack-panel-id panel)
+                         (plist-get entry :id)))
+          (should (plist-get entry :ends-with-block))
+          (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
+          (+agent-shell-pstack-panel-acp-test--members-gone panel))))))
 
 (ert-deftest +agent-shell-pstack-panel-acp-test-timeout ()
   "Settle a hung member at the deadline with its partial text."

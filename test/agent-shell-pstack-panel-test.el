@@ -45,6 +45,9 @@ lists the roles whose result equals the base."
           (+agent-shell-pstack-panel-directory directory)
           (+agent-shell-pstack-arena-directory arenas)
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+          (+agent-shell-pstack-panel--logs (make-hash-table :test #'eq))
+          (+agent-shell-pstack-panel--request-digests
+           (make-hash-table :test #'equal))
           (+agent-shell-pstack-prime-texts nil)
           (+agent-shell-pstack-reminder-texts nil)
           (+agent-shell-pstack-mode-hook nil)
@@ -254,6 +257,221 @@ lists the roles whose result equals the base."
   (should-not (+agent-shell-pstack-panel--block "```pstack-panel\n{\"a\":1}\n"))
   (should-not (+agent-shell-pstack-panel--block "```json\n{}\n```"))
   (should-not (+agent-shell-pstack-panel--block nil)))
+
+(ert-deftest +agent-shell-pstack-panel-test-log-outcomes ()
+  "Distinguish no request, interruption, duplicate, rejection and startup."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (+agent-shell-pstack-panel-test--message
+                 +agent-shell-pstack-panel-test--how)))
+      (lead-event :kind 'tool-call-update :session "s1" :text "Reading.")
+      (lead-event :kind 'tool-call-update :session "s1" :text text :title "Read")
+      (let ((id (+agent-shell-pstack-panel-id
+                 (car (+agent-shell-pstack-panel-list)))))
+        (lead-event :kind 'turn-complete :session "s1" :text text)
+        (lead-event :kind 'turn-complete :session "s2" :text text)
+        (lead-event :kind 'turn-complete :session "s3"
+                    :text (+agent-shell-pstack-panel-test--message "{}"))
+        (lead-event :kind 'prompt-ready :session "s3")
+        (lead-event :kind 'clean-up :session "s3")
+        (let ((entries (ring-elements
+                        (gethash lead +agent-shell-pstack-panel--logs))))
+          (should (equal '(clean-up prompt-ready turn-complete turn-complete
+                                   turn-complete tool-call-update tool-call-update)
+                         (mapcar (lambda (e) (plist-get e :kind)) entries)))
+          (should (equal '(no-block no-block rejected started duplicate
+                                   interrupted no-block)
+                         (mapcar (lambda (e) (plist-get e :outcome)) entries)))
+          (dolist (index '(4 5))
+            (should (equal id (plist-get (nth index entries) :id))))
+          (should (string-match-p "JSON object" (plist-get (nth 2 entries) :reason)))
+          (should (plist-get (nth 3 entries) :ends-with-block))
+          (should (equal "s2" (plist-get (nth 3 entries) :session)))
+          (should (equal (buffer-name lead) (plist-get (car entries) :lead)))
+          (should (plist-get (car entries) :time)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-log-bounded ()
+  "Keep fifty entries per lead and never retain the text after excerpts."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((prefix (make-string 210 ?p))
+           (json (concat (make-string 210 ?b) "SECRET-BLOCK-TAIL"))
+           (text (concat prefix "SECRET-MESSAGE-TAIL\n```pstack-panel\n"
+                         json "\n```")))
+      (dotimes (_ 60)
+        (lead-event :kind 'turn-complete :session "s1" :text text))
+      (let* ((log (gethash lead +agent-shell-pstack-panel--logs))
+             (entry (ring-ref log 0)))
+        (should (= 50 (ring-length log)))
+        (should (= (length text) (plist-get entry :length)))
+        (should (= 200 (length (plist-get entry :excerpt))))
+        (should (= 200 (length (plist-get entry :block-first-line))))
+        (should-not (string-search "SECRET-" (prin1-to-string log))))
+      (with-temp-buffer
+        (+agent-shell-pstack-panel--lead-event
+         (list :shell (current-buffer) :kind 'prompt-ready :session "other"))
+        (should (= 1 (ring-length
+                      (gethash (current-buffer) +agent-shell-pstack-panel--logs)))))
+      (should (= 50 (ring-length
+                     (gethash lead +agent-shell-pstack-panel--logs)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-log-errors ()
+  "Catch and message parse and lifecycle errors, preserving the evidence."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (+agent-shell-pstack-panel-test--message
+                 +agent-shell-pstack-panel-test--how))
+          messages)
+      (cl-letf (((symbol-function '+agent-shell-pstack-panel--parse)
+                 (lambda (&rest _) (error "Request exploded")))
+                ((symbol-function 'message)
+                 (lambda (format-string &rest args)
+                   (push (apply #'format format-string args) messages))))
+        (lead-event :kind 'turn-complete :session "s1" :text text)
+        (should-not (+agent-shell-pstack-panel-list))
+        (let ((entry (ring-ref (gethash lead +agent-shell-pstack-panel--logs) 0)))
+          (should (eq 'error (plist-get entry :outcome)))
+          (should (equal "Request exploded" (plist-get entry :reason))))
+        (should (seq-some (lambda (m) (string-search "Request exploded" m))
+                          messages)))
+      (cl-letf (((symbol-function '+agent-shell-pstack-panel--deliver-to)
+                 (lambda (&rest _) (error "Delivery exploded"))))
+        (lead-event :kind 'prompt-ready :session "s1")
+        (let ((entry (ring-ref (gethash lead +agent-shell-pstack-panel--logs) 0)))
+          (should (eq 'error (plist-get entry :outcome)))
+          (should (equal "Delivery exploded" (plist-get entry :reason))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-recover-split-final ()
+  "Recover only a turn ending in a block when its final part was split."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (+agent-shell-pstack-panel-test--message
+                 +agent-shell-pstack-panel-test--how)))
+      (lead-event :kind 'turn-complete :session "s1" :text "```"
+                  :turn-text text)
+      (should (= 2 (length started)))
+      (let ((entry (ring-ref (gethash lead +agent-shell-pstack-panel--logs) 0)))
+        (should (eq 'started (plist-get entry :outcome)))
+        (should (= 3 (plist-get entry :length)))
+        (should-not (plist-get entry :ends-with-block))
+        (should (eq 'turn-text (plist-get entry :source))))
+      (lead-event :kind 'turn-complete :session "s2" :text nil :turn-text text)
+      (should (= 4 (length started)))
+      (lead-event :kind 'turn-complete :session "s3" :text "More work"
+                  :turn-text (concat text "More work"))
+      (should (= 4 (length started)))
+      (lead-event :kind 'turn-complete :session "s4" :text "Plain text")
+      (should (= 4 (length started))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-trailing-block ()
+  "Do not replay a prior block when a later code fence ends the turn."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((text (+agent-shell-pstack-panel-test--message
+                  +agent-shell-pstack-panel-test--how))
+           (later (concat text "More work\n```sh\ntrue\n```")))
+      (should (+agent-shell-pstack-panel--ends-with-block-p text))
+      (should-not (+agent-shell-pstack-panel--ends-with-block-p later))
+      (lead-event :kind 'turn-complete :session "s1" :text "true\n```"
+                  :turn-text later)
+      (should-not started)
+      (should (eq 'no-block
+                  (plist-get (ring-ref (gethash lead +agent-shell-pstack-panel--logs)
+                                       0)
+                             :outcome)))
+      (lead-event :kind 'turn-complete :session "s2" :text "```"
+                  :turn-text (concat (+agent-shell-pstack-panel-test--message "{}")
+                                     text))
+      (should (= 2 (length started))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-log-extraction-error ()
+  "Record extraction failures before the outer watcher can swallow them."
+  (+agent-shell-pstack-panel-test--with
+    (let (messages)
+      (cl-letf (((symbol-function '+agent-shell-pstack-panel--block)
+                 (lambda (&rest _) (error "Extraction exploded")))
+                ((symbol-function 'message)
+                 (lambda (format-string &rest args)
+                   (push (apply #'format format-string args) messages))))
+        (lead-event :kind 'turn-complete :session "s1" :text "message")
+        (should-not (+agent-shell-pstack-panel--request lead "s1" "message"))
+        (let ((entries (ring-elements
+                        (gethash lead +agent-shell-pstack-panel--logs))))
+          (should (= 2 (length entries)))
+          (dolist (entry entries)
+            (should (eq 'error (plist-get entry :outcome)))
+            (should (equal "Extraction exploded" (plist-get entry :reason)))))
+        (should (= 2 (length messages)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-request-identity ()
+  "Only the same block in the same session is a duplicate."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((json +agent-shell-pstack-panel-test--how)
+           (other (replace-regexp-in-string "Explain the drive" "Other task"
+                                            json)))
+      (dolist (request `(("s1" . ,json) ("s1" . ,other)
+                        ("s2" . ,json) ("s1" . ,json)))
+        (lead-event :kind 'turn-complete :session (car request)
+                    :text (+agent-shell-pstack-panel-test--message (cdr request))))
+      (should (= 3 (length (+agent-shell-pstack-panel-list))))
+      (let ((entries (ring-elements
+                      (gethash lead +agent-shell-pstack-panel--logs))))
+        (should (equal '(duplicate started started started)
+                       (mapcar (lambda (e) (plist-get e :outcome)) entries)))
+        (should (equal (plist-get (car entries) :id)
+                       (plist-get (car (last entries)) :id)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-request-hash-collision ()
+  "A shortened id collision cannot discard a different request."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((json +agent-shell-pstack-panel-test--how)
+           (other (replace-regexp-in-string "Explain the drive" "Other task"
+                                            json)))
+      (cl-letf (((symbol-function '+agent-shell-pstack-panel--id)
+                 (lambda (&rest _) "same-short-id")))
+        (dolist (block (list json other other json))
+          (lead-event :kind 'turn-complete :session "s1"
+                      :text (+agent-shell-pstack-panel-test--message block))))
+      (should (= 2 (length (+agent-shell-pstack-panel-list))))
+      (should (= 4 (length started)))
+      (let ((entries (ring-elements
+                      (gethash lead +agent-shell-pstack-panel--logs))))
+        (should (equal '(duplicate duplicate started started)
+                       (mapcar (lambda (e) (plist-get e :outcome)) entries)))
+        (should-not (equal (plist-get (nth 2 entries) :id)
+                           (plist-get (nth 3 entries) :id)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-log-view ()
+  "Show bounded events newest first in a read-only buffer from a lead row."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (unwind-protect
+          (progn
+            (lead-event :kind 'turn-complete :session "older" :text "old")
+            (lead-event :kind 'turn-complete :session "newer"
+                        :text (+agent-shell-pstack-panel-test--message "{}"))
+            (+agent-shell-pstack-panels)
+            (goto-char (point-min))
+            (should (search-forward "Last request: block rejected" nil t))
+            (should (eq lead (+agent-shell-pstack-panel--lead-at-point)))
+            (should (eq #'+agent-shell-pstack-panel-log
+                        (key-binding "l")))
+            (+agent-shell-pstack-panel-log)
+            (should buffer-read-only)
+            (should (derived-mode-p 'special-mode))
+            (should (search-forward "session=\"newer\"" nil t))
+            (should (search-forward "session=\"older\"" nil t)))
+        (dolist (name '("*pstack panels*" "*pstack panel log*"))
+          (when (get-buffer name) (kill-buffer name)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-last-request ()
+  "Keep the latest turn's failed block visible until a new turn completes."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message "{}"))
+    (lead-event :kind 'prompt-ready :session "s1")
+    (should (+agent-shell-pstack-panels--last-request lead))
+    (lead-event :kind 'turn-complete :session "s1" :text "Thanks")
+    (should-not (+agent-shell-pstack-panels--last-request lead))
+    (lead-event :kind 'turn-complete :session "s2"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--how))
+    (should-not (+agent-shell-pstack-panels--last-request lead))))
 
 (ert-deftest +agent-shell-pstack-panel-test-block-before-more-work ()
   "Start a panel whose lead kept working after the block, and interrupt it."

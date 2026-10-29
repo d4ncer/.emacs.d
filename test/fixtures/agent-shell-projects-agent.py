@@ -328,6 +328,16 @@ def handle_pstack_prompt(message, text, state):
             text[position + len("PSTACK-LEAD "):])
         block = ("Requesting a panel.\n\n```pstack-panel\n"
                  + json.dumps(request) + "\n```\n")
+        if "SPLIT-PANEL" in text:
+            split = block.index("panel\n")
+            chunk(session_id, block[:split])
+            emit({"method": "session/update", "params": {
+                "sessionId": session_id,
+                "update": {"sessionUpdate": "tool_call", "toolCallId": "late-1",
+                           "title": "Late read update", "kind": "read",
+                           "status": "completed"},
+            }})
+            return block[split:]
         if "KEEP-WORKING" not in text:
             return block
         chunk(session_id, block + "\nMeanwhile, more digging.")

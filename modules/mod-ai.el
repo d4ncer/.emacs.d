@@ -291,6 +291,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
    "<return>" #'+agent-shell-pstack-panels-visit
    "x" #'+agent-shell-pstack-panels-clean
    "c" #'+agent-shell-pstack-panels-cancel
+   "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
    "gr" #'revert-buffer
    "q" #'quit-window)
   :config

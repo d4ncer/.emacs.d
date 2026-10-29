@@ -27,6 +27,7 @@
 (require 'json)
 (require 'map)
 (require 'rx)
+(require 'ring)
 (require 'seq)
 (require 'subr-x)
 (require '+agent-shell-drive)
@@ -334,6 +335,139 @@ Expiry and abandonment reach only the current phase's members.")
 (defconst +agent-shell-pstack-panel--mode-line-construct
   '("" +agent-shell-pstack-panel--mode-line)
   "Mode-line construct showing `+agent-shell-pstack-panel--mode-line'.")
+
+;;;; Request diagnostics
+
+(defvar +agent-shell-pstack-panel--logs (make-hash-table :test #'eq)
+  "Map each lead buffer to a ring of its last 50 handled events.")
+
+(defvar +agent-shell-pstack-panel--request-digests (make-hash-table :test #'equal)
+  "Map panel ids to full request digests, without retaining request text.")
+
+(defvar +agent-shell-pstack-panel--log-entry nil
+  "Dynamically bound entry for the lead event being handled.")
+
+(defun +agent-shell-pstack-panel--excerpt (text)
+  "Return at most the first 200 characters of TEXT without properties."
+  (when text (substring-no-properties text 0 (min 200 (length text)))))
+
+(defun +agent-shell-pstack-panel--trailing-block-text (text)
+  "Return TEXT's trailing pstack-panel fence and contents, or nil."
+  (when text
+    (let ((start 0) trailing)
+      (while (string-match (rx bol "```pstack-panel" (* blank) "\n")
+                           text start)
+        (let ((open (match-beginning 0)))
+          (setq start (match-end 0))
+          (if (string-match (rx bol "```" (* blank) eol) text start)
+              (progn
+                (setq start (match-end 0))
+                (when (string-blank-p (substring text start))
+                  (setq trailing (substring text open))))
+            (setq start (length text)))))
+      trailing)))
+
+(defun +agent-shell-pstack-panel--ends-with-block-p (text)
+  "Return whether TEXT ends with a complete pstack-panel fence."
+  (and (+agent-shell-pstack-panel--trailing-block-text text) t))
+
+(defun +agent-shell-pstack-panel--log-event (lead session kind text)
+  "Record LEAD's KIND event in SESSION with bounded excerpts of TEXT."
+  (let* ((entry (list :time (current-time) :lead (buffer-name lead)
+                      :session session :kind kind :length (length text)
+                      :source 'final :ends-with-block nil :block nil
+                      :excerpt (+agent-shell-pstack-panel--excerpt text)
+                      :block-first-line nil
+                      :outcome 'no-block :id nil :reason nil))
+         (log (or (gethash lead +agent-shell-pstack-panel--logs)
+                  (puthash lead (make-ring 50)
+                           +agent-shell-pstack-panel--logs))))
+    (ring-insert log entry)
+    entry))
+
+(defun +agent-shell-pstack-panel--log-request-text (final text)
+  "Record FINAL's fence status and the block requested in recovered TEXT."
+  (let ((block (+agent-shell-pstack-panel--block text)))
+    (setf (plist-get +agent-shell-pstack-panel--log-entry :source)
+          (if (equal text final) 'final 'turn-text)
+          (plist-get +agent-shell-pstack-panel--log-entry :ends-with-block)
+          (+agent-shell-pstack-panel--ends-with-block-p final)
+          (plist-get +agent-shell-pstack-panel--log-entry :block) (and block t)
+          (plist-get +agent-shell-pstack-panel--log-entry :block-first-line)
+          (when block
+            (+agent-shell-pstack-panel--excerpt
+             (car (split-string block "\n")))))))
+
+(defun +agent-shell-pstack-panel--log-outcome (outcome &optional id reason)
+  "Set the current event's OUTCOME, panel ID and bounded REASON."
+  (setf (plist-get +agent-shell-pstack-panel--log-entry :outcome) outcome
+        (plist-get +agent-shell-pstack-panel--log-entry :id) id
+        (plist-get +agent-shell-pstack-panel--log-entry :reason)
+        (+agent-shell-pstack-panel--excerpt reason)))
+
+(defun +agent-shell-pstack-panel--log-error (err)
+  "Record and message request error ERR."
+  (+agent-shell-pstack-panel--log-outcome
+   'error (plist-get +agent-shell-pstack-panel--log-entry :id)
+   (error-message-string err))
+  (message "pstack panel request (%s): %s"
+           (plist-get +agent-shell-pstack-panel--log-entry :lead)
+           (plist-get +agent-shell-pstack-panel--log-entry :reason)))
+
+(defun +agent-shell-pstack-panel--log-outcome-text (entry)
+  "Describe the outcome of log ENTRY on one line."
+  (string-join
+   (delq nil (list (pcase (plist-get entry :outcome)
+                     ('no-block "no block")
+                     ('started "panel started")
+                     ('rejected "block rejected")
+                     ('duplicate "duplicate of existing panel")
+                     (other (symbol-name other)))
+                   (plist-get entry :id)
+                   (when-let* ((reason (plist-get entry :reason)))
+                     (replace-regexp-in-string "[\n\r]+" " " reason))))
+   " — "))
+
+(defun +agent-shell-pstack-panel--lead-at-point ()
+  "Return the lead of the panels row at point, or the current buffer."
+  (or (get-text-property (point) '+agent-shell-pstack-panels-lead)
+      (when-let* ((panel (get-text-property
+                         (point) '+agent-shell-pstack-panels-panel)))
+        (+agent-shell-pstack-panel-lead panel))
+      (current-buffer)))
+
+;;;###autoload
+(defun +agent-shell-pstack-panel-log (&optional lead)
+  "Show LEAD's bounded event log, newest first, in a read-only buffer.
+Interactively use the lead at point in the panels view or the current shell."
+  (interactive)
+  (setq lead (or lead (+agent-shell-pstack-panel--lead-at-point)))
+  (let ((log (gethash lead +agent-shell-pstack-panel--logs))
+        (buffer (get-buffer-create "*pstack panel log*")))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "Panel events for %s (newest first)\n\n"
+                        (+agent-shell-pstack-panels--name lead)))
+        (if (or (null log) (ring-empty-p log))
+            (insert "No handled lead events.\n")
+          (dolist (entry (ring-elements log))
+            (insert (format "%s  %s  lead=%S session=%S length=%d \
+ends-with-block=%s source=%s\n  %s\n"
+                            (format-time-string "%F %T" (plist-get entry :time))
+                            (plist-get entry :kind) (plist-get entry :lead)
+                            (plist-get entry :session) (plist-get entry :length)
+                            (plist-get entry :ends-with-block)
+                            (plist-get entry :source)
+                            (+agent-shell-pstack-panel--log-outcome-text entry)))
+            (when (plist-get entry :excerpt)
+              (insert (format "  Text: %S\n" (plist-get entry :excerpt))))
+            (when (plist-get entry :block-first-line)
+              (insert (format "  Block first line: %S\n"
+                              (plist-get entry :block-first-line)))))))
+      (special-mode)
+      (goto-char (point-min)))
+    (pop-to-buffer buffer)))
 
 ;;;; Requests
 
@@ -2036,45 +2170,71 @@ for a local delegate, which commits as its repository says."
                     '(:agent-config :identifier))))
 
 (defun +agent-shell-pstack-panel--request (lead session text &optional tool)
+  "Handle LEAD's request in TEXT from SESSION, logging every outcome.
+TOOL is the call to interrupt.  Catch, log and message request errors."
+  (let* ((own-entry (null +agent-shell-pstack-panel--log-entry))
+         (+agent-shell-pstack-panel--log-entry
+          (or +agent-shell-pstack-panel--log-entry
+              (+agent-shell-pstack-panel--log-event
+               lead session (if tool 'tool-call-update 'turn-complete) text))))
+    (condition-case err
+        (progn
+          (when own-entry (+agent-shell-pstack-panel--log-request-text text text))
+          (+agent-shell-pstack-panel--start-request lead session text tool))
+      (error (+agent-shell-pstack-panel--log-error err) nil))))
+
+(defun +agent-shell-pstack-panel--start-request (lead session text &optional tool)
   "Start the panel that LEAD requested in TEXT in SESSION.
 TOOL names the call LEAD made after TEXT; a new request interrupts LEAD.
 Return the panel, or nil when TEXT requests none or one already seen."
   (when-let* ((block (+agent-shell-pstack-panel--block text))
-              (id (+agent-shell-pstack-panel--id (or session "") block))
-              ((not (+agent-shell-pstack-panel--find id))))
-    (let ((panel (condition-case err
-                     (+agent-shell-pstack-panel--parse
-                      block (+agent-shell-pstack-panel--lead-agent lead))
-                   (user-error
-                    (+agent-shell-pstack-panel--make
-                     :rejection (error-message-string err))))))
-      (setf (+agent-shell-pstack-panel-id panel) id
-            (+agent-shell-pstack-panel-lead panel) lead)
-      (puthash id panel +agent-shell-pstack-panel--panels)
-      (when tool
-        (setf (+agent-shell-pstack-panel-interrupted panel) tool)
-        (+agent-shell-drive-interrupt lead))
-      (cond
-       ((+agent-shell-pstack-panel-rejection panel)
-        (+agent-shell-pstack-panel--finish panel))
-       ((memq (+agent-shell-pstack-panel-shape panel) '(arena delegate))
-        (setf (+agent-shell-pstack-panel-cwd panel)
-              (with-current-buffer lead (agent-shell-cwd)))
-        ;; The base must include the edit the interrupt may cut short, and
-        ;; a delegate's checkout must be clean of it.
-        (if tool
-            (setf (+agent-shell-pstack-panel-phase panel) 'interrupting)
-          (+agent-shell-pstack-panel--prepare panel)))
-       (t
-        (setf (+agent-shell-pstack-panel-cwd panel)
-              (with-current-buffer lead (agent-shell-cwd)))
-        (+agent-shell-pstack-panel--arm
-         panel (+agent-shell-pstack-panel--phase-timeout panel))
-        (dolist (member (+agent-shell-pstack-panel-members panel))
-          (+agent-shell-pstack-panel--start-member panel member))
-        (+agent-shell-pstack-panel--advance panel)))
-      (+agent-shell-pstack-panels--refresh)
-      panel)))
+              (short-id (+agent-shell-pstack-panel--id (or session "") block))
+              (digest (secure-hash 'sha256 (concat session "\0" block)))
+              (id (let ((previous
+                         (gethash short-id
+                                  +agent-shell-pstack-panel--request-digests)))
+                    (if (and previous (not (equal digest previous)))
+                        digest short-id))))
+    (if (+agent-shell-pstack-panel--find id)
+        (progn (+agent-shell-pstack-panel--log-outcome 'duplicate id) nil)
+      (+agent-shell-pstack-panel--log-outcome 'started id)
+      (let ((panel (condition-case err
+                       (+agent-shell-pstack-panel--parse
+                        block (+agent-shell-pstack-panel--lead-agent lead))
+                     (user-error
+                      (+agent-shell-pstack-panel--make
+                       :rejection (error-message-string err))))))
+        (setf (+agent-shell-pstack-panel-id panel) id
+              (+agent-shell-pstack-panel-lead panel) lead)
+        (puthash id panel +agent-shell-pstack-panel--panels)
+        (puthash id digest +agent-shell-pstack-panel--request-digests)
+        (when tool
+          (setf (+agent-shell-pstack-panel-interrupted panel) tool)
+          (+agent-shell-drive-interrupt lead)
+          (+agent-shell-pstack-panel--log-outcome 'interrupted id tool))
+        (cond
+         ((+agent-shell-pstack-panel-rejection panel)
+          (+agent-shell-pstack-panel--log-outcome
+           'rejected id (+agent-shell-pstack-panel-rejection panel))
+          (+agent-shell-pstack-panel--finish panel))
+         ((memq (+agent-shell-pstack-panel-shape panel) '(arena delegate))
+          (setf (+agent-shell-pstack-panel-cwd panel)
+                (with-current-buffer lead (agent-shell-cwd)))
+          ;; The base must include the edit the interrupt may cut short, and
+          ;; a delegate's checkout must be clean of it.
+          (if tool
+              (setf (+agent-shell-pstack-panel-phase panel) 'interrupting)
+            (+agent-shell-pstack-panel--prepare panel)))
+         (t
+          (setf (+agent-shell-pstack-panel-cwd panel)
+                (with-current-buffer lead (agent-shell-cwd)))
+          (+agent-shell-pstack-panel--arm
+           panel (+agent-shell-pstack-panel--phase-timeout panel))
+          (dolist (member (+agent-shell-pstack-panel-members panel))
+            (+agent-shell-pstack-panel--start-member panel member))
+          (+agent-shell-pstack-panel--advance panel)))
+        (+agent-shell-pstack-panels--refresh)
+        panel))))
 
 ;;;; Arenas
 
@@ -2346,20 +2506,37 @@ An arena on a host decides for itself; see
   (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-pstack-panel--lead-event (event)
-  "Read panel requests from a lead's EVENT and deliver its follow-ups."
-  (let ((lead (plist-get event :shell)))
-    (pcase (plist-get event :kind)
-      ('tool-call-update
-       (+agent-shell-pstack-panel--request
-        lead (plist-get event :session) (plist-get event :text)
-        (or (plist-get event :title) "a tool")))
-      ('turn-complete
-       (+agent-shell-pstack-panel--request lead (plist-get event :session)
-                                           (plist-get event :text))
-       (+agent-shell-pstack-panel--resume lead)
-       (+agent-shell-pstack-panel--deliver-to lead))
-      ('prompt-ready (+agent-shell-pstack-panel--deliver-to lead))
-      ('clean-up (+agent-shell-pstack-panel--abandon lead)))))
+  "Read panel requests from a lead's EVENT and log every handled outcome."
+  (let ((lead (plist-get event :shell))
+        (kind (plist-get event :kind)))
+    (when (memq kind '(turn-complete tool-call-update prompt-ready clean-up))
+      (let* ((final (plist-get event :text))
+             (+agent-shell-pstack-panel--log-entry
+              (+agent-shell-pstack-panel--log-event
+               lead (plist-get event :session) kind final)))
+        (condition-case err
+            (let ((text (or (and (eq kind 'turn-complete)
+                                 (not (+agent-shell-pstack-panel--block final))
+                                 (+agent-shell-pstack-panel--trailing-block-text
+                                  (plist-get event :turn-text)))
+                            final)))
+              (+agent-shell-pstack-panel--log-request-text final text)
+              (pcase kind
+                ('tool-call-update
+                 (+agent-shell-pstack-panel--request
+                  lead (plist-get event :session) text
+                  (or (plist-get event :title) "a tool")))
+                ('turn-complete
+                 (+agent-shell-pstack-panel--request
+                  lead (plist-get event :session) text)
+                 (+agent-shell-pstack-panel--resume lead)
+                 (+agent-shell-pstack-panel--deliver-to lead))
+                ('prompt-ready (+agent-shell-pstack-panel--deliver-to lead))
+                ('clean-up (+agent-shell-pstack-panel--abandon lead))))
+          (error (+agent-shell-pstack-panel--log-error err)))
+        (condition-case err
+            (+agent-shell-pstack-panels--refresh)
+          (error (+agent-shell-pstack-panel--log-error err)))))))
 
 (defun +agent-shell-pstack-panel-list ()
   "Return every panel, oldest first."
@@ -2731,14 +2908,16 @@ exited mid-run."
   :doc "Keymap for `+agent-shell-pstack-panels-mode'."
   "RET" #'+agent-shell-pstack-panels-visit
   "x" #'+agent-shell-pstack-panels-clean
-  "c" #'+agent-shell-pstack-panels-cancel)
+  "c" #'+agent-shell-pstack-panels-cancel
+  "l" #'+agent-shell-pstack-panel-log)
 
 (define-derived-mode +agent-shell-pstack-panels-mode special-mode
   "pstack panels"
   "List pstack panels, their members and reports.
 \\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line.
 \\[+agent-shell-pstack-panels-clean] cleans up the finished arena or delegate on the line.
-\\[+agent-shell-pstack-panels-cancel] cancels the unfinished panel on the line."
+\\[+agent-shell-pstack-panels-cancel] cancels the unfinished panel on the line.
+\\[+agent-shell-pstack-panel-log] shows the lead's request log."
   (setq-local revert-buffer-function
               (lambda (&rest _) (+agent-shell-pstack-panels--render))
               truncate-lines t))
@@ -2780,6 +2959,16 @@ exited mid-run."
                 "")
               name))))
 
+(defun +agent-shell-pstack-panels--last-request (lead)
+  "Return LEAD's latest turn if it had a block but started no panel."
+  (when-let* ((log (gethash lead +agent-shell-pstack-panel--logs))
+              (entry (seq-find (lambda (entry)
+                                 (eq (plist-get entry :kind) 'turn-complete))
+                               (ring-elements log)))
+              ((plist-get entry :block))
+              ((not (memq (plist-get entry :outcome) '(started interrupted)))))
+    entry))
+
 (defun +agent-shell-pstack-panels--render ()
   "Redraw the current panels buffer, keeping point's line."
   (let ((inhibit-read-only t)
@@ -2789,6 +2978,17 @@ exited mid-run."
     (unless panels
       (insert "No panels yet.  A pstack lead requests one by ending its \
 message with a pstack-panel block.\n"))
+    (maphash
+     (lambda (lead _log)
+       (when-let* ((entry (+agent-shell-pstack-panels--last-request lead)))
+         (let ((start (point)))
+           (+agent-shell-pstack-panels--line
+            lead (+agent-shell-pstack-panels--name lead)
+            "  Last request: " (+agent-shell-pstack-panel--log-outcome-text entry)
+            "  (l: log)")
+           (put-text-property start (point) '+agent-shell-pstack-panels-lead
+                              lead))))
+     +agent-shell-pstack-panel--logs)
     (dolist (panel panels)
       (let ((lead (+agent-shell-pstack-panel-lead panel))
             (start (point)))
