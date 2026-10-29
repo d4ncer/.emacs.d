@@ -162,7 +162,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 9
+(defconst +agent-shell-pstack-panel--schema 10
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -181,7 +181,8 @@ A delegate's DELEGATE-OPTIONS is its policy, frozen once by
 `+agent-shell-arena-git-delegate-options', and IDENTITY the laptop
 user's `+agent-shell-arena-git-user' when it needs one.  A panel a host's
 runner made has RUNNER, a plist of :observer, called with each member
-and event of its, and :lease, returning a member's process lease."
+and event of its, and :lease, returning a member's process lease.
+EXPIRES is the time its current phase's timer expires it."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
@@ -191,13 +192,20 @@ and event of its, and :lease, returning a member's process lease."
   (logins nil :documentation "Each agent's login result, as admitted.")
   (measure-egress nil :documentation "Whether its members' egress is \
 recorded.")
-  delegate-options identity runner)
+  delegate-options identity runner expires)
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")
 
 (defvar +agent-shell-pstack-arena-extra-deny-reads nil
   "More folders no arena candidate may read, such as a runner's records.")
+
+(defcustom +agent-shell-pstack-panel-retry-delay 60
+  "Seconds before a member a transient provider failure stopped tries again.
+The member's shell is asked once to continue where it left off.  A retry
+that would start after its phase expires or its arena's deadline is not
+made; see `+agent-shell-pstack-panel--fail'."
+  :type 'natnum)
 
 (defcustom +agent-shell-pstack-panel-arena-preparation-allowance 1800
   "Seconds allowed for provisioning and host login admission in an arena."
@@ -257,11 +265,16 @@ started fails once stopped.  RESULT then holds :commit, :ref, :changed,
 
 A delegate's CAPTURE takes the same steps without waiting for others.
 Its RESULT holds :survivors, the pids that outlived its stop, and :error
-when collecting failed; what it left is in its panel's manifest."
+when collecting failed; what it left is in its panel's manifest.
+
+FAILURE is the last provider failure from `+agent-shell-drive-failure'
+that ended one of its turns.  RETRY is the timer of its pending retry,
+then t once it was asked to continue."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result
   (egress-file nil :documentation "Where its egress record is saved.")
-  (egress-record nil :documentation "Its final `+agent-shell-egress-record'."))
+  (egress-record nil :documentation "Its final `+agent-shell-egress-record'.")
+  failure retry)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -1301,7 +1314,8 @@ address or a name."
 (defun +agent-shell-pstack-panel--arm (panel seconds)
   "Expire PANEL's current phase after SECONDS."
   (+agent-shell-pstack-panel--disarm panel)
-  (setf (+agent-shell-pstack-panel-timer panel)
+  (setf (+agent-shell-pstack-panel-expires panel) (+ (float-time) seconds)
+        (+agent-shell-pstack-panel-timer panel)
         (run-at-time seconds nil #'+agent-shell-pstack-panel--expire
                      (+agent-shell-pstack-panel-id panel)
                      (+agent-shell-pstack-panel-phase panel))))
@@ -1497,6 +1511,9 @@ produced exactly it; otherwise nil."
   "Settle MEMBER of PANEL as STATE with TEXT and ERROR, once.
 STOP-REASON comes with a turn that completed successfully."
   (unless (+agent-shell-pstack-panel--settled-p member)
+    (when (timerp (+agent-shell-pstack-panel-member-retry member))
+      (cancel-timer (+agent-shell-pstack-panel-member-retry member))
+      (setf (+agent-shell-pstack-panel-member-retry member) t))
     (setf (+agent-shell-pstack-panel-member-state member) state
           (+agent-shell-pstack-panel-member-text member) text
           (+agent-shell-pstack-panel-member-error member) error)
@@ -1802,28 +1819,119 @@ A runner's panel shows its observer the event first."
        (+agent-shell-pstack-panel--send-brief panel member))
       ('prompt-ready (+agent-shell-pstack-panel--send-brief panel member))
       ('turn-complete
-       (when (eq (+agent-shell-pstack-panel-member-state member) 'running)
-         (let ((text (+agent-shell-pstack-panel--report-text event))
-               (reason (plist-get event :stop-reason)))
-           (if (member reason +agent-shell-pstack-panel--failed-stops)
-               (+agent-shell-pstack-panel--settle
-                panel member 'error text
-                (format "The turn ended with stop reason %s." reason))
-             (+agent-shell-pstack-panel--settle panel member 'done text nil
-                                                (or reason "end_turn"))))))
+       (when (+agent-shell-pstack-panel--turn-open-p member)
+         (let* ((text (+agent-shell-pstack-panel--report-text event))
+                (reason (plist-get event :stop-reason))
+                (failure (+agent-shell-pstack-panel--failure member event)))
+           (cond
+            (failure (+agent-shell-pstack-panel--fail panel member failure
+                                                      text))
+            ((member reason +agent-shell-pstack-panel--failed-stops)
+             (+agent-shell-pstack-panel--settle
+              panel member 'error text
+              (format "The turn ended with stop reason %s." reason)))
+            (t (+agent-shell-pstack-panel--settle panel member 'done text nil
+                                                  (or reason "end_turn")))))))
       ('error
-       (when (eq (+agent-shell-pstack-panel-member-state member) 'running)
-         (+agent-shell-pstack-panel--settle
-          panel member 'error
-          (+agent-shell-drive-partial-text
-           (+agent-shell-pstack-panel-member-shell member))
-          (format "The agent reported an error: %s"
-                  (or (plist-get event :message) "no message")))))
+       (when (+agent-shell-pstack-panel--turn-open-p member)
+         (let* ((text (+agent-shell-drive-partial-text
+                       (+agent-shell-pstack-panel-member-shell member)))
+                (failure (+agent-shell-pstack-panel--failure
+                          member (append (list :text text) event))))
+           (if failure
+               (+agent-shell-pstack-panel--fail panel member failure text)
+             (+agent-shell-pstack-panel--settle
+              panel member 'error text
+              (format "The agent reported an error: %s"
+                      (or (plist-get event :message) "no message")))))))
       ('clean-up
        (+agent-shell-pstack-panel--settle
         panel member 'error nil
         (or (plist-get event :reason)
             "The member's shell ended before it reported."))))
+    (+agent-shell-pstack-panels--refresh)))
+
+(defun +agent-shell-pstack-panel--turn-open-p (member)
+  "Return whether MEMBER runs a turn whose end Emacs awaits."
+  (and (eq (+agent-shell-pstack-panel-member-state member) 'running)
+       (not (timerp (+agent-shell-pstack-panel-member-retry member)))))
+
+(defun +agent-shell-pstack-panel--agent-name (member)
+  "Return the name of MEMBER's agent."
+  (let ((agent (+agent-shell-pstack-panel-member-agent member)))
+    (or (plist-get (alist-get agent +agent-shell-sandbox-agents) :name)
+        (format "%s" agent))))
+
+(defun +agent-shell-pstack-panel--failure (member event)
+  "Return the provider failure that ended MEMBER's turn in EVENT, or nil.
+See `+agent-shell-drive-failure'; the text patterns are its agent's."
+  (+agent-shell-drive-failure
+   event (plist-get (alist-get (+agent-shell-pstack-panel-member-agent member)
+                               +agent-shell-sandbox-agents)
+                    :failure-patterns)))
+
+(defun +agent-shell-pstack-panel--failure-text (member failure)
+  "Return the sentence saying FAILURE ended MEMBER's turn."
+  (let ((message (string-trim (or (plist-get failure :message) ""))))
+    (format "%s %s%s" (+agent-shell-pstack-panel--agent-name member)
+            (+agent-shell-drive-failure-phrase (plist-get failure :kind))
+            (if (string-empty-p message) "." (concat ": " message)))))
+
+(defun +agent-shell-pstack-panel--retry-time (panel)
+  "Return when a retry PANEL's members wait for now would start, or nil.
+That is `+agent-shell-pstack-panel-retry-delay' from now, unless it
+would not come before PANEL's current phase expires and its deadline."
+  (let ((start (+ (float-time) +agent-shell-pstack-panel-retry-delay)))
+    (unless (seq-some (lambda (limit) (and limit (>= start limit)))
+                      (list (+agent-shell-pstack-panel-expires panel)
+                            (+agent-shell-pstack-panel-deadline panel)))
+      start)))
+
+(defun +agent-shell-pstack-panel--fail (panel member failure text)
+  "Handle provider FAILURE ending running MEMBER of PANEL's turn with TEXT.
+A transient kind is retried once: after `+agent-shell-pstack-panel-retry-delay'
+the same shell is asked to continue.  Otherwise, or when no retry fits
+before PANEL's phase or deadline ends, MEMBER settles as `error' with
+TEXT, saying what failed."
+  (setf (+agent-shell-pstack-panel-member-failure member) failure)
+  (let* ((kind (plist-get failure :kind))
+         (retried (+agent-shell-pstack-panel-member-retry member))
+         (transient (+agent-shell-drive-failure-transient-p kind))
+         (start (and transient (not retried)
+                     (+agent-shell-pstack-panel--retry-time panel)))
+         (id (+agent-shell-pstack-panel-id panel))
+         (role (+agent-shell-pstack-panel-member-role member)))
+    (if start
+        (setf (+agent-shell-pstack-panel-member-retry member)
+              (run-at-time (- start (float-time)) nil
+                           #'+agent-shell-pstack-panel--retry id role))
+      (+agent-shell-pstack-panel--settle
+       panel member 'error text
+       (concat (+agent-shell-pstack-panel--failure-text member failure)
+               (cond (retried "  Emacs had already asked it once to \
+continue, and it failed again.")
+                     (transient "  Emacs did not retry, since the panel \
+would end before a retry could start.")))))))
+
+(defun +agent-shell-pstack-panel--retry (id role)
+  "Ask member ROLE of panel ID, which a provider failure stopped, to continue."
+  (when-let* ((panel (+agent-shell-pstack-panel--find id))
+              (member (+agent-shell-pstack-panel--member panel role))
+              ((timerp (+agent-shell-pstack-panel-member-retry member))))
+    (setf (+agent-shell-pstack-panel-member-retry member) t)
+    (let ((failure (+agent-shell-pstack-panel-member-failure member)))
+      (unless (+agent-shell-drive-send
+               (+agent-shell-pstack-panel-member-shell member)
+               (format "Your last turn ended early because of a provider \
+failure: %s\nContinue where you left off, and finish the task your brief \
+gave you." (+agent-shell-pstack-panel--failure-text member failure)))
+        (+agent-shell-pstack-panel--settle
+         panel member 'error
+         (+agent-shell-drive-partial-text
+          (+agent-shell-pstack-panel-member-shell member))
+         (concat (+agent-shell-pstack-panel--failure-text member failure)
+                 "  Emacs could not send its retry, since the shell was \
+not ready."))))
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--phase-timeout (panel)

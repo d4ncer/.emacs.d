@@ -155,6 +155,35 @@
                                :env ("A=1"))
                      (+agent-shell-arena-remote-job-profile back))))))
 
+(ert-deftest +agent-shell-arena-remote-test-failure-kind ()
+  "Carry a member's provider failure kind, reading an unknown one leniently."
+  (let* ((status (+agent-shell-arena-remote--make-status
+                  :id "abc-12345678" :phase 'delegating :heartbeat 1.5
+                  :members (list (+agent-shell-arena-remote--make-member
+                                  :role "builder" :agent 'codex
+                                  :kind 'delegate :state 'error
+                                  :error "Codex was overloaded: Busy"
+                                  :failure-kind 'overloaded))))
+         (json (+agent-shell-arena-remote-to-json 'status status))
+         (member (car (+agent-shell-arena-remote-status-members
+                       (+agent-shell-arena-remote-from-json 'status json)))))
+    (should (string-search "\"failure_kind\":\"overloaded\"" json))
+    (should (eq 'overloaded
+                (+agent-shell-arena-remote-member-failure-kind member)))
+    (should (equal '(:kind overloaded)
+                   (+agent-shell-arena-remote--failure member)))
+    (should-not (+agent-shell-arena-remote--failure
+                 (+agent-shell-arena-remote--make-member :role "a")))
+    (let ((member (car (+agent-shell-arena-remote-status-members
+                        (+agent-shell-arena-remote-from-json
+                         'status (string-replace "\"overloaded\"" "\"novel\""
+                                                 json))))))
+      (should (eq 'provider_error
+                  (+agent-shell-arena-remote-member-failure-kind member))))
+    (should-error (+agent-shell-arena-remote-from-json
+                   'status (string-replace "\"overloaded\"" "7" json))
+                  :type '+agent-shell-arena-remote-wire)))
+
 (ert-deftest +agent-shell-arena-remote-test-validation ()
   "Malformed records are refused at the boundary, naming the field."
   (let* ((good (+agent-shell-arena-remote--encode

@@ -169,6 +169,51 @@ def pstack_delegate(role, text, state):
     return f"DELEGATE role={role} mode={state['mode']} branch={branch}"
 
 
+CAPACITY = "Selected model is at capacity. Please try a different model."
+
+
+def provider_failure(message, text, state):
+    """Fail the turn as a provider would, or return None.
+
+    PROVIDER-FAIL STYLE TIMES in a brief fails it and the next TIMES-1
+    prompts that ask to continue; a later one reports.  STYLE `codex'
+    sends Codex's retry warning, then its message as the final text;
+    `capacity' writes only the capacity line; `error:KIND' fails the
+    prompt with a JSON-RPC error whose data has errorKind KIND."""
+    marker = re.search(r"PROVIDER-FAIL (\S+) (\d+)", text)
+    if "PSTACK-LEAD " in text:
+        return None
+    if marker:
+        state["failure"] = marker[1]
+        state["failures"] = int(marker[2])
+    elif "Continue where you left off" not in text:
+        return None
+    if not state.get("failures"):
+        return f"REPORT continued after {state.pop('failure', 'nothing')}"
+    state["failures"] -= 1
+    session_id = message["params"]["sessionId"]
+    style = state["failure"]
+    if style == "codex":
+        emit({"method": "session/update", "params": {
+            "sessionId": session_id,
+            "update": {"sessionUpdate": "session_info_update",
+                       "_meta": {"codex": {"error": {
+                           "message": CAPACITY,
+                           "codexErrorInfo": "serverOverloaded",
+                           "turnId": "turn-1", "willRetry": True}}}}}})
+        chunk(session_id, CAPACITY + "\n\n")
+    elif style == "capacity":
+        chunk(session_id, CAPACITY)
+    else:
+        chunk(session_id, "Partial before the failure.")
+        emit({"id": message["id"],
+              "error": {"code": -32603, "message": "Internal error",
+                        "data": {"errorKind": style.split(":", 1)[1]}}})
+        return False
+    emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
+    return False
+
+
 def handle_pstack_prompt(message, text, state):
     """Answer pstack panel traffic; return the reply, or None if unrelated.
 
@@ -188,6 +233,9 @@ def handle_pstack_prompt(message, text, state):
                            "status": "completed"},
             }})
         reply = pstack_delegate(delegate[1], text, state)
+        failure = provider_failure(message, text, state)
+        if failure is not None:
+            return failure
         if "HANG" in text:
             chunk(session_id, f"PARTIAL {reply}")
             return False
@@ -238,7 +286,15 @@ def handle_pstack_prompt(message, text, state):
             write = "denied"
         return (f"SCORES mode={state['mode']} lead={lead} checkout={read}"
                 f" write={write}\n" + text)
+    failure = provider_failure(message, text, state)
+    if failure is not None:
+        return failure
     if "member of a pstack" in text:
+        if "MENTION-CAPACITY" in text:
+            return ("REPORT The drive library has spare capacity: each "
+                    "watcher is cheap, and the panel never runs more than "
+                    "four members, so " + CAPACITY.lower()
+                    + " is a message it never needs to show.")
         if "HANG" in text:
             chunk(session_id, "Partial before hang.")
             return False

@@ -780,6 +780,90 @@ The agent reported an error: Prompt failed\nPartial text:\n\nSo far"
                                 (car followups)))
         (should-not (string-match-p "Second failure" (car followups)))))))
 
+(defconst +agent-shell-pstack-panel-test--overloaded
+  '(((message . "Busy") (codexErrorInfo . "serverOverloaded")))
+  "The Codex error records of a turn its provider was overloaded for.")
+
+(ert-deftest +agent-shell-pstack-panel-test-provider-retry ()
+  "Retry a transient provider failure once, ignoring events meanwhile."
+  (+agent-shell-pstack-panel-test--with
+    (let ((+agent-shell-pstack-panel-retry-delay 0))
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--one))
+      (member-event "a" :kind 'init-finished)
+      (let* ((member (car (+agent-shell-pstack-panel-members
+                           (car (+agent-shell-pstack-panel-list)))))
+             (shell (+agent-shell-pstack-panel-member-shell member)))
+        (member-event "a" :kind 'turn-complete :text "Busy\n"
+                      :provider-errors +agent-shell-pstack-panel-test--overloaded)
+        (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+        (should (timerp (+agent-shell-pstack-panel-member-retry member)))
+        (member-event "a" :kind 'error :message "Late")
+        (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+        (+agent-shell-pstack-panel-test--drain)
+        (should (eq t (+agent-shell-pstack-panel-member-retry member)))
+        (should (equal (format "Your last turn ended early because of a \
+provider failure: codex was overloaded: Busy\nContinue where you left off, \
+and finish the task your brief gave you.")
+                       (cdr (assq shell sent))))
+        (member-event "a" :kind 'turn-complete :text "Busy"
+                      :provider-errors +agent-shell-pstack-panel-test--overloaded)
+        (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+        (should (= 2 (seq-count (lambda (entry) (eq shell (car entry))) sent)))
+        (should (string-match-p "## a (codex): error\nReport: .*\ncodex was \
+overloaded: Busy  Emacs had already asked it once to continue, and it failed \
+again\.\nPartial text:\n\nBusy"
+                                (car (+agent-shell-pstack-panel-test--followups
+                                      sent lead))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-provider-retry-limits ()
+  "Settle a transient failure as error when no retry fits or sends."
+  (pcase-dolist (`(,delay ,send ,note)
+                 '((3600 t "  Emacs did not retry, since the panel would end \
+before a retry could start.")
+                   (0 nil "  Emacs could not send its retry, since the shell \
+was not ready.")))
+    (+agent-shell-pstack-panel-test--with
+      (let ((+agent-shell-pstack-panel-retry-delay delay))
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--one))
+        (member-event "a" :kind 'init-finished)
+        (setq send-ok send)
+        (member-event "a" :kind 'error :message "Internal error"
+                      :data '((errorKind . "transport_lost")))
+        (+agent-shell-pstack-panel-test--drain)
+        (let ((member (car (+agent-shell-pstack-panel-members
+                            (car (+agent-shell-pstack-panel-list))))))
+          (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+          (should (equal (concat "codex lost its connection: Internal error"
+                                 note)
+                         (+agent-shell-pstack-panel-member-error member))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-provider-failure-candidate ()
+  "Settle an arena candidate a provider failure stopped, still capturing it."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "opus" :kind 'init-finished)
+    (member-event "codex" :kind 'init-finished)
+    (member-event "opus" :kind 'error :message "Internal error"
+                  :data '((errorKind . "billing_error")))
+    (member-event "codex" :kind 'turn-complete :text "Done")
+    (+agent-shell-pstack-panel-test--drain)
+    (let* ((panel (car (+agent-shell-pstack-panel-list)))
+           (opus (+agent-shell-pstack-panel--member panel "opus")))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state opus)))
+      (should (eq 'quota_exhausted
+                  (plist-get (+agent-shell-pstack-panel-member-failure opus)
+                             :kind)))
+      (should (equal "claude-code ran out of quota: Internal error"
+                     (+agent-shell-pstack-panel-member-error opus)))
+      (should (member "opus" captured)))))
+
 (ert-deftest +agent-shell-pstack-panel-test-expiry-in-phase ()
   "Expire only the phase that armed the timer."
   (+agent-shell-pstack-panel-test--with

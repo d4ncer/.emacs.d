@@ -261,10 +261,12 @@ host keeps."
                (:constructor +agent-shell-arena-remote--make-member)
                (:copier nil))
   "A member as a status or report gives it.
-A status gives only ROLE, AGENT, KIND, STATE, CAPTURE and ERROR, why it
-settled as an error.  A report adds the member's TEXT, the COMMIT that
-holds its result, its diff STAT, and why its capture failed, FAILURE."
-  role agent kind state capture text error commit stat failure)
+A status gives only ROLE, AGENT, KIND, STATE, CAPTURE, ERROR, why it
+settled as an error, and FAILURE-KIND, the kind of the provider failure
+that ended its last turn.  A report adds the member's TEXT, the COMMIT
+that holds its result, its diff STAT, and why its capture failed,
+FAILURE."
+  role agent kind state capture text error commit stat failure failure-kind)
 
 (cl-defstruct (+agent-shell-arena-remote-report
                (:constructor +agent-shell-arena-remote--make-report)
@@ -388,7 +390,8 @@ The slots from DIRECTORY to LOGINS are not saved."
                                        error timeout))
                   (capture "capture" (opt (enum stopping stopped capturing
                                                 captured failed)))
-                  (error "error" (opt text)))
+                  (error "error" (opt text))
+                  (failure-kind "failure_kind" (opt failure-kind)))
     (report +agent-shell-arena-remote-report
             +agent-shell-arena-remote--make-report
             (id "id" id) (arena "arena" (opt id)) (base "base" sha)
@@ -419,7 +422,8 @@ The slots from DIRECTORY to LOGINS are not saved."
                                                captured failed)))
                    (text "text" (opt text)) (error "error" (opt text))
                    (commit "commit" (opt sha)) (stat "stat" (opt text))
-                   (failure "failure" (opt text)))
+                   (failure "failure" (opt text))
+                   (failure-kind "failure_kind" (opt failure-kind)))
     (tool +agent-shell-arena-remote-tool +agent-shell-arena-remote--make-tool
           (path "path" text) (version "version" text))
     (ready +agent-shell-arena-remote-ready
@@ -455,6 +459,8 @@ The slots from DIRECTORY to LOGINS are not saved."
 A field is (SLOT KEY TYPE).  TYPE is `text', any string; `id', a name
 safe in a path and a ref; `sha', a full commit id; `agent', an agent
 identifier read as a symbol; `host-kind', a registered host kind;
+`failure-kind', one of `+agent-shell-drive-failure-kinds', an unknown
+one read as `provider_error';
 `natnum', `number' or `boolean'; (enum
 SYMBOL...); (strings); (list KIND) or (record KIND) of another kind;
 `profile', a repository profile as plain data; or (opt TYPE), which may be
@@ -505,6 +511,9 @@ kind.  The host's setup writes ready.json in a format of its own.")
       ('host-kind
        (+agent-shell-arena-remote--decode-value
         (cons 'enum (+agent-shell-arena-git-host-kinds)) value path))
+      ('failure-kind
+       (if (stringp value) (+agent-shell-drive-failure-kind value)
+         (funcall bad "a failure kind")))
       ('agent (if (and (stringp value)
                        (string-match-p +agent-shell-arena-remote--agent-regexp
                                        value))
@@ -644,7 +653,7 @@ to %d; update it" path version newest))))
     (`(opt ,inner) (if (null value) :null
                    (+agent-shell-arena-remote--encode-value inner value)))
     ((or 'text 'id 'sha 'natnum 'number) value)
-    ((or 'agent 'host-kind `(enum . ,_)) (symbol-name value))
+    ((or 'agent 'host-kind 'failure-kind `(enum . ,_)) (symbol-name value))
     ('boolean (if value t :false))
     ('(strings) (vconcat value))
     (`(list ,kind) (vconcat (mapcar (lambda (element)
@@ -2244,6 +2253,11 @@ Once its host has been silent too long, tell the lead."
            (message "pstack arena %s: %s" (+agent-shell-arena-remote-id remote)
                     error)))))))
 
+(defun +agent-shell-arena-remote--failure (state)
+  "Return the provider failure member STATE names a kind of, or nil."
+  (when-let* ((kind (+agent-shell-arena-remote-member-failure-kind state)))
+    (list :kind kind)))
+
 (defun +agent-shell-arena-remote--mirror (remote status)
   "Show STATUS's member states in REMOTE's panel.
 Members never settle through the local path; they only take the states
@@ -2261,7 +2275,9 @@ the runner reports."
               (+agent-shell-pstack-panel-member-capture member)
               (+agent-shell-arena-remote-member-capture state)
               (+agent-shell-pstack-panel-member-error member)
-              (+agent-shell-arena-remote-member-error state))))
+              (+agent-shell-arena-remote-member-error state)
+              (+agent-shell-pstack-panel-member-failure member)
+              (+agent-shell-arena-remote--failure state))))
     (let ((file (expand-file-name "status.json"
                                   (+agent-shell-arena-remote-directory remote))))
       (+agent-shell-arena-remote--write-json file 'status status))))
@@ -2560,6 +2576,8 @@ The follow-up is composed as a local arena's is."
               (+agent-shell-arena-remote-member-text reported)
               (+agent-shell-pstack-panel-member-error member)
               (+agent-shell-arena-remote-member-error reported)
+              (+agent-shell-pstack-panel-member-failure member)
+              (+agent-shell-arena-remote--failure reported)
               (+agent-shell-pstack-panel-member-capture member)
               (+agent-shell-arena-remote-member-capture reported)
               (+agent-shell-pstack-panel-member-result member)
@@ -3485,7 +3503,11 @@ the repository's lock held."
                  :kind (+agent-shell-pstack-panel-member-kind member)
                  :state (+agent-shell-pstack-panel-member-state member)
                  :capture (+agent-shell-pstack-panel-member-capture member)
-                 :error (+agent-shell-pstack-panel-member-error member)))
+                 :error (+agent-shell-pstack-panel-member-error member)
+                 :failure-kind (plist-get
+                                (+agent-shell-pstack-panel-member-failure
+                                 member)
+                                :kind)))
               (+agent-shell-pstack-panel-members panel))
     (mapcar (lambda (member)
               (+agent-shell-arena-remote--make-member
@@ -3782,7 +3804,9 @@ candidate ran.  Request the arena again."))
           (cond
            (settled (setf (+agent-shell-pstack-panel-member-state member) state
                           (+agent-shell-pstack-panel-member-error member)
-                          (+agent-shell-arena-remote-member-error old)))
+                          (+agent-shell-arena-remote-member-error old)
+                          (+agent-shell-pstack-panel-member-failure member)
+                          (+agent-shell-arena-remote--failure old)))
            (candidate
             (setf (+agent-shell-pstack-panel-member-state member) 'timeout
                   (+agent-shell-pstack-panel-member-error member)
@@ -3859,11 +3883,15 @@ shown to have stopped." survivors)))
             (final (setf (+agent-shell-pstack-panel-member-state member)
                          (if (memq state '(error timeout)) state 'done)
                          (+agent-shell-pstack-panel-member-error member)
-                         (and old (+agent-shell-arena-remote-member-error old))))
+                         (and old (+agent-shell-arena-remote-member-error old))
+                         (+agent-shell-pstack-panel-member-failure member)
+                         (and old (+agent-shell-arena-remote--failure old))))
             ((memq state +agent-shell-pstack-panel--settled)
              (setf (+agent-shell-pstack-panel-member-state member) state
                    (+agent-shell-pstack-panel-member-error member)
-                   (+agent-shell-arena-remote-member-error old)))
+                   (+agent-shell-arena-remote-member-error old)
+                   (+agent-shell-pstack-panel-member-failure member)
+                   (+agent-shell-arena-remote--failure old)))
             (t (setf (+agent-shell-pstack-panel-member-state member) 'error
                      (+agent-shell-pstack-panel-member-error member)
                      "The runner stopped while the delegate ran; Emacs did \
@@ -3932,6 +3960,9 @@ is nil."
                :capture (+agent-shell-pstack-panel-member-capture member)
                :text (+agent-shell-pstack-panel-member-text member)
                :error (+agent-shell-pstack-panel-member-error member)
+               :failure-kind (plist-get
+                              (+agent-shell-pstack-panel-member-failure member)
+                              :kind)
                :commit (plist-get result :commit)
                :stat (plist-get result :stat)
                :failure (plist-get result :error))))

@@ -39,8 +39,9 @@
 (defmacro +agent-shell-pstack-panel-acp-test--with-lead (&rest body)
   "Run BODY with a ready pstack lead shell bound to `lead'.
 Agents `fixture-codex' and `fixture-claude' have read-only modes;
-`fixture-stubborn' refuses to change mode.  BODY also sees `cwd' and
-`reports', the panel report root."
+`fixture-stubborn' refuses to change mode.  `fixture-codex' has Codex's
+failure patterns, and a provider failure is retried at once.  BODY also
+sees `cwd' and `reports', the panel report root."
   (declare (indent 0))
   `(let* ((cwd (file-name-as-directory
                 (file-truename (make-temp-file "pstack-lead-" t))))
@@ -60,6 +61,16 @@ Agents `fixture-codex' and `fixture-claude' have read-only modes;
            '((fixture-codex . "read-only") (fixture-claude . "plan")
              (fixture-stubborn . "read-only")))
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
+          (+agent-shell-sandbox-agents
+           `((fixture-codex
+              :name "Codex"
+              :failure-patterns
+              ,(plist-get (alist-get 'codex (eval (car (get '+agent-shell-sandbox-agents
+                                                           'standard-value))
+                                                  t))
+                          :failure-patterns))
+             (fixture-claude :name "Claude Code")))
+          (+agent-shell-pstack-panel-retry-delay 0)
           (+agent-shell-pstack-panel-directory reports)
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
@@ -242,6 +253,108 @@ watchers."
        lead "Emacs interrupted your turn because you called Run git show")
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
       (should (= 1 (length (+agent-shell-pstack-panel-list)))))))
+
+(defun +agent-shell-pstack-panel-acp-test--failing (lead agent failure)
+  "Run LEAD's one-member interrogate panel on AGENT, failing as FAILURE.
+FAILURE is the fixture's PROVIDER-FAIL arguments.  Return the member
+once the follow-up was delivered and its shell is gone."
+  (let ((panel (+agent-shell-pstack-panel-acp-test--request
+                lead (format "{\"version\":1,\"shape\":\"interrogate\",\
+\"brief\":\"PROVIDER-FAIL %s\",\"members\":[{\"role\":\"a\",\"agent\":\
+\"%s\"}]}" failure agent))))
+    (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
+    (+agent-shell-pstack-panel-acp-test--members-gone panel)
+    (car (+agent-shell-pstack-panel-members panel))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-codex-warning-retried ()
+  "Retry once a turn that ended with Codex's retried overload warning."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let ((member (+agent-shell-pstack-panel-acp-test--failing
+                   lead "fixture-codex" "codex 1")))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (should (equal '(:kind overloaded :message "Selected model is at \
+capacity. Please try a different model." :source codex-error)
+                     (+agent-shell-pstack-panel-member-failure member)))
+      (should (eq t (+agent-shell-pstack-panel-member-retry member)))
+      (should (equal "REPORT continued after codex"
+                     (+agent-shell-pstack-panel-acp-test--report member))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-codex-warning-twice ()
+  "Settle a member as error when its retry fails the same way."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let* ((member (+agent-shell-pstack-panel-acp-test--failing
+                    lead "fixture-codex" "codex 2"))
+           (panel (car (+agent-shell-pstack-panel-list))))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+      (should (equal "Codex was overloaded: Selected model is at capacity. \
+Please try a different model.  Emacs had already asked it once to continue, \
+and it failed again."
+                     (+agent-shell-pstack-panel-member-error member)))
+      (should (string-match-p
+               "Selected model is at capacity"
+               (+agent-shell-pstack-panel-acp-test--report member)))
+      (should (string-search "## a (fixture-codex): error\nReport: "
+                             (+agent-shell-pstack-panel-followup panel)))
+      (should (string-search "Codex was overloaded: Selected model"
+                             (+agent-shell-pstack-panel-followup panel))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-error-kind-retried ()
+  "Classify a JSON-RPC error by its errorKind and retry a transient one."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let ((member (+agent-shell-pstack-panel-acp-test--failing
+                   lead "fixture-claude" "error:rate_limit 1")))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (should (equal '(:kind rate_limited :message "Internal error"
+                             :source error-data)
+                     (+agent-shell-pstack-panel-member-failure member)))
+      (should (equal "REPORT continued after error:rate_limit"
+                     (+agent-shell-pstack-panel-acp-test--report member))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-auth-not-retried ()
+  "Settle a member a non-transient failure stopped without retrying it."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let* ((member (+agent-shell-pstack-panel-acp-test--failing
+                    lead "fixture-claude" "error:authentication_failed 1"))
+           (panel (car (+agent-shell-pstack-panel-list))))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+      (should (eq 'auth_required
+                  (plist-get (+agent-shell-pstack-panel-member-failure member)
+                             :kind)))
+      (should-not (+agent-shell-pstack-panel-member-retry member))
+      (should (equal "Claude Code needs to log in again: Internal error"
+                     (+agent-shell-pstack-panel-member-error member)))
+      (should (equal "Partial before the failure."
+                     (+agent-shell-pstack-panel-acp-test--report member)))
+      (should (string-search "Claude Code needs to log in again"
+                             (+agent-shell-pstack-panel-followup panel))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-capacity-line ()
+  "Classify a final message that is exactly Codex's capacity line."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let ((member (+agent-shell-pstack-panel-acp-test--failing
+                   lead "fixture-codex" "capacity 1")))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (should (equal '(overloaded pattern)
+                     (let ((failure (+agent-shell-pstack-panel-member-failure
+                                     member)))
+                       (list (plist-get failure :kind)
+                             (plist-get failure :source)))))
+      (should (equal "REPORT continued after capacity"
+                     (+agent-shell-pstack-panel-acp-test--report member))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-capacity-mentioned ()
+  "Take a normal report that merely mentions capacity as done."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let* ((panel (+agent-shell-pstack-panel-acp-test--request
+                   lead "{\"version\":1,\"shape\":\"how\",\"brief\":\
+\"MENTION-CAPACITY\",\"members\":[{\"role\":\"a\",\"agent\":\
+\"fixture-codex\"}]}"))
+           (member (car (+agent-shell-pstack-panel-members panel))))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (should-not (+agent-shell-pstack-panel-member-failure member))
+      (should (string-match-p "selected model is at capacity"
+                              (+agent-shell-pstack-panel-acp-test--report
+                               member))))))
 
 (provide 'agent-shell-pstack-panel-acp-test)
 ;;; agent-shell-pstack-panel-acp-test.el ends here

@@ -80,7 +80,8 @@ ISOLATION is the repository's delegate isolation.  BODY sees `scratch',
           (+agent-shell-drive-read-only-modes
            '((fixture-codex . "read-only")))
           (+agent-shell-sandbox-agents
-           '((fixture-codex :mode "agent-full-access")))
+           '((fixture-codex :mode "agent-full-access" :name "Codex")))
+          (+agent-shell-pstack-panel-retry-delay 0)
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
@@ -251,6 +252,42 @@ back to main." followup))
 loose.txt.  Commit or stash, then run git switch main."
                              (+agent-shell-pstack-panel-followup panel)))
       (should (equal branch (funcall git "branch" "--show-current"))))))
+
+(ert-deftest +agent-shell-pstack-delegate-acp-test-provider-failure ()
+  "Settle a delegate a login failure stopped as error, keeping its commit."
+  (skip-unless (+agent-shell-pstack-delegate-acp-test--available-p))
+  (+agent-shell-pstack-delegate-acp-test--with 'branch
+      "Add the builder file. PROVIDER-FAIL error:authentication_failed 1"
+    (let ((branch (concat "pstack/delegate/"
+                          (+agent-shell-pstack-panel-id panel)))
+          (member (car (+agent-shell-pstack-panel-members panel)))
+          (followup (+agent-shell-pstack-panel-followup panel)))
+      (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+      (should-not (+agent-shell-pstack-panel-member-retry member))
+      (should (string-search "builder (fixture-codex): error.\nCodex needs \
+to log in again: Internal error\n" followup))
+      (should (string-search (format "Branch: %s, 1 commit since" branch)
+                             followup))
+      (should (string-search "Partial before the failure." followup))
+      (should (equal "Add builder.txt"
+                     (funcall git "log" "-1" "--format=%s" branch))))))
+
+(ert-deftest +agent-shell-pstack-delegate-acp-test-provider-retry ()
+  "Ask a delegate an overload stopped to continue, then report it done."
+  (skip-unless (+agent-shell-pstack-delegate-acp-test--available-p))
+  (+agent-shell-pstack-delegate-acp-test--with 'branch
+      "Add the builder file. PROVIDER-FAIL codex 1"
+    (let ((branch (concat "pstack/delegate/"
+                          (+agent-shell-pstack-panel-id panel)))
+          (member (car (+agent-shell-pstack-panel-members panel))))
+      (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
+      (should (eq 'overloaded (plist-get (+agent-shell-pstack-panel-member-failure
+                                          member)
+                                         :kind)))
+      (should (equal "REPORT continued after codex"
+                     (+agent-shell-pstack-panel-member-text member)))
+      (should (equal "Add builder.txt"
+                     (funcall git "log" "-1" "--format=%s" branch))))))
 
 (provide 'agent-shell-pstack-delegate-acp-test)
 ;;; agent-shell-pstack-delegate-acp-test.el ends here
