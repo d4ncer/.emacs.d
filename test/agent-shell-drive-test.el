@@ -238,6 +238,8 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
                    (lambda (&rest _)
                      ;; Prompt-ready/finish-output callbacks precede completion.
                      (emit shell '((:event . input-submitted))))))
+          ;; The fakes replaced the advised definitions.
+          (+agent-shell-drive--advise)
           (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
           (dolist (finish-first '(nil t))
             (emit shell '((:event . input-submitted)))

@@ -841,6 +841,21 @@ shell's watchers get it as a `provider-warning' event."
                    :info (map-elt error 'codexErrorInfo)
                    :will-retry (and (map-elt error 'willRetry) t))))))
 
+(defun +agent-shell-drive--advise ()
+  "Advise the agent-shell functions whose events watchers need.
+Each advice acts only on shells this library watches."
+  (advice-add 'agent-shell--finish-output :before
+              #'+agent-shell-drive--finish-output)
+  (advice-add 'agent-shell--emit-event :around
+              #'+agent-shell-drive--emit-event)
+  (advice-add 'agent-shell--make-error-handler :around
+              #'+agent-shell-drive--error-handler)
+  (advice-add 'agent-shell--on-notification :after
+              #'+agent-shell-drive--note-notification))
+
+;; At load, so shells watched before a reload are covered too.
+(+agent-shell-drive--advise)
+
 (defun +agent-shell-drive-watch (shell owner id function)
   "Call FUNCTION with SHELL's parsed events under key (OWNER . ID).
 Watching the same key on the same shell again does nothing; on another shell
@@ -850,14 +865,6 @@ it moves the watcher."
     (unless (eq (car entry) shell)
       (when entry (+agent-shell-drive--remove key))
       (unless (gethash shell +agent-shell-drive--shells)
-        (advice-add 'agent-shell--finish-output :before
-                    #'+agent-shell-drive--finish-output)
-        (advice-add 'agent-shell--emit-event :around
-                    #'+agent-shell-drive--emit-event)
-        (advice-add 'agent-shell--make-error-handler :around
-                    #'+agent-shell-drive--error-handler)
-        (advice-add 'agent-shell--on-notification :after
-                    #'+agent-shell-drive--note-notification)
         (puthash shell
                  (list :subscription
                        (agent-shell-subscribe-to
