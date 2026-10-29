@@ -485,9 +485,9 @@ and `:copy` clones, and the lead's own copies of the `:files` paths.
 A repository too large for a second worktree can have the delegate work in
 the lead's own checkout instead. Its profile in
 `+agent-shell-pstack-arena-profiles` says so with `:delegate`, whose keys
-are `:isolation`, `worktree` or `branch`, `:host`, only ever `local`, and
-`:sandbox`, `t` or `nil`; a key it does not know, or names twice, is an
-error:
+are `:isolation`, `worktree` or `branch`, `:host`, only ever `local`,
+`:sandbox`, `t` or `nil`, and `:link`, below; a key it does not know, or
+names twice, is an error:
 
 ```elisp
 (add-to-list
@@ -505,6 +505,35 @@ the delegate's record. Otherwise it leaves the checkout where it is, keeps
 the record and says why. Branch isolation is laptop-only: with an
 effective host Emacs refuses it before making anything, and says to use
 `:delegate (:host local)`.
+
+#### Linked folders
+
+A worktree has none of the lead's ignored folders, such as installed
+packages, so a delegate's tests may not run there. `:delegate (:link
+("DIR" ...))` names such folders, relative to the top level. Before the
+delegate starts, Emacs symlinks each one the lead has from the lead's
+checkout into the worktree, recording it in the manifest first. It
+removes the links, never what they point at, before it collects what the
+delegate left and before it cleans the workspace, so they never reach a
+commit or the list of uncommitted paths. A sandboxed delegate may read
+the linked folders but not write them.
+
+The profile check is strict: each path is relative, without `..`, and
+untracked and ignored by git in the lead's checkout. `:link` with
+`:isolation branch` is an error, since the delegate then works in the
+lead's checkout already, and a delegate on a host refuses it before
+anything starts. Each link must be ignored as a symlink too, so a
+`.gitignore` pattern with a trailing slash, such as `elpaca/`, which
+matches only folders, fails the preparation; use `/elpaca` instead.
+
+This repository ignores `/elpaca`, so to let delegates run its tests, add
+its entry yourself:
+
+```elisp
+(add-to-list
+ '+agent-shell-pstack-arena-profiles
+ '("~/.emacs.d/" :delegate (:link ("elpaca"))))
+```
 
 #### Sandboxed delegates
 

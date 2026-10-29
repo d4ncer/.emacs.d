@@ -1874,7 +1874,10 @@ A sandboxed delegate first gets its one commit; see
 `+agent-shell-pstack-panel--finalize-delegate'.  A process that outlived
 the stop keeps the lead's checkout on the delegate's branch; see
 `+agent-shell-arena-git-finish-delegate'.  A branch without commits of
-its own goes; see `+agent-shell-arena-git-drop-branch'."
+its own goes; see `+agent-shell-arena-git-drop-branch'.  The folders
+linked into its worktree go first, so nothing collected holds them."
+  (+agent-shell-arena-git-unlink-delegate
+   (+agent-shell-pstack-panel-arena panel))
   (if (and (+agent-shell-pstack-panel--sandboxed-p panel)
            (not (eq (+agent-shell-pstack-panel-member-capture member)
                     'capturing)))
@@ -2773,7 +2776,9 @@ needs macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s"
 
 (defun +agent-shell-pstack-panel--provision-delegate (panel base)
   "Give PANEL's delegate a worktree on its new branch at BASE, then start it.
-A branch of that name already there is refused, never reused or reset."
+A branch of that name already there is refused, never reused or reset.
+The worktree gets the profile's :delegate :link folders as symlinks; see
+`+agent-shell-arena-git-link-delegate'."
   (let* ((options (+agent-shell-pstack-panel-delegate-options panel))
          (branch (concat "pstack/delegate/" (+agent-shell-pstack-panel-id panel))))
     (when (+agent-shell-arena-git--read-in
@@ -2796,8 +2801,10 @@ Delete or rename it, then request the delegate again" branch
         (car (+agent-shell-pstack-panel-members panel)))
        (lambda (_directory error)
          (+agent-shell-pstack-panel--preparing
-          panel error (lambda () (+agent-shell-pstack-panel--start-delegate
-                                  panel))))
+          panel (or error
+                    (+agent-shell-arena-git-link-delegate
+                     manifest (plist-get options :link)))
+          (lambda () (+agent-shell-pstack-panel--start-delegate panel))))
        branch))))
 
 (defun +agent-shell-pstack-panel--take-checkout (panel base)
@@ -2902,8 +2909,9 @@ its worktree, or the lead's checkout in branch isolation.  Git's
 metadata stays read-only: the worktree's .git pointer, its own git
 directory and the common one, even where the repository profile's :write
 overlaps them, so it cannot commit, write a ref or change git config.
-Otherwise it gets what an arena candidate gets, from the same profile;
-in a worktree, its :files are written for the new sandbox."
+Otherwise it gets what an arena candidate gets, from the same profile,
+and may read the folders its worktree links; in a worktree, its :files
+are written for the new sandbox."
   (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
          (profile (+agent-shell-arena-git-profile toplevel))
          (branch (eq 'branch (+agent-shell-arena-git-delegate-isolation
@@ -2923,8 +2931,12 @@ in a worktree, its :files are written for the new sandbox."
                                 (unless branch
                                   (mapcar (lambda (path)
                                             (expand-file-name path toplevel))
-                                          (+agent-shell-arena-git-role-shared
-                                           role)))
+                                          (append
+                                           (+agent-shell-arena-git-role-shared
+                                            role)
+                                           (+agent-shell-arena-git-delegate-links
+                                            (+agent-shell-arena-git-manifest-delegate
+                                             manifest)))))
                                 (plist-get profile :read))
            :allow-metadata (unless branch (list toplevel))
            :allow-writes (plist-get profile :write)

@@ -122,18 +122,18 @@ With BRANCH-MODE it works on its branch in REPO itself."
   "Delegates inherit the profile's host unless :host is local; branch
 isolation on a host is refused; sandboxing is off unless asked for."
   (let ((host '(coder . "example-workspace")))
-    (should (equal `(:host ,host :isolation worktree :sandbox nil)
+    (should (equal `(:host ,host :isolation worktree :sandbox nil :link nil)
                    (+agent-shell-arena-git-delegate-options
                     `(:host ,host :host-directory "~/src/big-repo"))))
-    (should (equal '(:host nil :isolation worktree :sandbox nil)
+    (should (equal '(:host nil :isolation worktree :sandbox nil :link nil)
                    (+agent-shell-arena-git-delegate-options nil)))
-    (should (equal '(:host nil :isolation branch :sandbox t)
+    (should (equal '(:host nil :isolation branch :sandbox t :link nil)
                    (+agent-shell-arena-git-delegate-options
                     `(:host ,host :host-directory "~/src/big-repo"
                             :delegate (:host local :isolation branch
                                              :sandbox t)))))
     (should (equal '(:host (local . "/tmp/host-root") :isolation worktree
-                           :sandbox t)
+                           :sandbox t :link nil)
                    (+agent-shell-arena-git-delegate-options
                     '(:host (local . "/tmp/host-root") :host-directory "/r"
                             :delegate (:sandbox t)))))
@@ -143,7 +143,18 @@ isolation on a host is refused; sandboxing is off unless asked for."
                              :type 'user-error)))
       (should (string-match-p "\\`Remote delegates require :isolation \
 worktree; use :delegate (:host local)\nto use :isolation branch on the laptop\\."
-                              (cadr err))))))
+                              (cadr err))))
+    (should (equal '(:host nil :isolation worktree :sandbox nil
+                           :link ("elpaca"))
+                   (+agent-shell-arena-git-delegate-options
+                    `(:host ,host :host-directory "~/r"
+                            :delegate (:host local :link ("elpaca"))))))
+    (let ((err (should-error (+agent-shell-arena-git-delegate-options
+                              `(:host ,host :host-directory "~/r"
+                                      :delegate (:link ("elpaca"))))
+                             :type 'user-error)))
+      (should (string-prefix-p "Remote delegates cannot use :delegate :link"
+                               (cadr err))))))
 
 (ert-deftest +agent-shell-pstack-remote-delegate-test-profile-keys ()
   "A :delegate plist refuses unknown and repeated keys and loose values."

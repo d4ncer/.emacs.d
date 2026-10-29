@@ -294,6 +294,89 @@ To merge: git merge --ff-only %s, or push it" base branch branch)
         (should (equal "Add two.txt" (git "log" "-1" "--format=%s" branch)))
         (should (= 1 (length (split-string (git "worktree" "list") "\n"))))))))
 
+(defun +agent-shell-pstack-delegate-test--deps (repo ignore)
+  "Give REPO an ignored deps folder, ignored by the .gitignore line IGNORE."
+  (with-temp-file (expand-file-name ".gitignore" repo) (insert ignore "\n"))
+  (make-directory (expand-file-name "deps/pkg" repo) t)
+  (with-temp-file (expand-file-name "deps/pkg/lib.el" repo) (insert "lib\n"))
+  (let ((default-directory repo))
+    (process-file "git" nil nil nil "add" ".gitignore")
+    (process-file "git" nil nil nil "commit" "-q" "-m" "Ignore deps")))
+
+(ert-deftest +agent-shell-pstack-delegate-test-link-profile ()
+  "Refuse :delegate :link paths that are outside, tracked or not ignored."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--deps repo "/deps")
+    (should (+agent-shell-arena-git--check-profile
+             repo '(:delegate (:link ("deps")))))
+    (pcase-dolist
+        (`(,delegate ,reason)
+         `(((:link "deps") ":delegate :link must be a list of paths inside \
+the top level, not \"deps\"")
+           ((:link ("/tmp")) ":delegate :link must be a list of paths inside")
+           ((:link ("deps/../..")) ":delegate :link must be a list of paths \
+inside")
+           ((:link (".")) "each :delegate :link path must be a folder below \
+the top level, not \".\"")
+           ((:link ("README")) "each :delegate :link path must be untracked and \
+ignored by git in the lead's checkout, not \"README\"")
+           ((:link ("build")) "untracked and ignored by git in the lead's \
+checkout, not \"build\"")
+           ((:isolation branch :link ("deps")) ":delegate :link must be absent \
+with :isolation branch, where the delegate works in the lead's own checkout")))
+      (let ((err (should-error (+agent-shell-arena-git--check-profile
+                                repo (list :delegate delegate))
+                               :type 'user-error)))
+        (should (string-search reason (cadr err)))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-link ()
+  "Link ignored folders into a worktree delegate, never committing them."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--deps repo "/deps")
+    (setq +agent-shell-pstack-arena-profiles
+          `((,repo :delegate (:link ("deps")))))
+    (+agent-shell-pstack-delegate-test--started
+      (let ((link (expand-file-name "deps" directory)))
+        (should (equal (expand-file-name "deps" repo) (file-symlink-p link)))
+        (should (file-exists-p (expand-file-name "pkg/lib.el" link)))
+        (should (equal '("deps") (+agent-shell-arena-git-delegate-links
+                                  (+agent-shell-arena-git-manifest-delegate
+                                   (car (+agent-shell-arena-git-arenas))))))
+        (member-event "builder" :kind 'init-finished)
+        (with-temp-file (expand-file-name "one.txt" directory) (insert "x\n"))
+        (let ((default-directory directory))
+          (process-file "git" nil nil nil "add" "-A")
+          (process-file "git" nil nil nil "commit" "-q" "-m" "Add one.txt"))
+        (should (equal "one.txt" (git "show" "--format=" "--name-only" branch)))
+        (member-event "builder" :kind 'turn-complete :text "Built it.")
+        (let ((text (followup)))
+          (should (string-search "1 commit since" text))
+          (should-not (string-search "uncommitted" text)))
+        (should-not (file-symlink-p link))
+        (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))
+        (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+          (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                                "Workspace:")
+            (+agent-shell-pstack-panels-clean)))
+        (wait-for (lambda () (not (file-exists-p directory))))
+        (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-link-not-ignored ()
+  "Refuse a link git would stage, leaving the lead's folder alone."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--deps repo "deps/")
+    (setq +agent-shell-pstack-arena-profiles
+          `((,repo :delegate (:link ("deps")))))
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-delegate-test--message
+                       (+agent-shell-pstack-delegate-test--request)))
+    (should (string-search "Git does not ignore the symlink deps in the \
+delegate's worktree, so a commit could take it; ignore it with a pattern \
+that also matches a symlink, such as /deps rather than deps/" (followup)))
+    (should-not started)
+    (wait-for (lambda () (not (+agent-shell-arena-git-arenas))))
+    (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))))
+
 (ert-deftest +agent-shell-pstack-delegate-test-worktree-snapshot ()
   "Start a worktree delegate from a snapshot of the lead's uncommitted work.
 The lead's checkout, index and stash stay as they were."

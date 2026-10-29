@@ -118,6 +118,12 @@ matches applies.  PROFILE is a plist with any of these keys:
           it on this machine.  :sandbox t confines it to its worktree,
           where it cannot commit: Emacs makes its one commit, as your
           git identity, from the message its final response proposes.
+          :link lists folders, relative to the top level and ignored by
+          git there, that Emacs symlinks from the lead's checkout into a
+          worktree delegate's worktree before it starts and removes
+          before collecting or cleaning, such as a package folder its
+          tests need.  Only a worktree delegate on this machine takes
+          :link.
 
 Paths in :shared, :private, :copy and :files are relative to the top
 level and stay inside it.  Each element of :write and :read is an
@@ -188,8 +194,11 @@ plist whose :state is `prepared' or `committed', with the commit's fixed
 and, once made, :oid; or `empty' or `blocked', with a :reason.  DIRTY
 lists the worktree's uncommitted paths when it was last collected.
 HEAD is the lead's HEAD when the base is a snapshot of its uncommitted
-work on top of it, and nil when the base is HEAD itself."
-  isolation origin commits restore note sandbox finalization dirty head)
+work on top of it, and nil when the base is HEAD itself.  LINKS lists the
+profile's :delegate :link paths Emacs symlinks into the worktree; see
+`+agent-shell-arena-git-link-delegate'."
+  isolation origin commits restore note sandbox finalization dirty head
+  links)
 
 (defconst +agent-shell-arena-git--manifest-version 2
   "Layout this code writes manifests in.  Version 1 lacks a delegate's
@@ -615,6 +624,7 @@ there is no base."
                     :false))
       (dirty . ,(vconcat (+agent-shell-arena-git-delegate-dirty delegate)))
       (head . ,(or (+agent-shell-arena-git-delegate-head delegate) :null))
+      (links . ,(vconcat (+agent-shell-arena-git-delegate-links delegate)))
       (finalization
        . ,(if-let* ((finalization (+agent-shell-arena-git-delegate-finalization
                                    delegate)))
@@ -638,6 +648,7 @@ there is no base."
      :sandbox (and (alist-get 'sandbox json) t)
      :dirty (alist-get 'dirty json)
      :head (alist-get 'head json)
+     :links (alist-get 'links json)
      :finalization
      (when-let* ((finalization (alist-get 'finalization json)))
        (cl-loop for (key . value) in finalization
@@ -794,7 +805,8 @@ with ~/" value)))
                                            (lambda (option)
                                              (not (memq option
                                                         '(:isolation :host
-                                                                     :sandbox))))
+                                                                     :sandbox
+                                                                     :link))))
                                            options)))
                        (user-error "Arena profile for %s: unknown :delegate \
 key %S" toplevel unknown))
@@ -819,7 +831,26 @@ since a delegate otherwise runs on the profile's :host" setting)))
                            (:sandbox
                             (unless (memq setting '(t nil))
                               (funcall fail ":delegate :sandbox" "t or nil"
-                                       setting)))))))
+                                       setting)))
+                           (:link
+                            (unless (and (proper-list-p setting)
+                                         (seq-every-p relative-p setting))
+                              (funcall fail ":delegate :link"
+                                       "a list of paths inside the top level"
+                                       setting))
+                            (when (eq (plist-get value :isolation) 'branch)
+                              (funcall fail ":delegate :link" "absent with \
+:isolation branch, where the delegate works in the lead's own checkout"
+                                       setting))
+                            (dolist (path setting)
+                              (when (member path '("." ".git"))
+                                (funcall fail "each :delegate :link path"
+                                         "a folder below the top level" path))
+                              (unless (+agent-shell-arena-git--read
+                                       toplevel "check-ignore" "-q" "--" path)
+                                (funcall fail "each :delegate :link path"
+                                         "untracked and ignored by git in \
+the lead's checkout" path))))))))
                   (_ (user-error "Arena profile for %s: unknown key %S"
                                  toplevel key))))
     (when (and (plist-get profile :host)
@@ -1268,10 +1299,11 @@ Both author and committer use this identity; host config is no fallback."
 
 (defun +agent-shell-arena-git-delegate-options (profile)
   "Resolve delegate execution policy from validated repository PROFILE.
-Return (:host HOST :isolation ISOLATION :sandbox SANDBOX).  Absent
+Return (:host HOST :isolation ISOLATION :sandbox SANDBOX :link LINK).  Absent
 :delegate :host inherits PROFILE's registered host pair; only the symbol
 `local' overrides it, resolving to nil.  ISOLATION defaults to `worktree'
-and SANDBOX to nil.  Signal `user-error' for branch isolation on a host,
+and SANDBOX to nil.  LINK is the :delegate :link list.  Signal
+`user-error' for branch isolation or :link on a host,
 before any resource is created.  This is the sole resolver; launch and
 recovery read its frozen result."
   (let* ((delegate (plist-get profile :delegate))
@@ -1282,8 +1314,13 @@ recovery read its frozen result."
       (user-error "Remote delegates require :isolation worktree; use \
 :delegate (:host local)
 to use :isolation branch on the laptop."))
+    (when (and host (plist-get delegate :link))
+      (user-error "Remote delegates cannot use :delegate :link, which links \
+folders from this checkout into a worktree here; use :delegate (:host local) \
+to run the delegate on the laptop, or remove :link"))
     (list :host host :isolation isolation
-          :sandbox (and (plist-get delegate :sandbox) t))))
+          :sandbox (and (plist-get delegate :sandbox) t)
+          :link (plist-get delegate :link))))
 
 (defun +agent-shell-arena-git-identity-error (name email)
   "Return why NAME and EMAIL are not a usable git identity, or nil."
@@ -1629,6 +1666,73 @@ with the record and nil, or nil and a message."
                                      name)))))))))))
       (error (+agent-shell-arena-git--later fail (error-message-string err))))))
 
+(defun +agent-shell-arena-git--links (manifest)
+  "Return (LINK . TARGET) for each of MANIFEST's delegate links.
+LINK is in the delegate's worktree, TARGET the folder in the lead's."
+  (let ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+        (role (car (+agent-shell-arena-git-manifest-roles manifest))))
+    (when role
+      (mapcar (lambda (path)
+                (cons (directory-file-name
+                       (expand-file-name
+                        path (+agent-shell-arena-git-role-worktree role)))
+                      (directory-file-name (expand-file-name path toplevel))))
+              (+agent-shell-arena-git-delegate-links
+               (+agent-shell-arena-git-manifest-delegate manifest))))))
+
+(defun +agent-shell-arena-git-link-delegate (manifest paths)
+  "Symlink PATHS from the lead's checkout into MANIFEST's delegate worktree.
+PATHS are a profile's :delegate :link; those the lead lacks are skipped.
+The manifest records them before any link is made, so cleanup finds
+them.  Each link must be ignored by git in the worktree too, so the
+delegate's own git add never stages it: a pattern with a trailing
+slash, such as elpaca/, matches the lead's folder but not a symlink.
+Return nil, or a message saying why a link could not be made."
+  (let* ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (role (car (+agent-shell-arena-git-manifest-roles manifest)))
+         (present (seq-filter (lambda (path)
+                                (file-directory-p
+                                 (expand-file-name path toplevel)))
+                              paths)))
+    (setf (+agent-shell-arena-git-delegate-links
+           (+agent-shell-arena-git-manifest-delegate manifest))
+          present)
+    (+agent-shell-arena-git-write-manifest manifest)
+    (condition-case err
+        (catch 'refused
+          (pcase-dolist (`(,link . ,target)
+                         (+agent-shell-arena-git--links manifest))
+            (when (or (file-exists-p link) (file-symlink-p link))
+              (throw 'refused (format "Cannot link %s into the delegate's \
+worktree: %s already exists there" target link)))
+            (make-directory (file-name-directory link) t)
+            (make-symbolic-link target link)
+            (let ((path (file-relative-name
+                         link (+agent-shell-arena-git-role-worktree role))))
+              (unless (+agent-shell-arena-git--read-in
+                       (+agent-shell-arena-git-role-git-dir role)
+                       (+agent-shell-arena-git-role-worktree role)
+                       "check-ignore" "-q" "--" path)
+                (throw 'refused (format "Git does not ignore the symlink %s \
+in the delegate's worktree, so a commit could take it; ignore it with a \
+pattern that also matches a symlink, such as /%s rather than %s/" path path
+                                        path)))))
+          nil)
+      (error (format "Cannot link the profile's :delegate :link folders: %s"
+                     (error-message-string err))))))
+
+(defun +agent-shell-arena-git-unlink-delegate (manifest)
+  "Remove the symlinks `+agent-shell-arena-git-link-delegate' made.
+Only a symlink still pointing at its folder in the lead's checkout goes,
+never what it points at.  Safe to call again."
+  (when (+agent-shell-arena-git-manifest-delegate manifest)
+    (pcase-dolist (`(,link . ,target) (+agent-shell-arena-git--links manifest))
+      (when (equal (file-symlink-p link) target)
+        (condition-case err
+            (delete-file link)
+          (error (message "pstack delegate: the link %s stayed: %s" link
+                          (error-message-string err))))))))
+
 (defun +agent-shell-arena-git-drop-branch (manifest callback)
   "Delete MANIFEST's delegate branch when it has no commit of its own.
 Only a branch that still points exactly at the base, and that no
@@ -1742,6 +1846,7 @@ when that cannot, nothing is removed and the message says why.
 
 Trees go as `+agent-shell-sandbox-delete' deletes them, so read-only
 folders a candidate's tools made do not stop the cleanup."
+  (+agent-shell-arena-git-unlink-delegate manifest)
   (let ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
         (returned-p (lambda (delegate)
                       (memq (+agent-shell-arena-git-delegate-restore delegate)
