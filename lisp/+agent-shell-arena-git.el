@@ -263,8 +263,10 @@ output on success, otherwise FAIL with a message."
                    (funcall fail (if (string-empty-p message)
                                      (format "exit status %s" status)
                                    message)))))))))
-    (when input (process-send-string process input))
-    (process-send-eof process)))
+    (when (and input (process-live-p process))
+      (process-send-string process input))
+    (when (process-live-p process)
+      (process-send-eof process))))
 
 (defun +agent-shell-arena-git--git (git-dir work-tree args fail done
                                             &optional env input)

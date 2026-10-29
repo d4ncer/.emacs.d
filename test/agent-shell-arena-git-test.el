@@ -117,6 +117,45 @@
   (+arena-git-test--ok
    (lambda (done) (+agent-shell-arena-git-capture manifest role done))))
 
+(ert-deftest +agent-shell-arena-git-test-run-exited-before-input ()
+  "A command that finishes before input is sent reports its result once."
+  (dolist (status '(0 7))
+    (dolist (input '("unused input" nil))
+      (let ((make-process (symbol-function 'make-process))
+            (calls nil))
+        (cl-letf (((symbol-function 'make-process)
+                   (lambda (&rest args)
+                     (let ((process (apply make-process args)))
+                       (+agent-shell-sandbox-test-wait
+                        (lambda () calls))
+                       process))))
+          (+agent-shell-arena-git--run
+           (list "sh" "-c"
+                 (format "printf output; printf diagnostic >&2; exit %s"
+                         status))
+           temporary-file-directory nil
+           (lambda (message) (push (list 'error message) calls))
+           (lambda (output) (push (list 'done output) calls)) input))
+        (should (equal calls (if (zerop status)
+                                '((done "output"))
+                              '((error "diagnostic")))))))))
+
+(ert-deftest +agent-shell-arena-git-test-run-exited-before-eof ()
+  "A command that finishes during input delivery needs no EOF."
+  (let ((send-string (symbol-function 'process-send-string))
+        (calls nil))
+    (cl-letf (((symbol-function 'process-send-string)
+               (lambda (process string)
+                 (funcall send-string process string)
+                 (+agent-shell-sandbox-test-wait
+                  (lambda () calls)))))
+      (+agent-shell-arena-git--run
+       '("sh" "-c" "IFS= read -r line; printf '%s' \"$line\"")
+       temporary-file-directory nil
+       (lambda (message) (push (list 'error message) calls))
+       (lambda (output) (push (list 'done output) calls)) "payload\n"))
+    (should (equal calls '((done "payload"))))))
+
 (ert-deftest +agent-shell-arena-git-test-base-capture-identity ()
   "An arena's base keeps the capture identity even without a user identity."
   (+arena-git-test--with-scratch
