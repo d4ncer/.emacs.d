@@ -24,6 +24,14 @@
   (expand-file-name "fixtures/agent-shell-projects-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
+(defun +remote-delegate-acp-test--capabilities ()
+  "Return the capabilities the local test host declares in ready.json.
+It has git, the fixture adapters and the delegate runner, and on Linux
+the sandbox's namespaces; its runner starts under nohup, not systemd."
+  `((git . 1) (node_adapters . 1) (delegate . 1)
+    ,@(when (eq +agent-shell-sandbox-backend 'bwrap)
+        '((linux_namespaces . 1) (bwrap . 1) (slirp4netns . 1)))))
+
 (defun +remote-delegate-acp-test--config (identifier)
   "Return a fixture agent config named IDENTIFIER."
   (agent-shell-make-agent-config
@@ -206,7 +214,8 @@ was delivered."
                   (emacs (path . ,(expand-file-name invocation-name
                                                     invocation-directory))
                          (version . ,emacs-version))
-                  (capabilities (delegate . 1))))))
+                  (capabilities
+                   ,@(+remote-delegate-acp-test--capabilities))))))
      (+remote-delegate-acp-test--runner-init
       (expand-file-name "runner-init.el" host-root))
      (unwind-protect

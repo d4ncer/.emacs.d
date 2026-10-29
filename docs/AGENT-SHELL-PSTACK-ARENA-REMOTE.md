@@ -328,9 +328,17 @@ smoke check passes, and deletes it on every boot first. It has its own
 format, version 1, with no `kind`. `emacs` is required, and `written_at`,
 `adapters_bin`, `claude_agent_acp`, `codex_acp`, `node`, `bwrap`,
 `unshare`, `slirp4netns` and `capabilities` are optional. Each tool is an
-object with `path` and `version`. `capabilities` is `{"delegate":1}`
-once setup has proved the host can run delegates, as below; an arena
-needs none:
+object with `path` and `version`. `capabilities` maps each name in
+`+agent-shell-arena-remote-capability-registry` (`linux_namespaces`,
+`bwrap`, `slirp4netns`, `systemd_user`, `git`, `node_adapters`,
+`delegate` and `egress_tshark`) to the version of the check setup ran
+that proved it, or 0 when that check failed. Once the host answers the
+probe, and before anything is shipped, the submission refuses a job
+whose needs the file does not prove, naming each capability and what
+sets it up. A file without a key, such as one written before hosts
+declared capabilities, gets a refusal saying to rerun setup. A measured
+job without `egress_tshark` still runs, with its egress records
+unavailable. A file from that earlier setup:
 
 ```json
 {"version":1,"written_at":"2026-10-26T10:29:45.684Z",

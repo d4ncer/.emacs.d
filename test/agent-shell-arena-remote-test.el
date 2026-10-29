@@ -254,8 +254,14 @@ turns placeholders back into functions of its own sandbox."
     (should (equal '("T=/w/opus") (funcall (plist-get host :env) sandbox)))
     (should (+agent-shell-arena-git--check-profile "/r/" host))))
 
+(defconst +arena-remote-test--capabilities
+  "\"capabilities\": {\"linux_namespaces\": 1, \"bwrap\": 1, \"slirp4netns\": 1, \
+\"systemd_user\": 1, \"git\": 1, \"node_adapters\": 1, \"delegate\": 1, \
+\"egress_tshark\": 1}"
+  "A readiness file's capabilities, every one proved.")
+
 (defconst +arena-remote-test--ready
-  "{
+  (concat "{
   \"version\": 1,
   \"written_at\": \"2026-10-26T10:29:45.684Z\",
   \"emacs\": {\"path\": \"/nix/store/0wx9-emacs-nox-31.1/bin/emacs\", \"version\": \"31.1\"},
@@ -265,8 +271,9 @@ turns placeholders back into functions of its own sandbox."
   \"node\": {\"path\": \"/usr/bin/node\", \"version\": \"v24.22.1\"},
   \"bwrap\": {\"path\": \"/usr/bin/bwrap\", \"version\": \"bubblewrap 0.6.1\"},
   \"unshare\": {\"path\": \"/usr/bin/unshare\", \"version\": \"unshare 2.37.2\"},
-  \"slirp4netns\": {\"path\": \"/usr/bin/slirp4netns\", \"version\": \"slirp4netns version 1.0.1\"}
-}"
+  \"slirp4netns\": {\"path\": \"/usr/bin/slirp4netns\", \"version\": \"slirp4netns version 1.0.1\"},
+  "
+          +arena-remote-test--capabilities "\n}")
   "The remote host's readiness file, as its setup wrote it.")
 
 (ert-deftest +agent-shell-arena-remote-test-ready ()
@@ -336,6 +343,168 @@ the host's own setting; a job without the field measures nothing."
       (should (member name names)))
     (should-not (seq-some (lambda (name) (string-match-p "autoloads" name))
                           names))))
+
+;;;; Capabilities
+
+(defun +arena-remote-test--capable (&rest overrides)
+  "Return a probe whose readiness file proves every capability.
+OVERRIDES is a plist of capability keys, as strings, and values that
+replace them; a value of `absent' leaves its key out."
+  (let ((capabilities
+         (seq-keep (pcase-lambda (`(,_ ,key . ,_))
+                     (let ((value (if (plist-member overrides key #'equal)
+                                      (plist-get overrides key #'equal)
+                                    1)))
+                       (unless (eq value 'absent) (cons (intern key) value))))
+                   +agent-shell-arena-remote-capability-registry)))
+    (list :toplevel "/r" :ready-file "~/ready.json"
+          :ready (+agent-shell-arena-remote-from-json
+                  'ready (json-serialize
+                          `((version . 1)
+                            (emacs (path . "/e") (version . "31.1"))
+                            ,@(when capabilities
+                                `((capabilities . ,capabilities)))))))))
+
+(defun +arena-remote-test--delegate-job (sandbox)
+  "Return a delegate job, sandboxed when SANDBOX is non-nil."
+  (let ((job (+arena-remote-test--job)))
+    (setf (+agent-shell-arena-remote-job-shape job) 'delegate
+          (+agent-shell-arena-remote-job-members job)
+          (list (+agent-shell-arena-remote--make-request-member
+                 :role "delegate" :agent 'codex :kind 'delegate))
+          (+agent-shell-arena-remote-job-delegate job)
+          (+agent-shell-arena-remote--make-delegate-job :sandbox sandbox))
+    job))
+
+(ert-deftest +agent-shell-arena-remote-test-capability-registry ()
+  "The readiness file's capabilities are the registry's, in its order."
+  (should (equal (mapcar #'car +agent-shell-arena-remote-capability-registry)
+                 (mapcar #'car (cdr (cl-struct-slot-info
+                                     '+agent-shell-arena-remote-capabilities)))))
+  (should (equal (mapcar #'cadr +agent-shell-arena-remote-capability-registry)
+                 (mapcar #'cadr (nthcdr 3 (+agent-shell-arena-remote--kind
+                                           'capabilities)))))
+  (dolist (entry +agent-shell-arena-remote-capability-registry)
+    (should (stringp (plist-get (nthcdr 2 entry) :proof)))
+    (should (stringp (plist-get (nthcdr 2 entry) :setup)))))
+
+(ert-deftest +agent-shell-arena-remote-test-capability-needs ()
+  "A job needs what its shape, sandboxing and host's launcher use."
+  (let ((coder (+agent-shell-arena-remote--make-host
+                :kind 'coder :name "example-workspace"))
+        (local (+agent-shell-arena-remote-parse-host
+                '(local . "/tmp/arena-host"))))
+    (should (equal '(git node-adapters systemd-user linux-namespaces bwrap
+                         slirp4netns)
+                   (+agent-shell-arena-remote--needs
+                    coder (+arena-remote-test--job))))
+    (should (equal '(git node-adapters systemd-user delegate)
+                   (+agent-shell-arena-remote--needs
+                    coder (+arena-remote-test--delegate-job nil))))
+    (should (equal '(git node-adapters systemd-user delegate linux-namespaces
+                         bwrap slirp4netns)
+                   (+agent-shell-arena-remote--needs
+                    coder (+arena-remote-test--delegate-job t))))
+    (let ((+agent-shell-sandbox-backend 'sandbox-exec))
+      (should (equal '(git node-adapters)
+                     (+agent-shell-arena-remote--needs
+                      local (+arena-remote-test--job)))))
+    (let ((+agent-shell-sandbox-backend 'bwrap))
+      (should (equal '(git node-adapters linux-namespaces bwrap slirp4netns)
+                     (+agent-shell-arena-remote--needs
+                      local (+arena-remote-test--job)))))))
+
+(ert-deftest +agent-shell-arena-remote-test-capability-refusals ()
+  "Each capability a job needs and the host lacks refuses it by name, with
+what sets it up; one the job does not need refuses nothing."
+  (let ((coder (+agent-shell-arena-remote--make-host
+                :kind 'coder :name "example-workspace"))
+        (arena (+arena-remote-test--job))
+        (delegate (+arena-remote-test--delegate-job nil)))
+    (should-not (+agent-shell-arena-remote--capability-error
+                 (+arena-remote-test--capable) coder arena))
+    (pcase-dolist (`(,name ,key . ,properties)
+                   +agent-shell-arena-remote-capability-registry)
+      (let ((probe (+arena-remote-test--capable key 0)))
+        (dolist (job (list arena delegate))
+          (let ((error (+agent-shell-arena-remote--capability-error
+                        probe coder job)))
+            (if (memq name (+agent-shell-arena-remote--needs coder job))
+                (progn
+                  (should (string-match-p
+                           (format "needs: %s\\.  %s: %s\\." (regexp-quote key)
+                                   (regexp-quote key)
+                                   (regexp-quote
+                                    (plist-get properties :setup)))
+                           error))
+                  (should-not (string-match-p "predates" error)))
+              (should-not error))))))
+    (should (string-match-p
+             "needs: git, bwrap\\.  git: install git\\.  bwrap: install \
+bubblewrap"
+             (+agent-shell-arena-remote--capability-error
+              (+arena-remote-test--capable "git" 0 "bwrap" 0) coder arena)))
+    (should-not (+agent-shell-arena-remote--capability-error
+                 (+arena-remote-test--capable "bwrap" 0 "slirp4netns" 'absent)
+                 coder delegate))
+    (should (string-match-p
+             "needs: delegate\\..*keep delegates here with :delegate (:host \
+local)"
+             (+agent-shell-arena-remote--capability-error
+              (+arena-remote-test--capable "delegate" 'absent) coder
+              delegate)))))
+
+(ert-deftest +agent-shell-arena-remote-test-capabilities-before-declaration ()
+  "A readiness file from before hosts declared capabilities is refused for
+a job that needs them, asking for setup to run again, never misread."
+  (let ((coder (+agent-shell-arena-remote--make-host
+                :kind 'coder :name "example-workspace"))
+        (old (+arena-remote-test--capable
+              "linux_namespaces" 'absent "bwrap" 'absent "slirp4netns" 'absent
+              "systemd_user" 'absent "git" 'absent "node_adapters" 'absent
+              "egress_tshark" 'absent)))
+    (should (equal 1 (+agent-shell-arena-remote--capability
+                      (plist-get old :ready) 'delegate)))
+    (dolist (job (list (+arena-remote-test--job)
+                       (+arena-remote-test--delegate-job nil)))
+      (let ((error (+agent-shell-arena-remote--capability-error old coder job)))
+        (should (string-match-p "~/ready\\.json does not prove" error))
+        (should (string-match-p
+                 "does not declare git, node_adapters, systemd_user.* at all, \
+so the host's setup predates them; rerun it\\."
+                 error))
+        (should-not (string-match-p "declare.*delegate" error))))
+    (should (string-match-p
+             "needs: git, node_adapters, systemd_user, linux_namespaces, \
+bwrap, slirp4netns\\."
+             (+agent-shell-arena-remote--capability-error
+              (list :ready-file "~/ready.json"
+                    :ready (+agent-shell-arena-remote--make-ready
+                            :emacs (+agent-shell-arena-remote--make-tool
+                                    :path "/e" :version "31.1")))
+              coder (+arena-remote-test--job))))))
+
+(ert-deftest +agent-shell-arena-remote-test-egress-capability ()
+  "A measured job on a host without tshark runs, its egress records
+unavailable, rather than being refused."
+  (let ((coder (+agent-shell-arena-remote--make-host
+                :kind 'coder :name "example-workspace"))
+        (job (+arena-remote-test--job))
+        (probe (+arena-remote-test--capable "egress_tshark" 0)))
+    (should-not (+agent-shell-arena-remote--capability-notes probe coder job))
+    (setf (+agent-shell-arena-remote-job-measure-egress job) t)
+    (should-not (+agent-shell-arena-remote--capability-error probe coder job))
+    (should (string-match-p "does not prove egress_tshark, so egress records \
+will be unavailable"
+                            (+agent-shell-arena-remote--capability-notes
+                             probe coder job)))
+    (should-not (+agent-shell-arena-remote--capability-notes
+                 (+arena-remote-test--capable) coder job))
+    (let ((+agent-shell-sandbox-backend 'sandbox-exec))
+      (should-not (+agent-shell-arena-remote--capability-notes
+                   probe (+agent-shell-arena-remote-parse-host
+                          '(local . "/tmp/arena-host"))
+                   job)))))
 
 ;;;; Phases
 
@@ -749,16 +918,18 @@ and the lead hears once the host has been silent too long."
               (resources . [((agents . [((name . "main")
                                          (status . ,(or agent "connected")))]))]))))))
 
-(defun +arena-remote-test--probe (boot written)
+(defun +arena-remote-test--probe (boot written &optional capabilities)
   "Return a probe answer from a host booted at BOOT, its readiness file
-written at WRITTEN, an ISO 8601 string, or missing when WRITTEN is nil."
+written at WRITTEN, an ISO 8601 string, or missing when WRITTEN is nil.
+CAPABILITIES is the file's capabilities field, by default every one."
   (concat "pstack-arena-probe 1\ntoplevel /home/user/src/big-repo\n"
           "tip " (make-string 40 ?e) "\ncode 0\n"
           "ready /home/user/.local/share/pstack-arena/ready.json\n"
           (format "boot %s\n" boot)
           (if written
               (format "{\"version\":1,\"written_at\":%S,\
-\"emacs\":{\"path\":\"/nix/bin/emacs\",\"version\":\"31.1\"}}\n" written)
+\"emacs\":{\"path\":\"/nix/bin/emacs\",\"version\":\"31.1\"},%s}\n" written
+                      (or capabilities +arena-remote-test--capabilities))
             "")))
 
 (defmacro +arena-remote-test--with-submission (&rest body)
@@ -840,6 +1011,57 @@ never finished is refused at once."
     (should-not offered)
     (should (string-match-p "no readiness file"
                             (+agent-shell-pstack-panel-rejection panel)))))
+
+(ert-deftest +agent-shell-arena-remote-test-capability-refused-at-submission ()
+  "A host lacking a capability the job needs is refused once it answers,
+before any prerequisite, bundle or upload."
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             (- (float-time) 7200) "2026-10-26T19:41:44.010Z"
+                             (string-replace "\"bwrap\": 1" "\"bwrap\": 0"
+                                             +arena-remote-test--capabilities)))
+    (should-not offered)
+    (should-not spawned)
+    (should (string-match-p "Coder workspace box: .*needs: bwrap\\.  bwrap: \
+install bubblewrap"
+                            (+agent-shell-pstack-panel-rejection panel))))
+  (+arena-remote-test--with-submission
+    (answer "\\`list\\'" 0 (+arena-remote-test--workspaces "box" "running"))
+    (answer "coder\\.box" 0 (+arena-remote-test--probe
+                             (- (float-time) 7200) "2026-10-26T19:41:44.010Z"
+                             "\"capabilities\":{\"delegate\":1}"))
+    (should-not offered)
+    (should (string-match-p "predates them; rerun it"
+                            (+agent-shell-pstack-panel-rejection panel)))))
+
+(ert-deftest +agent-shell-arena-remote-test-egress-fails-open ()
+  "A measured job goes on to a host without tshark, saying its egress
+records will be unavailable."
+  (+arena-remote-test--with-scratch
+    (let* ((host (+agent-shell-arena-remote--make-host
+                  :kind 'coder :name "example-workspace"))
+           (remote (+arena-remote-test--record host))
+           (job (+arena-remote-test--job))
+           (probe (+arena-remote-test--capable "egress_tshark" 0))
+           (messages nil)
+           (answer nil))
+      (setf (+agent-shell-arena-remote-phase remote) 'submitting
+            (+agent-shell-arena-remote-job-measure-egress job) t)
+      (cl-letf (((symbol-function '+agent-shell-arena-remote--coder-wake)
+                 (lambda (_name done) (funcall done 'ready nil nil)))
+                ((symbol-function '+agent-shell-arena-remote--probe)
+                 (lambda (_remote _job done) (funcall done probe nil)))
+                ((symbol-function 'message)
+                 (lambda (format &rest args)
+                   (push (apply #'format-message format args) messages))))
+        (+agent-shell-arena-remote--await
+         remote job (lambda (probe) (setq answer probe))))
+      (should (eq probe answer))
+      (should (seq-some (lambda (text)
+                          (string-match-p "egress records will be unavailable"
+                                          text))
+                        messages)))))
 
 (ert-deftest +agent-shell-arena-remote-test-wake-gives-up ()
   "A workspace that never gets ready is refused after the wake timeout,

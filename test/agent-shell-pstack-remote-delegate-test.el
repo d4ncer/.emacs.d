@@ -472,21 +472,38 @@ and outcome; their version-1 forms still read as arenas."
   "A delegate needs its host's readiness file to list the capability;
 an arena does not."
   (let* ((tool (+agent-shell-arena-remote--make-tool :path "/e" :version "31.1"))
-         (old (+agent-shell-arena-remote--make-ready :emacs tool))
-         (ready (+agent-shell-arena-remote-from-json
-                 'ready (json-serialize
-                         '((version . 1)
-                           (emacs (path . "/e") (version . "31.1"))
-                           (capabilities (delegate . 1))))))
+         (host (+agent-shell-arena-remote--make-host :kind 'ssh
+                                                     :name "build-host"))
+         (capable '((linux_namespaces . 1) (bwrap . 1) (slirp4netns . 1)
+                    (systemd_user . 1) (git . 1) (node_adapters . 1)))
+         (ready (lambda (capabilities)
+                  (+agent-shell-arena-remote-from-json
+                   'ready (json-serialize
+                           `((version . 1)
+                             (emacs (path . "/e") (version . "31.1"))
+                             (capabilities . ,capabilities))))))
          (probe (lambda (ready) (list :toplevel "/r" :ready ready
-                                      :ready-file "~/ready.json"))))
+                                      :ready-file "~/ready.json")))
+         (job (lambda (shape)
+                (+agent-shell-arena-remote--make-job
+                 :shape shape
+                 :delegate (when (eq shape 'delegate)
+                             (+agent-shell-arena-remote--make-delegate-job
+                              :sandbox nil))))))
     (should-not (+agent-shell-arena-remote--ready-error
-                 (funcall probe old) "/r" 'arena))
-    (should (string-match-p "does not list the capability \"delegate\":1"
-                            (+agent-shell-arena-remote--ready-error
-                             (funcall probe old) "/r" 'delegate)))
-    (should-not (+agent-shell-arena-remote--ready-error
-                 (funcall probe ready) "/r" 'delegate))))
+                 (funcall probe (+agent-shell-arena-remote--make-ready
+                                 :emacs tool))
+                 "/r"))
+    (should-not (+agent-shell-arena-remote--capability-error
+                 (funcall probe (funcall ready capable)) host
+                 (funcall job 'arena)))
+    (should (string-match-p "needs: delegate\\."
+                            (+agent-shell-arena-remote--capability-error
+                             (funcall probe (funcall ready capable)) host
+                             (funcall job 'delegate))))
+    (should-not (+agent-shell-arena-remote--capability-error
+                 (funcall probe (funcall ready (cons '(delegate . 1) capable)))
+                 host (funcall job 'delegate)))))
 
 ;;;; Identity
 

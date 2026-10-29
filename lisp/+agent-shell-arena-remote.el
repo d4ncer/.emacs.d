@@ -231,12 +231,68 @@ blocked."
   branch tip commits workspace sandbox dirty-paths (dirty-count 0)
   (finalization 'none) message-error retained-reason)
 
+(defconst +agent-shell-arena-remote-capability-registry
+  '((linux-namespaces
+     "linux_namespaces"
+     :proof "unshare --user --map-root-user --net true succeeds as the \
+runner's user"
+     :setup "allow unprivileged user namespaces (kernel.unprivileged_userns_clone=1, \
+and on Ubuntu 24.04 or newer an AppArmor profile for bwrap or \
+kernel.apparmor_restrict_unprivileged_userns=0)")
+    (bwrap
+     "bwrap"
+     :proof "bwrap --unshare-user --unshare-pid --unshare-ipc --unshare-net \
+--die-with-parent --ro-bind / / --dev /dev --proc /proc true succeeds"
+     :setup "install bubblewrap and record it as ready.json's bwrap tool")
+    (slirp4netns
+     "slirp4netns"
+     :proof "a command in a bwrap network namespace reaches the network \
+through slirp4netns --configure"
+     :setup "install slirp4netns and record it as ready.json's slirp4netns \
+tool")
+    (systemd-user
+     "systemd_user"
+     :proof "systemd-run --user --collect --wait true and systemd-run --user \
+--scope --collect true both succeed from a non-interactive ssh session"
+     :setup "run a systemd user manager that outlives logins (loginctl \
+enable-linger) and reaches ssh sessions through XDG_RUNTIME_DIR")
+    (git
+     "git"
+     :proof "git runs bundle verify, fetch from a bundle, worktree add and \
+sparse-checkout in a scratch repository"
+     :setup "install git")
+    (node-adapters
+     "node_adapters"
+     :proof "node, and claude-agent-acp and codex-acp in adapters_bin, each \
+answer --version"
+     :setup "install Node and the ACP adapters from their lock into \
+adapters_bin, and record them as ready.json's node, claude_agent_acp and \
+codex_acp tools")
+    (delegate
+     "delegate"
+     :proof "setup's delegate smoke check passes: a fixture delegate commits \
+on a branch of a scratch checkout and its scope stops"
+     :setup "rerun the host's setup with delegate support, or keep delegates \
+here with :delegate (:host local)")
+    (egress-tshark
+     "egress_tshark"
+     :proof "tshark captures a sandbox's traffic inside its user namespace"
+     :setup "install tshark"))
+  "What a host's readiness file may say its setup proved, in order.
+Each entry is (NAME KEY :proof PROOF :setup SETUP): KEY names it in
+ready.json's capabilities object, PROOF is the check that proves it and
+SETUP what to do on a host that lacks it.  A capability's value is the
+version of that check that passed, at least 1, or 0 when it ran and
+failed; a key that is absent was never checked.")
+
 (cl-defstruct (+agent-shell-arena-remote-capabilities
                (:constructor +agent-shell-arena-remote--make-capabilities)
                (:copier nil))
-  "What a host's setup says it can run beyond arenas: DELEGATE is the
-version of delegate support it smoke-tested, or nil."
-  delegate)
+  "What a host's setup proved it can do, one slot per entry of
+`+agent-shell-arena-remote-capability-registry': each the version of the
+check that passed, 0 when it failed, or nil when setup never checked."
+  linux-namespaces bwrap slirp4netns systemd-user git node-adapters delegate
+  egress-tshark)
 
 (cl-defstruct (+agent-shell-arena-remote-sparse
                (:constructor +agent-shell-arena-remote--make-sparse)
@@ -289,7 +345,9 @@ delegate's DELEGATE is its `+agent-shell-arena-remote-outcome'."
   "A host's readiness file, written once its setup passed a smoke check.
 EMACS is the Emacs a runner runs on.  ADAPTERS-BIN is the folder holding
 the ACP adapters' launchers, and the other slots the tools the Linux
-sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'."
+sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'.
+CAPABILITIES says what setup proved, a
+`+agent-shell-arena-remote-capabilities'."
   written-at emacs adapters-bin claude-agent-acp codex-acp node bwrap unshare
   slirp4netns capabilities)
 
@@ -328,7 +386,7 @@ The slots from DIRECTORY to LOGINS are not saved."
   "Agent identifiers a record may name.")
 
 (defconst +agent-shell-arena-remote--kinds
-  '((job +agent-shell-arena-remote-job +agent-shell-arena-remote--make-job
+  `((job +agent-shell-arena-remote-job +agent-shell-arena-remote--make-job
          (id "id" id) (panel "panel" id)
          (shape "shape" (enum arena delegate)) (brief "brief" text)
          (rubric "rubric" (strings)) (timeout "timeout" natnum)
@@ -438,7 +496,9 @@ The slots from DIRECTORY to LOGINS are not saved."
            (capabilities "capabilities" (opt (record capabilities))))
     (capabilities +agent-shell-arena-remote-capabilities
                   +agent-shell-arena-remote--make-capabilities
-                  (delegate "delegate" (opt natnum)))
+                  ,@(mapcar (pcase-lambda (`(,slot ,key . ,_))
+                              (list slot key '(opt natnum)))
+                            +agent-shell-arena-remote-capability-registry))
     (host +agent-shell-arena-remote-host +agent-shell-arena-remote--make-host
           (kind "kind" host-kind) (name "name" text))
     (record +agent-shell-arena-remote +agent-shell-arena-remote--make
@@ -1755,20 +1815,111 @@ left\"."
   (when-let* ((written (+agent-shell-arena-remote-ready-written-at ready)))
     (ignore-errors (float-time (encode-time (iso8601-parse written))))))
 
+(defun +agent-shell-arena-remote--capability (ready name)
+  "Return the value READY gives capability NAME: a version, 0, or nil."
+  (when-let* ((capabilities (and ready (+agent-shell-arena-remote-ready-capabilities
+                                        ready))))
+    (cl-struct-slot-value '+agent-shell-arena-remote-capabilities name
+                          capabilities)))
+
 (defun +agent-shell-arena-remote--delegate-ready-p (ready)
   "Return whether READY says its host's setup can run delegates."
-  (when-let* ((capabilities (and ready (+agent-shell-arena-remote-ready-capabilities
-                                        ready)))
-              (version (+agent-shell-arena-remote-capabilities-delegate
-                        capabilities)))
+  (when-let* ((version (+agent-shell-arena-remote--capability ready 'delegate)))
     (>= version 1)))
 
-(defun +agent-shell-arena-remote--ready-error (probe repository
-                                                     &optional shape)
+(defun +agent-shell-arena-remote--linux-sandbox-p (host)
+  "Return whether HOST's runner confines members with the Linux sandbox.
+A local host's runner is this Emacs's system; any other runs on Linux."
+  (if (+agent-shell-arena-remote--host-option host :local)
+      (eq +agent-shell-sandbox-backend 'bwrap)
+    t))
+
+(defun +agent-shell-arena-remote--needs (host job)
+  "Return the capabilities JOB needs on HOST, as registry names.
+Every job needs git and the adapters, and a systemd launcher its user
+manager, which also holds each delegate's scope.  A delegate needs the
+delegate capability, and sandboxed members on Linux need namespaces,
+bwrap and slirp4netns: every arena member, and a delegate when its
+policy sandboxes it."
+  (let ((delegate (+agent-shell-arena-remote-job-delegate job)))
+    (append
+     '(git node-adapters)
+     (when (equal (+agent-shell-arena-remote--launcher host) "systemd")
+       '(systemd-user))
+     (when (eq (+agent-shell-arena-remote-job-shape job) 'delegate)
+       '(delegate))
+     (when (and (+agent-shell-arena-remote--linux-sandbox-p host)
+                (or (not delegate)
+                    (+agent-shell-arena-remote-delegate-job-sandbox delegate)))
+       '(linux-namespaces bwrap slirp4netns)))))
+
+(defun +agent-shell-arena-remote--wants (host job)
+  "Return the capabilities JOB uses on HOST without needing them.
+A measured job's Linux members capture egress with tshark; without it
+their records are unavailable, and the job runs regardless."
+  (when (and (+agent-shell-arena-remote-job-measure-egress job)
+             (+agent-shell-arena-remote--linux-sandbox-p host))
+    '(egress-tshark)))
+
+(defun +agent-shell-arena-remote--lacking (ready names)
+  "Return the capabilities of NAMES that READY does not prove."
+  (seq-remove (lambda (name)
+                (let ((version (+agent-shell-arena-remote--capability
+                                ready name)))
+                  (and version (>= version 1))))
+              names))
+
+(defun +agent-shell-arena-remote--capability-key (name)
+  "Return capability NAME's key in ready.json."
+  (nth 1 (assq name +agent-shell-arena-remote-capability-registry)))
+
+(defun +agent-shell-arena-remote--capability-error (probe host job)
+  "Return why PROBE's readiness file cannot run JOB on HOST, or nil.
+Name each capability JOB needs that the file does not prove and what
+sets it up.  One the file never declares means its setup predates it."
+  (let* ((ready (plist-get probe :ready))
+         (lacking (+agent-shell-arena-remote--lacking
+                   ready (+agent-shell-arena-remote--needs host job)))
+         (undeclared (seq-filter (lambda (name)
+                                   (null (+agent-shell-arena-remote--capability
+                                          ready name)))
+                                 lacking)))
+    (when lacking
+      (concat
+       (format "its readiness file at %s does not prove the capabilities \
+this job needs: %s.  "
+               (plist-get probe :ready-file)
+               (mapconcat #'+agent-shell-arena-remote--capability-key lacking
+                          ", "))
+       (mapconcat (lambda (name)
+                    (format "%s: %s."
+                            (+agent-shell-arena-remote--capability-key name)
+                            (plist-get (nthcdr 2 (assq name
+                                                       +agent-shell-arena-remote-capability-registry))
+                                       :setup)))
+                  lacking "  ")
+       (when undeclared
+         (format "  The file does not declare %s at all, so the host's \
+setup predates %s; rerun it."
+                 (mapconcat #'+agent-shell-arena-remote--capability-key
+                            undeclared ", ")
+                 (if (cdr undeclared) "them" "it")))))))
+
+(defun +agent-shell-arena-remote--capability-notes (probe host job)
+  "Return what JOB on HOST goes without, as PROBE's readiness file says.
+That names the capabilities it uses but does not need; nil when none lack."
+  (when-let* ((lacking (+agent-shell-arena-remote--lacking
+                        (plist-get probe :ready)
+                        (+agent-shell-arena-remote--wants host job))))
+    (format "its readiness file does not prove %s, so egress records will \
+be unavailable"
+            (mapconcat #'+agent-shell-arena-remote--capability-key lacking
+                       ", "))))
+
+(defun +agent-shell-arena-remote--ready-error (probe repository)
   "Return why PROBE says the host cannot run a job for REPOSITORY, or nil.
 A readiness file written before the host last booted is stale: setup
-removes it on every boot before it writes a fresh one.  A job of SHAPE
-`delegate' also needs the readiness file's delegate capability."
+removes it on every boot before it writes a fresh one."
   (let* ((ready (plist-get probe :ready))
          (written (and ready (+agent-shell-arena-remote--written ready)))
          (boot (plist-get probe :boot)))
@@ -1788,10 +1939,7 @@ at %s, so its setup has not finished since"
               (+agent-shell-arena-remote--version ready 'emacs)
               +agent-shell-arena-remote-minimum-emacs))
      ((string-empty-p (or (plist-get probe :toplevel) ""))
-      (format "it has no git checkout at %s" repository))
-     ((and (eq shape 'delegate)
-           (not (+agent-shell-arena-remote--delegate-ready-p ready)))
-      (format "its readiness file at %s does not list the capability \"delegate\":1, so its setup has not proved it can run delegates there.  Rerun the host's setup with delegate support, or keep delegates here with :delegate (:host local)" (plist-get probe :ready-file))))))
+      (format "it has no git checkout at %s" repository)))))
 
 (defun +agent-shell-arena-remote--coder-wake (name callback)
   "Check or start Coder workspace NAME, reporting wake events to CALLBACK.
@@ -1887,11 +2035,20 @@ was last wrong.  A cancel stops the wait."
                                  (+agent-shell-arena-remote--ready-error
                                   probe
                                   (+agent-shell-arena-remote-job-repository
-                                   job)
-                                  (+agent-shell-arena-remote-job-shape job))))
+                                   job))))
                     (boot (plist-get probe :boot)))
                 (cond
-                 ((not problem) (funcall callback probe))
+                 ((not problem)
+                  (if-let* ((refusal (+agent-shell-arena-remote--capability-error
+                                      probe host job)))
+                      (+agent-shell-arena-remote--reject remote refusal)
+                    (when-let* ((note (+agent-shell-arena-remote--capability-notes
+                                       probe host job)))
+                      (message "pstack arena %s: %s, %s"
+                               (+agent-shell-arena-remote-id remote)
+                               (+agent-shell-arena-remote--host-label host)
+                               note))
+                    (funcall callback probe)))
                  ((or woke
                       (and boot
                            (< (- (float-time) boot)

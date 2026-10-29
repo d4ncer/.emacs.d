@@ -23,6 +23,14 @@
   (expand-file-name "fixtures/agent-shell-projects-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
+(defun +agent-shell-pstack-arena-remote-acp-test--capabilities ()
+  "Return the capabilities the local test host declares in ready.json.
+It has git and the fixture adapters, and on Linux the sandbox's
+namespaces; its runner starts under nohup, not systemd."
+  `((git . 1) (node_adapters . 1)
+    ,@(when (eq +agent-shell-sandbox-backend 'bwrap)
+        '((linux_namespaces . 1) (bwrap . 1) (slirp4netns . 1)))))
+
 (defun +agent-shell-pstack-arena-remote-acp-test--config (identifier)
   "Return a fixture agent config named IDENTIFIER."
   (agent-shell-make-agent-config
@@ -255,7 +263,9 @@ record, and `delivered', which waits for a panel's follow-up."
                 `((version . 1)
                   (emacs (path . ,(expand-file-name invocation-name
                                                     invocation-directory))
-                         (version . ,emacs-version))))))
+                         (version . ,emacs-version))
+                  (capabilities
+                   ,@(+agent-shell-pstack-arena-remote-acp-test--capabilities))))))
      (+agent-shell-pstack-arena-remote-acp-test--runner-init
       (expand-file-name "runner-init.el" host-root))
      (unwind-protect
