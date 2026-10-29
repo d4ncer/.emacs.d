@@ -295,6 +295,10 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
    "gr" #'revert-buffer
    "q" #'quit-window)
   :config
+  ;; Delegates on this config run its tests, which load the built packages.
+  (setf (alist-get user-emacs-directory +agent-shell-pstack-arena-profiles
+                   nil nil #'equal)
+        '(:delegate (:link ("elpaca"))))
   (+agent-shell-pstack-panel-mode 1))
 
 (use-package +agent-shell-arena-remote
