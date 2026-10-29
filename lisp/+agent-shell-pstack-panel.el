@@ -1107,7 +1107,16 @@ branch stays either way.\n")
         :arena (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
                  (+agent-shell-arena-git-manifest-id manifest))
         :role (+agent-shell-pstack-panel-member-role member)
-        :kind (+agent-shell-pstack-panel-member-kind member)))
+        :kind (+agent-shell-pstack-panel-member-kind member)
+        :agent (symbol-name (+agent-shell-pstack-panel-member-agent member))
+        :repository
+        (when-let* ((toplevel
+                     (or (when-let* ((manifest
+                                      (+agent-shell-pstack-panel-arena panel)))
+                           (+agent-shell-arena-git-manifest-toplevel manifest))
+                         (when-let* ((cwd (+agent-shell-pstack-panel-cwd panel)))
+                           (locate-dominating-file cwd ".git")))))
+          (abbreviate-file-name (directory-file-name toplevel)))))
 
 (defun +agent-shell-pstack-panel--egress-session (member)
   "Return sandboxed MEMBER's egress session, or nil."

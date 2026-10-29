@@ -513,6 +513,19 @@ destination is a numeric address, port and protocol (`tcp`, `udp` or
 was first and last seen, a count, and the method that saw it. A record
 never holds a payload, a URL path, a header, a token or raw tool output.
 
+Run `M-x +agent-shell-egress-summary` to review all saved records, sorted
+by agent and destination. With `C-u`, enter an inclusive starting date in
+UTC (`YYYY-MM-DD`), based on each record's start time or, when no time was
+saved, its file modification time. The read-only view shows observation
+methods, agents, repositories, panel and member counts, first and last
+seen, and partial or unavailable record counts. Its header reports the date
+range and coverage per backend. Press `g` to refresh or `e` to export the
+current table as CSV or JSON. New version 2 records add the agent identifier
+and abbreviated repository top level. Version 1 records remain readable;
+missing identity comes from live panel metadata or a sibling record's
+repository when available, otherwise `unknown`. Unnamed addresses stay
+separate from named hosts, and DNS questions do not count as host evidence.
+
 Measurement never stops, delays past a short bounded wait, or changes a
 member. A missing tool, a refused namespace, an observer that dies, or a
 file that cannot be written becomes a reason code: `helper-missing`,

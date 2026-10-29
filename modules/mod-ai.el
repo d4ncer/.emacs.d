@@ -303,6 +303,10 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-arena-remote-mode 1))
 
+(use-package +agent-shell-egress-summary
+  :ensure nil
+  :commands (+agent-shell-egress-summary))
+
 (use-package +agent-shell-pstack-arena-trace
   :ensure nil
   :commands (+agent-shell-pstack-arena-trace)

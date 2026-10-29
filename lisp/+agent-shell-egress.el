@@ -92,7 +92,8 @@
                (:constructor +agent-shell-egress--make-record)
                (:copier nil))
   "What was observed of one member's network destinations.
-IDENTITY is a plist of :panel, :arena, :role and :kind.  BACKEND is
+IDENTITY holds :panel, :arena, :role, :kind and optional :agent and
+:repository (the abbreviated repository top level).  BACKEND is
 `linux-tshark', `macos-lsof' or nil when the member never started.
 REASON is a code from `+agent-shell-egress--reasons' or nil.  WRITTEN
 says the record reached its file; it is not saved."
@@ -128,11 +129,13 @@ it."
   "Return RECORD as `json-serialize' takes it, saved fields only."
   (let ((identity (+agent-shell-egress-record-identity record))
         (name (lambda (symbol) (if symbol (symbol-name symbol) :null))))
-    `((version . 1)
+    `((version . 2)
       (panel . ,(plist-get identity :panel))
       (arena . ,(or (plist-get identity :arena) :null))
       (role . ,(plist-get identity :role))
       (kind . ,(symbol-name (plist-get identity :kind)))
+      (agent . ,(or (plist-get identity :agent) :null))
+      (repository . ,(or (plist-get identity :repository) :null))
       (backend . ,(funcall name (+agent-shell-egress-record-backend record)))
       (state . ,(symbol-name (+agent-shell-egress-record-state record)))
       (reason . ,(funcall name (+agent-shell-egress-record-reason record)))
@@ -295,14 +298,26 @@ is returned as nil."
       (let ((items (mapcar check value)))
         (if (memq :bad items) :bad items)))))
 
+(defun +agent-shell-egress--repository (value)
+  "Validate repository top-level text VALUE, returning :bad if invalid."
+  (if (and (stringp value) (<= (length value) 4096)
+           (string-match-p "\\`\\(?:/\\|~/\\)" value)
+           (not (string-match-p "[[:cntrl:]]\\|://" value))
+           (not (file-remote-p value)))
+      value
+    :bad))
+
 (defun +agent-shell-egress--parse (object)
   "Return the record parsed JSON OBJECT holds, or signal why it is invalid."
-  (+agent-shell-egress--keys
-   object '(version panel arena role kind backend state reason started_at
-            ended_at observers limits destinations)
-   "record")
-  (unless (equal (alist-get 'version object) 1)
+  (unless (and (listp object) (seq-every-p #'consp object)
+               (memq (alist-get 'version object) '(1 2)))
     (+agent-shell-egress--invalid "unknown version"))
+  (+agent-shell-egress--keys
+   object (append '(version panel arena role kind backend state reason
+                    started_at ended_at observers limits destinations)
+                  (when (eql (alist-get 'version object) 2)
+                    '(agent repository)))
+   "record")
   (let* ((id (+agent-shell-egress--text "\\`[A-Za-z0-9_-]\\{1,64\\}\\'"))
          (time (+agent-shell-egress--text +agent-shell-egress--time-regexp))
          (reason (+agent-shell-egress--member +agent-shell-egress--reasons))
@@ -382,12 +397,21 @@ is returned as nil."
       (+agent-shell-egress--invalid "too many destinations"))
     (+agent-shell-egress--make-record
      :identity
-     (list :panel (+agent-shell-egress--field object 'panel id "panel")
+     (append
+      (list :panel (+agent-shell-egress--field object 'panel id "panel")
            :arena (+agent-shell-egress--field object 'arena id "arena" t)
            :role (+agent-shell-egress--field object 'role id "role")
            :kind (+agent-shell-egress--field
-                  object 'kind (+agent-shell-egress--member '(candidate judge))
+                  object 'kind (+agent-shell-egress--member '(candidate judge delegate))
                   "kind"))
+      (when (eql (alist-get 'version object) 2)
+        (let ((agent (+agent-shell-egress--field object 'agent id "agent" t))
+              (repository
+               (+agent-shell-egress--field
+                object 'repository #'+agent-shell-egress--repository
+                "repository" t)))
+          (append (when agent (list :agent agent))
+                  (when repository (list :repository repository))))))
      :backend (+agent-shell-egress--field
                object 'backend
                (+agent-shell-egress--member '(linux-tshark macos-lsof))
@@ -411,10 +435,10 @@ is returned as nil."
                     (+agent-shell-egress--list destination) "destinations")
      :written t)))
 
-(defun +agent-shell-egress-read (file identity)
+(defun +agent-shell-egress-read (file &optional identity)
   "Return the record in FILE if it is valid and describes IDENTITY.
-IDENTITY's :panel, :role and :kind must match; its :arena may differ,
-since a host's arena has an id of its own.  Signal
+When IDENTITY is non-nil, its :panel, :role and :kind must match.
+Its :arena may differ, since a host's arena has an id of its own.  Signal
 `+agent-shell-egress-invalid' with a fixed phrase otherwise; the
 message never quotes the file."
   (when (or (file-symlink-p file) (not (file-regular-p file)))
@@ -433,9 +457,10 @@ message never quotes the file."
                    (error (+agent-shell-egress--invalid "not JSON"))))
          (record (+agent-shell-egress--parse object))
          (found (+agent-shell-egress-record-identity record)))
-    (dolist (key '(:panel :role :kind))
-      (unless (equal (plist-get found key) (plist-get identity key))
-        (+agent-shell-egress--invalid "another member's record")))
+    (when identity
+      (dolist (key '(:panel :role :kind))
+        (unless (equal (plist-get found key) (plist-get identity key))
+          (+agent-shell-egress--invalid "another member's record"))))
     record))
 
 (defun +agent-shell-egress-import (source identity file)
@@ -453,6 +478,12 @@ A missing or invalid SOURCE saves an unavailable record instead."
             (+agent-shell-egress--make-record
              :identity identity :state 'unavailable
              :reason 'artifact-invalid)))))
+    (dolist (key '(:agent :repository))
+      (when (and (not (plist-get (+agent-shell-egress-record-identity record) key))
+                 (plist-get identity key))
+        (setf (+agent-shell-egress-record-identity record)
+              (plist-put (+agent-shell-egress-record-identity record)
+                         key (plist-get identity key)))))
     (+agent-shell-egress--write record file)
     record))
 
@@ -525,7 +556,8 @@ joins its names and COUNT, 1 by default, its count."
 
 (defun +agent-shell-egress-open (sandbox file identity)
   "Start observing SANDBOX's member, saving what is seen to FILE.
-IDENTITY is a plist of :panel, :arena, :role and :kind.  Return the
+IDENTITY holds :panel, :arena, :role, :kind and optional :agent and
+:repository (the abbreviated repository top level).  Return the
 session and keep it in SANDBOX's egress slot for its launch to use.
 With SANDBOX nil the member never started: save a not-started record
 and return a closed session.  A record already in FILE is kept instead,

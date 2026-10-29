@@ -57,7 +57,7 @@
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
    "-l" "agent-shell-sandbox-test" "-l" "agent-shell-sandbox-linux-test"
-   "-l" "agent-shell-egress-test"
+   "-l" "agent-shell-egress-test" "-l" "agent-shell-egress-summary-test"
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-pstack-reload-test"
    "-l" "agent-shell-pstack-delegate-test"
    "-l" "agent-shell-arena-git-test"

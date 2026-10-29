@@ -19,6 +19,7 @@
                        "lisp/+agent-shell-sandbox.el"
                        "lisp/+agent-shell-drive.el"
                        "lisp/+agent-shell-egress.el"
+                       "lisp/+agent-shell-egress-summary.el"
                        "lisp/+agent-shell-pstack.el"
                        "lisp/+agent-shell-pstack-reload.el"
                        "lisp/+agent-shell-pstack-panel.el"
