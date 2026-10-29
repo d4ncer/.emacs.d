@@ -1165,8 +1165,8 @@ the host, apart from the branch; cleaning the workspace up loses them.\n"
      (when (and published commits)
        (+agent-shell-pstack-panel--review-text manifest))
      "The host workspace stays until you clean it up: press x on its line in \
-the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
-branch stays either way.\n"
+the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  \
+Cleaning deletes the branch only once your branch has all its commits.\n"
      "\n" (+agent-shell-pstack-panel--shape panel :triage))))
 
 (defun +agent-shell-pstack-panel--delegate-text (panel)
@@ -1237,8 +1237,8 @@ from%s\n"
            (+agent-shell-pstack-panel--review-text manifest))
          (when worktree
            "The workspace stays until you clean it up: press x on its line in \
-the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  The \
-branch stays either way.\n")
+the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  \
+Cleaning deletes the branch only once your branch has all its commits.\n")
          "\n" (+agent-shell-pstack-panel--shape panel :triage))))))
 
 ;;;; Egress
@@ -3318,7 +3318,9 @@ An arena captures what its candidates made and skips its judge."
 
 (defun +agent-shell-pstack-arena--clean (manifest)
   "Clean MANIFEST's arena after confirmation, forgetting it in its panel.
-An arena that ran on a host is cleaned there too."
+An arena that ran on a host is cleaned there too.  A delegate's branch
+then goes when the lead's branch has all its work; see
+`+agent-shell-arena-git-prune-branch'."
   (let ((id (+agent-shell-arena-git-manifest-id manifest))
         (remote (and (featurep '+agent-shell-arena-remote)
                      (+agent-shell-arena-remote-recorded-p manifest))))
@@ -3347,7 +3349,7 @@ An arena that ran on a host is cleaned there too."
                                  outcome)
                               0)))
                 (format "Remove delegate %s's job and worktree from its \
-host%s?  Its branch %s stays. " id
+host%s?  Its branch %s goes only if your branch has its commits. " id
                         (if (> dirty 0)
                             (format ", losing the %d uncommitted path%s there"
                                     dirty (if (= dirty 1) "" "s"))
@@ -3355,11 +3357,11 @@ host%s?  Its branch %s stays. " id
                         (+agent-shell-arena-git-delegate-branch manifest))))
              ('worktree
               (format "Remove delegate %s's worktree from %s?  Its branch %s \
-stays. " id (+agent-shell-arena-git-manifest-toplevel manifest)
+goes only if your branch has its commits. " id (+agent-shell-arena-git-manifest-toplevel manifest)
                       (+agent-shell-arena-git-delegate-branch manifest)))
              ('branch
               (format "Return %s from %s if it is clean, and forget delegate \
-%s?  The branch stays. " (+agent-shell-arena-git-manifest-toplevel manifest)
+%s?  The branch goes only if your branch has its commits. " (+agent-shell-arena-git-manifest-toplevel manifest)
                       (+agent-shell-arena-git-delegate-branch manifest) id))
              (_ (format "Remove arena %s's worktrees, checkouts and result \
 refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
@@ -3373,10 +3375,26 @@ refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
          #'+agent-shell-arena-git-clean)
        manifest
        (lambda (left error)
-         (cond (error (message "Arena %s: cleanup failed: %s" id error))
-               (left (message "Arena %s: cleaned, but left %s" id
-                              (string-join left "; ")))
-               (t (message "Arena %s: cleaned" id)))
+         (let ((cleaned (if left (format "cleaned, but left %s"
+                                         (string-join left "; "))
+                          "cleaned")))
+           (cond
+            (error (message "Arena %s: cleanup failed: %s" id error))
+            ((+agent-shell-arena-git-manifest-delegate manifest)
+             (+agent-shell-arena-git-prune-branch
+              manifest
+              (lambda (deleted reason)
+                (let ((branch (+agent-shell-arena-git-delegate-branch
+                               manifest)))
+                  (message "Arena %s: %s%s" id cleaned
+                           (cond (deleted
+                                  (format "; deleted branch %s, since your \
+branch has all its commits" branch))
+                                 (reason (format "; kept branch %s: %s"
+                                                 branch reason))
+                                 (t ""))))
+                (+agent-shell-pstack-panels--refresh))))
+            (t (message "Arena %s: %s" id cleaned))))
          (+agent-shell-pstack-panels--refresh)))
       (+agent-shell-pstack-panels--refresh))))
 

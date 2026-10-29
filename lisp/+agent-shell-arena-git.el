@@ -1757,6 +1757,69 @@ went, or nil when it stays, and nil; or nil and a message."
           git-dir toplevel (list "update-ref" "-d" ref base) fail
           (lambda (_) (funcall callback branch nil))))))))
 
+(defun +agent-shell-arena-git-prune-branch (manifest callback)
+  "Delete MANIFEST's delegate branch once the lead's branch has its work.
+That is when every commit on it since the base is on the branch the
+lead's checkout is on now, by ancestry or as an equal patch, as git
+cherry compares them, and no worktree has it checked out.  A branch
+with any other commit always stays.  Call CALLBACK with t when it went;
+nil and why it stays; or nil and nil when there is no such branch."
+  (let* ((git-dir (+agent-shell-arena-git-manifest-git-dir manifest))
+         (toplevel (+agent-shell-arena-git-manifest-toplevel manifest))
+         (base (+agent-shell-arena-git-manifest-base manifest))
+         (ref (concat "refs/heads/"
+                      (+agent-shell-arena-git-delegate-branch manifest)))
+         (tip (+agent-shell-arena-git--read-in git-dir toplevel "rev-parse"
+                                               "-q" "--verify" ref))
+         (lead (+agent-shell-arena-git--read-in git-dir toplevel
+                                                "symbolic-ref" "-q" "HEAD"))
+         (keep (lambda (reason) (funcall callback nil reason))))
+    (cl-labels
+        ((holder (output)
+           (let (worktree holder)
+             (dolist (field (split-string output "\0" t))
+               (cond ((string-prefix-p "worktree " field)
+                      (setq worktree (substring field (length "worktree "))))
+                     ((equal field (concat "branch " ref))
+                      (setq holder (or holder worktree)))))
+             holder))
+         (compare (merges)
+           (+agent-shell-arena-git--git
+            git-dir toplevel (list "cherry" lead tip base) keep
+            (lambda (output)
+              (let ((missing (+ (length (split-string merges "\n" t))
+                                (seq-count
+                                 (lambda (line) (string-prefix-p "+" line))
+                                 (split-string output "\n" t)))))
+                (if (> missing 0)
+                    (funcall keep
+                             (format "%d commit%s on it %s not on %s"
+                                     missing (if (= missing 1) "" "s")
+                                     (if (= missing 1) "is" "are")
+                                     (string-remove-prefix "refs/heads/"
+                                                           lead)))
+                  ;; The old value makes git refuse a branch that moved.
+                  (+agent-shell-arena-git--git
+                   git-dir toplevel (list "update-ref" "-d" ref tip) keep
+                   (lambda (_) (funcall callback t nil)))))))))
+      (cond
+       ((null tip) (+agent-shell-arena-git--later callback nil nil))
+       ((null lead)
+        (+agent-shell-arena-git--later
+         keep "your checkout is not on a branch to compare it with"))
+       (t
+        (+agent-shell-arena-git--git
+         git-dir toplevel '("worktree" "list" "--porcelain" "-z") keep
+         (lambda (output)
+           (if-let* ((holder (holder output)))
+               (funcall keep (format "it is checked out in %s" holder))
+             ;; git cherry skips merges, so they count apart, by ancestry.
+             (+agent-shell-arena-git--git
+              git-dir toplevel
+              (list "rev-list" "--merges" tip (concat "^" lead)
+                    (concat "^" base))
+              keep #'compare)))))))))
+
 (defun +agent-shell-arena-git-delegate-log (manifest tip callback)
   "Call CALLBACK with the commits from MANIFEST's base to TIP, and nil.
 They are (OID . SUBJECT), oldest first; or CALLBACK gets nil and a

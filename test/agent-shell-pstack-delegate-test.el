@@ -377,6 +377,100 @@ that also matches a symlink, such as /deps rather than deps/" (followup)))
     (wait-for (lambda () (not (+agent-shell-arena-git-arenas))))
     (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))))
 
+(defmacro +agent-shell-pstack-delegate-test--cleaned (lead-work &rest body)
+  "Finish a worktree delegate that commits one.txt, run LEAD-WORK, clean.
+LEAD-WORK runs in the lead's repository with `branch' bound; BODY then
+sees `cleaned', the cleanup's message."
+  (declare (indent 1))
+  `(+agent-shell-pstack-delegate-test--started
+     (member-event "builder" :kind 'init-finished)
+     (+agent-shell-pstack-delegate-test--commit directory "one.txt")
+     (member-event "builder" :kind 'turn-complete :text "Built it.")
+     (should (string-search "Cleaning deletes the branch only once your \
+branch has all its commits." (followup)))
+     ,lead-work
+     (let* ((messages nil)
+            (cleaned nil))
+       (cl-letf* ((message (symbol-function 'message))
+                  ((symbol-function 'message)
+                   (lambda (format &rest args)
+                     (when (and format (string-prefix-p "Arena" format))
+                       (push (apply #'format-message format args) messages))
+                     (apply message format args)))
+                  ((symbol-function 'yes-or-no-p) (lambda (_) t)))
+         (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                               "Workspace:")
+           (+agent-shell-pstack-panels-clean))
+         (wait-for (lambda () messages)))
+       (setq cleaned (car messages))
+       ,@body)))
+
+(ert-deftest +agent-shell-pstack-delegate-test-clean-merged-branch ()
+  "Delete a cleaned delegate's branch once the lead's branch merged it."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--cleaned
+        (git "merge" "-q" "--ff-only" branch)
+      (should (string-search (format "cleaned; deleted branch %s, since your \
+branch has all its commits" branch)
+                             cleaned))
+      (should (equal "" (git "branch" "--list" branch)))
+      (should (equal "Add one.txt" (git "log" "-1" "--format=%s"))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-clean-picked-branch ()
+  "Delete a cleaned delegate's branch whose commits the lead cherry-picked."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--cleaned
+        (progn (with-temp-file (expand-file-name "lead.txt" repo)
+                 (insert "lead\n"))
+               (git "add" "lead.txt")
+               (git "commit" "-q" "-m" "Lead work")
+               (git "cherry-pick" branch))
+      (should (string-search (format "deleted branch %s" branch) cleaned))
+      (should (equal "" (git "branch" "--list" branch))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-clean-keeps-unmerged ()
+  "Keep a cleaned delegate's branch with commits the lead's branch lacks."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--cleaned
+        nil
+      (should (string-search (format "cleaned; kept branch %s: 1 commit on \
+it is not on main" branch)
+                             cleaned))
+      (should (equal "Add one.txt" (git "log" "-1" "--format=%s" branch))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-clean-keeps-merge-commit ()
+  "Keep a branch whose merge commit the lead's branch lacks."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--cleaned
+        (progn
+          (git "switch" "-q" "-c" "side" "main")
+          (with-temp-file (expand-file-name "side.txt" repo) (insert "s\n"))
+          (git "add" "side.txt")
+          (git "commit" "-q" "-m" "Side")
+          (git "switch" "-q" "main")
+          (let ((default-directory directory))
+            (should (eql 0 (process-file "git" nil nil nil "merge" "-q"
+                                         "--no-ff" "-m" "Merge side" "side"))))
+          (git "cherry-pick" (concat branch "^1"))
+          (git "cherry-pick" "side"))
+      (should (string-search (format "kept branch %s: 1 commit on it is not \
+on main" branch)
+                             cleaned))
+      (should (equal "Merge side" (git "log" "-1" "--format=%s" branch))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-clean-keeps-checked-out ()
+  "Keep a delegate's branch that a worktree still has checked out."
+  (+agent-shell-pstack-delegate-test--with
+    (let ((elsewhere (expand-file-name "elsewhere" scratch)))
+      (+agent-shell-pstack-delegate-test--cleaned
+          (progn (git "merge" "-q" "--ff-only" branch)
+                 (git "worktree" "remove" "--force" directory)
+                 (git "worktree" "add" "-q" elsewhere branch))
+        (should (string-search (format "kept branch %s: it is checked out \
+in %s" branch elsewhere)
+                               cleaned))
+        (should-not (equal "" (git "branch" "--list" branch)))))))
+
 (ert-deftest +agent-shell-pstack-delegate-test-worktree-snapshot ()
   "Start a worktree delegate from a snapshot of the lead's uncommitted work.
 The lead's checkout, index and stash stay as they were."
@@ -619,8 +713,8 @@ Commit or stash, then run git switch main." (followup)))
       (wait-for (lambda () (not (+agent-shell-arena-git-arenas))))
       (with-current-buffer (+agent-shell-pstack-delegate-test--line "No panels")
         (should-not (string-search "interrupted" (buffer-string))))
-      (should (equal branch (git "branch" "--list" "--format=%(refname:short)"
-                                 branch))))))
+      ;; It made no commits, so main has them all and cleaning deletes it.
+      (wait-for (lambda () (equal "" (git "branch" "--list" branch)))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-timeout-keeps-commits ()
   "Collect a delegate's commits when its timer expires after preparation."

@@ -614,8 +614,15 @@ The delegate's line in `C-c P` shows its shell, and `RET` opens it, live,
 while it runs; a remote delegate's opens its transcript instead. `c` cancels it. A worktree delegate's line shows its
 workspace, and once it has finished, `x` removes the worktree. A
 branch-mode delegate's line shows the checkout's state, and `x` switches
-the checkout back if Emacs could not, then forgets the record. Cleaning
-never deletes the delegate's branch.
+the checkout back if Emacs could not, then forgets the record.
+
+Cleaning then deletes the delegate's branch, but only when the branch your
+checkout is on has every commit the delegate's branch has since its base,
+by ancestry, as after a merge, or as an equal patch by `git cherry`, as
+after a rebase or cherry-pick, and no worktree has it checked out. A merge
+commit counts only by ancestry. A branch with any other commit stays, and
+the cleanup message says why: how many of its commits your branch lacks,
+or where it is checked out.
 
 #### The follow-up
 
