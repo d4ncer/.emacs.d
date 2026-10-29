@@ -274,9 +274,9 @@ FAILURE is the last provider failure from `+agent-shell-drive-failure'
 that ended one of its turns.  RETRY is the timer of its pending retry,
 then t once it was asked to continue.
 
-A delegate's BACKGROUND is a plist: :baseline, the pids its adapter had
-started when the brief was sent, and :asked, t once it was asked to wait
-for the commands it left running; see
+A delegate's BACKGROUND is a plist: :commands, the shell commands its
+tool calls ran since the brief, oldest first, and :asked, t once it was
+asked to wait for the commands it left running; see
 `+agent-shell-pstack-panel--await-commands'."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result
@@ -1932,19 +1932,13 @@ linked into its worktree go first, so nothing collected holds them."
         (error (end 'failed (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
-  "Send MEMBER of PANEL its brief once it is waiting for one.
-A delegate's adapter's processes then are its own, not commands it ran;
-see `+agent-shell-pstack-panel--await-commands'."
-  (let ((shell (+agent-shell-pstack-panel-member-shell member)))
-    (when (eq (+agent-shell-pstack-panel-member-state member) 'waiting)
-      (let ((baseline (when (eq (+agent-shell-pstack-panel-member-kind member)
-                                'delegate)
-                        (mapcar #'car (+agent-shell-drive-commands shell)))))
-        (when (+agent-shell-drive-send
-               shell (+agent-shell-pstack-panel--brief panel member))
-          (setf (+agent-shell-pstack-panel-member-state member) 'running
-                (+agent-shell-pstack-panel-member-background member)
-                (list :baseline baseline)))))))
+  "Send MEMBER of PANEL its brief once it is waiting for one."
+  (when (and (eq (+agent-shell-pstack-panel-member-state member) 'waiting)
+             (+agent-shell-drive-send
+              (+agent-shell-pstack-panel-member-shell member)
+              (+agent-shell-pstack-panel--brief panel member)))
+    (setf (+agent-shell-pstack-panel-member-state member) 'running
+          (+agent-shell-pstack-panel-member-background member) nil)))
 
 (defconst +agent-shell-pstack-panel--await-text "Your turn ended while \
 commands you started are still running:\n%s\nDo not end your turn while a \
@@ -1964,20 +1958,23 @@ as your brief asked."
                        (car command)))
              commands "\n"))
 
-(defun +agent-shell-pstack-panel--await-commands (member)
-  "Handle delegate MEMBER's successful turn end; return non-nil to wait.
-Commands still running are its adapter's descendants that were not there
-when the brief was sent.  The first time any are, MEMBER's shell is asked
-once to wait for them and end its turn again, and this returns t.  When
-some still run after that, return a note naming them for the follow-up,
-since Emacs stops them with the delegate.  Otherwise return nil."
+(defun +agent-shell-pstack-panel--await-commands (member event)
+  "Handle delegate MEMBER's successful turn end EVENT; return non-nil to wait.
+Commands still running are the live processes running a shell command
+its tool calls ran since the brief, and their descendants; what else its
+adapter started, such as MCP servers and hooks, does not count.  The
+first time any are, MEMBER's shell is asked once to wait for them and
+end its turn again, and this returns t.  When some still run after that,
+return a note naming them for the follow-up, since Emacs stops them with
+the delegate.  Otherwise return nil."
   (when (eq (+agent-shell-pstack-panel-member-kind member) 'delegate)
     (let* ((background (+agent-shell-pstack-panel-member-background member))
-           (baseline (plist-get background :baseline))
-           (commands (seq-remove
-                      (lambda (command) (memql (car command) baseline))
-                      (+agent-shell-drive-commands
-                       (+agent-shell-pstack-panel-member-shell member)))))
+           (ran (seq-uniq (append (plist-get background :commands)
+                                  (plist-get event :commands))))
+           (commands (+agent-shell-drive-commands
+                      (+agent-shell-pstack-panel-member-shell member) ran)))
+      (setq background (plist-put background :commands ran))
+      (setf (+agent-shell-pstack-panel-member-background member) background)
       (cond
        ((null commands) nil)
        ((and (not (plist-get background :asked))
@@ -2034,7 +2031,8 @@ A runner's panel shows its observer the event first."
               panel member 'error text
               (format "The turn ended with stop reason %s." reason)))
             (t
-             (let ((waiting (+agent-shell-pstack-panel--await-commands member)))
+             (let ((waiting (+agent-shell-pstack-panel--await-commands
+                             member event)))
                (unless (eq waiting t)
                  (+agent-shell-pstack-panel--settle
                   panel member 'done text waiting

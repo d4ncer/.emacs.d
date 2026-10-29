@@ -301,5 +301,68 @@ to log in again: Internal error\n" followup))
       (should (equal "Add builder.txt"
                      (funcall git "log" "-1" "--format=%s" branch))))))
 
+(defmacro +agent-shell-pstack-delegate-acp-test--tool-calls (brief &rest body)
+  "Run a delegate whose fixture brief is TOOL-CALLS PIDFILE and BRIEF.
+BODY sees `member', `followup', `infra', the pids of what its adapter
+started without a tool call, and `gates', those of the test commands
+its tool calls left running.  Every pid is killed afterwards."
+  (declare (indent 1))
+  `(let* ((outside (file-name-as-directory
+                    (file-truename (make-temp-file "pstack-tool-calls-" t))))
+          (pidfile (expand-file-name "pids.json" outside))
+          (infra nil) (gates nil))
+     (unwind-protect
+         (+agent-shell-pstack-delegate-acp-test--with 'branch
+             (format "Add the builder file. TOOL-CALLS %s %s" pidfile ,brief)
+           (let* ((pids (json-parse-string
+                         (with-temp-buffer (insert-file-contents pidfile)
+                                           (buffer-string))
+                         :object-type 'plist :array-type 'list))
+                  (member (car (+agent-shell-pstack-panel-members panel)))
+                  (followup (+agent-shell-pstack-panel-followup panel)))
+             (setq infra (plist-get pids :infra)
+                   gates (plist-get pids :gates))
+             (should (= 4 (length infra)))
+             ,@body))
+       (dolist (pid (append infra gates))
+         (ignore-errors (signal-process pid 'SIGKILL)))
+       (delete-directory outside t))))
+
+(ert-deftest +agent-shell-pstack-delegate-acp-test-adapter-processes ()
+  "Settle without asking when only the adapter's own processes still run."
+  (skip-unless (+agent-shell-pstack-delegate-acp-test--available-p))
+  (+agent-shell-pstack-delegate-acp-test--tool-calls ""
+    (should-not gates)
+    (should (string-prefix-p "DELEGATE role=builder"
+                             (+agent-shell-pstack-panel-member-text member)))
+    (should-not (string-search "still running" followup))
+    (should-not (seq-some #'+agent-shell-pstack-delegate-acp-test--alive-p
+                          infra))))
+
+(ert-deftest +agent-shell-pstack-delegate-acp-test-tool-call-commands ()
+  "Ask once to wait for running tool call commands, naming only those."
+  (skip-unless (+agent-shell-pstack-delegate-acp-test--available-p))
+  (+agent-shell-pstack-delegate-acp-test--tool-calls "RUN-GATE"
+    (let ((asked (+agent-shell-pstack-panel-member-text member))
+          (note (substring followup
+                           (string-search "Commands it started" followup))))
+      (should (= 2 (length gates)))
+      (should (string-prefix-p "WAITED\nYour turn ended while commands you \
+started are still running:\n" asked))
+      (dolist (text (list asked note))
+        (dolist (gate gates)
+          (should (string-search (format "(pid %d)" gate) text)))
+        (dolist (child '("sleep 117" "sleep 118"))
+          (should (string-match-p (concat "^  " child " (pid [0-9]+)$") text)))
+        (dolist (pid infra)
+          (should-not (string-search (format "(pid %d)" pid) text)))
+        (dolist (name '("example-mcp-server" "mcp serve" "agent-hook"
+                        "exec-host" "sleep 120" "git status"))
+          (should-not (string-search name text))))
+      (should (string-search "after Emacs had asked it once to wait for them; \
+Emacs stopped them with the delegate:\n" note))
+      (should-not (seq-some #'+agent-shell-pstack-delegate-acp-test--alive-p
+                            (append infra gates))))))
+
 (provide 'agent-shell-pstack-delegate-acp-test)
 ;;; agent-shell-pstack-delegate-acp-test.el ends here

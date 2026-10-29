@@ -12,8 +12,10 @@
 ;; :provider-errors, the `_meta.codex.error' records the turn's
 ;; `session_info_update' notifications carried, newest first; each also
 ;; reaches watchers as a `provider-warning' event with :message, :info and
-;; :will-retry.  `+agent-shell-drive-failure' classifies a finished or
-;; failed turn.  `agent-message-chunk' only feeds the turn text, and
+;; :will-retry.  `turn-complete' also adds :commands, the shell commands
+;; the turn's execute tool calls ran, oldest first, for
+;; `+agent-shell-drive-commands'.  `+agent-shell-drive-failure' classifies
+;; a finished or failed turn.  `agent-message-chunk' only feeds the turn text, and
 ;; `input-submitted' starts a new turn.  A tool call ends the final part; the
 ;; first `tool-call-update' after agent text reports that part as :text and
 ;; the call's :title.
@@ -99,7 +101,8 @@
   "Map a watched shell to (:subscription TOKEN :turn CHUNKS :final CHUNKS).
 CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.
 :provider-errors lists the turn's `_meta.codex.error' records, newest
-first.")
+first.  :commands maps each of the turn's execute tool call ids to the
+command it ran, newest first.")
 
 (defvar-local +agent-shell-drive--policy nil
   "Policy this shell was started with; see `+agent-shell-drive-start'.")
@@ -588,21 +591,127 @@ PROCESSES is a list from `+agent-shell-drive--processes'."
                       (not (assq found processes))))
                 found)))
 
-(defun +agent-shell-drive-commands (shell)
-  "Return (PID . COMMAND) for each live process SHELL's adapter started.
-These are the adapter's descendants, by parent pid, in pid order, found
-by the walk `+agent-shell-drive-stop-unconfined' makes.  COMMAND is the
-process's command line, or its name when the system hides that.  Return
-nil while SHELL has no live adapter."
-  (when-let* ((pid (+agent-shell-drive--adapter shell)))
-    (mapcar (lambda (child)
-              (let ((attributes (process-attributes child)))
-                (cons child (or (alist-get 'args attributes)
-                                (alist-get 'comm attributes)
-                                "unknown"))))
-            (sort (+agent-shell-drive--tree pid nil
-                                            (+agent-shell-drive--processes))
-                  #'<))))
+(defun +agent-shell-drive--groups (pid tree processes)
+  "Return the process groups of PID and its TREE among PROCESSES.
+Emacs's own group is left out, so walking them never reaches Emacs."
+  (let ((group (lambda (member) (nth 2 (assq member processes)))))
+    (delete (funcall group (emacs-pid))
+            (seq-uniq (mapcar group (cons pid tree))))))
+
+(defun +agent-shell-drive--command-line (pid)
+  "Return PID's command line, or its name when the system hides that."
+  (let ((attributes (process-attributes pid)))
+    (or (alist-get 'args attributes) (alist-get 'comm attributes)
+        "unknown")))
+
+(defun +agent-shell-drive--normalize (command)
+  "Return COMMAND without quotes or backslashes, its blanks collapsed.
+Shells and adapters quote a command differently from how a process
+shows it, so both sides of a match drop quoting."
+  (string-trim (replace-regexp-in-string
+                "[[:space:]]+" " "
+                (replace-regexp-in-string "['\"\\]" "" command))))
+
+(defconst +agent-shell-drive--shell-prefix
+  "\\`[[:space:]]*\\(?:\\S-*/\\)?\\(?:ba\\|z\\|da\\|k\\)?sh[[:space:]]+-l?c[[:space:]]+"
+  "Regexp matching the shell -c an adapter may wrap a command in.")
+
+(defconst +agent-shell-drive--simple-prefix
+  "\\`\\(?:\\(?:[[:alpha:]_][[:alnum:]_]*=\\S-*\\|nohup\\|exec\\|setsid\\|command\\)[[:space:]]+\\)+"
+  "Regexp matching what a simple command runs under but a process hides.")
+
+(defconst +agent-shell-drive--redirection
+  "\\(?:[0-9]*\\|&\\)[<>][<>&|]*[[:space:]]*[^[:space:]<>;&|()]*"
+  "Regexp matching a redirection, which a process's command line hides.")
+
+(defun +agent-shell-drive--pieces (command)
+  "Return the simple commands in COMMAND, each normalized.
+A command that ends in & or chains several leaves processes running
+only one piece of it, without the shell -c that wrapped it or its
+redirections."
+  (seq-uniq
+   (seq-remove
+    #'string-empty-p
+    (mapcar (lambda (piece)
+              (+agent-shell-drive--normalize
+               (replace-regexp-in-string
+                +agent-shell-drive--simple-prefix ""
+                (string-trim piece))))
+            (split-string
+             (replace-regexp-in-string
+              +agent-shell-drive--redirection " "
+              (replace-regexp-in-string
+               +agent-shell-drive--shell-prefix "" command))
+             "[;&|()\n]+")))))
+
+(defun +agent-shell-drive--word-search (needle haystack &optional whole)
+  "Return whether NEEDLE appears in HAYSTACK as whole words.
+A path may come before NEEDLE, so /usr/bin/make test holds make test.
+With WHOLE, only the end of HAYSTACK or a shell operator may follow it,
+as when a shell wraps NEEDLE."
+  (string-match-p (concat "\\(?:\\`\\|[[:space:]/]\\)" (regexp-quote needle)
+                          (if whole "\\(?:\\'\\|[[:space:]]+[<>;&|]\\)"
+                            "\\(?:\\'\\|[[:space:]]\\)"))
+                  haystack))
+
+(defun +agent-shell-drive--ran-p (line commands)
+  "Return whether a process with command LINE runs one of COMMANDS.
+It does when LINE holds a whole command, as the shell wrapping it does,
+or is one of its simple commands, or holds one that has arguments."
+  (let ((line (+agent-shell-drive--normalize line)))
+    (seq-some
+     (lambda (command)
+       (let ((whole (+agent-shell-drive--normalize command)))
+         (or (and (not (string-empty-p whole))
+                  (+agent-shell-drive--word-search whole line t))
+             (seq-some (lambda (piece)
+                         (or (equal piece line)
+                             (and (string-search " " piece)
+                                  (+agent-shell-drive--word-search
+                                   piece line))))
+                       (+agent-shell-drive--pieces command)))))
+     commands)))
+
+(defun +agent-shell-drive-commands (shell commands)
+  "Return (PID . COMMAND) for each live process running one of COMMANDS.
+COMMANDS are what SHELL's tool calls ran, as `turn-complete' events
+report them.  The processes are those the walk
+`+agent-shell-drive-stop-unconfined' makes finds whose command line
+holds one of COMMANDS, plus their descendants, in pid order; the rest,
+such as MCP servers, hooks and execution hosts its adapter started, are
+left out.  COMMAND is the process's command line, or its name when the
+system hides that.  Return nil while SHELL has no live adapter or
+COMMANDS is nil."
+  (when-let* ((commands)
+              (pid (+agent-shell-drive--adapter shell)))
+    (let* ((processes (+agent-shell-drive--processes))
+           (tree (+agent-shell-drive--tree pid nil processes))
+           (candidates (delq pid (+agent-shell-drive--tree
+                                  pid (+agent-shell-drive--groups
+                                       pid tree processes)
+                                  processes)))
+           (lines (mapcar (lambda (candidate)
+                            (cons candidate (+agent-shell-drive--command-line
+                                             candidate)))
+                          candidates))
+           (parents (mapcar (lambda (process)
+                              (cons (nth 0 process) (nth 1 process)))
+                            processes))
+           (found nil))
+      (dolist (entry lines)
+        (when (+agent-shell-drive--ran-p (cdr entry) commands)
+          (dolist (member (cons (car entry)
+                                (+agent-shell-sandbox--descendants
+                                 (car entry) parents)))
+            (cl-pushnew member found))))
+      (mapcar (lambda (member)
+                (or (assq member lines)
+                    (cons member (+agent-shell-drive--command-line member))))
+              (sort (seq-filter (lambda (member)
+                                  (let ((process (assq member processes)))
+                                    (and process (not (nth 3 process)))))
+                                found)
+                    #'<)))))
 
 (defun +agent-shell-drive-stop-unconfined (shell &optional reason callback)
   "Stop unconfined SHELL and every process its adapter started.
@@ -618,9 +727,7 @@ runs from a timer, so SHELL's own event callbacks may call this."
      (let* ((pid (+agent-shell-drive--adapter shell))
             (processes (and pid (+agent-shell-drive--processes)))
             (tree (and pid (+agent-shell-drive--tree pid nil processes)))
-            (group (lambda (member) (nth 2 (assq member processes))))
-            (groups (and pid (delete (funcall group (emacs-pid))
-                                     (seq-uniq (mapcar group (cons pid tree))))))
+            (groups (and pid (+agent-shell-drive--groups pid tree processes)))
             (finish (lambda (survivors)
                       (when callback (funcall callback survivors)))))
        (cl-labels ((sweep (rounds)
@@ -719,6 +826,20 @@ ARGUMENTS belong to `agent-shell--finish-output'."
         (apply emit arguments))
     (apply emit arguments)))
 
+(defun +agent-shell-drive--note-command (state data)
+  "Record in turn STATE the command of the tool call event DATA names.
+Only execute tool calls count.  Adapters send the command in rawInput as
+a string or an argv vector, and may send it only in a later update."
+  (when-let* ((call (map-elt data :tool-call))
+              ((equal (map-elt call :kind) "execute"))
+              (command (map-elt call :command))
+              ((stringp command))
+              ((not (string-blank-p command))))
+    (let ((commands (plist-get state :commands))
+          (id (map-elt data :tool-call-id)))
+      (setf (alist-get id commands nil nil #'equal) command)
+      (plist-put state :commands commands))))
+
 (defun +agent-shell-drive--parse (shell state event)
   "Update SHELL's turn STATE from upstream EVENT; return a plist or nil."
   (let ((kind (map-elt event :event))
@@ -726,6 +847,8 @@ ARGUMENTS belong to `agent-shell--finish-output'."
     (when (and (eq kind 'turn-complete)
                (eq shell (car +agent-shell-drive--completion)))
       (setq state (cdr +agent-shell-drive--completion)))
+    (when (memq kind '(tool-call tool-call-update))
+      (+agent-shell-drive--note-command state data))
     (pcase kind
       ('agent-message-chunk
        (when-let* ((chunk (map-elt data :text-chunk)))
@@ -745,7 +868,8 @@ ARGUMENTS belong to `agent-shell--finish-output'."
        (when (eq kind 'input-submitted)
          (plist-put state :turn nil)
          (plist-put state :final nil)
-         (plist-put state :provider-errors nil))
+         (plist-put state :provider-errors nil)
+         (plist-put state :commands nil))
        (unless (and (eq kind 'init-finished)
                     (+agent-shell-drive--refusal shell))
          (append
@@ -763,7 +887,10 @@ ARGUMENTS belong to `agent-shell--finish-output'."
                             (if (string-blank-p final)
                                 (+agent-shell-drive--text (plist-get state :turn))
                               final))
-                    :provider-errors (plist-get state :provider-errors))
+                    :provider-errors (plist-get state :provider-errors)
+                    :commands (seq-uniq (reverse
+                                         (mapcar #'cdr (plist-get state
+                                                                  :commands)))))
               (when-let* ((plan (buffer-local-value
                                  '+agent-shell-drive--plan shell)))
                 (with-current-buffer shell
@@ -887,7 +1014,7 @@ it moves the watcher."
                         :shell-buffer shell
                         :on-event (lambda (event)
                                     (+agent-shell-drive--dispatch shell event)))
-                       :turn nil :final nil :completed nil)
+                       :turn nil :final nil :completed nil :commands nil)
                  +agent-shell-drive--shells))
       (puthash key (cons shell function) +agent-shell-drive--watchers))))
 

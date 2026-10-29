@@ -630,9 +630,13 @@ The brief tells the delegate not to end its turn while a command it
 started is still running. When its turn completes anyway with such a
 command running, Emacs asks the same shell once to wait for its commands
 and end its turn again with its report, and kills nothing. A command
-counts as running when it descends from the adapter, by the drive
-library's process-tree walk, and was not there when the brief was sent,
-so the adapter's own helpers never count. A second turn that ends with
+counts as running when one of the delegate's execute tool calls since the
+brief ran it: a process the drive library's walk of the adapter's tree
+and process groups finds whose command line holds that tool call's
+command, or one of its simple commands when it ran in the background,
+and that process's descendants. MCP servers, hooks, execution hosts and
+anything else not traceable to a tool call never count, though Emacs
+still stops them with the delegate. A second turn that ends with
 commands still running settles as usual, and the follow-up names them. A
 remote delegate's runner does the same on its host.
 

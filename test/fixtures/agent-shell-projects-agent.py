@@ -169,6 +169,71 @@ def pstack_delegate(role, text, state):
     return f"DELEGATE role={role} mode={state['mode']} branch={branch}"
 
 
+def tool_call(session_id, call_id, raw_input, status):
+    """Report an execute tool call shaped as RAW_INPUT, with STATUS."""
+    emit({"method": "session/update", "params": {
+        "sessionId": session_id,
+        "update": {"sessionUpdate": "tool_call" if status == "pending"
+                   else "tool_call_update",
+                   "toolCallId": call_id, "title": "Terminal",
+                   "kind": "execute", "status": status,
+                   "rawInput": raw_input},
+    }})
+
+
+def tool_calls(session_id, text, state):
+    """Start what an adapter runs on its own, then run tool call commands.
+
+    TOOL-CALLS PIDFILE starts two MCP servers, a hook with children and an
+    execution host, none of which a tool call ran, and runs a command that
+    finishes, as Claude Code's adapter reports one.  RUN-GATE also leaves two
+    test commands running: one ending in &, its argv in rawInput as Codex's
+    adapter sends it, and one Claude Code's background tool runs.  PIDFILE
+    gets their pids as JSON."""
+    marker = re.search(r"TOOL-CALLS (\S+)", text)
+    if not marker:
+        return
+    cwd = state["cwd"]
+    quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+             "stderr": subprocess.DEVNULL}
+    sleeper = [sys.executable, "-c", "import time; time.sleep(120)"]
+    infra = [subprocess.Popen(command, cwd=cwd, **quiet).pid for command in (
+        sleeper + ["npm", "exec", "example-mcp-server"],
+        sleeper + ["example-cli", "mcp", "serve"],
+        ["/bin/sh", "-c",
+         "sleep 120 | cat > /dev/null; : example-cli agent-hook --event stop"],
+        sleeper + ["example-cli", "exec-host"])]
+    tool_call(session_id, "bash-1", {}, "pending")
+    finished = "git status --short"
+    tool_call(session_id, "bash-1", {"command": finished,
+                                     "description": "Show status"},
+              "in_progress")
+    subprocess.run(["/bin/sh", "-c", finished], cwd=cwd, **quiet)
+    tool_call(session_id, "bash-1", {"command": finished}, "completed")
+    gates = []
+    if "RUN-GATE" in text:
+        inner = Path(marker[1] + ".inner")
+        background = ("sh -c 'sleep 117 & sleep 118' run-gate & echo $! > "
+                      + str(inner))
+        argv = ["/bin/sh", "-c", background]
+        tool_call(session_id, "exec-1", {"command": argv, "cwd": cwd},
+                  "pending")
+        subprocess.run(argv, cwd=cwd, **quiet)
+        tool_call(session_id, "exec-1", {"command": argv, "cwd": cwd},
+                  "completed")
+        gates.append(int(inner.read_text()))
+        tool = "sleep 119"
+        tool_call(session_id, "bash-2", {"command": tool,
+                                         "run_in_background": True},
+                  "pending")
+        gates.append(subprocess.Popen(["/bin/sh", "-c", tool], cwd=cwd,
+                                      **quiet).pid)
+        tool_call(session_id, "bash-2", {"command": tool,
+                                         "run_in_background": True},
+                  "completed")
+    Path(marker[1]).write_text(json.dumps({"infra": infra, "gates": gates}))
+
+
 CAPACITY = "Selected model is at capacity. Please try a different model."
 
 
@@ -222,8 +287,11 @@ def handle_pstack_prompt(message, text, state):
     # A follow-up can quote member briefs, so recognise it first.
     if "has finished:" in text and "pstack panel" in text:
         return f"TRIAGED {text.count(chr(10) + '## ')}"
+    if text.startswith("Your turn ended while commands you started"):
+        return "WAITED\n" + text
     delegate = re.search(r"You are the (\S+) delegate of a pstack panel", text)
     if delegate:
+        tool_calls(session_id, text, state)
         if "NARRATE" in text:
             chunk(session_id, "I will add the file.")
             emit({"method": "session/update", "params": {

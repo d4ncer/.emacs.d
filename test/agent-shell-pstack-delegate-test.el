@@ -17,7 +17,8 @@ BODY sees `repo' (the lead's checkout, on main), `arenas', `sent' (newest
 first, each (SHELL . TEXT)), `started' (each (AGENT SHELL POLICY
 DIRECTORY)), `stopped' (shells stopped, newest first), `survivors' (the
 pids each stop reports), `commands' (what the adapter runs, each (PID
-. COMMAND)), `interrupted', and the functions `git',
+. COMMAND), of which `+agent-shell-drive-commands' reports those its
+tool calls ran), `interrupted', and the functions `git',
 `lead-event', `member-event', `wait-for' and `followup'."
   (declare (indent 0))
   `(let* ((scratch (file-name-as-directory
@@ -97,7 +98,11 @@ pids each stop reports), `commands' (what the adapter runs, each (PID
                  ((symbol-function '+agent-shell-drive-interrupt)
                   (lambda (shell) (push shell interrupted)))
                  ((symbol-function '+agent-shell-drive-commands)
-                  (lambda (_shell) commands))
+                  (lambda (_shell ran)
+                    (seq-filter (lambda (command)
+                                  (+agent-shell-drive--ran-p (cdr command)
+                                                             ran))
+                                commands)))
                  ((symbol-function '+agent-shell-drive-partial-text)
                   (lambda (_shell) "partial"))
                  ((symbol-function '+agent-shell-drive-kill)
@@ -805,14 +810,17 @@ outlived the delegate.  Once nothing runs there, press x" (followup)))
         (should (string-search "Do not end your turn while a command you \
 started is still running." (cdr (assq shell sent))))
         (setq commands '((100 . "node adapter-helper")
+                         (150 . "npm exec example-mcp-server")
                          (200 . "emacs -Q --batch -l test/run-config.el")))
         (member-event "builder" :kind 'turn-complete
-                      :text "The full gate is still running.")
+                      :text "The full gate is still running."
+                      :commands '("emacs -Q --batch -l test/run-config.el &"))
         (let ((asked (cdr (assq shell sent))))
           (should (string-prefix-p "Your turn ended while commands you started \
 are still running:\n  emacs -Q --batch -l test/run-config.el (pid 200)\n"
                                    asked))
-          (should-not (string-search "adapter-helper" asked)))
+          (should-not (string-search "adapter-helper" asked))
+          (should-not (string-search "example-mcp-server" asked)))
         (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
         (should-not stopped)
         (setq commands '((100 . "node adapter-helper")))
@@ -829,14 +837,17 @@ are still running:\n  emacs -Q --batch -l test/run-config.el (pid 200)\n"
   (+agent-shell-pstack-delegate-test--with
     (+agent-shell-pstack-delegate-test--started
       (member-event "builder" :kind 'init-finished)
-      (setq commands '((300 . "make\ntest")))
-      (member-event "builder" :kind 'turn-complete :text "Still testing.")
+      (setq commands '((300 . "make\ntest")
+                       (400 . "bash -c read -r x | example-cli agent-hook")))
+      (member-event "builder" :kind 'turn-complete :text "Still testing."
+                    :commands '("make test"))
       (member-event "builder" :kind 'turn-complete :text "Still testing.")
       (let ((text (followup)))
         (should (string-search "builder (codex): done.\nCommands it started \
 were still running when its turn ended, after Emacs had asked it once to \
 wait for them; Emacs stopped them with the delegate:\n  make test (pid 300)\n"
-                               text)))
+                               text))
+        (should-not (string-search "agent-hook" text)))
       (should (= 2 (length (seq-filter (lambda (entry) (eq shell (car entry)))
                                        sent))))
       (should (equal (list shell) stopped)))))

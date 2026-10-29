@@ -222,6 +222,60 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (emit shell '((:event . error) (:data (:message . "bad"))))
           (should (equal "bad" (plist-get (car events) :message))))))))
 
+(ert-deftest +agent-shell-drive-test-turn-commands ()
+  "Report the commands a turn's execute tool calls ran, oldest first."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let (events)
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+        (cl-flet ((call (id kind &optional command)
+                    (emit shell `((:event . tool-call-update)
+                                  (:data (:tool-call-id . ,id)
+                                         (:tool-call (:kind . ,kind)
+                                                     (:command . ,command)))))))
+          (call "old" "execute" "make stale")
+          (emit shell '((:event . input-submitted)))
+          ;; Claude Code's first notice can come before its input.
+          (call "bash-1" "execute")
+          (call "read-1" "read" "cat README")
+          (call "bash-1" "execute" "npm test &")
+          (call "bash-2" "execute" "bash -lc 'sleep 5 & wait'")
+          (call "bash-1" "execute" "npm test &")
+          (emit shell '((:event . turn-complete)))
+          (should (equal '("npm test &" "bash -lc 'sleep 5 & wait'")
+                         (plist-get (car events) :commands)))
+          (emit shell '((:event . input-submitted)))
+          (emit shell '((:event . turn-complete)))
+          (should-not (plist-get (car events) :commands)))))))
+
+(ert-deftest +agent-shell-drive-test-ran ()
+  "Match command lines to the tool call commands that started them."
+  (dolist (case
+           `(;; Claude Code's Bash tool evals the command in a wrapper.
+             (t "npm test -- --watch=false"
+                ,(concat "/bin/zsh -c source /tmp/snapshot.sh 2>/dev/null "
+                         "|| true && eval 'npm test -- --watch=false' "
+                         "< /dev/null && pwd -P >| /tmp/cwd"))
+             (t "git commit -m 'Fix it'"
+                "/bin/zsh -c eval 'git commit -m '\\''Fix it'\\''' < /dev/null")
+             ;; Codex runs the shell its command names.
+             (t "/bin/zsh -lc 'make test &'" "/bin/zsh -lc make test &")
+             (t "bash -lc \"sleep 5 & wait\"" "bash -lc sleep 5 & wait")
+             ;; A background piece outlives the shell that started it.
+             (t "/bin/zsh -lc 'make test &'" "make test")
+             (t "CI=1 nohup npm test > log &" "node /usr/local/bin/npm test")
+             (t "cd lisp && make" "make")
+             (nil "npm test" "npm exec example-mcp-server")
+             (nil "make test" "cmake tests")
+             (nil "git status"
+                  "bash -c cat | example-cli agent-hook --event stop")
+             (nil "cd lisp && make" "example-cli exec-host --listen")
+             (nil "make" "make check")))
+    (pcase-let ((`(,expected ,command ,line) case))
+      (should (eq expected
+                  (and (+agent-shell-drive--ran-p line (list command)) t)))))
+  (should-not (+agent-shell-drive--ran-p "make test" nil)))
+
 (ert-deftest +agent-shell-drive-test-completion-before-queued-input ()
   "Keep the completed turn when a callback submits the next prompt."
   (+agent-shell-drive-test--with-upstream
@@ -949,13 +1003,14 @@ wait" "sh" pids)))
         (delete-file pids)))))
 
 (ert-deftest +agent-shell-drive-test-commands ()
-  "List the live processes an adapter started, with their command lines."
+  "List the live processes running a tool call's command, by command line."
   (+agent-shell-drive-test--with-shells (shell)
     (let* ((pids (make-temp-file "drive-pids-"))
            (adapter (make-process
                      :name "drive-adapter" :noquery t :connection-type 'pipe
                      :command (list "/bin/sh" "-c"
-                                    "sleep 61 & echo $! >> \"$1\"; wait"
+                                    "sleep 61 & echo $! >> \"$1\"; \
+sleep 62 & wait"
                                     "sh" pids))))
       (unwind-protect
           (let ((deadline (+ (float-time) 10)))
@@ -967,12 +1022,15 @@ wait" "sh" pids)))
             (let ((child (string-to-number
                           (with-temp-buffer (insert-file-contents pids)
                                             (buffer-string)))))
-              (should-not (+agent-shell-drive-commands shell))
+              (should-not (+agent-shell-drive-commands shell '("sleep 61")))
               (cl-letf (((symbol-function '+agent-shell-drive--adapter)
                          (lambda (_) (process-id adapter))))
-                (let ((commands (+agent-shell-drive-commands shell)))
+                (should-not (+agent-shell-drive-commands shell nil))
+                (should-not (+agent-shell-drive-commands shell '("sleep 63")))
+                (let ((commands (+agent-shell-drive-commands
+                                 shell '("sleep 61 &"))))
                   (should (equal (list child) (mapcar #'car commands)))
-                  (should (string-search "sleep" (cdar commands)))))))
+                  (should (string-search "sleep 61" (cdar commands)))))))
         (when (process-live-p adapter)
           (+agent-shell-sandbox-kill-tree (process-id adapter))
           (delete-process adapter))
