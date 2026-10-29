@@ -420,12 +420,23 @@ snapshotted as commit %s on top of %s"
       (accept-process-output nil 1)
       (should (= 1 (with-current-buffer lead
                      (how-many "TRIAGED" (point-min) (point-max)))))
-      ;; x cleans the host job and worktree, and the branch stays.
-      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
-        (+agent-shell-pstack-arena--clean manifest))
-      (+remote-delegate-acp-test--wait-for
-       (lambda () (not (file-exists-p
-                        (+agent-shell-arena-git-manifest-directory manifest)))))
+      ;; x cleans the host job and worktree, and the branch, which main
+      ;; lacks, stays.
+      (let ((cleaned nil))
+        (cl-letf* ((message (symbol-function 'message))
+                   ((symbol-function 'message)
+                    (lambda (format &rest args)
+                      (when (and format (string-prefix-p "Arena" format))
+                        (setq cleaned (apply #'format-message format args)))
+                      (apply message format args)))
+                   ((symbol-function 'yes-or-no-p) (lambda (_) t)))
+          (+agent-shell-pstack-arena--clean manifest)
+          (+remote-delegate-acp-test--wait-for (lambda () cleaned)))
+        (should (string-search (format "kept branch %s: 1 commit on it is \
+not on main" branch)
+                               cleaned)))
+      (should-not (file-exists-p
+                   (+agent-shell-arena-git-manifest-directory manifest)))
       (should-not (file-exists-p (expand-file-name
                                   (format "arenas/%s" host-arena) host-root)))
       (should (equal "Add builder.txt"

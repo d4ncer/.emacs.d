@@ -210,14 +210,26 @@ mode=agent-full-access branch=%s" branch)
                           (save-excursion
                             (goto-char (point-min))
                             (search-forward "TRIAGED" nil t)))))
-            (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
-              (+agent-shell-pstack-panels)
-              (with-current-buffer "*pstack panels*"
-                (goto-char (point-min))
-                (search-forward "Workspace:")
-                (+agent-shell-pstack-panels-clean)))
-            (+agent-shell-pstack-delegate-acp-test--wait-for
-             (lambda () (not (file-exists-p worktree))))
+            (let ((cleaned nil))
+              (cl-letf* ((message (symbol-function 'message))
+                         ((symbol-function 'message)
+                          (lambda (format &rest args)
+                            (when (and format (string-prefix-p "Arena" format))
+                              (setq cleaned
+                                    (apply #'format-message format args)))
+                            (apply message format args)))
+                         ((symbol-function 'yes-or-no-p) (lambda (_) t)))
+                (+agent-shell-pstack-panels)
+                (with-current-buffer "*pstack panels*"
+                  (goto-char (point-min))
+                  (search-forward "Workspace:")
+                  (+agent-shell-pstack-panels-clean))
+                (+agent-shell-pstack-delegate-acp-test--wait-for
+                 (lambda () cleaned)))
+              (should (string-search (format "kept branch %s: 1 commit on it \
+is not on main" branch)
+                                     cleaned)))
+            (should-not (file-exists-p worktree))
             (should (equal "Add builder.txt"
                            (funcall git "log" "-1" "--format=%s" branch)))
             (should (equal "" (funcall git "status" "--porcelain")))))
