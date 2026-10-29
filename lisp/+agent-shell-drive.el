@@ -588,6 +588,22 @@ PROCESSES is a list from `+agent-shell-drive--processes'."
                       (not (assq found processes))))
                 found)))
 
+(defun +agent-shell-drive-commands (shell)
+  "Return (PID . COMMAND) for each live process SHELL's adapter started.
+These are the adapter's descendants, by parent pid, in pid order, found
+by the walk `+agent-shell-drive-stop-unconfined' makes.  COMMAND is the
+process's command line, or its name when the system hides that.  Return
+nil while SHELL has no live adapter."
+  (when-let* ((pid (+agent-shell-drive--adapter shell)))
+    (mapcar (lambda (child)
+              (let ((attributes (process-attributes child)))
+                (cons child (or (alist-get 'args attributes)
+                                (alist-get 'comm attributes)
+                                "unknown"))))
+            (sort (+agent-shell-drive--tree pid nil
+                                            (+agent-shell-drive--processes))
+                  #'<))))
+
 (defun +agent-shell-drive-stop-unconfined (shell &optional reason callback)
   "Stop unconfined SHELL and every process its adapter started.
 Kill the adapter's descendants and every process in their process groups,

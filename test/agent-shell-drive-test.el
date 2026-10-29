@@ -948,5 +948,35 @@ wait" "sh" pids)))
         (delete-process bystander)
         (delete-file pids)))))
 
+(ert-deftest +agent-shell-drive-test-commands ()
+  "List the live processes an adapter started, with their command lines."
+  (+agent-shell-drive-test--with-shells (shell)
+    (let* ((pids (make-temp-file "drive-pids-"))
+           (adapter (make-process
+                     :name "drive-adapter" :noquery t :connection-type 'pipe
+                     :command (list "/bin/sh" "-c"
+                                    "sleep 61 & echo $! >> \"$1\"; wait"
+                                    "sh" pids))))
+      (unwind-protect
+          (let ((deadline (+ (float-time) 10)))
+            (while (and (string-empty-p (with-temp-buffer
+                                          (insert-file-contents pids)
+                                          (buffer-string)))
+                        (< (float-time) deadline))
+              (accept-process-output nil 0.05))
+            (let ((child (string-to-number
+                          (with-temp-buffer (insert-file-contents pids)
+                                            (buffer-string)))))
+              (should-not (+agent-shell-drive-commands shell))
+              (cl-letf (((symbol-function '+agent-shell-drive--adapter)
+                         (lambda (_) (process-id adapter))))
+                (let ((commands (+agent-shell-drive-commands shell)))
+                  (should (equal (list child) (mapcar #'car commands)))
+                  (should (string-search "sleep" (cdar commands)))))))
+        (when (process-live-p adapter)
+          (+agent-shell-sandbox-kill-tree (process-id adapter))
+          (delete-process adapter))
+        (delete-file pids)))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here

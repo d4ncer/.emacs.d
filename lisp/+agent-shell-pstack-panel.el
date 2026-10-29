@@ -108,14 +108,16 @@ commits on a branch of its own, in a shell the user can watch"
 full-access mode, so nobody is asked for permission; a permission request \
 ends your turn.  Implement the task, run the repository's tests, and commit \
 your work with git on the branch you are on, in small commits with clear \
-messages.  Do not switch branches, rewrite history or push.  End your turn \
+messages.  Do not switch branches, rewrite history or push.  Do not end \
+your turn while a command you started is still running.  End your turn \
 with a report as your final message: what you built, how you tested it, and \
 what a reviewer should know.  Nobody answers questions during the turn."
      :sandbox-contract "You work alone in a sandbox that confines writes to \
 your workspace, in your agent's full-access mode, so nobody is asked for \
 permission; a permission request ends your turn.  Git cannot write its \
 metadata there, so do not commit, stash, switch branches or write refs.  \
-Implement and verify the task.  Leave your changes uncommitted.  End your \
+Implement and verify the task.  Leave your changes uncommitted.  Do not \
+end your turn while a command you started is still running.  End your \
 final message with a report: what you built, how you tested it, and what a \
 reviewer should know.  Then end it with exactly one block of this form, \
 using this repository's commit style.  Give the subject and body for the \
@@ -163,7 +165,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 10
+(defconst +agent-shell-pstack-panel--schema 11
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -270,12 +272,17 @@ when collecting failed; what it left is in its panel's manifest.
 
 FAILURE is the last provider failure from `+agent-shell-drive-failure'
 that ended one of its turns.  RETRY is the timer of its pending retry,
-then t once it was asked to continue."
+then t once it was asked to continue.
+
+A delegate's BACKGROUND is a plist: :baseline, the pids its adapter had
+started when the brief was sent, and :asked, t once it was asked to wait
+for the commands it left running; see
+`+agent-shell-pstack-panel--await-commands'."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result
   (egress-file nil :documentation "Where its egress record is saved.")
   (egress-record nil :documentation "Its final `+agent-shell-egress-record'.")
-  failure retry)
+  failure retry background)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -705,7 +712,9 @@ on the repository's host when its profile names one, or, where the profile \
 says so, in your own checkout, which you then leave alone until the \
 follow-up arrives.  Delegate agents: %s.  A delegate \
 request has no judge, and its \"timeout\", %d seconds by default, \
-bounds the whole run.  Emacs sends you one prompt with its report, its \
+bounds the whole run.  Its brief tells it not to end its turn while a \
+command it started is still running; if it does, Emacs asks it once to \
+wait for them.  Emacs sends you one prompt with its report, its \
 branch, its commits and how to review and merge them."
           (+agent-shell-pstack-panel--names
            (+agent-shell-pstack-panel--candidate-agents))
@@ -1920,12 +1929,69 @@ its own goes; see `+agent-shell-arena-git-drop-branch'."
         (error (end 'failed (error-message-string err)))))))
 
 (defun +agent-shell-pstack-panel--send-brief (panel member)
-  "Send MEMBER of PANEL its brief once it is waiting for one."
-  (when (and (eq (+agent-shell-pstack-panel-member-state member) 'waiting)
+  "Send MEMBER of PANEL its brief once it is waiting for one.
+A delegate's adapter's processes then are its own, not commands it ran;
+see `+agent-shell-pstack-panel--await-commands'."
+  (let ((shell (+agent-shell-pstack-panel-member-shell member)))
+    (when (eq (+agent-shell-pstack-panel-member-state member) 'waiting)
+      (let ((baseline (when (eq (+agent-shell-pstack-panel-member-kind member)
+                                'delegate)
+                        (mapcar #'car (+agent-shell-drive-commands shell)))))
+        (when (+agent-shell-drive-send
+               shell (+agent-shell-pstack-panel--brief panel member))
+          (setf (+agent-shell-pstack-panel-member-state member) 'running
+                (+agent-shell-pstack-panel-member-background member)
+                (list :baseline baseline)))))))
+
+(defconst +agent-shell-pstack-panel--await-text "Your turn ended while \
+commands you started are still running:\n%s\nDo not end your turn while a \
+command you started is still running.  Wait for these to finish, without \
+stopping them, and read their results.  Then end your turn with your report, \
+as your brief asked."
+  "The one message asking a delegate to wait for the commands it left.")
+
+(defun +agent-shell-pstack-panel--commands-text (commands)
+  "Return COMMANDS, each (PID . COMMAND), one indented line apiece."
+  (mapconcat (lambda (command)
+               (format "  %s (pid %d)"
+                       (truncate-string-to-width
+                        (replace-regexp-in-string "[[:cntrl:]]+" " "
+                                                  (cdr command))
+                        120 nil nil "...")
+                       (car command)))
+             commands "\n"))
+
+(defun +agent-shell-pstack-panel--await-commands (member)
+  "Handle delegate MEMBER's successful turn end; return non-nil to wait.
+Commands still running are its adapter's descendants that were not there
+when the brief was sent.  The first time any are, MEMBER's shell is asked
+once to wait for them and end its turn again, and this returns t.  When
+some still run after that, return a note naming them for the follow-up,
+since Emacs stops them with the delegate.  Otherwise return nil."
+  (when (eq (+agent-shell-pstack-panel-member-kind member) 'delegate)
+    (let* ((background (+agent-shell-pstack-panel-member-background member))
+           (baseline (plist-get background :baseline))
+           (commands (seq-remove
+                      (lambda (command) (memql (car command) baseline))
+                      (+agent-shell-drive-commands
+                       (+agent-shell-pstack-panel-member-shell member)))))
+      (cond
+       ((null commands) nil)
+       ((and (not (plist-get background :asked))
              (+agent-shell-drive-send
               (+agent-shell-pstack-panel-member-shell member)
-              (+agent-shell-pstack-panel--brief panel member)))
-    (setf (+agent-shell-pstack-panel-member-state member) 'running)))
+              (format +agent-shell-pstack-panel--await-text
+                      (+agent-shell-pstack-panel--commands-text commands))))
+        (setf (+agent-shell-pstack-panel-member-background member)
+              (plist-put background :asked t))
+        t)
+       (t
+        (format "Commands it started were still running when its turn ended%s; \
+Emacs stopped them with the delegate:\n%s"
+                (if (plist-get background :asked)
+                    ", after Emacs had asked it once to wait for them"
+                  "")
+                (+agent-shell-pstack-panel--commands-text commands)))))))
 
 (defun +agent-shell-pstack-panel--report-text (event)
   "Return the report in a member's turn-complete EVENT.
@@ -1964,8 +2030,12 @@ A runner's panel shows its observer the event first."
              (+agent-shell-pstack-panel--settle
               panel member 'error text
               (format "The turn ended with stop reason %s." reason)))
-            (t (+agent-shell-pstack-panel--settle panel member 'done text nil
-                                                  (or reason "end_turn")))))))
+            (t
+             (let ((waiting (+agent-shell-pstack-panel--await-commands member)))
+               (unless (eq waiting t)
+                 (+agent-shell-pstack-panel--settle
+                  panel member 'done text waiting
+                  (or reason "end_turn")))))))))
       ('error
        (when (+agent-shell-pstack-panel--turn-open-p member)
          (let* ((text (+agent-shell-drive-partial-text

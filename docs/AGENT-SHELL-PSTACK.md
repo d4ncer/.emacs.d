@@ -590,6 +590,16 @@ never deletes the delegate's branch.
 
 #### The follow-up
 
+The brief tells the delegate not to end its turn while a command it
+started is still running. When its turn completes anyway with such a
+command running, Emacs asks the same shell once to wait for its commands
+and end its turn again with its report, and kills nothing. A command
+counts as running when it descends from the adapter, by the drive
+library's process-tree walk, and was not there when the brief was sent,
+so the adapter's own helpers never count. A second turn that ends with
+commands still running settles as usual, and the follow-up names them. A
+remote delegate's runner does the same on its host.
+
 Once the delegate's turn ends, times out or is cancelled, Emacs stops its
 adapter's processes and process groups, never a whole directory's, then
 lists the branch's commits since the commit it started from. The lead gets

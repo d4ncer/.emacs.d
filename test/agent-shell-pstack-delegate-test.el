@@ -16,7 +16,8 @@
 BODY sees `repo' (the lead's checkout, on main), `arenas', `sent' (newest
 first, each (SHELL . TEXT)), `started' (each (AGENT SHELL POLICY
 DIRECTORY)), `stopped' (shells stopped, newest first), `survivors' (the
-pids each stop reports), `interrupted', and the functions `git',
+pids each stop reports), `commands' (what the adapter runs, each (PID
+. COMMAND)), `interrupted', and the functions `git',
 `lead-event', `member-event', `wait-for' and `followup'."
   (declare (indent 0))
   `(let* ((scratch (file-name-as-directory
@@ -44,7 +45,7 @@ pids each stop reports), `interrupted', and the functions `git',
              (codex :mode "agent-full-access")))
           (handlers (make-hash-table :test #'equal))
           (sent nil) (started nil) (stopped nil) (survivors nil)
-          (interrupted nil)
+          (commands nil) (interrupted nil)
           (lead (generate-new-buffer " *lead*")))
      (cl-labels
          ((git (&rest args)
@@ -95,6 +96,8 @@ pids each stop reports), `interrupted', and the functions `git',
                   (lambda (shell text) (push (cons shell text) sent) t))
                  ((symbol-function '+agent-shell-drive-interrupt)
                   (lambda (shell) (push shell interrupted)))
+                 ((symbol-function '+agent-shell-drive-commands)
+                  (lambda (_shell) commands))
                  ((symbol-function '+agent-shell-drive-partial-text)
                   (lambda (_shell) "partial"))
                  ((symbol-function '+agent-shell-drive-kill)
@@ -614,6 +617,52 @@ outlived the delegate.  Once nothing runs there, press x" (followup)))
       (should (equal branch (git "branch" "--show-current")))
       (+agent-shell-pstack-delegate-test--line
        "Processes 4242 outlived the delegate.  (x switches it back to main)"))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-commands-at-turn-end ()
+  "Ask a delegate once to wait for commands it left running, then settle."
+  (+agent-shell-pstack-delegate-test--with
+    (setq commands '((100 . "node adapter-helper")))
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (let ((member (car (+agent-shell-pstack-panel-members panel))))
+        (should (string-search "Do not end your turn while a command you \
+started is still running." (cdr (assq shell sent))))
+        (setq commands '((100 . "node adapter-helper")
+                         (200 . "emacs -Q --batch -l test/run-config.el")))
+        (member-event "builder" :kind 'turn-complete
+                      :text "The full gate is still running.")
+        (let ((asked (cdr (assq shell sent))))
+          (should (string-prefix-p "Your turn ended while commands you started \
+are still running:\n  emacs -Q --batch -l test/run-config.el (pid 200)\n"
+                                   asked))
+          (should-not (string-search "adapter-helper" asked)))
+        (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+        (should-not stopped)
+        (setq commands '((100 . "node adapter-helper")))
+        (member-event "builder" :kind 'turn-complete :text "The gate passed.")
+        (let ((text (followup)))
+          (should (string-search "builder (codex): done.\nBranch: " text))
+          (should (string-search "Report:\nThe gate passed.\n" text))
+          (should-not (string-search "still running" text)))
+        (should (= 2 (length (seq-filter (lambda (entry) (eq shell (car entry)))
+                                         sent))))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-commands-still-running ()
+  "Settle a delegate whose commands outlast the one request, naming them."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (setq commands '((300 . "make\ntest")))
+      (member-event "builder" :kind 'turn-complete :text "Still testing.")
+      (member-event "builder" :kind 'turn-complete :text "Still testing.")
+      (let ((text (followup)))
+        (should (string-search "builder (codex): done.\nCommands it started \
+were still running when its turn ended, after Emacs had asked it once to \
+wait for them; Emacs stopped them with the delegate:\n  make test (pid 300)\n"
+                               text)))
+      (should (= 2 (length (seq-filter (lambda (entry) (eq shell (car entry)))
+                                       sent))))
+      (should (equal (list shell) stopped)))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-waits-for-interrupted-turn ()
   "Prepare only once the lead's interrupted turn has ended."
