@@ -7,7 +7,8 @@
 ;;
 ;; A watcher receives (:kind KIND :shell BUFFER :session ID ...), where KIND
 ;; is the upstream event symbol.  `turn-complete' adds :stop-reason and :text,
-;; `error' adds :message and the JSON-RPC error's :data.  Both add
+;; plus :turn-text before tool updates split it into parts.  `error' adds
+;; :message and the JSON-RPC error's :data.  Both add
 ;; :provider-errors, the `_meta.codex.error' records the turn's
 ;; `session_info_update' notifications carried, newest first; each also
 ;; reaches watchers as a `provider-warning' event with :message, :info and
@@ -681,10 +682,34 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
     (unless (+agent-shell-drive--watching (car entry))
       (+agent-shell-drive--forget (car entry)))))
 
+(defvar +agent-shell-drive--completion nil
+  "Dynamically bound (SHELL . STATE) while emitting a completed turn.")
+
+(defun +agent-shell-drive--finish-output (&rest arguments)
+  "Save the finished turn before output callbacks can submit ARGUMENTS.
+ARGUMENTS belong to `agent-shell--finish-output'."
+  (when (plist-get arguments :success)
+    (when-let* ((state (gethash (current-buffer) +agent-shell-drive--shells)))
+      (plist-put state :completed (copy-sequence state)))))
+
+(defun +agent-shell-drive--emit-event (emit &rest arguments)
+  "Call EMIT with ARGUMENTS, freezing completion before subscribers run."
+  (if-let* (((eq (plist-get arguments :event) 'turn-complete))
+            (state (gethash (current-buffer) +agent-shell-drive--shells)))
+      (let ((+agent-shell-drive--completion
+             (cons (current-buffer)
+                   (or (plist-get state :completed) (copy-sequence state)))))
+        (plist-put state :completed nil)
+        (apply emit arguments))
+    (apply emit arguments)))
+
 (defun +agent-shell-drive--parse (shell state event)
   "Update SHELL's turn STATE from upstream EVENT; return a plist or nil."
   (let ((kind (map-elt event :event))
         (data (map-elt event :data)))
+    (when (and (eq kind 'turn-complete)
+               (eq shell (car +agent-shell-drive--completion)))
+      (setq state (cdr +agent-shell-drive--completion)))
     (pcase kind
       ('agent-message-chunk
        (when-let* ((chunk (map-elt data :text-chunk)))
@@ -715,6 +740,8 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
             ('turn-complete
              (append
               (list :stop-reason (map-elt data :stop-reason)
+                    :turn-text (+agent-shell-drive--text
+                                (plist-get state :turn))
                     :text (let ((final (+agent-shell-drive--text
                                         (plist-get state :final))))
                             (if (string-blank-p final)
@@ -823,6 +850,10 @@ it moves the watcher."
     (unless (eq (car entry) shell)
       (when entry (+agent-shell-drive--remove key))
       (unless (gethash shell +agent-shell-drive--shells)
+        (advice-add 'agent-shell--finish-output :before
+                    #'+agent-shell-drive--finish-output)
+        (advice-add 'agent-shell--emit-event :around
+                    #'+agent-shell-drive--emit-event)
         (advice-add 'agent-shell--make-error-handler :around
                     #'+agent-shell-drive--error-handler)
         (advice-add 'agent-shell--on-notification :after
@@ -833,7 +864,7 @@ it moves the watcher."
                         :shell-buffer shell
                         :on-event (lambda (event)
                                     (+agent-shell-drive--dispatch shell event)))
-                       :turn nil :final nil)
+                       :turn nil :final nil :completed nil)
                  +agent-shell-drive--shells))
       (puthash key (cons shell function) +agent-shell-drive--watchers))))
 

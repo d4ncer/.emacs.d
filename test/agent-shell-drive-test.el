@@ -222,6 +222,51 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (emit shell '((:event . error) (:data (:message . "bad"))))
           (should (equal "bad" (plist-get (car events) :message))))))))
 
+(ert-deftest +agent-shell-drive-test-completion-before-queued-input ()
+  "Keep the completed turn when a callback submits the next prompt."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let (events)
+        (cl-letf (((symbol-function 'agent-shell--emit-event)
+                   (lambda (&rest _)
+                     ;; A subscriber registered after drive runs first.
+                     (emit shell '((:event . input-submitted)))
+                     (emit shell '((:event . agent-message-chunk)
+                                   (:data (:text-chunk . "Next turn"))))
+                     (emit shell '((:event . turn-complete)))))
+                  ((symbol-function 'agent-shell--finish-output)
+                   (lambda (&rest _)
+                     ;; Prompt-ready/finish-output callbacks precede completion.
+                     (emit shell '((:event . input-submitted))))))
+          (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+          (dolist (finish-first '(nil t))
+            (emit shell '((:event . input-submitted)))
+            (emit shell '((:event . agent-message-chunk)
+                          (:data (:text-chunk . "Completed turn"))))
+            (with-current-buffer shell
+              (when finish-first (agent-shell--finish-output :success t))
+              (agent-shell--emit-event :event 'turn-complete))
+            (should (equal "Completed turn" (plist-get (car events) :text)))
+            (should (equal "Next turn"
+                           (+agent-shell-drive-partial-text shell)))))))))
+
+(ert-deftest +agent-shell-drive-test-tool-update-splits-final ()
+  "Expose the entire turn when a late tool update bisects final text."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let (event)
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (setq event e)))
+        (emit shell '((:event . input-submitted)))
+        (dolist (part '("Answer\n```pstack-" "panel\n{}\n" "```"))
+          (emit shell `((:event . agent-message-chunk)
+                        (:data (:text-chunk . ,part))))
+          (unless (equal part "```")
+            (emit shell '((:event . tool-call-update)))))
+        (emit shell '((:event . turn-complete)))
+        (should (equal "```" (plist-get event :text)))
+        (should (equal "Answer\n```pstack-panel\n{}\n```"
+                       (plist-get event :turn-text)))))))
+
 (ert-deftest +agent-shell-drive-test-provider-errors ()
   "Carry a watched shell's JSON-RPC error data and Codex error records."
   (+agent-shell-drive-test--with-upstream
