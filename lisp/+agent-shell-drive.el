@@ -7,7 +7,12 @@
 ;;
 ;; A watcher receives (:kind KIND :shell BUFFER :session ID ...), where KIND
 ;; is the upstream event symbol.  `turn-complete' adds :stop-reason and :text,
-;; `error' adds :message.  `agent-message-chunk' only feeds the turn text, and
+;; `error' adds :message and the JSON-RPC error's :data.  Both add
+;; :provider-errors, the `_meta.codex.error' records the turn's
+;; `session_info_update' notifications carried, newest first; each also
+;; reaches watchers as a `provider-warning' event with :message, :info and
+;; :will-retry.  `+agent-shell-drive-failure' classifies a finished or
+;; failed turn.  `agent-message-chunk' only feeds the turn text, and
 ;; `input-submitted' starts a new turn.  A tool call ends the final part; the
 ;; first `tool-call-update' after agent text reports that part as :text and
 ;; the call's :title.
@@ -59,7 +64,8 @@
 (declare-function agent-shell--resolve-path "agent-shell")
 (declare-function agent-shell-start "agent-shell")
 (declare-function agent-shell-cwd "agent-shell-project")
-(declare-function agent-shell--current-mode-id "agent-shell-config")(declare-function agent-shell-status "agent-shell")
+(declare-function agent-shell--current-mode-id "agent-shell-config")
+(declare-function agent-shell-status "agent-shell")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-insert "agent-shell")
 (declare-function agent-shell-interrupt "agent-shell")
@@ -90,7 +96,9 @@
   "Map (OWNER . ID) to (SHELL . FUNCTION).")
 (defvar +agent-shell-drive--shells (make-hash-table :test #'eq)
   "Map a watched shell to (:subscription TOKEN :turn CHUNKS :final CHUNKS).
-CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.")
+CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.
+:provider-errors lists the turn's `_meta.codex.error' records, newest
+first.")
 
 (defvar-local +agent-shell-drive--policy nil
   "Policy this shell was started with; see `+agent-shell-drive-start'.")
@@ -105,6 +113,9 @@ CHUNKS lists text newest first; `+agent-shell-drive--text' joins them.")
 
 (defvar +agent-shell-drive--progress (make-hash-table :test #'equal)
   "Keys of watchers that also get `progress' events.")
+
+(defvar +agent-shell-drive--error-data nil
+  "Data of the JSON-RPC error a driven shell's error handler is handling.")
 
 (defun +agent-shell-drive--configs ()
   "Return `agent-shell-agent-configs' with function entries resolved."
@@ -692,7 +703,8 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
       (_
        (when (eq kind 'input-submitted)
          (plist-put state :turn nil)
-         (plist-put state :final nil))
+         (plist-put state :final nil)
+         (plist-put state :provider-errors nil))
        (unless (and (eq kind 'init-finished)
                     (+agent-shell-drive--refusal shell))
          (append
@@ -707,7 +719,8 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
                                         (plist-get state :final))))
                             (if (string-blank-p final)
                                 (+agent-shell-drive--text (plist-get state :turn))
-                              final)))
+                              final))
+                    :provider-errors (plist-get state :provider-errors))
               (when-let* ((plan (buffer-local-value
                                  '+agent-shell-drive--plan shell)))
                 (with-current-buffer shell
@@ -717,7 +730,10 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
              (when-let* ((reason (buffer-local-value
                                   '+agent-shell-drive--reason shell)))
                (list :reason reason)))
-            ('error (list :message (map-elt data :message))))))))))
+            ('error (list :message (map-elt data :message)
+                          :data +agent-shell-drive--error-data
+                          :provider-errors
+                          (plist-get state :provider-errors))))))))))
 
 (defun +agent-shell-drive--progress-event (shell event)
   "Return the `progress' event upstream EVENT from SHELL makes, or nil.
@@ -747,17 +763,56 @@ before them, which the parsed events leave out."
 progress: %S" (car watcher) err))))))
   (when-let* ((state (gethash shell +agent-shell-drive--shells))
               (parsed (+agent-shell-drive--parse shell state event)))
-    (unwind-protect
-        (dolist (watcher (+agent-shell-drive--watching shell))
-          (when (eq (gethash (car watcher) +agent-shell-drive--watchers)
-                    (cdr watcher))
-            (condition-case err (funcall (cddr watcher) parsed)
-              (error (message "agent-shell-drive: watcher %S errored on %s: %S"
-                              (car watcher) (plist-get parsed :kind) err)))))
+    (unwind-protect (+agent-shell-drive--deliver shell parsed)
       (when (eq (plist-get parsed :kind) 'clean-up)
         (dolist (watcher (+agent-shell-drive--watching shell))
           (remhash (car watcher) +agent-shell-drive--watchers))
         (+agent-shell-drive--forget shell)))))
+
+(defun +agent-shell-drive--deliver (shell parsed)
+  "Call each of SHELL's watchers with PARSED, an event plist."
+  (dolist (watcher (+agent-shell-drive--watching shell))
+    (when (eq (gethash (car watcher) +agent-shell-drive--watchers)
+              (cdr watcher))
+      (condition-case err (funcall (cddr watcher) parsed)
+        (error (message "agent-shell-drive: watcher %S errored on %s: %S"
+                        (car watcher) (plist-get parsed :kind) err))))))
+
+(defun +agent-shell-drive--error-handler (make &rest args)
+  "Advise MAKE, `agent-shell--make-error-handler', called with ARGS.
+The handler it returns binds `+agent-shell-drive--error-data' to the
+JSON-RPC error's data while a watched shell handles it, so that shell's
+`error' event carries it."
+  (let ((handler (apply make args))
+        (shell (plist-get args :shell-buffer)))
+    (lambda (acp-error raw-message)
+      (let ((+agent-shell-drive--error-data
+             (and (gethash shell +agent-shell-drive--shells)
+                  (map-elt acp-error 'data))))
+        (funcall handler acp-error raw-message)))))
+
+(defun +agent-shell-drive--note-notification (&rest args)
+  "Record a watched shell's provider error from ARGS, a notification's.
+ARGS are those of `agent-shell--on-notification'.  A `session_info_update'
+carrying `_meta.codex.error' joins the turn's :provider-errors, and the
+shell's watchers get it as a `provider-warning' event."
+  (let* ((shell (map-elt (plist-get args :state) :buffer))
+         (state (and shell (gethash shell +agent-shell-drive--shells)))
+         (update (map-nested-elt (plist-get args :acp-notification)
+                                 '(params update))))
+    (when-let* ((state)
+                ((equal (map-elt update 'sessionUpdate) "session_info_update"))
+                (error (map-nested-elt update '(_meta codex error)))
+                ((map-elt error 'message)))
+      (plist-put state :provider-errors
+                 (cons error (plist-get state :provider-errors)))
+      (+agent-shell-drive--deliver
+       shell (list :kind 'provider-warning :shell shell
+                   :session (ignore-errors
+                              (agent-shell-session-id :shell-buffer shell))
+                   :message (map-elt error 'message)
+                   :info (map-elt error 'codexErrorInfo)
+                   :will-retry (and (map-elt error 'willRetry) t))))))
 
 (defun +agent-shell-drive-watch (shell owner id function)
   "Call FUNCTION with SHELL's parsed events under key (OWNER . ID).
@@ -768,6 +823,10 @@ it moves the watcher."
     (unless (eq (car entry) shell)
       (when entry (+agent-shell-drive--remove key))
       (unless (gethash shell +agent-shell-drive--shells)
+        (advice-add 'agent-shell--make-error-handler :around
+                    #'+agent-shell-drive--error-handler)
+        (advice-add 'agent-shell--on-notification :after
+                    #'+agent-shell-drive--note-notification)
         (puthash shell
                  (list :subscription
                        (agent-shell-subscribe-to
@@ -790,6 +849,113 @@ The watcher's key is (`progress' OWNER . ID), apart from OWNER's others."
   (dolist (key (hash-table-keys +agent-shell-drive--watchers))
     (when (and (equal (car key) owner) (or (null id) (equal (cdr key) id)))
       (+agent-shell-drive--remove key))))
+
+;;;; Provider failures
+
+(defconst +agent-shell-drive-failure-kinds
+  '((rate_limited "was rate limited" t)
+    (quota_exhausted "ran out of quota" nil)
+    (overloaded "was overloaded" t)
+    (transport_lost "lost its connection" t)
+    (auth_required "needs to log in again" nil)
+    (context_exhausted "ran out of context" nil)
+    (budget_exhausted "ran out of budget" nil)
+    (policy_denied "was refused by policy" nil)
+    (internal_error "had an internal error" t)
+    (provider_error "had a provider error" nil))
+  "Each provider failure KIND as (KIND PHRASE TRANSIENT).
+PHRASE completes a sentence the agent's name starts.  A TRANSIENT kind
+may succeed when the turn is tried again.")
+
+(defconst +agent-shell-drive--failure-aliases
+  '(("rate_limit" . rate_limited) ("rateLimitExceeded" . rate_limited)
+    ("billing_error" . quota_exhausted) ("account_on_hold" . quota_exhausted)
+    ("usageLimitExceeded" . quota_exhausted)
+    ("serverOverloaded" . overloaded)
+    ("httpConnectionFailed" . transport_lost)
+    ("responseStreamConnectionFailed" . transport_lost)
+    ("responseStreamDisconnected" . transport_lost)
+    ("responseTooManyFailedAttempts" . transport_lost)
+    ("authentication_failed" . auth_required)
+    ("oauth_org_not_allowed" . auth_required)
+    ("unauthorized" . auth_required) ("access_denied" . auth_required)
+    ("verification_required" . auth_required)
+    ("cloud_credential_error" . auth_required)
+    ("max_output_tokens" . context_exhausted)
+    ("contextWindowExceeded" . context_exhausted)
+    ("sessionBudgetExceeded" . budget_exhausted)
+    ("cyberPolicy" . policy_denied)
+    ("server_error" . internal_error) ("internalServerError" . internal_error)
+    ("no_result" . internal_error) ("worker_shutdown" . internal_error))
+  "Adapter and API error kinds, by name, and the failure kind each means.
+Claude Code's adapter sends the API's kinds and its own as errorKind;
+Codex's sends codexErrorInfo.")
+
+(defun +agent-shell-drive-failure-kind (value)
+  "Return the failure kind in `+agent-shell-drive-failure-kinds' VALUE means.
+VALUE is an errorKind string, or a codexErrorInfo string or object; an
+object's single key names it, and HTTP status 429 or 401 inside it means
+`rate_limited' or `auth_required'.  Anything unknown is `provider_error'."
+  (let* ((name (cond ((stringp value) value)
+                     ((symbolp value) (and value (symbol-name value)))
+                     ((consp (car-safe value)) (symbol-name (caar value)))))
+         (status (and (consp (car-safe value))
+                      (map-elt (cdar value) 'httpStatusCode))))
+    (cond ((eql status 429) 'rate_limited)
+          ((eql status 401) 'auth_required)
+          ((and name (assq (intern name) +agent-shell-drive-failure-kinds))
+           (intern name))
+          ((and name (cdr (assoc name +agent-shell-drive--failure-aliases))))
+          (t 'provider_error))))
+
+(defun +agent-shell-drive-failure-transient-p (kind)
+  "Return whether failure KIND may succeed when the turn is tried again."
+  (nth 2 (assq kind +agent-shell-drive-failure-kinds)))
+
+(defun +agent-shell-drive-failure-phrase (kind)
+  "Return how a sentence naming an agent goes on to say it failed as KIND."
+  (or (nth 1 (assq kind +agent-shell-drive-failure-kinds)) "failed"))
+
+(defun +agent-shell-drive-failure (event &optional patterns)
+  "Return the provider failure that ended EVENT's turn, or nil.
+EVENT is a parsed `turn-complete' or `error' event.  The result is
+\(:kind KIND :message TEXT :source SOURCE), from the first of:
+
+- `error-data': the JSON-RPC error's data names an errorKind or a
+  codexErrorInfo.
+- `codex-error': the turn saw a `_meta.codex.error' whose message is
+  exactly its final text, once both are trimmed; Codex's adapter writes
+  a final error it will not retry as the turn's text.
+- `pattern': the whole trimmed final text matches a regexp in PATTERNS,
+  a list of (KIND . REGEXP) such as an agent's :failure-patterns in
+  `+agent-shell-sandbox-agents'."
+  (let* ((data (plist-get event :data))
+         (data (and (consp (car-safe data)) data))
+         (code (or (map-elt data 'errorKind) (map-elt data 'codexErrorInfo)))
+         (text (string-trim (or (plist-get event :text) ""))))
+    (cond
+     (code
+      (list :kind (+agent-shell-drive-failure-kind code)
+            :message (or (map-elt data 'message) (plist-get event :message)
+                         "")
+            :source 'error-data))
+     ((string-empty-p text) nil)
+     ((when-let* ((error (seq-find
+                          (lambda (error)
+                            (equal text (string-trim
+                                         (or (map-elt error 'message) ""))))
+                          (plist-get event :provider-errors))))
+        (list :kind (+agent-shell-drive-failure-kind
+                     (map-elt error 'codexErrorInfo))
+              :message text :source 'codex-error)))
+     ((when-let* ((pattern (seq-find
+                            (lambda (pattern)
+                              (let ((case-fold-search nil))
+                                (string-match-p
+                               (concat "\\`\\(?:" (cdr pattern) "\\)\\'")
+                               text)))
+                            patterns)))
+        (list :kind (car pattern) :message text :source 'pattern))))))
 
 (provide '+agent-shell-drive)
 ;;; +agent-shell-drive.el ends here

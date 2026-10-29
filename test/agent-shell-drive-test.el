@@ -222,6 +222,147 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (emit shell '((:event . error) (:data (:message . "bad"))))
           (should (equal "bad" (plist-get (car events) :message))))))))
 
+(ert-deftest +agent-shell-drive-test-provider-errors ()
+  "Carry a watched shell's JSON-RPC error data and Codex error records."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell other)
+      (let (events)
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+        (cl-flet ((notify (buffer update)
+                    (+agent-shell-drive--note-notification
+                     :state `((:buffer . ,buffer))
+                     :acp-notification `((method . "session/update")
+                                         (params (update . ,update)))))
+                  (handle (buffer)
+                    (funcall (+agent-shell-drive--error-handler
+                              (cl-function
+                               (lambda (&key shell-buffer &allow-other-keys)
+                                 (lambda (_error _raw)
+                                   (emit shell-buffer
+                                         '((:event . error)
+                                           (:data (:message . "m")))))))
+                              :state nil :shell-buffer buffer)
+                             '((code . -32603) (message . "m")
+                               (data (errorKind . "overloaded")))
+                             nil)))
+          (emit shell '((:event . input-submitted)))
+          (setq events nil)
+          (notify shell '((sessionUpdate . "session_info_update")
+                          (title . "t")))
+          (should-not events)
+          (notify shell '((sessionUpdate . "session_info_update")
+                          (_meta (codex (error (message . "Busy")
+                                               (codexErrorInfo
+                                                . "serverOverloaded")
+                                               (willRetry . t))))))
+          (notify other '((sessionUpdate . "session_info_update")
+                          (_meta (codex (error (message . "Other"))))))
+          (should (equal '(:kind provider-warning :message "Busy"
+                                 :info "serverOverloaded" :will-retry t)
+                         (map-into (map-filter (lambda (key _)
+                                                 (memq key '(:kind :message
+                                                                   :info
+                                                                   :will-retry)))
+                                               (car events))
+                                   'plist)))
+          (emit shell '((:event . agent-message-chunk)
+                        (:data (:text-chunk . "Busy"))))
+          (emit shell '((:event . turn-complete)
+                        (:data (:stop-reason . "end_turn"))))
+          (should (equal '(((message . "Busy") (codexErrorInfo
+                                                . "serverOverloaded")
+                            (willRetry . t)))
+                         (plist-get (car events) :provider-errors)))
+          (should (eq 'overloaded
+                      (plist-get (+agent-shell-drive-failure (car events))
+                                 :kind)))
+          (handle shell)
+          (should (equal '((errorKind . "overloaded"))
+                         (plist-get (car events) :data)))
+          (emit shell '((:event . input-submitted)))
+          (emit shell '((:event . error) (:data (:message . "plain"))))
+          (should-not (plist-get (car events) :data))
+          (should-not (plist-get (car events) :provider-errors))
+          (setq events nil)
+          (handle other)
+          (should-not events))))))
+
+(ert-deftest +agent-shell-drive-test-failure-kind ()
+  "Map adapter error kinds and Codex error info onto the fixed kinds."
+  (pcase-dolist (`(,value . ,kind)
+                 '(("overloaded" . overloaded) ("rate_limit" . rate_limited)
+                   ("billing_error" . quota_exhausted)
+                   ("authentication_failed" . auth_required)
+                   ("max_output_tokens" . context_exhausted)
+                   ("worker_shutdown" . internal_error)
+                   ("transport_lost" . transport_lost)
+                   ("serverOverloaded" . overloaded)
+                   ("usageLimitExceeded" . quota_exhausted)
+                   ("unauthorized" . auth_required)
+                   ("contextWindowExceeded" . context_exhausted)
+                   ("sessionBudgetExceeded" . budget_exhausted)
+                   ("cyberPolicy" . policy_denied)
+                   ("internalServerError" . internal_error)
+                   (((responseStreamDisconnected (httpStatusCode . 502)))
+                    . transport_lost)
+                   (((httpConnectionFailed (httpStatusCode . 429)))
+                    . rate_limited)
+                   (((responseStreamConnectionFailed (httpStatusCode . 401)))
+                    . auth_required)
+                   (((activeTurnNotSteerable)) . provider_error)
+                   ("badRequest" . provider_error) ("novel" . provider_error)
+                   (nil . provider_error)))
+    (should (eq kind (+agent-shell-drive-failure-kind value))))
+  (should (equal '(rate_limited overloaded transport_lost internal_error)
+                 (seq-filter #'+agent-shell-drive-failure-transient-p
+                             (mapcar #'car +agent-shell-drive-failure-kinds))))
+  (should (equal "was overloaded"
+                 (+agent-shell-drive-failure-phrase 'overloaded))))
+
+(ert-deftest +agent-shell-drive-test-failure ()
+  "Classify a turn from error data, then a Codex error, then a pattern."
+  (let ((capacity "Selected model is at capacity. Please try a different \
+model.")
+        (patterns (plist-get (alist-get 'codex (eval (car (get '+agent-shell-sandbox-agents
+                                                              'standard-value))
+                                                     t))
+                             :failure-patterns)))
+    (should (equal '(:kind rate_limited :message "Slow down" :source error-data)
+                   (+agent-shell-drive-failure
+                    '(:kind error :message "Internal error"
+                            :data ((errorKind . "rate_limit")
+                                   (message . "Slow down"))))))
+    (should (equal '(:kind quota_exhausted :message "Internal error"
+                           :source error-data)
+                   (+agent-shell-drive-failure
+                    '(:kind error :message "Internal error"
+                            :data ((codexErrorInfo . "usageLimitExceeded"))))))
+    (should-not (+agent-shell-drive-failure
+                 '(:kind error :message "Internal error" :data "detail")))
+    (should (equal `(:kind overloaded :message ,capacity :source codex-error)
+                   (+agent-shell-drive-failure
+                    `(:kind turn-complete :text ,(concat capacity "\n\n")
+                            :provider-errors
+                            (((message . ,capacity)
+                              (codexErrorInfo . "serverOverloaded")))))))
+    (should-not (+agent-shell-drive-failure
+                 `(:kind turn-complete :text ,(concat "Done.  " capacity)
+                         :provider-errors
+                         (((message . ,capacity)
+                           (codexErrorInfo . "serverOverloaded"))))))
+    (should (equal `(:kind overloaded :message ,capacity :source pattern)
+                   (+agent-shell-drive-failure
+                    `(:kind turn-complete :text ,(concat " " capacity "\n"))
+                    patterns)))
+    (dolist (text (list (concat "REPORT The panel has spare capacity, so "
+                                (downcase capacity) " never shows.")
+                        (concat capacity "\nThen I finished the work.")
+                        (upcase capacity) ""))
+      (should-not (+agent-shell-drive-failure
+                   `(:kind turn-complete :text ,text) patterns)))
+    (should-not (+agent-shell-drive-failure
+                 `(:kind turn-complete :text ,capacity)))))
+
 (ert-deftest +agent-shell-drive-test-start-ignores-caller-locals ()
   "Start with the new session strategy even from a shell with its own."
   (let ((agent-shell-session-strategy 'prompt)

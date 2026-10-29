@@ -85,7 +85,10 @@ there and use /login.")
            :login +agent-shell-sandbox--codex-login
            :refresh ("codex" "exec" "--skip-git-repo-check"
                      "Reply with the single word OK.")
-           :relogin "Log Codex in again on the host with codex login."))
+           :relogin "Log Codex in again on the host with codex login."
+           :failure-patterns
+           ((overloaded . "Selected model is at capacity\\. Please try a \
+different model\\."))))
   "The single registry for sandbox launch and host login policy.
 :mode names the full-access session mode.  :prepare receives a sandbox
 and returns environment entries, using a fresh projected host login.
@@ -93,6 +96,8 @@ and returns environment entries, using a fresh projected host login.
 user error; it is the only reader of this provider's host credential
 and expiry on either backend.  :name names the provider, :refresh is
 its host CLI command, and :relogin gives host login instructions.
+:failure-patterns lists (KIND . REGEXP) for provider error lines the
+agent writes as a whole final message; see `+agent-shell-drive-failure'.
 Every arena member, including its judge, must have a :login reader.
 No sandbox may refresh a host login or copy credentials back."
   :type '(alist :key-type symbol :value-type plist))
