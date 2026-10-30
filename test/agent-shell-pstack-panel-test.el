@@ -452,7 +452,8 @@ lists the roles whose result equals the base."
                         :text (+agent-shell-pstack-panel-test--message "{}"))
             (+agent-shell-pstack-panels)
             (goto-char (point-min))
-            (should (search-forward "Last request: block rejected" nil t))
+            (should (search-forward "NOT STARTED" nil t))
+            (should (search-forward "· block rejected" (line-end-position) t))
             (should (eq lead (+agent-shell-pstack-panel--lead-at-point)))
             (should (eq #'+agent-shell-pstack-panel-log
                         (key-binding "l")))
@@ -781,7 +782,7 @@ cancelled the panel." (cdar sent)))
                          (+agent-shell-pstack-panel-cancelled panel)))
           (+agent-shell-pstack-panels--render)
           (should (string-match-p
-                   "^\\[cancelled\\] how .*\n.*\n  Cancelled: You cancelled \
+                   "^– CANCELLED  how · .*\n    Cancelled  You cancelled \
 the panel\\.$"
                    (buffer-string)))
           (goto-char (point-min))
@@ -855,7 +856,7 @@ the panel\\.$"
         (should (equal +agent-shell-pstack-panels--buffer (buffer-name view)))
         (should buffer-read-only)
         (should (derived-mode-p 'magit-section-mode))
-        (should (string-match-p "\\`pstack panels  none\n.*\n\nNo panels yet\\."
+        (should (string-match-p "\\`pstack panels · none\n\nActions\n\\(?:.*\n\\)*?\nNo panels yet\\."
                                 (buffer-string)))
         (lead-event :kind 'turn-complete :session "s2"
                     :text (+agent-shell-pstack-panel-test--message "{}"))
@@ -864,40 +865,37 @@ the panel\\.$"
                            +agent-shell-pstack-panel-test--how))
         (let* ((id (+agent-shell-pstack-panel-test--id
                     +agent-shell-pstack-panel-test--how))
-               (codex (nth 1 (nth 0 started)))
                (claude (nth 1 (nth 1 started)))
-               (rejected (+agent-shell-pstack-panel-id
-                          (car (+agent-shell-pstack-panel-list))))
                (text (lambda () (with-current-buffer view
                                   (buffer-substring-no-properties
                                    (point-min) (point-max))))))
           (should (string-match-p
-                   (format "\\`pstack panels  1 error, 1 running
-.*
-
-\\[error: rejected\\] -  %s   \\*lead\\*  [0-9]+s · In Panel[^\n]*
-  RET visit lead  l request log  \\? all keys
-  The block must hold a JSON object
-  Follow-up: delivered [0-9]+s ago, unread
-" rejected)
+                   "\\`pstack panels · 1 failed, 1 running
+"
                    (funcall text)))
           (should (string-match-p
-                   (format "^\\[running\\] how  %s   \\*lead\\*  [0-9]+s · In Panel[^\n]*
-  RET visit lead  c cancel the panel  l request log  \\? all keys
-  data-flow        codex        starting  %s
-    RET visit shell  \\? all keys
-  risks            claude-code  starting  %s
-    RET visit shell  \\? all keys
-" id (regexp-quote (buffer-name codex)) (regexp-quote (buffer-name claude)))
+                   "^─\\{60\\}
+✗ FAILED · rejected  request · [^\n]*\\*lead\\* · [0-9]+s
+    The block must hold a JSON object
+    Follow-up  delivered [0-9]+s ago, unread
+"
                    (funcall text)))
+          (should (string-match-p
+                   "^─\\{60\\}
+● RUNNING  how · [^\n]*\\*lead\\* · [0-9]+s
+    data-flow  codex        ◌ starting
+    risks      claude-code  ◌ starting
+"
+                   (funcall text)))
+          (should-not (string-search id (funcall text)))
           (member-event "data-flow" :kind 'init-finished)
           (member-event "data-flow" :kind 'turn-complete :text "Report A")
           (let ((report (expand-file-name (format "%s/data-flow.md" id)
                                           directory)))
-            (should (string-search
-                     (format "data-flow        codex        done      %s"
-                             (abbreviate-file-name report))
-                     (funcall text)))
+            (should (string-search "    data-flow  codex        ✓ done\n"
+                                   (funcall text)))
+            (should-not (string-search (abbreviate-file-name report)
+                                       (funcall text)))
             (with-current-buffer view
               (goto-char (point-min))
               (search-forward "data-flow")
@@ -913,7 +911,8 @@ the panel\\.$"
               (should (eq claude (current-buffer))))
             (with-current-buffer view
               (goto-char (point-min))
-              (search-forward (concat "how  " id))
+              (search-forward "● RUNNING  how")
+              (should (eq 'pstack-panel (oref (magit-current-section) type)))
               (+agent-shell-pstack-panels-visit)
               (should (eq lead (current-buffer))))))
         (kill-buffer view)))))
@@ -968,12 +967,7 @@ the switcher's result."
       (with-temp-buffer
         (+agent-shell-projects--activity
          '(:author "lead" :agents ((:id "lead"))) nil nil)
-        (should (string-search expected (buffer-string)))))
-    (with-temp-buffer
-      (magit-insert-section (root)
-        (+agent-shell-pstack-panels--insert-panel
-         (car (+agent-shell-pstack-panel-list))))
-      (should (string-search expected (buffer-string))))))
+        (should (string-search expected (buffer-string)))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-display-and-notify ()
   "Keep the lead in-panel through delivery and notify on its answer only."
@@ -1012,7 +1006,9 @@ the switcher's result."
           (member-event "risks" :kind 'init-finished)
           (member-event "risks" :kind 'turn-complete :text "B")
           (should (+agent-shell-pstack-panel-delivered panel))
-          (should (equal status (+agent-shell-pstack-panel-display-status lead)))
+          (should (equal "panel (0/2)" status))
+          (setq status (+agent-shell-pstack-panel-display-status lead))
+          (should (equal "panel (2/2)" status))
           (+agent-shell-pstack-panel-test--displays lead status)
           ;; One delivered before delivery times were kept has started.
           (let ((at (+agent-shell-pstack-panel-delivered-at panel)))
@@ -1040,18 +1036,18 @@ the switcher's result."
                            +agent-shell-pstack-panel-test--how)))
       (let* ((panels (+agent-shell-pstack-panel-list))
              (status (+agent-shell-pstack-panel-display-status lead)))
-        (should (string-prefix-p "In Panel [2]" status))
+        (should (string-match-p "\\`panel ([0-9]+/[0-9]+)\\'" status))
         (dolist (panel panels)
-          (should (string-search (+agent-shell-pstack-panel-id panel) status)))
+          (should-not (string-search (+agent-shell-pstack-panel-id panel)
+                                     status)))
         (+agent-shell-pstack-panel-test--displays lead status)
         (setf (+agent-shell-pstack-panel-followup (car panels)) "Follow-up")
         (+agent-shell-pstack-panel--deliver (car panels))
         (should (equal status (+agent-shell-pstack-panel-display-status lead)))
         (lead-event :kind 'input-submitted)
-        (should (string-prefix-p "In Panel (how "
-                                 (+agent-shell-pstack-panel-display-status lead)))
-        (should-not (string-search "[2]"
-                                  (+agent-shell-pstack-panel-display-status lead)))
+        (should (string-match-p "\\`panel ([0-9]+/[0-9]+)\\'"
+                                (+agent-shell-pstack-panel-display-status
+                                 lead)))
         (setf (+agent-shell-pstack-panel-followup (cadr panels)) "Next follow-up")
         (+agent-shell-pstack-panel--deliver (cadr panels))
         (lead-event :kind 'input-submitted)
@@ -1145,9 +1141,9 @@ the switcher's result."
                                          (get-text-property column 'face
                                                             candidate))))
                            candidates title-columns)
-                  ;; Statuses: In Panel in its face, the others upstream's.
+                  ;; Statuses: panel in its face, the others upstream's.
                   (should (string-prefix-p
-                           "In Panel (how "
+                           "panel "
                            (substring (nth 0 candidates) (nth 0 columns))))
                   (should (string-search status (nth 0 candidates)))
                   (cl-mapc
@@ -1163,7 +1159,7 @@ the switcher's result."
                   (should (string-prefix-p
                            "busy " (substring (nth 2 candidates)
                                               (nth 2 columns))))
-                  ;; Columns stay aligned, padded to In Panel.
+                  ;; Columns stay aligned, padded to panel.
                   (should (= 1 (length (seq-uniq columns))))
                   (should (= 1 (length (seq-uniq title-columns))))
                   (should (= (+ (nth 0 columns) (length status) 1)
@@ -1225,8 +1221,6 @@ the switcher's result."
   "Show member progress in the lead's mode line while its panel runs."
   (+agent-shell-pstack-panel-test--with
     (let* ((updates nil)
-           (id (+agent-shell-pstack-panel-test--id
-                +agent-shell-pstack-panel-test--how))
            (item (lambda () (buffer-local-value
                              '+agent-shell-pstack-panel--mode-line lead)))
            (rendered (lambda ()
@@ -1240,12 +1234,12 @@ the switcher's result."
         (lead-event :kind 'turn-complete :session "s1"
                     :text (+agent-shell-pstack-panel-test--message
                            +agent-shell-pstack-panel-test--how))
-        (should (equal (format "In Panel (how %s) 0/2 " id)
+        (should (equal "panel (0/2) "
                        (substring-no-properties (funcall item))))
-        (should (equal (format "pstack panel %s (how)
+        (should (equal "pstack how panel
   data-flow  codex  starting
   risks  claude-code  starting
-mouse-1: show panels" id)
+mouse-1: show panels"
                        (get-text-property 0 'help-echo (funcall item))))
         (should (eq #'+agent-shell-pstack-panels
                     (lookup-key (get-text-property 0 'local-map (funcall item))
@@ -1253,7 +1247,7 @@ mouse-1: show panels" id)
         ;; `format-mode-line' renders nothing in batch Emacs.
         (unless noninteractive
           (let* ((line (funcall rendered))
-                 (start (string-match "In Panel .* 0/2 " line)))
+                 (start (string-match "panel (0/2) " line)))
             (should start)
             (should (get-text-property start 'help-echo line))))
         (should (equal (list (list lead nil)) updates))
@@ -1265,12 +1259,12 @@ mouse-1: show panels" id)
                                 (get-text-property 0 'help-echo
                                                    (funcall item))))
         (member-event "data-flow" :kind 'turn-complete :text "Report A")
-        (should (equal (format "In Panel (how %s) 1/2 " id)
+        (should (equal "panel (1/2) "
                        (substring-no-properties (funcall item))))
         (should (equal (list (list lead nil) (list lead nil)) updates))
         (member-event "risks" :kind 'init-finished)
         (member-event "risks" :kind 'turn-complete :text "Report B"))
-      (should (string-prefix-p "In Panel" (funcall item)))
+      (should (string-prefix-p "panel" (funcall item)))
       (lead-event :kind 'input-submitted)
       (should-not (funcall item))
       (unless noninteractive
@@ -1639,8 +1633,7 @@ Their timer starts then too, and the judge stays pending."
       (should (equal (list cwd) bases))
       (should-not started)
       (should-not (+agent-shell-pstack-panel-timer panel))
-      (should (string-match-p (format "^\\[running: preparing\\] arena  %s"
-                                      (+agent-shell-pstack-panel-id panel))
+      (should (string-match-p "^● RUNNING · preparing  arena · "
                               (with-temp-buffer
                                 (+agent-shell-pstack-panels-mode)
                                 (+agent-shell-pstack-panels--render)
@@ -2520,43 +2513,47 @@ codex unavailable (%s), judge unavailable (%s); records: %s\\.\\'"
     (save-window-excursion
       (+agent-shell-pstack-panels)
       (let* ((view (current-buffer))
-             (id (+agent-shell-pstack-panel-id panel))
              (manifest (+agent-shell-pstack-panel-arena panel))
              (arena (abbreviate-file-name
                      (+agent-shell-arena-git-manifest-directory manifest)))
              (answers nil)
-             (text (lambda () (with-current-buffer view (buffer-string)))))
-        (should (string-match-p
-                 (format "^\\[running: candidates\\] arena  %s .*\n  RET visit \
-lead  c cancel the panel  l request log  \\? all keys$" id)
-                 (funcall text)))
-        (should (string-match-p (format "^  Arena: %s$" (regexp-quote arena))
+             (text (lambda () (with-current-buffer view (buffer-string))))
+             (workspace
+              (lambda ()
+                (with-current-buffer view
+                  (goto-char (point-min))
+                  (search-forward "    Arena  ")
+                  (magit-current-section)))))
+        (should (string-match-p "^● RUNNING · candidates working  arena · .*$"
                                 (funcall text)))
-        (should (string-match-p (format "pstack panel %s (arena, candidates)"
-                                        id)
+        (should (string-match-p (format "^    Arena      %s$"
+                                        (regexp-quote arena))
+                                (funcall text)))
+        (should (string-match-p "\\`pstack arena panel (candidates)\n"
                                 (get-text-property
                                  0 'help-echo
                                  (buffer-local-value
                                   '+agent-shell-pstack-panel--mode-line lead))))
         (with-current-buffer view
-          (goto-char (point-min))
-          (search-forward "Arena:")
+          (should (eq 'pstack-workspace (oref (funcall workspace) type)))
           (should-error (+agent-shell-pstack-panels-clean) :type 'user-error))
-        (should (string-match-p "^  judge            codex        pending   \
-not started$" (funcall text)))
+        (should (string-match-p "^    judge  codex        ◌ pending$"
+                                (funcall text)))
         (finish "opus" "A")
         (finish "codex" "B")
         (+agent-shell-pstack-panel-test--drain)
-        (should (string-match-p "^  opus             claude-code  done      \
+        (should (string-match-p "^    opus   claude-code  ✓ done  \
 captured commit-opus$" (funcall text)))
-        (should (string-match-p (format "^\\[judging\\] arena  %s " id)
-                                (funcall text)))
+        (should (string-match-p "^● JUDGING  arena · " (funcall text)))
         (member-event "judge" :kind 'init-finished)
         (member-event "judge" :kind 'turn-complete :text "Scores")
-        (should (string-match-p
-                 (format "^  Arena: %s\n    RET visit folder  x clean up its \
-workspace  \\? all keys$" (regexp-quote arena))
-                 (funcall text)))
+        (should (string-match-p (format "^    Arena      %s$"
+                                        (regexp-quote arena))
+                                (funcall text)))
+        (let ((actions (+agent-shell-pstack-panels--actions
+                        (funcall workspace))))
+          (should (equal "visit folder" (cdr (assoc "RET" actions))))
+          (should (equal "clean up its workspace" (cdr (assoc "x" actions)))))
         (cl-letf (((symbol-function 'yes-or-no-p)
                    (lambda (prompt) (push prompt answers) nil)))
           (with-current-buffer view
@@ -2568,11 +2565,12 @@ workspace  \\? all keys$" (regexp-quote arena))
         (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
           (with-current-buffer view
             (goto-char (point-min))
-            (search-forward (concat "arena  " id))
+            (search-forward "  arena · ")
+            (should (eq 'pstack-panel (oref (magit-current-section) type)))
             (+agent-shell-pstack-panels-clean)))
         (should (equal (list manifest) cleaned))
         (should-not (+agent-shell-pstack-panel-arena panel))
-        (should-not (string-match-p "Arena:" (funcall text)))
+        (should-not (string-match-p "^    Arena " (funcall text)))
         (kill-buffer view)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-gone-workspace ()
@@ -2598,7 +2596,7 @@ workspace  \\? all keys$" (regexp-quote arena))
         (save-window-excursion
           (+agent-shell-pstack-panels)
           (goto-char (point-min))
-          (search-forward (if isolation "Workspace:" "Arena:"))
+          (search-forward (if isolation "    Workspace  " "    Arena  "))
           (let ((section (magit-current-section)))
             (should (eq 'pstack-workspace (oref section type)))
             (should (string-search "(gone)"
@@ -2611,10 +2609,8 @@ workspace  \\? all keys$" (regexp-quote arena))
               (should-not (assoc "RET" actions))
               (should-not (assoc "x" actions)))
             (should-error (+agent-shell-pstack-panels-visit) :type 'user-error)
-            (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)
-            (forward-line 1)
-            (should-not (string-search "RET" (thing-at-point 'line)))
-            (should-not (string-search "x clean" (thing-at-point 'line)))))))))
+            (should-error (+agent-shell-pstack-panels-clean)
+                          :type 'user-error)))))))
 
 (defun +agent-shell-pstack-panel-test--finish-how (member-event)
   "Finish the newest how panel's members through MEMBER-EVENT."
@@ -2625,11 +2621,9 @@ workspace  \\? all keys$" (regexp-quote arena))
 
 (defun +agent-shell-pstack-panel-test--heading (id)
   "Return the start of panel ID's heading in the current buffer, or nil."
-  (save-excursion
-    (goto-char (point-min))
-    (when (re-search-forward
-           (concat "^\\[[^\n]+\\] [^ ]+  " (regexp-quote id) " ") nil t)
-      (line-beginning-position))))
+  (when-let* ((section (magit-get-section
+                        `((pstack-panel . ,id) (pstack-panels)))))
+    (oref section start)))
 
 (ert-deftest +agent-shell-pstack-panel-test-view-summary ()
   "Count panels by status on the first line, the most urgent first."
@@ -2655,15 +2649,16 @@ workspace  \\? all keys$" (regexp-quote arena))
                                   (+agent-shell-pstack-panel-id panel)))
                                (list finished rejected running))))
           (goto-char (point-min))
-          (should (equal "pstack panels  1 needs input, 1 error, 1 running"
+          (should (equal "pstack panels · 1 unread, 1 failed, 1 running"
                          (buffer-substring-no-properties
                           (point-min) (line-end-position))))
           (should (eq '+agent-shell-pstack-panels-input
-                      (get-text-property (search-forward "1 needs")
+                      (get-text-property (progn (search-forward "1 unread")
+                                                (match-beginning 0))
                                          'font-lock-face)))
           (should (apply #'< starts))
           (goto-char (car starts))
-          (should (looking-at-p "\\[needs input\\] how "))
+          (should (looking-at-p "◆ UNREAD  how "))
           (should (eq '+agent-shell-pstack-panels-input
                       (get-text-property (point) 'font-lock-face)))
           ;; A follow-up delivered before delivery times were kept is read.
@@ -2675,7 +2670,7 @@ workspace  \\? all keys$" (regexp-quote arena))
           (should (eq lead (current-buffer)))
           (should-not (+agent-shell-pstack-panel-unread-p finished))
           (with-current-buffer +agent-shell-pstack-panels--buffer
-            (should (equal "pstack panels  1 error, 1 running, 1 done"
+            (should (equal "pstack panels · 1 failed, 1 running, 1 done"
                            (buffer-substring-no-properties
                             (point-min)
                             (save-excursion (goto-char (point-min))
@@ -2710,7 +2705,7 @@ workspace  \\? all keys$" (regexp-quote arena))
           (should (= 20 (current-column)))
           (should (= (point) (window-point)))
           (should (> (line-number-at-pos) line))
-          (should (looking-back "^  risks  +c" (line-beginning-position)))
+          (should (looking-back "^    risks  +claud" (line-beginning-position)))
           (save-excursion
             (goto-char (point-min))
             (search-forward "data-flow")
@@ -2721,31 +2716,57 @@ workspace  \\? all keys$" (regexp-quote arena))
           (should (= 20 (current-column)))
           ;; Its section gone, point goes to a neighbour, not the top.
           (goto-char (point-min))
-          (search-forward "[error: rejected]")
+          (search-forward "✗ FAILED · rejected")
           (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
             (+agent-shell-pstack-panels-clear-delivered))
           (should (equal `((pstack-panel . ,id) (pstack-panels))
                          (funcall ident))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-view-hints ()
-  "Name in a dim line the keys acting on each section, and all of them on ?."
+  "Name the keys once, in an Actions block, and those acting at point on ?."
   (+agent-shell-pstack-panel-test--with
     (save-window-excursion
       (lead-event :kind 'turn-complete :session "s1"
                   :text (+agent-shell-pstack-panel-test--message
                          +agent-shell-pstack-panel-test--how))
       (+agent-shell-pstack-panels)
+      (let* ((sections (oref magit-root-section children))
+             (actions (seq-filter (lambda (section)
+                                    (eq 'pstack-actions (oref section type)))
+                                  sections))
+             (block (buffer-substring-no-properties
+                     (oref (car actions) start) (oref (car actions) end))))
+        (should (= 1 (length actions)))
+        (should (eq (car actions) (car sections)))
+        (goto-char (point-min))
+        (forward-line 1)
+        (should (looking-at-p "\n"))
+        (forward-line 1)
+        (should (eq (car actions) (magit-current-section)))
+        (should (string-suffix-p "? keys here · q quit\n\n"
+                                 (buffer-substring-no-properties
+                                  (oref (car actions) start)
+                                  (1+ (oref (car actions) end)))))
+        (dolist (key '("RET" "c" "x" "l" "n / p" "TAB" "g" "D"))
+          (should (string-match (format "^  %s +[A-Z]" (regexp-quote key))
+                                block))
+          (should (eq '+agent-shell-pstack-panels-key
+                      (get-text-property
+                       (+ (oref (car actions) start) (match-beginning 0) 2)
+                       'font-lock-face))))
+        (save-excursion
+          (goto-char (oref (car actions) start))
+          (search-forward "? keys here")
+          (should (eq '+agent-shell-pstack-panels-key
+                      (get-text-property (match-beginning 0)
+                                         'font-lock-face))))
+        (should-not (string-search "all keys" (buffer-string)))
+        (should-not (string-search "RET visit" (buffer-string)))
+        (should-not (string-search "RET" (buffer-substring
+                                          (oref (car actions) end)
+                                          (point-max)))))
       (goto-char (point-min))
-      (forward-line 1)
-      (should (looking-at-p "g refresh  D clear delivered panels  \\? all keys$"))
-      (should (eq '+agent-shell-pstack-panels-hint
-                  (get-text-property (point) 'font-lock-face)))
       (search-forward "risks")
-      (forward-line 1)
-      (should (looking-at-p "    RET visit shell  \\? all keys$"))
-      (should (eq '+agent-shell-pstack-panels-hint
-                  (get-text-property (+ 4 (point)) 'font-lock-face)))
-      (forward-line -1)
       (+agent-shell-pstack-panels-keys)
       (with-current-buffer "*pstack panels keys*"
         (should (string-match-p "\\`Here:
@@ -2759,6 +2780,11 @@ Anywhere:
                                (buffer-string))))
       (with-current-buffer +agent-shell-pstack-panels--buffer
         (should (eq #'+agent-shell-pstack-panels-keys (key-binding "?")))
+        (should (eq #'+agent-shell-pstack-panels-visit (key-binding (kbd "RET"))))
+        (should (eq #'+agent-shell-pstack-panels-cancel (key-binding "c")))
+        (should (eq #'+agent-shell-pstack-panels-clean (key-binding "x")))
+        (should (eq #'+agent-shell-pstack-panel-log (key-binding "l")))
+        (should (eq #'revert-buffer (key-binding "g")))
         (should (eq #'+agent-shell-pstack-panels-clear-delivered
                     (key-binding "D")))
         (should (eq #'magit-section-forward (key-binding "n")))

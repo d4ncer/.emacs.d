@@ -190,7 +190,7 @@ the drive.\",\"members\":[{\"role\":\"data-flow\",\"agent\":\"fixture-codex\"},\
       (should-not listed-members)
       (should (memq lead (agent-shell-buffers)))
       (should (seq-some (lambda (text)
-                          (string-match-p "In Panel (how .* 0/2 " text))
+                          (string-match-p "panel (0/2) " text))
                         progress))
       (should-not (buffer-local-value '+agent-shell-pstack-panel--mode-line
                                       lead))

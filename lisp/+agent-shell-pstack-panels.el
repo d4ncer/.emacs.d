@@ -1,13 +1,14 @@
 ;;; +agent-shell-pstack-panels.el --- The pstack panels view -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; `+agent-shell-pstack-panels' lists every pstack panel as a magit section,
-;; the most urgent first, under a line counting them by status.  Each panel
-;; folds into its members, its workspace and its follow-up, and below the
-;; panels come the branch-mode delegate records no live panel holds.  Every
-;; section has a dim line naming the keys that act on it, and ? lists them
-;; all.  A refresh keeps each window on the section and column it was on,
-;; and keeps what was folded.  This library loads magit-section, so it
+;; `+agent-shell-pstack-panels' lists every pstack panel as a card, the
+;; most urgent first, under a line counting them by status and the one
+;; Actions block that names the view's keys; ? lists those acting at point.
+;; Each card is a magit section that folds into its members, its workspace
+;; and its follow-up, and below the panels come the branch-mode delegate
+;; records no live panel holds.  docs/UI-GUIDELINES.md governs the layout.
+;; A refresh keeps each window on the section and column it was on, and
+;; keeps what was folded.  This library loads magit-section, so it
 ;; loads only when the view opens; `+agent-shell-pstack-panel' holds the
 ;; panels themselves.
 
@@ -61,23 +62,39 @@
   "Face for a finished panel or member."
   :group '+agent-shell-pstack-panel)
 
-(defface +agent-shell-pstack-panels-hint '((t :inherit shadow))
-  "Face for the line naming the keys that act on a section."
+(defface +agent-shell-pstack-panels-dim '((t :inherit shadow))
+  "Face for detail labels, notes, effects and the rules between panels."
+  :group '+agent-shell-pstack-panel)
+
+(defface +agent-shell-pstack-panels-key '((t :inherit help-key-binding))
+  "Face for a key in the Actions block."
   :group '+agent-shell-pstack-panel)
 
 ;;;; Status
 
 (defconst +agent-shell-pstack-panels--statuses
-  '((input "needs input" +agent-shell-pstack-panels-input)
-    (error "error" +agent-shell-pstack-panels-error)
-    (host "on host" +agent-shell-pstack-panels-host)
-    (judging "judging" +agent-shell-pstack-panels-judging)
-    (running "running" +agent-shell-pstack-panels-running)
-    (queued "finishing" +agent-shell-pstack-panels-queued)
-    (cancelled "cancelled" +agent-shell-pstack-panels-cancelled)
-    (done "done" +agent-shell-pstack-panels-done))
-  "Panel statuses, most urgent first, each (STATUS LABEL FACE).
-A finishing panel has ended but its follow-up has not reached its lead.")
+  '((input "◆" "unread" +agent-shell-pstack-panels-input)
+    (error "✗" "failed" +agent-shell-pstack-panels-error)
+    (host "●" "on host" +agent-shell-pstack-panels-host)
+    (judging "●" "judging" +agent-shell-pstack-panels-judging)
+    (running "●" "running" +agent-shell-pstack-panels-running)
+    (queued "◌" "finishing" +agent-shell-pstack-panels-queued)
+    (cancelled "–" "cancelled" +agent-shell-pstack-panels-cancelled)
+    (done "✓" "done" +agent-shell-pstack-panels-done))
+  "Panel statuses, most urgent first, each (STATUS GLYPH LABEL FACE).
+A finishing panel has ended but its follow-up has not reached its lead,
+and an unread one delivered a follow-up you have not read.")
+
+(defconst +agent-shell-pstack-panels--phases
+  '((preparing . "preparing")
+    (interrupting . "stopping the lead's turn")
+    (candidates . "candidates working")
+    (capturing . "capturing results"))
+  "Words for a running panel's phase.  A phase not listed goes unnamed.")
+
+(defun +agent-shell-pstack-panels--dim (text)
+  "Return TEXT in the dim face."
+  (propertize text 'font-lock-face '+agent-shell-pstack-panels-dim))
 
 (defun +agent-shell-pstack-panels--finished-p (panel)
   "Return whether PANEL has ended, including as a rejected request."
@@ -118,29 +135,27 @@ A finishing panel has ended but its follow-up has not reached its lead.")
         (t 'done)))
 
 (defun +agent-shell-pstack-panels--badge (panel)
-  "Return PANEL's status badge, padded and in its status's face."
+  "Return PANEL's glyph and status in its face, then any detail, dim."
   (pcase-let* ((status (+agent-shell-pstack-panels--status panel))
-               (`(,label ,face) (alist-get status
-                                           +agent-shell-pstack-panels--statuses))
-               (phase (+agent-shell-pstack-panel-phase panel))
-               (detail (pcase status
-                         ('error (+agent-shell-pstack-panels--error panel))
-                         ('running (unless (eq phase 'running)
-                                     (symbol-name phase)))
-                         ('host (when-let* ((remote
-                                             (+agent-shell-pstack-panel-remote
+               (`(,glyph ,label ,face)
+                (alist-get status +agent-shell-pstack-panels--statuses))
+               (detail
+                (pcase status
+                  ('error (+agent-shell-pstack-panels--error panel))
+                  ('running (alist-get (+agent-shell-pstack-panel-phase panel)
+                                       +agent-shell-pstack-panels--phases))
+                  ('host (when-let* ((remote (+agent-shell-pstack-panel-remote
                                               panel))
-                                            (there
-                                             (+agent-shell-arena-remote-runner-phase
-                                              remote)))
-                                  (format "%s" there))))))
-    (concat (propertize (format "[%s%s]" label
-                                (if detail (concat ": " detail) ""))
+                                     (there (+agent-shell-arena-remote-runner-phase
+                                             remote)))
+                           (format "%s" there))))))
+    (concat (propertize (format "%s %s" glyph (upcase label))
                         'font-lock-face face)
-            " ")))
+            (if detail (+agent-shell-pstack-panels--dim (concat " · " detail))
+              ""))))
 
 (defun +agent-shell-pstack-panels--member-badge (member)
-  "Return MEMBER's state, padded and in its face."
+  "Return MEMBER's glyph and state in its face."
   (let* ((state (+agent-shell-pstack-panel-member-state member))
          (label (pcase state
                   ('error (let ((kind (+agent-shell-pstack-panels--member-error
@@ -151,14 +166,14 @@ A finishing panel has ended but its follow-up has not reached its lead.")
                                          member))
                                 "retrying"
                               "running"))
-                  (_ (symbol-name state))))
-         (face (pcase state
-                 ((or 'error 'timeout) '+agent-shell-pstack-panels-error)
-                 ('running '+agent-shell-pstack-panels-running)
-                 ('done '+agent-shell-pstack-panels-done)
-                 (_ '+agent-shell-pstack-panels-queued))))
-    (concat (propertize label 'font-lock-face face)
-            (make-string (max 1 (- 10 (length label))) ?\s))))
+                  (_ (symbol-name state)))))
+    (pcase-let ((`(,glyph ,face)
+                 (pcase state
+                   ((or 'error 'timeout) '("✗" +agent-shell-pstack-panels-error))
+                   ('running '("●" +agent-shell-pstack-panels-running))
+                   ('done '("✓" +agent-shell-pstack-panels-done))
+                   (_ '("◌" +agent-shell-pstack-panels-queued)))))
+      (propertize (concat glyph " " label) 'font-lock-face face))))
 
 (defun +agent-shell-pstack-panels--age (time)
   "Return how long ago TIME was, briefly."
@@ -185,11 +200,11 @@ A finishing panel has ended but its follow-up has not reached its lead.")
   "Return the line counting PANELS by status."
   (concat
    (propertize "pstack panels" 'font-lock-face 'magit-section-heading)
-   "  "
+   (+agent-shell-pstack-panels--dim " · ")
    (if panels
        (mapconcat
         #'identity
-        (seq-keep (pcase-lambda (`(,status ,label ,face))
+        (seq-keep (pcase-lambda (`(,status ,_glyph ,label ,face))
                     (let ((count (seq-count
                                   (lambda (panel)
                                     (eq status (+agent-shell-pstack-panels--status
@@ -219,9 +234,9 @@ A finishing panel has ended but its follow-up has not reached its lead.")
 (define-derived-mode +agent-shell-pstack-panels-mode magit-section-mode
   "pstack panels"
   "List pstack panels, their members, workspaces and follow-ups.
-Each section names the keys that act on it, and
+The Actions block names the view's keys, and
 \\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-keys] \
-lists them all.
+lists those acting at point.
 
 \\{+agent-shell-pstack-panels-mode-map}"
   (setq-local revert-buffer-function
@@ -367,16 +382,42 @@ workspace's list them, unless ALL."
 
 ;;;; Rendering
 
-(defun +agent-shell-pstack-panels--hint (indent section)
-  "Insert the dim line, indented by INDENT, of the keys acting on SECTION."
-  (insert (make-string indent ?\s)
-          (propertize
-           (mapconcat (pcase-lambda (`(,key . ,what)) (format "%s %s" key what))
-                      (append (+agent-shell-pstack-panels--actions section)
-                              '(("?" . "all keys")))
-                      "  ")
-           'font-lock-face '+agent-shell-pstack-panels-hint)
-          "\n"))
+(defconst +agent-shell-pstack-panels--action-groups
+  '(("Act"
+     ("RET" "Visit" "the item at point")
+     ("c" "Cancel" "the running panel at point")
+     ("x" "Clean up" "the finished panel's workspace, or the record at point")
+     ("l" "Request log" "the lead of the item at point"))
+    ("Navigate"
+     ("n / p" "Next / previous" "item")
+     ("TAB" "Fold / unfold" "the item at point"))
+    ("Manage"
+     ("g" "Refresh" "the whole view")
+     ("D" "Clear delivered" "every delivered panel"
+      "Asks before removing a workspace, checkout or branch it still holds.")))
+  "The Actions block, each (GROUP (KEY LABEL WHAT [EFFECT])...).")
+
+(defconst +agent-shell-pstack-panels--rule (make-string 60 ?─)
+  "The rule between panels.")
+
+(defun +agent-shell-pstack-panels--insert-actions ()
+  "Insert the Actions block, the one place the view lists its keys."
+  (magit-insert-section (pstack-actions)
+    (magit-insert-heading (propertize "Actions" 'font-lock-face 'bold))
+    (pcase-dolist (`(,group . ,rows) +agent-shell-pstack-panels--action-groups)
+      (insert group "\n")
+      (pcase-dolist (`(,key ,label ,what ,effect) rows)
+        (insert "  " (propertize (format "%-6s" key)
+                                 'font-lock-face '+agent-shell-pstack-panels-key)
+                " " (format "%-17s" label)
+                (+agent-shell-pstack-panels--dim what) "\n")
+        (when effect
+          (insert (make-string 26 ?\s)
+                  (+agent-shell-pstack-panels--dim effect) "\n"))))
+    (insert (propertize "?" 'font-lock-face '+agent-shell-pstack-panels-key)
+            (+agent-shell-pstack-panels--dim " keys here · ")
+            (propertize "q" 'font-lock-face '+agent-shell-pstack-panels-key)
+            (+agent-shell-pstack-panels--dim " quit") "\n")))
 
 (defun +agent-shell-pstack-panels--line (indent target &rest parts)
   "Insert PARTS as one line indented by INDENT, visiting TARGET when non-nil."
@@ -384,6 +425,12 @@ workspace's list them, unless ALL."
     (insert (if target
                 (propertize text '+agent-shell-pstack-panels-target target)
               text))))
+
+(defun +agent-shell-pstack-panels--detail (indent label target &rest parts)
+  "Insert PARTS after LABEL in a dim column, indented by INDENT.
+The line visits TARGET when it is non-nil."
+  (apply #'+agent-shell-pstack-panels--line indent target
+         (+agent-shell-pstack-panels--dim (format "%-10s " label)) parts))
 
 (defun +agent-shell-pstack-panels--lines (indent text &optional face)
   "Insert each line of TEXT indented by INDENT, in FACE."
@@ -399,17 +446,10 @@ workspace's list them, unless ALL."
                 (+agent-shell-arena-git-delegate-origin delegate))))
     (if (memq (+agent-shell-arena-git-delegate-restore delegate)
               '(restored unneeded))
-        ;; Its record goes once it is back, unless removing it failed.
-        (format "back on %s%s" name
-                (if (file-exists-p (+agent-shell-arena-git-manifest-directory
-                                    manifest))
-                    "  (x forgets its record)"
-                  ""))
-      (format "%s(x switches it back to %s)"
-              (if-let* ((note (+agent-shell-arena-git-delegate-note delegate)))
-                  (concat note "  ")
-                "")
-              name))))
+        (format "back on %s" name)
+      (let ((note (+agent-shell-arena-git-delegate-note delegate)))
+        (concat (if note (concat (string-trim-right note "\\.") "; ") "")
+                (format "not back on %s yet" name))))))
 
 (defun +agent-shell-pstack-panels--last-request (lead)
   "Return LEAD's latest turn if it had a block but started no panel."
@@ -422,127 +462,133 @@ workspace's list them, unless ALL."
     entry))
 
 (defun +agent-shell-pstack-panels--member-note (panel member)
-  "Return the note on MEMBER of PANEL's heading line."
+  "Return the note after MEMBER of PANEL's state, or nil."
   (let ((capture (+agent-shell-pstack-panel-member-capture member))
-        (result (+agent-shell-pstack-panel-member-result member))
-        (report (+agent-shell-pstack-panel-member-report member))
-        (error (+agent-shell-pstack-panel-member-error member)))
+        (result (+agent-shell-pstack-panel-member-result member)))
     (cond ((and (eq 'delegate (+agent-shell-pstack-panel-member-kind member))
                 (+agent-shell-pstack-panel-remote panel))
            (let ((remote (+agent-shell-pstack-panel-remote panel)))
-             (format "transcript (%s)"
-                     (if-let* ((polled (+agent-shell-arena-remote-polled remote)))
-                         (format "updated %s ago"
-                                 (+agent-shell-pstack-panels--age polled))
-                       (format "%s" (+agent-shell-arena-remote-phase remote))))))
+             (if-let* ((polled (+agent-shell-arena-remote-polled remote)))
+                 (format "transcript updated %s ago"
+                         (+agent-shell-pstack-panels--age polled))
+               (format "transcript %s" (+agent-shell-arena-remote-phase remote)))))
           (capture
            (string-join (delq nil (list (symbol-name capture)
                                         (plist-get result :commit)
                                         (plist-get result :error)))
-                        " "))
-          (report (abbreviate-file-name report))
-          (error (truncate-string-to-width
-                  (car (split-string error "\n")) 80 nil nil "..."))
-          (t (+agent-shell-pstack-panels--name
-              (+agent-shell-pstack-panel-member-shell member))))))
+                        " ")))))
 
-(defun +agent-shell-pstack-panels--insert-member (panel member)
-  "Insert the section of MEMBER of PANEL."
+(defun +agent-shell-pstack-panels--insert-member (panel member widths)
+  "Insert the section of MEMBER of PANEL, padding its role and agent to WIDTHS."
   (let* ((role (+agent-shell-pstack-panel-member-role member))
          (shell (+agent-shell-pstack-panel-member-shell member))
          (report (+agent-shell-pstack-panel-member-report member))
          (result (+agent-shell-pstack-panel-member-result member))
          (error (+agent-shell-pstack-panel-member-error member))
          (state (+agent-shell-pstack-panel-member-state member))
-         (manifest (+agent-shell-pstack-panel-arena panel)))
-    (magit-insert-section section (pstack-member role)
+         (manifest (+agent-shell-pstack-panel-arena panel))
+         (note (+agent-shell-pstack-panels--member-note panel member)))
+    (magit-insert-section (pstack-member role)
       (magit-insert-heading
-        (format "  %-16s %-12s " role
-                (+agent-shell-pstack-panel-member-agent member))
+        (format "    %s  %s  " (string-pad role (car widths))
+                (string-pad (format "%s" (+agent-shell-pstack-panel-member-agent
+                                          member))
+                            (cdr widths)))
         (+agent-shell-pstack-panels--member-badge member)
-        (+agent-shell-pstack-panels--member-note panel member))
-      (+agent-shell-pstack-panels--hint 4 section)
+        (if note (+agent-shell-pstack-panels--dim (concat "  " note)) ""))
       (when (and manifest
                  (eq 'delegate (+agent-shell-pstack-panel-member-kind member)))
         (let ((commits (+agent-shell-arena-git-delegate-commits
                         (+agent-shell-arena-git-manifest-delegate manifest))))
-          (+agent-shell-pstack-panels--line
-           4 nil "Branch: " (+agent-shell-arena-git-delegate-branch manifest)
+          (+agent-shell-pstack-panels--detail
+           6 "Branch" nil (+agent-shell-arena-git-delegate-branch manifest)
            (if commits
-               (format ", %d commit%s" (length commits)
-                       (if (cdr commits) "s" ""))
+               (+agent-shell-pstack-panels--dim
+                (format ", %d commit%s" (length commits)
+                        (if (cdr commits) "s" "")))
              ""))))
       (when-let* ((checkout (plist-get result :checkout)))
-        (+agent-shell-pstack-panels--line
-         4 checkout "Checkout: " (abbreviate-file-name checkout)))
-      ;; A heading noting nothing else names the report already.
+        (+agent-shell-pstack-panels--detail
+         6 "Checkout" checkout (abbreviate-file-name checkout)))
+      ;; Otherwise the heading already visits the report.
       (when (and report (or (+agent-shell-pstack-panel-member-capture member)
                             (+agent-shell-pstack-panel-remote panel)))
-        (+agent-shell-pstack-panels--line
-         4 report "Report: " (abbreviate-file-name report)))
-      ;; A heading noting nothing else names the shell already.
+        (+agent-shell-pstack-panels--detail
+         6 "Report" report (abbreviate-file-name report)))
+      ;; Otherwise the heading already visits the shell.
       (when (and (buffer-live-p shell)
                  (or report error (plist-get result :checkout)))
-        (+agent-shell-pstack-panels--line 4 shell "Shell: " (buffer-name shell)))
+        (+agent-shell-pstack-panels--detail 6 "Shell" shell (buffer-name shell)))
       (when (and (eq state 'running)
                  (plist-get (+agent-shell-pstack-panel-member-background member)
                             :asked))
         (+agent-shell-pstack-panels--line
-         4 nil "Asked to wait for the commands it left running"))
+         6 nil (+agent-shell-pstack-panels--dim
+                "Asked to wait for the commands it left running")))
       (when-let* ((survivors (plist-get result :survivors)))
         (+agent-shell-pstack-panels--line
-         4 nil (format "%d process%s outlived its stop: %s"
+         6 nil (format "%d process%s outlived its stop: %s"
                        (length survivors) (if (cdr survivors) "es" "")
                        (mapconcat #'number-to-string survivors " "))))
       (when error
         (+agent-shell-pstack-panels--lines
-         4 error (unless (eq state 'done) '+agent-shell-pstack-panels-error))))))
+         6 error (unless (eq state 'done) '+agent-shell-pstack-panels-error))))))
 
 (defun +agent-shell-pstack-panels--insert-workspace (panel)
   "Insert the section of PANEL's workspace, arena or checkout, if it has one."
   (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
     (let ((directory (+agent-shell-arena-git-manifest-directory manifest))
           (finished (eq (+agent-shell-pstack-panel-phase panel) 'finished))
-          (remote (+agent-shell-pstack-panel-remote panel)))
-      (magit-insert-section section (pstack-workspace)
+          (remote (+agent-shell-pstack-panel-remote panel))
+          (isolation (+agent-shell-pstack-panel--isolation panel)))
+      (magit-insert-section (pstack-workspace)
         (magit-insert-heading
-          (pcase (cond ((and directory (not (file-exists-p directory))) 'gone)
-                       ((and remote (+agent-shell-pstack-panel--delegate-p panel))
-                        'remote)
-                       (t (+agent-shell-pstack-panel--isolation panel)))
-            ('gone
-             (concat (if (+agent-shell-pstack-panel--isolation panel)
-                         "  Workspace: " "  Arena: ")
-                     (abbreviate-file-name directory) " (gone)"))
-            ('remote
-             (concat "  Workspace on host: "
-                     (if-let* ((arena (+agent-shell-arena-remote-arena remote)))
-                         (format ".../arenas/%s/%s" arena
-                                 (+agent-shell-pstack-panel-member-role
-                                  (car (+agent-shell-pstack-panel-members
-                                        panel))))
-                       "not made yet")))
-            ('branch
-             (concat "  Isolation: "
-                     (if finished
-                         (+agent-shell-pstack-panels--return manifest)
-                       "your checkout, on the delegate's branch; do not edit \
-or commit there until this finishes")))
-            (isolation
-             (concat (if isolation "  Workspace: " "  Arena: ")
-                     (if directory (abbreviate-file-name directory)
-                       "not made yet")))))
-        (+agent-shell-pstack-panels--hint 4 section)
+          "    "
+          (pcase-let
+              ((`(,label ,value)
+                (pcase (cond ((and directory (not (file-exists-p directory)))
+                              'gone)
+                             ((and remote
+                                   (+agent-shell-pstack-panel--delegate-p panel))
+                              'remote)
+                             (t isolation))
+                  ('gone
+                   (list (if isolation "Workspace" "Arena")
+                         (concat (abbreviate-file-name directory)
+                                 (+agent-shell-pstack-panels--dim " (gone)"))))
+                  ('remote
+                   (list "On host"
+                         (if-let* ((arena (+agent-shell-arena-remote-arena
+                                           remote)))
+                             (format ".../arenas/%s/%s" arena
+                                     (+agent-shell-pstack-panel-member-role
+                                      (car (+agent-shell-pstack-panel-members
+                                            panel))))
+                           "not made yet")))
+                  ('branch
+                   (list "Isolation"
+                         (if finished
+                             (+agent-shell-pstack-panels--return manifest)
+                           (propertize "your checkout, on the delegate's \
+branch; do not edit or commit there until this finishes"
+                                       'font-lock-face
+                                       '+agent-shell-pstack-panels-input))))
+                  (_
+                   (list (if isolation "Workspace" "Arena")
+                         (if directory (abbreviate-file-name directory)
+                           "not made yet"))))))
+            (concat (+agent-shell-pstack-panels--dim (format "%-10s " label))
+                    value)))
         (when remote
-          (+agent-shell-pstack-panels--line
-           4 nil "Host: " (+agent-shell-arena-remote-describe remote t)))))))
+          (+agent-shell-pstack-panels--detail
+           6 "Host" nil (+agent-shell-arena-remote-describe remote t)))))))
 
 (defun +agent-shell-pstack-panels--insert-followup (panel)
   "Insert the folded section of PANEL's follow-up, once it has one."
   (when-let* ((followup (+agent-shell-pstack-panel-followup panel)))
-    (magit-insert-section section (pstack-followup nil t)
+    (magit-insert-section (pstack-followup nil t)
       (magit-insert-heading
-        "  Follow-up: "
+        "    " (+agent-shell-pstack-panels--dim (format "%-10s " "Follow-up"))
         (if-let* ((at (+agent-shell-pstack-panel-delivered-at panel)))
             (format "delivered %s ago%s"
                     (+agent-shell-pstack-panels--age at)
@@ -552,77 +598,89 @@ or commit there until this finishes")))
                       ""))
           (if (+agent-shell-pstack-panel-delivered panel) "delivered"
             "waiting for the lead")))
-      (+agent-shell-pstack-panels--hint 4 section)
       (let ((lines (split-string (string-trim-right followup) "\n")))
         (+agent-shell-pstack-panels--lines
-         4 (string-join (seq-take lines 8) "\n"))
-        (when (nthcdr 8 lines)
+         6 (string-join (seq-take lines 2) "\n"))
+        (when (nthcdr 2 lines)
           (+agent-shell-pstack-panels--line
-           4 nil (format "... %d more lines" (- (length lines) 8))))))))
+           6 nil (+agent-shell-pstack-panels--dim
+                  (format "… %d more lines" (- (length lines) 2)))))))))
 
 (defun +agent-shell-pstack-panels--insert-panel (panel)
-  "Insert the section of PANEL."
-  (magit-insert-section section (pstack-panel (+agent-shell-pstack-panel-id
-                                               panel))
+  "Insert PANEL's card after a rule."
+  (insert (+agent-shell-pstack-panels--dim +agent-shell-pstack-panels--rule)
+          "\n")
+  (magit-insert-section (pstack-panel (+agent-shell-pstack-panel-id panel))
     (magit-insert-heading
       (+agent-shell-pstack-panels--badge panel)
-      (format "%s  " (or (+agent-shell-pstack-panel-shape panel) "-"))
-      (propertize (+agent-shell-pstack-panel-id panel) 'font-lock-face 'bold)
-      "  " (+agent-shell-pstack-panels--name
-            (+agent-shell-pstack-panel-lead panel))
-      "  " (+agent-shell-pstack-panels--age
-            (+agent-shell-pstack-panel-created panel))
-      (when (buffer-live-p (+agent-shell-pstack-panel-lead panel))
-        (format " · %s"
-                (+agent-shell-pstack-panel-display-status
-                 (+agent-shell-pstack-panel-lead panel)))))
-    (+agent-shell-pstack-panels--hint 2 section)
+      "  " (propertize (format "%s" (or (+agent-shell-pstack-panel-shape panel)
+                                        "request"))
+                       'font-lock-face 'bold)
+      " · " (+agent-shell-pstack-panels--name
+             (+agent-shell-pstack-panel-lead panel))
+      (+agent-shell-pstack-panels--dim
+       (concat " · " (+agent-shell-pstack-panels--age
+                      (+agent-shell-pstack-panel-created panel)))))
     (when-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
-      (+agent-shell-pstack-panels--lines 2 rejection
+      (+agent-shell-pstack-panels--lines 4 rejection
                                          '+agent-shell-pstack-panels-error))
     (when-let* ((reason (+agent-shell-pstack-panel-cancelled panel)))
-      (+agent-shell-pstack-panels--line 2 nil "Cancelled: " reason))
-    (dolist (member (+agent-shell-pstack-panel-members panel))
-      (+agent-shell-pstack-panels--insert-member panel member))
+      (+agent-shell-pstack-panels--detail 4 "Cancelled" nil reason))
+    (let* ((members (+agent-shell-pstack-panel-members panel))
+           (width (lambda (slot)
+                    (apply #'max 0 (mapcar (lambda (member)
+                                             (length (format "%s" (funcall slot
+                                                                           member))))
+                                           members))))
+           (widths (cons (funcall width #'+agent-shell-pstack-panel-member-role)
+                         (funcall width
+                                  #'+agent-shell-pstack-panel-member-agent))))
+      (dolist (member members)
+        (+agent-shell-pstack-panels--insert-member panel member widths)))
     (+agent-shell-pstack-panels--insert-workspace panel)
-    (+agent-shell-pstack-panels--insert-followup panel)
-    (insert "\n")))
+    (+agent-shell-pstack-panels--insert-followup panel)))
 
 (defun +agent-shell-pstack-panels--insert-records ()
   "Insert the section of branch-mode delegate records no panel holds."
   (when-let* ((manifests (+agent-shell-pstack-panel--interrupted)))
+    (insert (+agent-shell-pstack-panels--dim +agent-shell-pstack-panels--rule)
+            "\n")
     (magit-insert-section (pstack-records)
-      (magit-insert-heading "Records on disk with no live panel")
+      (magit-insert-heading
+        (propertize "Delegate records with no live panel" 'font-lock-face 'bold))
       (dolist (manifest manifests)
-        (let ((toplevel (+agent-shell-arena-git-manifest-toplevel manifest)))
-          (magit-insert-section section
+        (magit-insert-section
             (pstack-record (+agent-shell-arena-git-manifest-id manifest))
-            (magit-insert-heading
-              "  "
-              (propertize (+agent-shell-arena-git-manifest-id manifest)
-                          'font-lock-face 'bold)
-              (if (+agent-shell-arena-git-delegate-restore
-                   (+agent-shell-arena-git-manifest-delegate manifest))
-                  "  delegate  not returned"
-                "  delegate  interrupted"))
-            (+agent-shell-pstack-panels--hint 4 section)
-            (+agent-shell-pstack-panels--line
-             4 nil "Isolation: " (abbreviate-file-name toplevel) " is on "
-             (+agent-shell-arena-git-delegate-branch manifest)
-             "  " (+agent-shell-pstack-panels--return manifest))))))))
+          (magit-insert-heading
+            "    "
+            (propertize "✗ " 'font-lock-face '+agent-shell-pstack-panels-error)
+            (abbreviate-file-name
+             (+agent-shell-arena-git-manifest-toplevel manifest))
+            (+agent-shell-pstack-panels--dim
+             (if (+agent-shell-arena-git-delegate-restore
+                  (+agent-shell-arena-git-manifest-delegate manifest))
+                 " · delegate not returned"
+               " · delegate interrupted")))
+          (+agent-shell-pstack-panels--detail
+           6 "Branch" nil (+agent-shell-arena-git-delegate-branch manifest))
+          (+agent-shell-pstack-panels--detail
+           6 "Checkout" nil (+agent-shell-pstack-panels--return manifest)))))))
 
 (defun +agent-shell-pstack-panels--insert-requests ()
   "Insert a section per lead whose latest block started no panel."
   (maphash
    (lambda (lead _log)
      (when-let* ((entry (+agent-shell-pstack-panels--last-request lead)))
-       (magit-insert-section section (pstack-request lead)
+       (insert (+agent-shell-pstack-panels--dim +agent-shell-pstack-panels--rule)
+               "\n")
+       (magit-insert-section (pstack-request lead)
          (magit-insert-heading
-           (+agent-shell-pstack-panels--name lead) "  Last request: "
-           (propertize (+agent-shell-pstack-panel--log-outcome-text entry)
-                       'font-lock-face '+agent-shell-pstack-panels-error))
-         (+agent-shell-pstack-panels--hint 2 section)
-         (insert "\n"))))
+           (propertize "✗ NOT STARTED" 'font-lock-face
+                       '+agent-shell-pstack-panels-error)
+           "  " (+agent-shell-pstack-panels--name lead)
+           (+agent-shell-pstack-panels--dim
+            (concat " · " (+agent-shell-pstack-panel--log-outcome-text
+                           entry)))))))
    +agent-shell-pstack-panel--logs))
 
 ;;;; Stable point
@@ -671,13 +729,13 @@ or commit there until this finishes")))
         (positions (+agent-shell-pstack-panels--positions))
         (panels (+agent-shell-pstack-panels--sorted)))
     (erase-buffer)
-    (magit-insert-section section (pstack-panels)
-      (insert (+agent-shell-pstack-panels--summary panels))
-      (+agent-shell-pstack-panels--hint 0 section)
+    (magit-insert-section (pstack-panels)
+      (insert (+agent-shell-pstack-panels--summary panels) "\n")
+      (+agent-shell-pstack-panels--insert-actions)
       (insert "\n")
       (unless panels
         (insert "No panels yet.  A pstack lead requests one by ending its \
-message with a pstack-panel block.\n\n"))
+message with a pstack-panel block.\n"))
       (+agent-shell-pstack-panels--insert-requests)
       (mapc #'+agent-shell-pstack-panels--insert-panel panels)
       (+agent-shell-pstack-panels--insert-records))

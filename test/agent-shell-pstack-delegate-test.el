@@ -258,7 +258,7 @@ worktree of your own." branch)
                                (cdr (assq shell sent))))
         (should (string-search "commit your work with git"
                                (cdr (assq shell sent))))
-        (should (string-search "Workspace: "
+        (should (string-search "\n    Workspace  "
                                (with-current-buffer
                                    (+agent-shell-pstack-delegate-test--line
                                     "builder")
@@ -293,7 +293,7 @@ To merge: git merge --ff-only %s, or push it" base branch branch)
         (should (equal "main" (git "branch" "--show-current")))
         (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
           (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                                "Workspace:")
+                                "    Workspace  ")
             (+agent-shell-pstack-panels-clean)))
         (wait-for (lambda () (not (file-exists-p directory))))
         (should (equal "Add two.txt" (git "log" "-1" "--format=%s" branch)))
@@ -361,7 +361,7 @@ with :isolation branch, where the delegate works in the lead's own checkout")))
         (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))
         (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
           (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                                "Workspace:")
+                                "    Workspace  ")
             (+agent-shell-pstack-panels-clean)))
         (wait-for (lambda () (not (file-exists-p directory))))
         (should (file-exists-p (expand-file-name "deps/pkg/lib.el" repo)))))))
@@ -404,7 +404,7 @@ branch has all its commits." (followup)))
                      (apply message format args)))
                   ((symbol-function 'yes-or-no-p) (lambda (_) t)))
          (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                               "Workspace:")
+                               "    Workspace  ")
            (+agent-shell-pstack-panels-clean))
          (wait-for (lambda () messages)))
        (setq cleaned (car messages))
@@ -606,7 +606,7 @@ first.  Changed: loose.txt.\nNo panel started." (followup)))
       (should (string-search "do not edit or commit there"
                              (with-current-buffer
                                  (+agent-shell-pstack-delegate-test--line
-                                  "Isolation:")
+                                  "    Isolation  ")
                                (buffer-string))))
       (should (string-search
                "the delegate works in your checkout"
@@ -628,9 +628,10 @@ while it ran.  Your checkout was clean, so Emacs switched it back to main.\n"
       (should (equal "Add one.txt" (git "log" "-1" "--format=%s" branch)))
       (should-not (+agent-shell-arena-git-arenas))
       (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                            "Workspace:")
+                            "    Workspace  ")
         (should (string-search "(gone)" (thing-at-point 'line t)))
-        (should-not (string-search "x forgets" (buffer-string)))
+        (should-not (assoc "x" (+agent-shell-pstack-panels--actions
+                                (magit-current-section))))
         (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-no-commits-drops-branch ()
@@ -690,13 +691,13 @@ Commit or stash, then run git switch main." (followup)))
       (should (equal branch (git "branch" "--show-current")))
       (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
         (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                              "x switches it back to main")
+                              "not back on main yet")
           (+agent-shell-pstack-panels-clean))
         (accept-process-output nil 0.5)
         (should (equal branch (git "branch" "--show-current")))
         (delete-file (expand-file-name "loose.txt" repo))
         (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                              "x switches it back to main")
+                              "not back on main yet")
           (+agent-shell-pstack-panels-clean)))
       (wait-for (lambda () (equal "main" (git "branch" "--show-current"))))
       (wait-for (lambda () (not (+agent-shell-arena-git-arenas)))))))
@@ -711,7 +712,8 @@ Commit or stash, then run git switch main." (followup)))
       (should (equal branch (git "branch" "--show-current")))
       (let ((buffer (+agent-shell-pstack-delegate-test--line "interrupted")))
         (with-current-buffer buffer
-          (should (string-search (concat "is on " branch) (buffer-string)))
+          (should (string-search (concat "\n      Branch     " branch "\n")
+                                 (buffer-string)))
           (forward-line 1)
           (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
             (+agent-shell-pstack-panels-clean))))
@@ -798,8 +800,11 @@ You cancelled the panel." (followup)))
       (should (string-search "Emacs left your checkout there: Processes 4242 \
 outlived the delegate.  Once nothing runs there, press x" (followup)))
       (should (equal branch (git "branch" "--show-current")))
-      (+agent-shell-pstack-delegate-test--line
-       "Processes 4242 outlived the delegate.  (x switches it back to main)"))))
+      (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                            "Processes 4242 outlived the delegate")
+        (should (string-prefix-p "    Isolation  " (thing-at-point 'line t)))
+        (should (string-search "the delegate; not back on main yet"
+                               (thing-at-point 'line t)))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-commands-at-turn-end ()
   "Ask a delegate once to wait for commands it left running, then settle."

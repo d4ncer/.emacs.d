@@ -222,7 +222,7 @@ mode=agent-full-access branch=%s" branch)
                 (+agent-shell-pstack-panels)
                 (with-current-buffer "*pstack panels*"
                   (goto-char (point-min))
-                  (search-forward "Workspace:")
+                  (search-forward "    Workspace  ")
                   (+agent-shell-pstack-panels-clean))
                 (+agent-shell-pstack-delegate-acp-test--wait-for
                  (lambda () cleaned)))

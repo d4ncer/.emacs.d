@@ -3080,21 +3080,24 @@ counts as started."
 
 (defun +agent-shell-pstack-panel-display-status (&optional shell)
   "Return the user-facing status for SHELL, defaulting to this buffer.
-Return an In Panel string while a panel's follow-up has not started;
-otherwise return `agent-shell-status' unchanged.  Input readiness must
-continue to use `agent-shell-status' directly."
+Return \"panel (DONE/TOTAL)\" while a panel's follow-up has not
+started, counting the members of every such panel, or \"panel\" when
+none has members; the panels view has the details.  Otherwise return
+`agent-shell-status' unchanged.  Input readiness must continue to use
+`agent-shell-status' directly.  A killed SHELL has no status."
   (let* ((shell (or shell (current-buffer)))
-         (panels (+agent-shell-pstack-panel--waiting shell)))
-    (if panels
-        (format "In Panel%s (%s)"
-                (if (cdr panels) (format " [%d]" (length panels)) "")
-                (mapconcat (lambda (panel)
-                             (format "%s %s"
-                                     (or (+agent-shell-pstack-panel-shape panel)
-                                         'request)
-                                     (+agent-shell-pstack-panel-id panel)))
-                           panels "; "))
-      (agent-shell-status :shell-buffer shell))))
+         (panels (+agent-shell-pstack-panel--waiting shell))
+         (members (mapcan (lambda (panel)
+                            (copy-sequence
+                             (+agent-shell-pstack-panel-members panel)))
+                          panels)))
+    (cond (members
+           (format "panel (%d/%d)"
+                   (seq-count #'+agent-shell-pstack-panel--settled-p members)
+                   (length members)))
+          ;; A rejected request has no members, only its notice to deliver.
+          (panels "panel")
+          ((buffer-live-p shell) (agent-shell-status :shell-buffer shell)))))
 
 (defun +agent-shell-pstack-panel--ready-veto (shell _event)
   "Suppress a ready alert when SHELL's turn requested a panel."
@@ -3104,11 +3107,11 @@ continue to use `agent-shell-status' directly."
 
 (defface +agent-shell-pstack-panel-status
   '((t :inherit font-lock-keyword-face))
-  "Face for a lead's In Panel status."
+  "Face for a lead's panel status."
   :group '+agent-shell-pstack-panel)
 
 (defun +agent-shell-pstack-panel--status-text (&optional shell)
-  "Return SHELL's In Panel status in its face."
+  "Return SHELL's panel status in its face."
   (propertize (+agent-shell-pstack-panel-display-status shell)
               'face '+agent-shell-pstack-panel-status))
 
@@ -3153,7 +3156,7 @@ its status text ends at STATUS-END.  Columns are found by the faces
       (list start end (or status-end end)))))
 
 (defun +agent-shell-pstack-panel--switcher-candidates (candidates buffers)
-  "Return CANDIDATES for BUFFERS with In Panel statuses, or nil.
+  "Return CANDIDATES for BUFFERS with panel statuses, or nil.
 CANDIDATES are `agent-shell--read-shell-buffer' strings in BUFFERS
 order.  Waiting leads' statuses are replaced and every status column is
 padded to the widest.  Return nil when any candidate is unrecognized."
@@ -3180,7 +3183,7 @@ padded to the widest.  Return nil when any candidate is unrecognized."
      candidates columns statuses)))
 
 (defun +agent-shell-pstack-panel--read-shell-buffer (original &rest args)
-  "Show In Panel statuses in ORIGINAL's buffer selector, called with ARGS.
+  "Show panel statuses in ORIGINAL's buffer selector, called with ARGS.
 Rewrite only the status column of the candidates ORIGINAL passes to
 `completing-read'.  Call ORIGINAL unchanged when no lead waits, and
 leave its candidates unchanged when they are not recognized."
@@ -3213,39 +3216,32 @@ leave its candidates unchanged when they are not recognized."
 (defun +agent-shell-pstack-panel--mode-line-text (lead)
   "Return mode-line text for LEAD's running panels, or nil."
   (when-let* ((panels (+agent-shell-pstack-panel--waiting lead)))
-    (let ((members (mapcan (lambda (panel)
-                             (copy-sequence
-                              (+agent-shell-pstack-panel-members panel)))
-                           panels)))
-      (propertize
-       (format "%s %d/%d " (+agent-shell-pstack-panel-display-status lead)
-               (seq-count #'+agent-shell-pstack-panel--settled-p members)
-               (length members))
-       'face '+agent-shell-pstack-mode-line
-       'mouse-face 'mode-line-highlight
-       'local-map +agent-shell-pstack-panel--mode-line-map
-       'help-echo
-       (concat
-        (mapconcat
-         (lambda (panel)
-           (concat
-            (format "pstack panel %s (%s%s)"
-                    (+agent-shell-pstack-panel-id panel)
-                    (+agent-shell-pstack-panel-shape panel)
-                    (let ((phase (+agent-shell-pstack-panel-phase panel)))
-                      (if (eq phase 'running) "" (format ", %s" phase))))
-            (mapconcat
-             (lambda (member)
-               (format "\n  %s  %s  %s"
-                       (+agent-shell-pstack-panel-member-role member)
-                       (+agent-shell-pstack-panel-member-agent member)
-                       (+agent-shell-pstack-panel-member-state member)))
-             (+agent-shell-pstack-panel-members panel) "")
-            (when (eq (+agent-shell-pstack-panel--isolation panel) 'branch)
-              "\n  the delegate works in your checkout; do not edit or \
+    (propertize
+     (concat (+agent-shell-pstack-panel-display-status lead) " ")
+     'face '+agent-shell-pstack-mode-line
+     'mouse-face 'mode-line-highlight
+     'local-map +agent-shell-pstack-panel--mode-line-map
+     'help-echo
+     (concat
+      (mapconcat
+       (lambda (panel)
+         (concat
+          (format "pstack %s panel%s"
+                  (+agent-shell-pstack-panel-shape panel)
+                  (let ((phase (+agent-shell-pstack-panel-phase panel)))
+                    (if (eq phase 'running) "" (format " (%s)" phase))))
+          (mapconcat
+           (lambda (member)
+             (format "\n  %s  %s  %s"
+                     (+agent-shell-pstack-panel-member-role member)
+                     (+agent-shell-pstack-panel-member-agent member)
+                     (+agent-shell-pstack-panel-member-state member)))
+           (+agent-shell-pstack-panel-members panel) "")
+          (when (eq (+agent-shell-pstack-panel--isolation panel) 'branch)
+            "\n  the delegate works in your checkout; do not edit or \
 commit there until it finishes")))
-         panels "\n")
-        "\nmouse-1: show panels")))))
+       panels "\n")
+      "\nmouse-1: show panels"))))
 
 (defun +agent-shell-pstack-panel--update-mode-lines ()
   "Update the mode line of each lead whose panels changed."

@@ -262,7 +262,7 @@ lead=denied checkout=ok write=denied\n" report))
         (+agent-shell-pstack-panels)
         (with-current-buffer "*pstack panels*"
           (goto-char (point-min))
-          (search-forward "Arena:")
+          (search-forward "    Arena  ")
           (+agent-shell-pstack-panels-clean)))
       (+agent-shell-pstack-arena-acp-test--wait-for
        (lambda () (not (file-exists-p arena))))

@@ -411,7 +411,7 @@ snapshotted as commit %s on top of %s"
         (+agent-shell-pstack-panels)
         (with-current-buffer "*pstack panels*"
           (goto-char (point-min))
-          (search-forward "transcript (")
+          (search-forward "  transcript ")
           (+agent-shell-pstack-panels-visit))
         (with-current-buffer (+agent-shell-arena-remote--transcript-name remote)
           (should (derived-mode-p '+agent-shell-arena-remote-transcript-mode))
