@@ -301,11 +301,13 @@ TARGET is as `+agent-shell-pstack-panels--visit-target' takes it."
     ('pstack-workspace
      (when-let* ((panel (+agent-shell-pstack-panels--panel section))
                  (manifest (+agent-shell-pstack-panel-arena panel))
+                 (directory (+agent-shell-arena-git-manifest-directory manifest))
+                 ((file-exists-p directory))
                  (folder (if (eq 'branch (+agent-shell-pstack-panel--isolation
                                           panel))
                              (+agent-shell-arena-git-manifest-toplevel manifest)
-                           (+agent-shell-arena-git-manifest-directory
-                            manifest))))
+                           directory))
+                 ((file-directory-p folder)))
        (cons "folder" folder)))
     ('pstack-followup
      (cons "follow-up" (cons 'pstack-followup
@@ -504,9 +506,14 @@ workspace's list them, unless ALL."
           (remote (+agent-shell-pstack-panel-remote panel)))
       (magit-insert-section section (pstack-workspace)
         (magit-insert-heading
-          (pcase (if (and remote (+agent-shell-pstack-panel--delegate-p panel))
-                     'remote
-                   (+agent-shell-pstack-panel--isolation panel))
+          (pcase (cond ((and directory (not (file-exists-p directory))) 'gone)
+                       ((and remote (+agent-shell-pstack-panel--delegate-p panel))
+                        'remote)
+                       (t (+agent-shell-pstack-panel--isolation panel)))
+            ('gone
+             (concat (if (+agent-shell-pstack-panel--isolation panel)
+                         "  Workspace: " "  Arena: ")
+                     (abbreviate-file-name directory) " (gone)"))
             ('remote
              (concat "  Workspace on host: "
                      (if-let* ((arena (+agent-shell-arena-remote-arena remote)))

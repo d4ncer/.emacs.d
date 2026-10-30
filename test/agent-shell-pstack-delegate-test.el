@@ -628,7 +628,8 @@ while it ran.  Your checkout was clean, so Emacs switched it back to main.\n"
       (should (equal "Add one.txt" (git "log" "-1" "--format=%s" branch)))
       (should-not (+agent-shell-arena-git-arenas))
       (with-current-buffer (+agent-shell-pstack-delegate-test--line
-                            "Isolation: back on main")
+                            "Workspace:")
+        (should (string-search "(gone)" (thing-at-point 'line t)))
         (should-not (string-search "x forgets" (buffer-string)))
         (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)))))
 

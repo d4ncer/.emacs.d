@@ -2417,6 +2417,47 @@ workspace  \\? all keys$" (regexp-quote arena))
         (should-not (string-match-p "Arena:" (funcall text)))
         (kill-buffer view)))))
 
+(ert-deftest +agent-shell-pstack-panel-test-gone-workspace ()
+  "A missing workspace is gone and offers neither visit nor cleanup."
+  (+agent-shell-pstack-panel-test--with-arena
+    (finish "opus" "A")
+    (finish "codex" "B")
+    (+agent-shell-pstack-panel-test--drain)
+    (member-event "judge" :kind 'init-finished)
+    (member-event "judge" :kind 'turn-complete :text "Scores")
+    (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+           (folder (+agent-shell-arena-git-manifest-directory manifest)))
+      (should (+agent-shell-pstack-panels--cleanable-p panel))
+      (delete-directory folder t)
+      ;; A branch delegate's original checkout can still exist after its
+      ;; workspace record disappears.  It must not be offered as a target.
+      (should (file-directory-p
+               (+agent-shell-arena-git-manifest-toplevel manifest)))
+      (dolist (isolation '(nil worktree branch))
+        (setf (+agent-shell-arena-git-manifest-delegate manifest)
+              (when isolation
+                (+agent-shell-arena-git--delegate :isolation isolation)))
+        (save-window-excursion
+          (+agent-shell-pstack-panels)
+          (goto-char (point-min))
+          (search-forward (if isolation "Workspace:" "Arena:"))
+          (let ((section (magit-current-section)))
+            (should (eq 'pstack-workspace (oref section type)))
+            (should (string-search "(gone)"
+                                   (buffer-substring-no-properties
+                                    (line-beginning-position)
+                                    (line-end-position))))
+            (should-not (+agent-shell-pstack-panels--target section))
+            (should-not (+agent-shell-pstack-panels--cleanable-p panel))
+            (let ((actions (+agent-shell-pstack-panels--actions section)))
+              (should-not (assoc "RET" actions))
+              (should-not (assoc "x" actions)))
+            (should-error (+agent-shell-pstack-panels-visit) :type 'user-error)
+            (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)
+            (forward-line 1)
+            (should-not (string-search "RET" (thing-at-point 'line)))
+            (should-not (string-search "x clean" (thing-at-point 'line)))))))))
+
 (defun +agent-shell-pstack-panel-test--finish-how (member-event)
   "Finish the newest how panel's members through MEMBER-EVENT."
   (dolist (role '("data-flow" "risks"))
