@@ -188,7 +188,8 @@ runner made has RUNNER, a plist of :observer, called with each member
 and event of its, and :lease, returning a member's process lease.
 EXPIRES is the time its current phase's timer expires it.  CANCELLED is
 the reason it was cancelled before it finished, DELIVERED-AT when its
-follow-up reached its lead, and SEEN whether you have read that since;
+follow-up reached its lead, FOLLOWUP-STARTED whether the lead began it,
+and SEEN whether you have read that since;
 see `+agent-shell-pstack-panel-unread-p'."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
@@ -200,7 +201,7 @@ see `+agent-shell-pstack-panel-unread-p'."
   (measure-egress nil :documentation "Whether its members' egress is \
 recorded.")
   delegate-options identity runner expires cancelled delivered-at seen
-  (followup-started nil :documentation "Whether the lead began the follow-up."))
+  followup-started)
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")

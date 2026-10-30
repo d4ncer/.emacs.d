@@ -282,8 +282,8 @@ original libraries are loaded again afterwards."
                    (`(,manifest ,role ,delegate ,remote)
                     (+agent-shell-pstack-reload-test--attach panel)))
         (+agent-shell-pstack-reload-test--edit
-         dir '+agent-shell-pstack-panel "runner expires cancelled delivered-at seen)"
-         "runner expires cancelled delivered-at seen (carried 'fresh))")
+         dir '+agent-shell-pstack-panel "  followup-started)"
+         "  followup-started (carried 'fresh))")
         (+agent-shell-pstack-reload-test--edit
          dir '+agent-shell-arena-git "base roles sparse delegate)"
          "base roles sparse delegate (extra 7))")
