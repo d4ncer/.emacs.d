@@ -8,14 +8,18 @@
 
 (require 'cl-lib)
 
+(declare-function evil-normalize-keymaps "evil-core")
+
 (defvar +agent-shell-pstack-panel--panels)
 (defvar +agent-shell-pstack-panel--schema)
 (defvar +agent-shell-arena-remote--arenas)
+(defvar +config-root)
 
 (defconst +agent-shell-pstack-reload--libraries
   '(+agent-shell-sandbox +agent-shell-drive +agent-shell-arena-git
-    +agent-shell-egress +agent-shell-pstack +agent-shell-pstack-panel
-    +agent-shell-pstack-panels +agent-shell-arena-remote
+    +agent-shell-egress +agent-shell-egress-summary
+    +agent-shell-pstack +agent-shell-pstack-panel
+    +agent-shell-pstack-panels +agent-shell-pstack-card +agent-shell-arena-remote
     +agent-shell-pstack-arena-trace)
   "Pstack libraries in dependency order.")
 
@@ -34,6 +38,61 @@ The panel library's schema guard then leaves every panel alone.")
     (condition-case nil
         (list (eval (car standard) t))
       (error nil))))
+
+;;;; Keymaps and configuration
+
+(defun +agent-shell-pstack-reload--forms (file)
+  "Read the top-level forms in FILE's source, in order."
+  (with-temp-buffer
+    (insert-file-contents (concat (file-name-sans-extension file) ".el"))
+    (let (forms)
+      (condition-case nil
+          (while t (push (read (current-buffer)) forms))
+        (end-of-file nil))
+      (nreverse forms))))
+
+(defun +agent-shell-pstack-reload--makes-keymap-p (form)
+  "Return non-nil if FORM contains a keymap constructor."
+  (and (consp form)
+       (or (memq (car form) '(define-keymap make-sparse-keymap))
+           (and (not (memq (car form) '(quote function)))
+                (cl-some #'+agent-shell-pstack-reload--makes-keymap-p form)))))
+
+(defun +agent-shell-pstack-reload--keymaps (file)
+  "Rebuild FILE's declared keymaps in place; return their count.
+Keep an established parent when the initializer does not supply one.
+Buffers, child maps and text properties retain their map references."
+  (let ((count 0))
+    (dolist (form (+agent-shell-pstack-reload--forms file))
+      (when (eq (car-safe form) 'defvar-keymap)
+        (setq form (macroexpand-1 form))
+        (when (eq (car form) 'progn)
+          (setq form (cadr form))))
+      (when (and (eq (car-safe form) 'defvar)
+                 (+agent-shell-pstack-reload--makes-keymap-p (caddr form)))
+        (let* ((symbol (cadr form))
+               (map (and (boundp symbol) (symbol-value symbol)))
+               (new (eval (caddr form) t)))
+          (when (and (keymapp map) (keymapp new))
+            (let ((parent (or (keymap-parent new) (keymap-parent map))))
+              (setcdr map (cdr new))
+              (set-keymap-parent map parent))
+            (cl-incf count)))))
+    count))
+
+(defun +agent-shell-pstack-reload--configure (libraries)
+  "Re-evaluate mod-ai declarations for LIBRARIES; return their count."
+  (let ((file (expand-file-name
+               "modules/mod-ai.el"
+               (or (bound-and-true-p +config-root) user-emacs-directory)))
+        (count 0))
+    (when (file-readable-p file)
+      (dolist (form (+agent-shell-pstack-reload--forms file))
+        (when (and (eq (car-safe form) 'use-package)
+                   (assq (cadr form) libraries))
+          (eval form t)
+          (cl-incf count))))
+    count))
 
 ;;;; Carrying panels
 
@@ -244,10 +303,13 @@ Adopt changed option defaults only where the live value still equals the
 old default.  Preserve minor modes.  Carry every panel and remote record
 over to the new struct layouts by slot name, and refuse to load anything
 when an unfinished panel holds a slot the new code removes.  Options
-whose standard values cannot be evaluated are left alone."
+whose standard values cannot be evaluated are left alone.  Rebuild declared
+keymaps in place and re-run the loaded libraries' mod-ai declarations."
   (interactive)
   (let (libraries options modes reset layouts snapshots
         (carried 0)
+        (keymaps 0)
+        (configured 0)
         (load-prefer-newer t))
     (dolist (feature +agent-shell-pstack-reload--libraries)
       (when (featurep feature)
@@ -286,7 +348,9 @@ running panel%s %s; retry after %s"
     (unwind-protect
         (let ((+agent-shell-pstack-reload--carrying t))
           (dolist (library libraries)
-            (load (file-name-sans-extension (cadr library)) nil t))
+            (load (file-name-sans-extension (cadr library)) nil t)
+            (cl-incf keymaps
+                     (+agent-shell-pstack-reload--keymaps (cadr library))))
           (setq carried (+agent-shell-pstack-reload--carry snapshots))
           (dolist (option options)
             (let ((symbol (car option))
@@ -298,16 +362,24 @@ running panel%s %s; retry after %s"
                 (when-let* ((new (+agent-shell-pstack-reload--default symbol)))
                   (unless (equal old (car new))
                     (custom-reevaluate-setting symbol)
-                    (push symbol reset)))))))
+                    (push symbol reset))))))
+          (setq configured (+agent-shell-pstack-reload--configure libraries))
+          (when (featurep 'evil)
+            (dolist (buffer (buffer-list))
+              (with-current-buffer buffer
+                (when (bound-and-true-p evil-local-mode)
+                  (evil-normalize-keymaps))))))
       (dolist (mode modes)
         (unless (default-value mode)
           (funcall mode 1))))
     (message "pstack: reloaded %d libraries (%s); options reset: %s; \
+keymaps rebuilt: %d; config forms re-run: %d; \
 carried over %d pstack panel%s"
              (length libraries)
              (if libraries (mapconcat (lambda (entry) (symbol-name (car entry)))
                                       libraries ", ") "none")
              (if reset (mapconcat #'symbol-name (nreverse reset) ", ") "none")
+             keymaps configured
              carried (if (= carried 1) "" "s"))))
 
 (provide '+agent-shell-pstack-reload)

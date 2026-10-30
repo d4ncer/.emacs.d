@@ -8,6 +8,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require 'bytecomp)
+(require 'config-test-support)
 (require '+agent-shell-pstack-reload)
 (require '+agent-shell-arena-remote)
 (require 'agent-shell-pstack-panel-test)
@@ -16,6 +17,7 @@
   "Run BODY with temporary libraries under `dir' and isolated load state."
   (declare (indent 0))
   `(let* ((dir (make-temp-file "pstack-reload-" t))
+          (+config-root dir)
           (load-path (cons dir load-path))
           (load-history (copy-tree load-history))
           (minor-mode-list (copy-sequence minor-mode-list))
@@ -216,6 +218,175 @@
       (+agent-shell-pstack-reload)
       (should (= (symbol-value '+reload-fixture-option) 2)))))
 
+(ert-deftest +agent-shell-pstack-reload-test-keymap-in-live-buffer ()
+  "Add and remove keys while preserving live maps and their parent links."
+  (+agent-shell-pstack-reload-test--with-libraries
+    (let ((mode '(define-derived-mode +reload-fixture-mode special-mode
+                   "Reload" "A reloadable mode.")))
+      (+agent-shell-pstack-reload-test--write
+       dir '+reload-fixture-first
+       '(defvar-keymap +reload-fixture-parent "z" #'forward-char)
+       '(defvar-keymap +reload-fixture-mode-map
+          :parent +reload-fixture-parent "a" #'ignore "C-c a" #'ignore)
+       mode)
+      (require '+reload-fixture-first)
+      (let* ((map (symbol-value '+reload-fixture-mode-map))
+             (parent (keymap-parent map))
+             (child (make-sparse-keymap)))
+        (set-keymap-parent child map)
+        (with-temp-buffer
+          (funcall '+reload-fixture-mode)
+          (should (eq (key-binding "a") #'ignore))
+          (+agent-shell-pstack-reload-test--write
+           dir '+reload-fixture-first
+           '(defvar-keymap +reload-fixture-mode-map
+              :parent +reload-fixture-parent "D" #'forward-line)
+           mode)
+          (let ((summary (+agent-shell-pstack-reload)))
+            (should (string-match-p "keymaps rebuilt: 1" summary)))
+          (should (eq map (current-local-map)))
+          (should (eq map (symbol-value '+reload-fixture-mode-map)))
+          (should (eq map (keymap-parent child)))
+          (should (eq parent (keymap-parent map)))
+          (should (eq (key-binding "D") #'forward-line))
+          (should (eq (lookup-key child "D") #'forward-line))
+          (should (eq (key-binding "z") #'forward-char))
+          (should-not (lookup-key map "a"))
+          (should-not (lookup-key map (kbd "C-c")))
+          (+agent-shell-pstack-reload-test--write
+           dir '+reload-fixture-first
+           '(defvar-keymap +reload-fixture-mode-map "a" #'ignore) mode)
+          (+agent-shell-pstack-reload)
+          (should (eq parent (keymap-parent map)))
+          (should-not (lookup-key map "D"))
+          (should (eq (key-binding "a") #'ignore)))))))
+
+(ert-deftest +agent-shell-pstack-reload-test-defvar-keymaps ()
+  "Rebuild both direct and let-bound keymap constructors."
+  (dolist (initializer '((define-keymap "a" #'ignore)
+                         (let ((map (make-sparse-keymap)))
+                           (define-key map "a" #'ignore)
+                           map)))
+    (+agent-shell-pstack-reload-test--with-libraries
+      (+agent-shell-pstack-reload-test--write
+       dir '+reload-fixture-first
+       `(defvar +reload-fixture-map ,initializer))
+      (require '+reload-fixture-first)
+      (let ((map (symbol-value '+reload-fixture-map)))
+        (+agent-shell-pstack-reload-test--write
+         dir '+reload-fixture-first
+         '(defvar +reload-fixture-map (define-keymap "b" #'forward-char)))
+        (+agent-shell-pstack-reload)
+        (should (eq map (symbol-value '+reload-fixture-map)))
+        (should-not (lookup-key map "a"))
+        (should (eq (lookup-key map "b") #'forward-char))))))
+
+(defun +agent-shell-pstack-reload-test--module (directory &rest forms)
+  "Write a temporary mod-ai in DIRECTORY containing FORMS."
+  (let ((modules (expand-file-name "modules" directory)))
+    (make-directory modules t)
+    (apply #'+agent-shell-pstack-reload-test--write modules 'mod-ai forms)))
+
+(ert-deftest +agent-shell-pstack-reload-test-config-bindings ()
+  "Replay real General bindings and config, leaving other declarations alone."
+  (+agent-shell-pstack-reload-test--with-libraries
+    (let* ((evil (require 'evil nil t))
+           (declaration
+            `(use-package +reload-fixture-first
+               :ensure nil :demand t
+               :general
+               (:states ,(and evil ''(normal motion))
+                :keymaps (list '+reload-fixture-mode-map)
+                (concat "D") (symbol-value '+reload-fixture-command))
+               :config
+               (setf (alist-get 'fixture +reload-fixture-profiles) 'first)
+               (add-hook '+reload-fixture-hook #'ignore)))
+           (changed (cl-subst '(concat "X") '(concat "D") declaration
+                              :test #'equal)))
+      (+agent-shell-pstack-reload-test--write
+       dir '+reload-fixture-first
+       '(defvar-keymap +reload-fixture-mode-map)
+       '(define-derived-mode +reload-fixture-mode special-mode
+          "Reload" "A reloadable mode.")
+       '(defvar +reload-fixture-command 'ignore)
+       '(defvar +reload-fixture-profiles nil)
+       '(defvar +reload-fixture-hook nil))
+      (require '+reload-fixture-first)
+      (+agent-shell-pstack-reload-test--write
+       dir '+reload-fixture-second
+       '(setq +reload-fixture-unloaded t))
+      (setq changed (cl-subst ''second ''first changed :test #'equal))
+      (+agent-shell-pstack-reload-test--module
+       dir declaration
+       '(use-package +reload-fixture-second
+          :ensure nil :demand t
+          :init (setq +reload-fixture-unloaded-config t))
+       '(use-package +reload-fixture-unrelated
+          :ensure nil :init (setq +reload-fixture-unrelated-config t))
+       '(error "Unrelated top-level form ran"))
+      (with-temp-buffer
+        (funcall '+reload-fixture-mode)
+        (when evil
+          (funcall 'evil-local-mode 1)
+          (funcall 'evil-normal-state))
+        (+agent-shell-pstack-reload)
+        (should-not (featurep '+reload-fixture-second))
+        (should-not (boundp '+reload-fixture-unloaded-config))
+        (should-not (boundp '+reload-fixture-unrelated-config))
+        (should (eq (key-binding "D") #'ignore))
+        (should (equal (symbol-value '+reload-fixture-profiles)
+                       '((fixture . first))))
+        (set '+reload-fixture-command #'forward-char)
+        (+agent-shell-pstack-reload-test--module dir changed)
+        (let ((summary (+agent-shell-pstack-reload)))
+          (should (string-match-p "config forms re-run: 1" summary)))
+        (should (eq (key-binding "X") #'forward-char))
+        (should-not
+         (lookup-key (if evil
+                         (funcall 'evil-get-auxiliary-keymap
+                                  (current-local-map) 'normal)
+                       (current-local-map))
+                     "D"))
+        (when evil
+          (funcall 'evil-motion-state)
+          (should (eq (key-binding "X") #'forward-char)))
+        (should (equal (symbol-value '+reload-fixture-profiles)
+                       '((fixture . second))))
+        (let ((profiles (copy-tree (symbol-value '+reload-fixture-profiles)))
+              (hook (copy-sequence (symbol-value '+reload-fixture-hook))))
+          (+agent-shell-pstack-reload)
+          (should (equal profiles (symbol-value '+reload-fixture-profiles)))
+          (should (equal hook (symbol-value '+reload-fixture-hook)))
+          (should (equal hook '(ignore)))
+          (should (eq (key-binding "X") #'forward-char)))))))
+
+(ert-deftest +agent-shell-pstack-reload-test-card-config-idempotent ()
+  "Replaying the real card declaration keeps its mode, hooks and bindings."
+  (require '+agent-shell-pstack-card)
+  (let ((+config-root +config-test-root)
+        (+agent-shell-pstack-card-mode nil)
+        (+agent-shell-pstack-card-map (make-sparse-keymap))
+        (agent-shell-markdown-render-functions nil)
+        (+agent-shell-pstack-panel-change-hook nil)
+        (global-minor-modes (copy-sequence global-minor-modes))
+        (libraries '((+agent-shell-pstack-card))))
+    (should (= 1 (+agent-shell-pstack-reload--configure libraries)))
+    (should +agent-shell-pstack-card-mode)
+    (should (equal agent-shell-markdown-render-functions
+                   '(+agent-shell-pstack-card--render-hook)))
+    (should (equal +agent-shell-pstack-panel-change-hook
+                   '(+agent-shell-pstack-card--update-buffers)))
+    (should (eq (lookup-key +agent-shell-pstack-card-map (kbd "RET"))
+                #'+agent-shell-pstack-card-toggle-source))
+    (let ((map (copy-keymap +agent-shell-pstack-card-map))
+          (render (copy-sequence agent-shell-markdown-render-functions))
+          (change (copy-sequence +agent-shell-pstack-panel-change-hook)))
+      (should (= 1 (+agent-shell-pstack-reload--configure libraries)))
+      (should +agent-shell-pstack-card-mode)
+      (should (equal map +agent-shell-pstack-card-map))
+      (should (equal render agent-shell-markdown-render-functions))
+      (should (equal change +agent-shell-pstack-panel-change-hook)))))
+
 ;;;; Carrying panels
 
 (defmacro +agent-shell-pstack-reload-test--with-copies (&rest body)
@@ -224,6 +395,7 @@ BODY sees `dir', which holds the copies, and an empty remote table.  The
 original libraries are loaded again afterwards."
   (declare (indent 0))
   `(let* ((dir (make-temp-file "pstack-reload-copies-" t))
+          (+config-root dir)
           (features '(+agent-shell-arena-git +agent-shell-pstack-panel))
           (originals (mapcar (lambda (feature)
                                (locate-library
