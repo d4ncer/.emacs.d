@@ -309,6 +309,29 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
         '(:delegate (:link ("elpaca"))))
   (+agent-shell-pstack-panel-mode 1))
 
+(use-package +agent-shell-plans
+  :ensure nil
+  :after agent-shell
+  :demand t
+  :general
+  (:keymaps 'agent-shell-mode-map
+   "C-c L" '(+agent-shell-plans :wk "agent plans"))
+  (:states '(normal motion) :keymaps '+agent-shell-plans-mode-map
+   "RET" #'+agent-shell-plans-visit
+   "<return>" #'+agent-shell-plans-visit
+   "TAB" #'magit-section-toggle
+   "<tab>" #'magit-section-toggle
+   "n" #'magit-section-forward
+   "p" #'magit-section-backward
+   "C-n" #'magit-section-forward
+   "C-p" #'magit-section-backward
+   "M-n" #'magit-section-forward-sibling
+   "M-p" #'magit-section-backward-sibling
+   "^" #'magit-section-up
+   "g" #'revert-buffer
+   "q" #'quit-window
+   "?" '(+agent-shell-plans-keys :wk "keys here")))
+
 (use-package +agent-shell-arena-remote
   :ensure nil
   :after +agent-shell-pstack-panel

@@ -13,7 +13,7 @@ single-harness port cannot, while upstream text stays untouched.
 | 0. Skills in agents | Done | pstack installed in Claude Code and Codex |
 | 1. Sticky mode and guard | Done | `+agent-shell-pstack-mode`, `+agent-shell-pstack-guard-mode` |
 | 2. Cross-vendor panels | Done | `how` and `interrogate` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees, here or on a remote host |
-| 3. Views | Partial | Panel status buffer; decision trail and plan views are planned |
+| 3. Views | Partial | Live panels and agent plans views; decision trail is planned |
 
 ## Layer 0: install the skills
 
@@ -749,8 +749,7 @@ forgets every finished panel whose follow-up was delivered; panels still
 holding a workspace, checkout or branch record are listed in one question,
 then cleaned as `x` would and forgotten, or kept. Reports stay on disk. `g`
 redraws, as every panel change does, keeping each window on its section
-and column and keeping what was folded. The decision trail and plan views
-are planned.
+and column and keeping what was folded. The decision trail is planned.
 
 If a lead's latest turn contains a block that starts no panel, `C-c P`
 shows a **Last request** section with the outcome. Press `l` there or in a
@@ -772,6 +771,26 @@ view. No status names a panel id.
 Member shells stay out of `agent-shell-buffers`, so
 `agent-shell-switch-buffer`, project reuse through `SPC p a` and the agent
 projects author picker never offer them. Reach them from the panels view.
+
+### Agent plans
+
+`C-c L` in an agent shell opens `+agent-shell-plans`. The capital `L`, for
+the list of plans, is free in agent-shell and this configuration. It sits
+alongside `C-c P` and avoids agent-shell's existing control chords.
+
+The summary counts plans by state (working, pending, done) and the live
+shells without one, panel members included. Only shells with plans get cards. Working plans come first, then
+pending and completed plans, with the latest update first within each state.
+Each heading shows the state, shell name, completed and total entry counts,
+and the current step. Cards start folded. `TAB` reveals the first five
+entries and a folded `… N more` section for the remainder. Each entry shows
+its state and text, including Codex's `step` entries.
+
+`RET` visits the shell, `n` and `p` move between sections, `g` refreshes,
+`q` quits, and `?` lists the keys at point. Redraws keep point, window
+positions, and folds. ACP plan updates replace the shell's stored plan and
+debounce redraws. Killing a shell forgets its plan. Recording starts when
+agent-shell loads; Magit sections load when the view first opens.
 
 ## Non-goals
 
