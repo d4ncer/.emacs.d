@@ -3063,14 +3063,19 @@ exited mid-run."
   "<mode-line> <mouse-1>" #'+agent-shell-pstack-panels)
 
 (defun +agent-shell-pstack-panel--waiting (lead)
-  "Return LEAD's panels whose follow-ups have not started."
+  "Return LEAD's panels whose follow-ups have not started.
+A follow-up delivered with no delivery time predates this tracking and
+counts as started."
   (when (and +agent-shell-pstack-panel-mode
              (buffer-live-p lead)
              (buffer-local-value '+agent-shell-pstack-mode lead))
     (seq-filter
      (lambda (panel)
        (and (eq lead (+agent-shell-pstack-panel-lead panel))
-            (not (+agent-shell-pstack-panel-followup-started panel))))
+            (not (+agent-shell-pstack-panel-followup-started panel))
+            (not (and (+agent-shell-pstack-panel-delivered panel)
+                      (null (+agent-shell-pstack-panel-delivered-at
+                             panel))))))
      (+agent-shell-pstack-panel-list))))
 
 (defun +agent-shell-pstack-panel-display-status (&optional shell)

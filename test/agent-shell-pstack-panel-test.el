@@ -999,6 +999,11 @@ the panel\\.$"
           (should (+agent-shell-pstack-panel-delivered panel))
           (should (equal status (+agent-shell-pstack-panel-display-status lead)))
           (+agent-shell-pstack-panel-test--displays lead status)
+          ;; One delivered before delivery times were kept has started.
+          (let ((at (+agent-shell-pstack-panel-delivered-at panel)))
+            (setf (+agent-shell-pstack-panel-delivered-at panel) nil)
+            (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
+            (setf (+agent-shell-pstack-panel-delivered-at panel) at))
           (lead-event :kind 'input-submitted)
           (agent-shell-notify--handle lead '((:event . input-submitted)))
           (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
