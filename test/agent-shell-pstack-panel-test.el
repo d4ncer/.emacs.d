@@ -9,6 +9,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-pstack-panel nil t)
+(require '+agent-shell-pstack-panels nil t)
 (require '+agent-shell-egress)
 (require '+agent-shell-pstack-reload)
 (require 'agent-shell-sandbox-test)
@@ -210,6 +211,8 @@ lists the roles whose result equals the base."
                    (delete-directory folder t)))))
            (dolist (entry started)
              (when (buffer-live-p (cadr entry)) (kill-buffer (cadr entry))))
+           (when-let* ((view (get-buffer "*pstack panels*")))
+             (kill-buffer view))
            (kill-buffer lead)
            (delete-directory directory t)
            (delete-directory arenas t)
@@ -765,13 +768,22 @@ high signal." followup))))))
           (+agent-shell-pstack-panels-mode)
           (+agent-shell-pstack-panels--render)
           (goto-char (point-min))
+          (should-error (+agent-shell-pstack-panels-cancel) :type 'user-error)
+          (search-forward "risks")
           (+agent-shell-pstack-panels-cancel)
           (should (equal '(error error)
                          (+agent-shell-pstack-panel-test--states panel)))
           (should (string-match-p "## data-flow (codex): error\nYou \
 cancelled the panel." (cdar sent)))
+          (should (equal "You cancelled the panel."
+                         (+agent-shell-pstack-panel-cancelled panel)))
           (+agent-shell-pstack-panels--render)
+          (should (string-match-p
+                   "^\\[cancelled\\] how .*\n.*\n  Cancelled: You cancelled \
+the panel\\.$"
+                   (buffer-string)))
           (goto-char (point-min))
+          (search-forward "risks")
           (should-error (+agent-shell-pstack-panels-cancel)
                         :type 'user-error))))))
 
@@ -833,14 +845,16 @@ cancelled the panel." (cdar sent)))
         (should-not (gethash (cons 'pstack-lead lead) handlers))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-view ()
-  "List panels with member states, refresh on change, and visit targets."
+  "List panels as sections with member states, refresh on change, and visit."
   (+agent-shell-pstack-panel-test--with
     (save-window-excursion
       (+agent-shell-pstack-panels)
       (let ((view (current-buffer)))
         (should (equal +agent-shell-pstack-panels--buffer (buffer-name view)))
         (should buffer-read-only)
-        (should (string-prefix-p "No panels yet." (buffer-string)))
+        (should (derived-mode-p 'magit-section-mode))
+        (should (string-match-p "\\`pstack panels  none\n.*\n\nNo panels yet\\."
+                                (buffer-string)))
         (lead-event :kind 'turn-complete :session "s2"
                     :text (+agent-shell-pstack-panel-test--message "{}"))
         (lead-event :kind 'turn-complete :session "s1"
@@ -851,30 +865,42 @@ cancelled the panel." (cdar sent)))
                (codex (nth 1 (nth 0 started)))
                (claude (nth 1 (nth 1 started)))
                (rejected (+agent-shell-pstack-panel-id
-                          (car (+agent-shell-pstack-panel-list)))))
-          (should (equal (format "%s  -  rejected
-  Lead:  *lead*
+                          (car (+agent-shell-pstack-panel-list))))
+               (text (lambda () (with-current-buffer view
+                                  (buffer-substring-no-properties
+                                   (point-min) (point-max))))))
+          (should (string-match-p
+                   (format "\\`pstack panels  1 error, 1 running
+.*
+
+\\[error: rejected\\] -  %s   \\*lead\\*  [0-9]+s
+  RET visit lead  l request log  \\? all keys
   The block must hold a JSON object
-
-%s  how  running
-  Lead:  *lead*
+  Follow-up: delivered [0-9]+s ago, unread
+" rejected)
+                   (funcall text)))
+          (should (string-match-p
+                   (format "^\\[running\\] how  %s   \\*lead\\*  [0-9]+s
+  RET visit lead  c cancel the panel  l request log  \\? all keys
   data-flow        codex        starting  %s
+    RET visit shell  \\? all keys
   risks            claude-code  starting  %s
-
-" rejected id (buffer-name codex) (buffer-name claude))
-                         (with-current-buffer view (buffer-string))))
+    RET visit shell  \\? all keys
+" id (regexp-quote (buffer-name codex)) (regexp-quote (buffer-name claude)))
+                   (funcall text)))
           (member-event "data-flow" :kind 'init-finished)
           (member-event "data-flow" :kind 'turn-complete :text "Report A")
           (let ((report (expand-file-name (format "%s/data-flow.md" id)
                                           directory)))
+            (should (string-search
+                     (format "data-flow        codex        done      %s"
+                             (abbreviate-file-name report))
+                     (funcall text)))
             (with-current-buffer view
               (goto-char (point-min))
-              (should (search-forward
-                       (format "data-flow        codex        done      %s"
-                               (abbreviate-file-name report))))
-              (should (search-forward "risks            claude-code  starting"))
-              (goto-char (point-min))
               (search-forward "data-flow")
+              (should (eq 'pstack-member
+                          (oref (magit-current-section) type)))
               (+agent-shell-pstack-panels-visit)
               (should (equal report buffer-file-name))
               (kill-buffer))
@@ -885,7 +911,7 @@ cancelled the panel." (cdar sent)))
               (should (eq claude (current-buffer))))
             (with-current-buffer view
               (goto-char (point-min))
-              (search-forward "Lead:")
+              (search-forward (concat "how  " id))
               (+agent-shell-pstack-panels-visit)
               (should (eq lead (current-buffer))))))
         (kill-buffer view)))))
@@ -1304,9 +1330,10 @@ Their timer starts then too, and the judge stays pending."
       (should (equal (list cwd) bases))
       (should-not started)
       (should-not (+agent-shell-pstack-panel-timer panel))
-      (should (string-match-p (format "%s  arena  preparing"
+      (should (string-match-p (format "^\\[running: preparing\\] arena  %s"
                                       (+agent-shell-pstack-panel-id panel))
                               (with-temp-buffer
+                                (+agent-shell-pstack-panels-mode)
                                 (+agent-shell-pstack-panels--render)
                                 (buffer-string))))
       (+agent-shell-pstack-panel-test--drain)
@@ -2190,8 +2217,10 @@ codex unavailable (%s), judge unavailable (%s); records: %s\\.\\'"
                      (+agent-shell-arena-git-manifest-directory manifest)))
              (answers nil)
              (text (lambda () (with-current-buffer view (buffer-string)))))
-        (should (string-match-p (format "^%s  arena  candidates$" id)
-                                (funcall text)))
+        (should (string-match-p
+                 (format "^\\[running: candidates\\] arena  %s .*\n  RET visit \
+lead  c cancel the panel  l request log  \\? all keys$" id)
+                 (funcall text)))
         (should (string-match-p (format "^  Arena: %s$" (regexp-quote arena))
                                 (funcall text)))
         (should (string-match-p (format "pstack panel %s (arena, candidates)"
@@ -2211,12 +2240,13 @@ not started$" (funcall text)))
         (+agent-shell-pstack-panel-test--drain)
         (should (string-match-p "^  opus             claude-code  done      \
 captured commit-opus$" (funcall text)))
-        (should (string-match-p (format "^%s  arena  judging$" id)
+        (should (string-match-p (format "^\\[judging\\] arena  %s " id)
                                 (funcall text)))
         (member-event "judge" :kind 'init-finished)
         (member-event "judge" :kind 'turn-complete :text "Scores")
         (should (string-match-p
-                 (format "^  Arena: %s  (x cleans it up)$" (regexp-quote arena))
+                 (format "^  Arena: %s\n    RET visit folder  x clean up its \
+workspace  \\? all keys$" (regexp-quote arena))
                  (funcall text)))
         (cl-letf (((symbol-function 'yes-or-no-p)
                    (lambda (prompt) (push prompt answers) nil)))
@@ -2229,12 +2259,227 @@ captured commit-opus$" (funcall text)))
         (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
           (with-current-buffer view
             (goto-char (point-min))
-            (search-forward "Lead:")
+            (search-forward (concat "arena  " id))
             (+agent-shell-pstack-panels-clean)))
         (should (equal (list manifest) cleaned))
         (should-not (+agent-shell-pstack-panel-arena panel))
         (should-not (string-match-p "Arena:" (funcall text)))
         (kill-buffer view)))))
+
+(defun +agent-shell-pstack-panel-test--finish-how (member-event)
+  "Finish the newest how panel's members through MEMBER-EVENT."
+  (dolist (role '("data-flow" "risks"))
+    (funcall member-event role :kind 'init-finished)
+    (funcall member-event role :kind 'turn-complete :text (concat "Report "
+                                                                  role))))
+
+(defun +agent-shell-pstack-panel-test--heading (id)
+  "Return the start of panel ID's heading in the current buffer, or nil."
+  (save-excursion
+    (goto-char (point-min))
+    (when (re-search-forward (concat "^\\[.*" (regexp-quote id)) nil t)
+      (line-beginning-position))))
+
+(ert-deftest +agent-shell-pstack-panel-test-view-summary ()
+  "Count panels by status on the first line, the most urgent first."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (+agent-shell-pstack-panel-test--finish-how #'member-event)
+      (let ((finished (car (+agent-shell-pstack-panel-list))))
+        (should (+agent-shell-pstack-panel-delivered finished))
+        (lead-event :kind 'turn-complete :session "s2"
+                    :text (+agent-shell-pstack-panel-test--message "{}"))
+        (lead-event :kind 'turn-complete :session "s3"
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--how))
+        (+agent-shell-pstack-panels)
+        (let* ((running (car (last (+agent-shell-pstack-panel-list))))
+               (rejected (seq-find #'+agent-shell-pstack-panel-rejection
+                                   (+agent-shell-pstack-panel-list)))
+               (starts (mapcar (lambda (panel)
+                                 (+agent-shell-pstack-panel-test--heading
+                                  (+agent-shell-pstack-panel-id panel)))
+                               (list finished rejected running))))
+          (goto-char (point-min))
+          (should (equal "pstack panels  1 needs input, 1 error, 1 running"
+                         (buffer-substring-no-properties
+                          (point-min) (line-end-position))))
+          (should (eq '+agent-shell-pstack-panels-input
+                      (get-text-property (search-forward "1 needs")
+                                         'font-lock-face)))
+          (should (apply #'< starts))
+          (goto-char (car starts))
+          (should (looking-at-p "\\[needs input\\] how "))
+          (should (eq '+agent-shell-pstack-panels-input
+                      (get-text-property (point) 'font-lock-face)))
+          (+agent-shell-pstack-panels-visit)
+          (should (eq lead (current-buffer)))
+          (should-not (+agent-shell-pstack-panel-unread-p finished))
+          (with-current-buffer +agent-shell-pstack-panels--buffer
+            (should (equal "pstack panels  1 error, 1 running, 1 done"
+                           (buffer-substring-no-properties
+                            (point-min)
+                            (save-excursion (goto-char (point-min))
+                                            (line-end-position)))))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-view-stable-point ()
+  "Keep point's section and column, and what was folded, across refreshes."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (+agent-shell-pstack-panels)
+      (let ((id (+agent-shell-pstack-panel-id
+                 (car (+agent-shell-pstack-panel-list))))
+            (ident (lambda () (magit-section-ident (magit-current-section)))))
+        (goto-char (point-min))
+        (search-forward "data-flow")
+        (magit-section-hide (magit-current-section))
+        (search-forward "risks")
+        (move-to-column 20)
+        (let ((here (funcall ident))
+              (line (line-number-at-pos)))
+          (should (equal `((pstack-member . "risks") (pstack-panel . ,id)
+                           (pstack-panels))
+                         here))
+          ;; A rejected request ranks above, so the risks line moves down.
+          (lead-event :kind 'turn-complete :session "s2"
+                      :text (+agent-shell-pstack-panel-test--message "{}"))
+          (should (eq (current-buffer) (window-buffer (selected-window))))
+          (should (equal here (funcall ident)))
+          (should (= 20 (current-column)))
+          (should (= (point) (window-point)))
+          (should (> (line-number-at-pos) line))
+          (should (looking-back "^  risks  +c" (line-beginning-position)))
+          (save-excursion
+            (goto-char (point-min))
+            (search-forward "data-flow")
+            (should (oref (magit-current-section) hidden)))
+          ;; Refreshing by hand keeps them too.
+          (revert-buffer)
+          (should (equal here (funcall ident)))
+          (should (= 20 (current-column)))
+          ;; Its section gone, point goes to a neighbour, not the top.
+          (goto-char (point-min))
+          (search-forward "[error: rejected]")
+          (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+            (+agent-shell-pstack-panels-clear-delivered))
+          (should (equal `((pstack-panel . ,id) (pstack-panels))
+                         (funcall ident))))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-view-hints ()
+  "Name in a dim line the keys acting on each section, and all of them on ?."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (+agent-shell-pstack-panels)
+      (goto-char (point-min))
+      (forward-line 1)
+      (should (looking-at-p "g refresh  D clear delivered panels  \\? all keys$"))
+      (should (eq '+agent-shell-pstack-panels-hint
+                  (get-text-property (point) 'font-lock-face)))
+      (search-forward "risks")
+      (forward-line 1)
+      (should (looking-at-p "    RET visit shell  \\? all keys$"))
+      (should (eq '+agent-shell-pstack-panels-hint
+                  (get-text-property (+ 4 (point)) 'font-lock-face)))
+      (forward-line -1)
+      (+agent-shell-pstack-panels-keys)
+      (with-current-buffer "*pstack panels keys*"
+        (should (string-match-p "\\`Here:
+  RET      visit shell
+  c        cancel the panel
+
+Anywhere:
+  TAB      fold or unfold the section
+" (buffer-string)))
+        (should (string-search "D        clear delivered panels"
+                               (buffer-string))))
+      (with-current-buffer +agent-shell-pstack-panels--buffer
+        (should (eq #'+agent-shell-pstack-panels-keys (key-binding "?")))
+        (should (eq #'+agent-shell-pstack-panels-clear-delivered
+                    (key-binding "D")))
+        (should (eq #'magit-section-forward (key-binding "n")))
+        (should (eq #'magit-section-forward-sibling (key-binding (kbd "M-n"))))
+        (should (eq #'magit-section-toggle (key-binding (kbd "TAB")))))
+      (kill-buffer "*pstack panels keys*"))))
+
+(ert-deftest +agent-shell-pstack-panel-test-clear-delivered ()
+  "Forget delivered panels holding nothing, without asking, and keep the rest."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (+agent-shell-pstack-panel-test--finish-how #'member-event)
+      (lead-event :kind 'turn-complete :session "s2"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (let ((finished (car (+agent-shell-pstack-panel-list)))
+            (running (cadr (+agent-shell-pstack-panel-list)))
+            (asked nil))
+        (+agent-shell-pstack-panels)
+        (cl-letf (((symbol-function 'yes-or-no-p)
+                   (lambda (prompt) (push prompt asked) t)))
+          (+agent-shell-pstack-panels-clear-delivered)
+          (should-not asked)
+          (should (equal (list running) (+agent-shell-pstack-panel-list)))
+          (should-not (+agent-shell-pstack-panel-test--heading
+                       (+agent-shell-pstack-panel-id finished)))
+          (should (file-exists-p (+agent-shell-pstack-panel-member-report
+                                  (car (+agent-shell-pstack-panel-members
+                                        finished)))))
+          (should-error (+agent-shell-pstack-panels-clear-delivered)
+                        :type 'user-error))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-clear-delivered-workspaces ()
+  "List delivered panels holding a workspace in one question, and clean them."
+  (+agent-shell-pstack-panel-test--with-arena
+    (save-window-excursion
+      (finish "opus" "A")
+      (finish "codex" "B")
+      (+agent-shell-pstack-panel-test--drain)
+      (member-event "judge" :kind 'init-finished)
+      (member-event "judge" :kind 'turn-complete :text "Scores")
+      (lead-event :kind 'turn-complete :session "s2"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (+agent-shell-pstack-panel-test--finish-how #'member-event)
+      (let ((manifest (+agent-shell-pstack-panel-arena panel))
+            (id (+agent-shell-pstack-panel-id panel))
+            (asked nil)
+            (answer nil))
+        (should (+agent-shell-pstack-panel-delivered panel))
+        (should (= 2 (length (+agent-shell-pstack-panel-list))))
+        (+agent-shell-pstack-panels)
+        (cl-letf (((symbol-function 'yes-or-no-p)
+                   (lambda (prompt) (push prompt asked) answer)))
+          (+agent-shell-pstack-panels-clear-delivered)
+          (should (= 1 (length asked)))
+          (should (string-match-p
+                   (format "\\`Forgot 1 delivered panel\\.  1 delivered panel \
+still holds work:\n  %s: its worktrees, checkouts and result refs in .*\nClean \
+it up as x would, then forget it\\? \\'" id)
+                   (car asked)))
+          (should (equal (list panel) (+agent-shell-pstack-panel-list)))
+          (should (eq manifest (+agent-shell-pstack-panel-arena panel)))
+          (should-not cleaned)
+          (should (+agent-shell-pstack-panel-test--heading id))
+          (setq answer t)
+          (+agent-shell-pstack-panels-clear-delivered)
+          (should (= 2 (length asked)))
+          (should (string-prefix-p "1 delivered panel still holds" (car asked)))
+          (should (equal (list manifest) cleaned))
+          (+agent-shell-pstack-panel-test--drain)
+          (should-not (+agent-shell-pstack-panel-list))
+          (with-current-buffer +agent-shell-pstack-panels--buffer
+            (should-not (+agent-shell-pstack-panel-test--heading id))))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-clean-command ()
   "Offer every arena on disk except those whose panel still runs."

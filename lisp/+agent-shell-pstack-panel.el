@@ -165,7 +165,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 11
+(defconst +agent-shell-pstack-panel--schema 12
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -185,7 +185,10 @@ A delegate's DELEGATE-OPTIONS is its policy, frozen once by
 user's `+agent-shell-arena-git-user' when it needs one.  A panel a host's
 runner made has RUNNER, a plist of :observer, called with each member
 and event of its, and :lease, returning a member's process lease.
-EXPIRES is the time its current phase's timer expires it."
+EXPIRES is the time its current phase's timer expires it.  CANCELLED is
+the reason it was cancelled before it finished, DELIVERED-AT when its
+follow-up reached its lead, and SEEN whether you have read that since;
+see `+agent-shell-pstack-panel-unread-p'."
   id shape brief timeout lead cwd members timer rejection followup delivered
   interrupted (created (float-time))
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
@@ -195,7 +198,7 @@ EXPIRES is the time its current phase's timer expires it."
   (logins nil :documentation "Each agent's login result, as admitted.")
   (measure-egress nil :documentation "Whether its members' egress is \
 recorded.")
-  delegate-options identity runner expires)
+  delegate-options identity runner expires cancelled delivered-at seen)
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")
@@ -434,14 +437,6 @@ Expiry and abandonment reach only the current phase's members.")
                    (when-let* ((reason (plist-get entry :reason)))
                      (replace-regexp-in-string "[\n\r]+" " " reason))))
    " — "))
-
-(defun +agent-shell-pstack-panel--lead-at-point ()
-  "Return the lead of the panels row at point, or the current buffer."
-  (or (get-text-property (point) '+agent-shell-pstack-panels-lead)
-      (when-let* ((panel (get-text-property
-                         (point) '+agent-shell-pstack-panels-panel)))
-        (+agent-shell-pstack-panel-lead panel))
-      (current-buffer)))
 
 ;;;###autoload
 (defun +agent-shell-pstack-panel-log (&optional lead)
@@ -1438,8 +1433,25 @@ address or a name."
              (+agent-shell-drive-send (+agent-shell-pstack-panel-lead panel)
                                       (+agent-shell-pstack-panel-followup
                                        panel)))
-    (setf (+agent-shell-pstack-panel-delivered panel) t)
+    (setf (+agent-shell-pstack-panel-delivered panel) t
+          (+agent-shell-pstack-panel-delivered-at panel) (float-time))
     (+agent-shell-pstack-panels--refresh)))
+
+(defun +agent-shell-pstack-panel-unread-p (panel)
+  "Return whether PANEL's delivered follow-up awaits your reading.
+It is read once you visit its lead or follow-up from the panels view, or
+the lead's shell has been shown since it arrived or is shown now, or the
+lead is gone."
+  (let ((lead (+agent-shell-pstack-panel-lead panel))
+        (at (+agent-shell-pstack-panel-delivered-at panel)))
+    (and (+agent-shell-pstack-panel-delivered panel)
+         (not (+agent-shell-pstack-panel-seen panel))
+         (buffer-live-p lead)
+         (not (and at (buffer-local-value 'buffer-display-time lead)
+                   (> (float-time (buffer-local-value 'buffer-display-time
+                                                      lead))
+                      at)))
+         (not (get-buffer-window lead 'visible)))))
 
 (defun +agent-shell-pstack-panel--deliver-to (lead)
   "Deliver the oldest pending follow-up for LEAD."
@@ -2551,7 +2563,13 @@ Settle the current phase's members and every pending member, which can
 no longer start, as `error' unless STATE says otherwise.  An arena still
 captures what its candidates made and never starts its judge, and one
 still checking its logins ends once the check does.  An arena on a host
-gets a cancel instead; see `+agent-shell-arena-remote-cancel'."
+gets a cancel instead; see `+agent-shell-arena-remote-cancel'.  An
+unfinished PANEL stopped other than by a timeout records REASON as why
+it was cancelled."
+  (unless (or (eq state 'timeout)
+              (eq (+agent-shell-pstack-panel-phase panel) 'finished)
+              (+agent-shell-pstack-panel-cancelled panel))
+    (setf (+agent-shell-pstack-panel-cancelled panel) reason))
   (if (+agent-shell-pstack-panel-remote panel)
       (+agent-shell-arena-remote-cancel panel reason)
     (dolist (member (+agent-shell-pstack-panel-members panel))
@@ -2981,199 +2999,14 @@ exited mid-run."
 
 ;;;; View
 
-(defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
-  "Name of the panels buffer.")
+;; The view is `+agent-shell-pstack-panels', which loads magit-section only
+;; when it opens.  What a panel change needs from it lives here.
 
-(defvar-keymap +agent-shell-pstack-panels-mode-map
-  :doc "Keymap for `+agent-shell-pstack-panels-mode'."
-  "RET" #'+agent-shell-pstack-panels-visit
-  "x" #'+agent-shell-pstack-panels-clean
-  "c" #'+agent-shell-pstack-panels-cancel
-  "l" #'+agent-shell-pstack-panel-log)
-
-(define-derived-mode +agent-shell-pstack-panels-mode special-mode
-  "pstack panels"
-  "List pstack panels, their members and reports.
-\\<+agent-shell-pstack-panels-mode-map>\\[+agent-shell-pstack-panels-visit] visits the report or shell on the current line.
-\\[+agent-shell-pstack-panels-clean] cleans up the finished arena or delegate on the line.
-\\[+agent-shell-pstack-panels-cancel] cancels the unfinished panel on the line.
-\\[+agent-shell-pstack-panel-log] shows the lead's request log."
-  (setq-local revert-buffer-function
-              (lambda (&rest _) (+agent-shell-pstack-panels--render))
-              truncate-lines t))
-
-(defun +agent-shell-pstack-panels--status (panel)
-  "Return a word describing PANEL's progress."
-  (cond ((+agent-shell-pstack-panel-rejection panel) "rejected")
-        ((+agent-shell-pstack-panel-delivered panel) "delivered")
-        ((+agent-shell-pstack-panel-followup panel) "waiting for the lead")
-        (t (symbol-name (+agent-shell-pstack-panel-phase panel)))))
-
-(defun +agent-shell-pstack-panels--line (target &rest parts)
-  "Insert PARTS as one line that visits TARGET."
-  (insert (propertize (concat (apply #'concat parts) "\n")
-                      '+agent-shell-pstack-panels-target target)))
-
-(defun +agent-shell-pstack-panels--name (buffer)
-  "Return BUFFER's name, or a note that it has ended or never started."
-  (cond ((buffer-live-p buffer) (buffer-name buffer))
-        (buffer "ended")
-        (t "not started")))
-
-(defun +agent-shell-pstack-panels--return (manifest)
-  "Describe returning the checkout branch-mode MANIFEST's delegate took."
-  (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
-         (name (+agent-shell-arena-git-origin-name
-                (+agent-shell-arena-git-delegate-origin delegate))))
-    (if (memq (+agent-shell-arena-git-delegate-restore delegate)
-              '(restored unneeded))
-        ;; Its record goes once it is back, unless removing it failed.
-        (format "back on %s%s" name
-                (if (file-exists-p (+agent-shell-arena-git-manifest-directory
-                                    manifest))
-                    "  (x forgets its record)"
-                  ""))
-      (format "%s(x switches it back to %s)"
-              (if-let* ((note (+agent-shell-arena-git-delegate-note delegate)))
-                  (concat note "  ")
-                "")
-              name))))
-
-(defun +agent-shell-pstack-panels--last-request (lead)
-  "Return LEAD's latest turn if it had a block but started no panel."
-  (when-let* ((log (gethash lead +agent-shell-pstack-panel--logs))
-              (entry (seq-find (lambda (entry)
-                                 (eq (plist-get entry :kind) 'turn-complete))
-                               (ring-elements log)))
-              ((plist-get entry :block))
-              ((not (memq (plist-get entry :outcome) '(started interrupted)))))
-    entry))
-
-(defun +agent-shell-pstack-panels--render ()
-  "Redraw the current panels buffer, keeping point's line."
-  (let ((inhibit-read-only t)
-        (line (line-number-at-pos))
-        (panels (+agent-shell-pstack-panel-list)))
-    (erase-buffer)
-    (unless panels
-      (insert "No panels yet.  A pstack lead requests one by ending its \
-message with a pstack-panel block.\n"))
-    (maphash
-     (lambda (lead _log)
-       (when-let* ((entry (+agent-shell-pstack-panels--last-request lead)))
-         (let ((start (point)))
-           (+agent-shell-pstack-panels--line
-            lead (+agent-shell-pstack-panels--name lead)
-            "  Last request: " (+agent-shell-pstack-panel--log-outcome-text entry)
-            "  (l: log)")
-           (put-text-property start (point) '+agent-shell-pstack-panels-lead
-                              lead))))
-     +agent-shell-pstack-panel--logs)
-    (dolist (panel panels)
-      (let ((lead (+agent-shell-pstack-panel-lead panel))
-            (start (point)))
-        (+agent-shell-pstack-panels--line
-         lead
-         (propertize (+agent-shell-pstack-panel-id panel) 'face 'bold)
-         (format "  %s  %s"
-                 (or (+agent-shell-pstack-panel-shape panel) "-")
-                 (+agent-shell-pstack-panels--status panel)))
-        (+agent-shell-pstack-panels--line
-         lead "  Lead: " (+agent-shell-pstack-panels--name lead))
-        (when-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
-          (+agent-shell-pstack-panels--line lead "  " rejection))
-        (when-let* ((manifest (+agent-shell-pstack-panel-arena panel)))
-          (let ((directory (+agent-shell-arena-git-manifest-directory
-                            manifest))
-                (finished (eq (+agent-shell-pstack-panel-phase panel)
-                              'finished)))
-            (pcase (if (and (+agent-shell-pstack-panel-remote panel)
-                            (+agent-shell-pstack-panel--delegate-p panel))
-                       'remote
-                     (+agent-shell-pstack-panel--isolation panel))
-              ('remote
-               (+agent-shell-pstack-panels--line
-                directory "  Branch: "
-                (+agent-shell-arena-git-delegate-branch manifest))
-               (+agent-shell-pstack-panels--line
-                directory "  Workspace on host: "
-                (if-let* ((arena (+agent-shell-arena-remote-arena
-                                  (+agent-shell-pstack-panel-remote panel))))
-                    (format ".../arenas/%s/%s" arena
-                            (+agent-shell-pstack-panel-member-role
-                             (car (+agent-shell-pstack-panel-members panel))))
-                  "not made yet")
-                (if finished "  (x cleans it up there)" "")))
-              ('branch
-               (+agent-shell-pstack-panels--line
-                (+agent-shell-arena-git-manifest-toplevel manifest)
-                "  Isolation: "
-                (if finished
-                    (+agent-shell-pstack-panels--return manifest)
-                  "your checkout, on the delegate's branch; do not edit or \
-commit there until this finishes")))
-              (isolation
-               (+agent-shell-pstack-panels--line
-                directory (if isolation "  Workspace: " "  Arena: ")
-                (abbreviate-file-name directory)
-                (if finished "  (x cleans it up)" ""))))
-            (when-let* ((remote (+agent-shell-pstack-panel-remote panel)))
-              (+agent-shell-pstack-panels--line
-               directory "  Host: "
-               (+agent-shell-arena-remote-describe remote t)))))
-        (dolist (member (+agent-shell-pstack-panel-members panel))
-          (let ((report (+agent-shell-pstack-panel-member-report member))
-                (shell (+agent-shell-pstack-panel-member-shell member))
-                (capture (+agent-shell-pstack-panel-member-capture member))
-                (result (+agent-shell-pstack-panel-member-result member))
-                (remote (and (eq 'delegate
-                                 (+agent-shell-pstack-panel-member-kind member))
-                             (+agent-shell-pstack-panel-remote panel))))
-            (if remote
-                (+agent-shell-pstack-panels--transcript-lines remote member)
-            (+agent-shell-pstack-panels--line
-             (or report shell)
-             (format "  %-16s %-12s %-9s "
-                     (+agent-shell-pstack-panel-member-role member)
-                     (+agent-shell-pstack-panel-member-agent member)
-                     (+agent-shell-pstack-panel-member-state member))
-             (cond (capture
-                    (string-join
-                     (delq nil (list (symbol-name capture)
-                                     (plist-get result :commit)
-                                     (plist-get result :error)))
-                     " "))
-                   (report (abbreviate-file-name report))
-                   ((+agent-shell-pstack-panel-member-error member))
-                   (t (+agent-shell-pstack-panels--name shell)))))))
-        (insert "\n")
-        (put-text-property start (point) '+agent-shell-pstack-panels-panel
-                           panel)))
-    (dolist (manifest (+agent-shell-pstack-panel--interrupted))
-      (let ((start (point))
-            (toplevel (+agent-shell-arena-git-manifest-toplevel manifest)))
-        (+agent-shell-pstack-panels--line
-         toplevel
-         (propertize (+agent-shell-arena-git-manifest-id manifest) 'face 'bold)
-         (if (+agent-shell-arena-git-delegate-restore
-              (+agent-shell-arena-git-manifest-delegate manifest))
-             "  delegate  not returned"
-           "  delegate  interrupted"))
-        (+agent-shell-pstack-panels--line
-         toplevel "  Isolation: " (abbreviate-file-name toplevel) " is on "
-         (+agent-shell-arena-git-delegate-branch manifest)
-         "  " (+agent-shell-pstack-panels--return manifest))
-        (insert "\n")
-        (put-text-property start (point) '+agent-shell-pstack-panels-manifest
-                           manifest)))
-    (goto-char (point-min))
-    (forward-line (1- line))))
-
-(declare-function +agent-shell-arena-remote-transcript-buffer
-                  "+agent-shell-arena-remote")
-(declare-function +agent-shell-arena-remote-arena "+agent-shell-arena-remote")
-(declare-function +agent-shell-arena-remote-polled "+agent-shell-arena-remote")
-(declare-function +agent-shell-arena-remote-phase "+agent-shell-arena-remote")
+(autoload '+agent-shell-pstack-panels "+agent-shell-pstack-panels"
+  "Show pstack panels, their members and reports." t)
+(declare-function +agent-shell-pstack-panels--render
+                  "+agent-shell-pstack-panels")
+(declare-function +agent-shell-pstack-panels--lead "+agent-shell-pstack-panels")
 (declare-function +agent-shell-arena-remote-host "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote--host-label
                   "+agent-shell-arena-remote")
@@ -3188,25 +3021,20 @@ commit there until this finishes")))
 (declare-function +agent-shell-arena-remote-outcome-retained-reason
                   "+agent-shell-arena-remote")
 
-(defun +agent-shell-pstack-panels--transcript-lines (remote member)
-  "Insert the lines of remote delegate MEMBER, whose record is REMOTE.
-Its member line opens its read-only transcript, even once it finished,
-and a Report line its saved final report."
-  (let ((report (+agent-shell-pstack-panel-member-report member))
-        (polled (+agent-shell-arena-remote-polled remote)))
-    (+agent-shell-pstack-panels--line
-     (cons 'pstack-transcript remote)
-     (format "  %-16s %-12s %-9s "
-             (+agent-shell-pstack-panel-member-role member)
-             (+agent-shell-pstack-panel-member-agent member)
-             (+agent-shell-pstack-panel-member-state member))
-     (format "transcript (%s; RET)"
-             (if polled
-                 (format "updated %ds ago" (round (- (float-time) polled)))
-               (format "%s" (+agent-shell-arena-remote-phase remote)))))
-    (when report
-      (+agent-shell-pstack-panels--line
-       report "    Report: " (abbreviate-file-name report)))))
+(defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
+  "Name of the panels buffer.")
+
+(defun +agent-shell-pstack-panels--name (buffer)
+  "Return BUFFER's name, or a note that it has ended or never started."
+  (cond ((buffer-live-p buffer) (buffer-name buffer))
+        (buffer "ended")
+        (t "not started")))
+
+(defun +agent-shell-pstack-panel--lead-at-point ()
+  "Return the lead of the panels view's section at point, or the current buffer."
+  (or (and (derived-mode-p '+agent-shell-pstack-panels-mode)
+           (+agent-shell-pstack-panels--lead))
+      (current-buffer)))
 
 (defvar-keymap +agent-shell-pstack-panel--mode-line-map
   :doc "Keymap for a lead's panel mode-line item."
@@ -3277,145 +3105,110 @@ Then run `+agent-shell-pstack-panel-change-hook'."
   (+agent-shell-pstack-panel--update-mode-lines)
   (run-hooks '+agent-shell-pstack-panel-change-hook)
   (when-let* ((buffer (get-buffer +agent-shell-pstack-panels--buffer)))
-    (with-current-buffer buffer (+agent-shell-pstack-panels--render))))
-
-;;;###autoload
-(defun +agent-shell-pstack-panels ()
-  "Show pstack panels, their members and reports."
-  (interactive)
-  (let ((buffer (get-buffer-create +agent-shell-pstack-panels--buffer)))
     (with-current-buffer buffer
-      (unless (derived-mode-p '+agent-shell-pstack-panels-mode)
-        (+agent-shell-pstack-panels-mode))
-      (+agent-shell-pstack-panels--render))
-    (pop-to-buffer buffer)))
+      (when (derived-mode-p '+agent-shell-pstack-panels-mode)
+        (+agent-shell-pstack-panels--render)))))
 
-(defun +agent-shell-pstack-panels-visit ()
-  "Visit the report, member shell or lead shell on the current line.
-A remote delegate's member line opens its read-only transcript."
-  (interactive)
-  (pcase (get-text-property (point) '+agent-shell-pstack-panels-target)
-    ((and (pred stringp) file) (find-file-other-window file))
-    (`(pstack-transcript . ,remote)
-     (pop-to-buffer (+agent-shell-arena-remote-transcript-buffer remote)))
-    ((and (pred buffer-live-p) buffer) (pop-to-buffer buffer))
-    (_ (user-error "Nothing to visit on this line"))))
+(defun +agent-shell-pstack-arena--remote-p (manifest)
+  "Return whether MANIFEST's arena ran on a host."
+  (and (featurep '+agent-shell-arena-remote)
+       (+agent-shell-arena-remote-recorded-p manifest)))
 
-(defun +agent-shell-pstack-panels-cancel ()
-  "Cancel the unfinished panel on the current line, after confirmation.
-An arena captures what its candidates made and skips its judge."
-  (interactive)
-  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel)))
-    (cond
-     ((null panel) (user-error "No panel on this line"))
-     ((+agent-shell-pstack-panel-followup panel)
-      (user-error "Panel %s has finished" (+agent-shell-pstack-panel-id panel)))
-     ((yes-or-no-p (format "Cancel panel %s? "
-                           (+agent-shell-pstack-panel-id panel)))
-      (+agent-shell-pstack-panel-cancel panel "You cancelled the panel.")))))
+(defun +agent-shell-pstack-arena--clean-prompt (manifest)
+  "Return the question confirming that MANIFEST's arena be cleaned."
+  (let ((id (+agent-shell-arena-git-manifest-id manifest))
+        (remote (+agent-shell-pstack-arena--remote-p manifest)))
+    (pcase (when-let* ((delegate
+                        (+agent-shell-arena-git-manifest-delegate
+                         manifest)))
+             (if remote 'remote
+               (+agent-shell-arena-git-delegate-isolation delegate)))
+      ('remote
+       (let* ((panel (seq-find
+                      (lambda (panel)
+                        (when-let* ((held (+agent-shell-pstack-panel-arena
+                                           panel)))
+                          (equal id (+agent-shell-arena-git-manifest-id
+                                     held))))
+                      (+agent-shell-pstack-panel-list)))
+              (outcome (and panel
+                            (plist-get
+                             (+agent-shell-pstack-panel-member-result
+                              (car (+agent-shell-pstack-panel-members
+                                    panel)))
+                             :outcome)))
+              (dirty (if outcome
+                         (+agent-shell-arena-remote-outcome-dirty-count
+                          outcome)
+                       0)))
+         (format "Remove delegate %s's job and worktree from its \
+host%s?  Its branch %s goes only if your branch has its commits. " id
+(if (> dirty 0)
+    (format ", losing the %d uncommitted path%s there"
+            dirty (if (= dirty 1) "" "s"))
+  "")
+(+agent-shell-arena-git-delegate-branch manifest))))
+      ('worktree
+       (format "Remove delegate %s's worktree from %s?  Its branch %s \
+goes only if your branch has its commits. " id (+agent-shell-arena-git-manifest-toplevel manifest)
+(+agent-shell-arena-git-delegate-branch manifest)))
+      ('branch
+       (format "Return %s from %s if it is clean, and forget delegate \
+%s?  The branch goes only if your branch has its commits. " (+agent-shell-arena-git-manifest-toplevel manifest)
+(+agent-shell-arena-git-delegate-branch manifest) id))
+      (_ (format "Remove arena %s's worktrees, checkouts and result \
+refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
+(if remote " and its host" ""))))))
 
 (defun +agent-shell-pstack-arena--clean (manifest)
-  "Clean MANIFEST's arena after confirmation, forgetting it in its panel.
+  "Clean MANIFEST's arena after confirmation.
+See `+agent-shell-pstack-arena--cleanup'."
+  (when (yes-or-no-p (+agent-shell-pstack-arena--clean-prompt manifest))
+    (+agent-shell-pstack-arena--cleanup manifest)))
+
+(defun +agent-shell-pstack-arena--cleanup (manifest &optional done)
+  "Clean MANIFEST's arena now, forgetting it in its panel.
 An arena that ran on a host is cleaned there too.  A delegate's branch
 then goes when the lead's branch has all its work; see
-`+agent-shell-arena-git-prune-branch'."
+`+agent-shell-arena-git-prune-branch'.  DONE, when given, is called with
+the cleanup's error, or nil, once it has ended."
   (let ((id (+agent-shell-arena-git-manifest-id manifest))
-        (remote (and (featurep '+agent-shell-arena-remote)
-                     (+agent-shell-arena-remote-recorded-p manifest))))
-    (when (yes-or-no-p
-           (pcase (when-let* ((delegate
-                               (+agent-shell-arena-git-manifest-delegate
-                                manifest)))
-                    (if remote 'remote
-                      (+agent-shell-arena-git-delegate-isolation delegate)))
-             ('remote
-              (let* ((panel (seq-find
-                             (lambda (panel)
-                               (when-let* ((held (+agent-shell-pstack-panel-arena
-                                                  panel)))
-                                 (equal id (+agent-shell-arena-git-manifest-id
-                                            held))))
-                             (+agent-shell-pstack-panel-list)))
-                     (outcome (and panel
-                                   (plist-get
-                                    (+agent-shell-pstack-panel-member-result
-                                     (car (+agent-shell-pstack-panel-members
-                                           panel)))
-                                    :outcome)))
-                     (dirty (if outcome
-                                (+agent-shell-arena-remote-outcome-dirty-count
-                                 outcome)
-                              0)))
-                (format "Remove delegate %s's job and worktree from its \
-host%s?  Its branch %s goes only if your branch has its commits. " id
-                        (if (> dirty 0)
-                            (format ", losing the %d uncommitted path%s there"
-                                    dirty (if (= dirty 1) "" "s"))
-                          "")
-                        (+agent-shell-arena-git-delegate-branch manifest))))
-             ('worktree
-              (format "Remove delegate %s's worktree from %s?  Its branch %s \
-goes only if your branch has its commits. " id (+agent-shell-arena-git-manifest-toplevel manifest)
-                      (+agent-shell-arena-git-delegate-branch manifest)))
-             ('branch
-              (format "Return %s from %s if it is clean, and forget delegate \
-%s?  The branch goes only if your branch has its commits. " (+agent-shell-arena-git-manifest-toplevel manifest)
-                      (+agent-shell-arena-git-delegate-branch manifest) id))
-             (_ (format "Remove arena %s's worktrees, checkouts and result \
-refs from %s%s? " id (+agent-shell-arena-git-manifest-toplevel manifest)
-                        (if remote " and its host" "")))))
-      (dolist (panel (+agent-shell-pstack-panel-list))
-        (when-let* ((held (+agent-shell-pstack-panel-arena panel))
-                    ((equal id (+agent-shell-arena-git-manifest-id held))))
-          (setf (+agent-shell-pstack-panel-arena panel) nil)))
-      (funcall
-       (if remote #'+agent-shell-arena-remote-clean
-         #'+agent-shell-arena-git-clean)
-       manifest
-       (lambda (left error)
-         (let ((cleaned (if left (format "cleaned, but left %s"
-                                         (string-join left "; "))
-                          "cleaned")))
-           (cond
-            (error (message "Arena %s: cleanup failed: %s" id error))
-            ((+agent-shell-arena-git-manifest-delegate manifest)
-             (+agent-shell-arena-git-prune-branch
-              manifest
-              (lambda (deleted reason)
-                (let ((branch (+agent-shell-arena-git-delegate-branch
-                               manifest)))
-                  (message "Arena %s: %s%s" id cleaned
-                           (cond (deleted
-                                  (format "; deleted branch %s, since your \
+        (remote (+agent-shell-pstack-arena--remote-p manifest))
+        (done (or done #'ignore)))
+    (dolist (panel (+agent-shell-pstack-panel-list))
+      (when-let* ((held (+agent-shell-pstack-panel-arena panel))
+                  ((equal id (+agent-shell-arena-git-manifest-id held))))
+        (setf (+agent-shell-pstack-panel-arena panel) nil)))
+    (funcall
+     (if remote #'+agent-shell-arena-remote-clean
+       #'+agent-shell-arena-git-clean)
+     manifest
+     (lambda (left error)
+       (let ((cleaned (if left (format "cleaned, but left %s"
+                                       (string-join left "; "))
+                        "cleaned")))
+         (cond
+          (error (message "Arena %s: cleanup failed: %s" id error)
+                 (funcall done error))
+          ((+agent-shell-arena-git-manifest-delegate manifest)
+           (+agent-shell-arena-git-prune-branch
+            manifest
+            (lambda (deleted reason)
+              (let ((branch (+agent-shell-arena-git-delegate-branch
+                             manifest)))
+                (message "Arena %s: %s%s" id cleaned
+                         (cond (deleted
+                                (format "; deleted branch %s, since your \
 branch has all its commits" branch))
-                                 (reason (format "; kept branch %s: %s"
-                                                 branch reason))
-                                 (t ""))))
-                (+agent-shell-pstack-panels--refresh))))
-            (t (message "Arena %s: %s" id cleaned))))
-         (+agent-shell-pstack-panels--refresh)))
-      (+agent-shell-pstack-panels--refresh))))
-
-(defun +agent-shell-pstack-panels-clean ()
-  "Clean up the finished arena or delegate on the current line.
-Ask for confirmation first."
-  (interactive)
-  (let ((panel (get-text-property (point) '+agent-shell-pstack-panels-panel))
-        (manifest (get-text-property (point)
-                                     '+agent-shell-pstack-panels-manifest)))
-    (cond
-     (manifest (+agent-shell-pstack-arena--clean manifest))
-     ((not (and panel (+agent-shell-pstack-panel-arena panel)))
-      (user-error "No arena on this line"))
-     ((not (eq (+agent-shell-pstack-panel-phase panel) 'finished))
-      (user-error "Arena %s is still %s" (+agent-shell-pstack-panel-id panel)
-                  (+agent-shell-pstack-panel-phase panel)))
-     ((not (file-exists-p (+agent-shell-arena-git-manifest-directory
-                           (+agent-shell-pstack-panel-arena panel))))
-      (user-error "Panel %s left nothing to clean up"
-                  (+agent-shell-pstack-panel-id panel)))
-     (t (+agent-shell-pstack-arena--clean
-         (+agent-shell-pstack-panel-arena panel))))))
+                               (reason (format "; kept branch %s: %s"
+                                               branch reason))
+                               (t ""))))
+              (funcall done nil)
+              (+agent-shell-pstack-panels--refresh))))
+          (t (message "Arena %s: %s" id cleaned)
+             (funcall done nil))))
+       (+agent-shell-pstack-panels--refresh)))
+    (+agent-shell-pstack-panels--refresh)))
 
 ;;;###autoload
 (defun +agent-shell-pstack-arena-clean ()

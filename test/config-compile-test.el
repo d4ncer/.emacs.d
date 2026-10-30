@@ -23,6 +23,7 @@
                        "lisp/+agent-shell-pstack.el"
                        "lisp/+agent-shell-pstack-reload.el"
                        "lisp/+agent-shell-pstack-panel.el"
+                       "lisp/+agent-shell-pstack-panels.el"
                        "lisp/+agent-shell-pstack-card.el"
                        "lisp/+agent-shell-pstack-arena-trace.el"
                        "lisp/+agent-shell-arena-git.el"

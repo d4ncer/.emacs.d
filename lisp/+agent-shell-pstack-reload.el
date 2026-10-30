@@ -15,7 +15,8 @@
 (defconst +agent-shell-pstack-reload--libraries
   '(+agent-shell-sandbox +agent-shell-drive +agent-shell-arena-git
     +agent-shell-egress +agent-shell-pstack +agent-shell-pstack-panel
-    +agent-shell-arena-remote +agent-shell-pstack-arena-trace)
+    +agent-shell-pstack-panels +agent-shell-arena-remote
+    +agent-shell-pstack-arena-trace)
   "Pstack libraries in dependency order.")
 
 (defvar +agent-shell-pstack-reload--carrying nil

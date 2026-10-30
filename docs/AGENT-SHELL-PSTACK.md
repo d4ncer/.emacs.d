@@ -720,19 +720,35 @@ event watching shared with `agent-shell-projects`.
 
 ## Layer 3: views
 
-`C-c P` in an agent shell runs `+agent-shell-pstack-panels`. It lists every
-panel since Emacs started, with its id, shape, phase or status and lead, and
-each member's role, agent, state and report. An arena also shows its folder
-and each candidate's capture, and a remote one its host and the host's
-phase. `RET` visits the report, the arena folder, or the member or lead
-shell, `x` cleans up a finished arena or delegate, and `c` cancels an
-unfinished panel. Below the panels it lists each branch-mode delegate an
-earlier Emacs left unreturned. The buffer redraws whenever a panel changes.
-The decision trail and plan views are planned.
+`C-c P` in an agent shell runs `+agent-shell-pstack-panels`, from
+`lisp/+agent-shell-pstack-panels.el`, which loads magit-section when the view
+first opens. Its first line counts the panels by status. Below it, every
+panel since Emacs started is a section, the most urgent first: needs input
+(its follow-up reached the lead and you have not looked since), error with
+its kind, on host, judging, running, finishing, cancelled, then done. A
+panel's heading shows its status badge, shape, id, lead and age. Its child
+sections are its members, with role, agent and state, and a delegate's
+branch, a candidate's capture, the report, errors and notes on commands
+left running; its workspace, arena folder or checkout, and a remote one's
+host; and its follow-up, folded. Below the panels it lists each branch-mode
+delegate an earlier Emacs left unreturned.
+
+`TAB` folds a section, `n` and `p` move between sections and `M-n` and `M-p`
+between those at the same level. Each section names the keys that act on
+it in a dim line, and `?` lists them all. `RET` visits the lead from a
+panel, the live shell, transcript or report from a member, the folder from
+a workspace and the whole follow-up from its section; a line naming a
+report, checkout or shell visits that. `c` cancels an unfinished panel and
+`x` cleans up a finished arena or delegate. `D` forgets every finished panel
+whose follow-up was delivered; panels still holding a workspace, checkout
+or branch record are listed in one question, then cleaned as `x` would and
+forgotten, or kept. Reports stay on disk. `g` redraws, as every panel
+change does, keeping each window on its section and column and keeping
+what was folded. The decision trail and plan views are planned.
 
 If a lead's latest turn contains a block that starts no panel, `C-c P`
-shows a **Last request** line with the outcome. Press `l` on that line or
-on a panel's row to run `+agent-shell-pstack-panel-log` for its lead. You
+shows a **Last request** section with the outcome. Press `l` there or in a
+panel to run `+agent-shell-pstack-panel-log` for its lead. You
 can also run the command from the lead shell. The read-only log shows the
 last 50 handled events per lead, newest first, with time, session, final
 text length, whether it ends in a fenced block, and the outcome or error.

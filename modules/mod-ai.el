@@ -291,7 +291,15 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
    "<return>" #'+agent-shell-pstack-panels-visit
    "x" #'+agent-shell-pstack-panels-clean
    "c" #'+agent-shell-pstack-panels-cancel
+   "D" '(+agent-shell-pstack-panels-clear-delivered :wk "clear delivered")
    "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
+   "?" '(+agent-shell-pstack-panels-keys :wk "keys here")
+   "TAB" #'magit-section-toggle
+   "<tab>" #'magit-section-toggle
+   "n" #'magit-section-forward
+   "p" #'magit-section-backward
+   "M-n" #'magit-section-forward-sibling
+   "M-p" #'magit-section-backward-sibling
    "gr" #'revert-buffer
    "q" #'quit-window)
   :config
