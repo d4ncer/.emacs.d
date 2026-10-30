@@ -725,29 +725,32 @@ event watching shared with `agent-shell-projects`.
 
 `C-c P` in an agent shell runs `+agent-shell-pstack-panels`, from
 `lisp/+agent-shell-pstack-panels.el`, which loads magit-section when the view
-first opens. Its first line counts the panels by status. Below it, every
-panel since Emacs started is a section, the most urgent first: needs input
-(its follow-up reached the lead and you have not looked since), error with
-its kind, on host, judging, running, finishing, cancelled, then done. A
-panel's heading shows its status badge, shape, id, lead and age. Its child
-sections are its members, with role, agent and state, and a delegate's
-branch, a candidate's capture, the report, errors and notes on commands
-left running; its workspace, arena folder or checkout, and a remote one's
-host; and its follow-up, folded. Below the panels it lists each branch-mode
-delegate an earlier Emacs left unreturned.
+first opens, and follows `docs/UI-GUIDELINES.md`, whose reference sketch it
+is. Its first line counts the panels by status, and the one Actions block
+below it names the view's keys. Every panel since Emacs started is a card
+after a rule, the most urgent first: unread (its follow-up reached the lead
+and you have not looked since), failed with its kind, on host, judging,
+running, finishing, cancelled, then done. A card's heading shows the state
+as a glyph and a word, then the shape, lead and age. Below it are the
+members, one line each with role, agent and state, and detail lines with
+dim labels: a delegate's branch, a candidate's capture, reports, errors and
+notes on commands left running; the workspace, arena folder or checkout,
+and a remote one's host; and the follow-up, folded to its first two lines.
+Below the panels it lists each branch-mode delegate an earlier Emacs left
+unreturned.
 
 `TAB` folds a section, `n` and `p` move between sections and `M-n` and `M-p`
-between those at the same level. Each section names the keys that act on
-it in a dim line, and `?` lists them all. `RET` visits the lead from a
-panel, the live shell, transcript or report from a member, the folder from
-a workspace and the whole follow-up from its section; a line naming a
-report, checkout or shell visits that. `c` cancels an unfinished panel and
-`x` cleans up a finished arena or delegate. `D` forgets every finished panel
-whose follow-up was delivered; panels still holding a workspace, checkout
-or branch record are listed in one question, then cleaned as `x` would and
-forgotten, or kept. Reports stay on disk. `g` redraws, as every panel
-change does, keeping each window on its section and column and keeping
-what was folded. The decision trail and plan views are planned.
+between those at the same level. `?` lists the keys acting at point. `RET`
+visits the lead from a panel, the live shell, transcript or report from a
+member, the folder from a workspace and the whole follow-up from its
+section; a line naming a report, checkout or shell visits that. `c` cancels
+an unfinished panel and `x` cleans up a finished arena or delegate. `D`
+forgets every finished panel whose follow-up was delivered; panels still
+holding a workspace, checkout or branch record are listed in one question,
+then cleaned as `x` would and forgotten, or kept. Reports stay on disk. `g`
+redraws, as every panel change does, keeping each window on its section
+and column and keeping what was folded. The decision trail and plan views
+are planned.
 
 If a lead's latest turn contains a block that starts no panel, `C-c P`
 shows a **Last request** section with the outcome. Press `l` there or in a
@@ -760,11 +763,11 @@ The log stays in memory and retains at most 200 characters of message text
 and 200 characters of the block's first line per event. Request errors
 also appear in `*Messages*`.
 
-While a lead has a panel running, its mode line shows `panel 1/3`, the
-settled and total member counts, next to `pstack`. Hovering lists each
-member's role, agent and state, and `mouse-1` opens the panels view. The item
-updates only when a member or panel changes state and disappears once every
-member has settled.
+While a lead waits on a panel, its status reads `panel (1/3)`, the settled
+and total member counts, in its mode line, header, busy indicator and the
+shell switcher, until it starts the follow-up. Hovering the mode-line item
+lists each member's role, agent and state, and `mouse-1` opens the panels
+view. No status names a panel id.
 
 Member shells stay out of `agent-shell-buffers`, so
 `agent-shell-switch-buffer`, project reuse through `SPC p a` and the agent
