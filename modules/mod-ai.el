@@ -321,6 +321,20 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   (:states '(normal motion) :keymaps '+agent-shell-pstack-arena-trace-mode-map
    "q" #'quit-window))
 
+(use-package +agent-shell-pstack-card
+  :ensure nil
+  :after +agent-shell-pstack-panel
+  :demand t
+  :general
+  (:keymaps '+agent-shell-pstack-card-map
+   "RET" #'+agent-shell-pstack-card-toggle-source
+   "<return>" #'+agent-shell-pstack-card-toggle-source
+   "<mouse-1>" #'+agent-shell-pstack-card-toggle-source
+   "TAB" #'+agent-shell-pstack-card-toggle-brief
+   "<tab>" #'+agent-shell-pstack-card-toggle-brief)
+  :config
+  (+agent-shell-pstack-card-mode 1))
+
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell

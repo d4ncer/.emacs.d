@@ -66,6 +66,14 @@ sandboxed worktree; see [Run an arena](#run-an-arena) and the design in
 one agent, which commits on a branch of its own; see
 [Delegate panels](#delegate-panels).
 
+Complete `pstack-panel` request blocks appear as compact cards with the shape,
+members, brief, timeouts, and arena rubric and judge. After a panel starts,
+its card shows the panel id and live phase; `C-c P` opens the panels view.
+Press `RET` or click to toggle the original JSON source, and press `TAB` to
+expand or fold a long brief. Copying the region preserves the original text.
+Run `M-x +agent-shell-pstack-card-refresh` to render an existing conversation.
+`+agent-shell-pstack-card-mode` controls this rendering globally.
+
 ### Request a panel
 
 A lead is a shell with `+agent-shell-pstack-mode` on. Its priming prompt
