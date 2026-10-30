@@ -3102,70 +3102,113 @@ continue to use `agent-shell-status' directly."
        (buffer-local-value '+agent-shell-pstack-mode shell)
        (buffer-local-value '+agent-shell-pstack-panel--requested-turn shell)))
 
+(defface +agent-shell-pstack-panel-status
+  '((t :inherit font-lock-keyword-face))
+  "Face for a lead's In Panel status."
+  :group '+agent-shell-pstack-panel)
+
+(defun +agent-shell-pstack-panel--status-text (&optional shell)
+  "Return SHELL's In Panel status in its face."
+  (propertize (+agent-shell-pstack-panel-display-status shell)
+              'face '+agent-shell-pstack-panel-status))
+
 (defun +agent-shell-pstack-panel--busy-display (original)
   "Replace the displayed activity ORIGINAL while this lead waits."
   (if (+agent-shell-pstack-panel--waiting (current-buffer))
-      (concat " " (+agent-shell-pstack-panel-display-status))
+      (concat " " (+agent-shell-pstack-panel--status-text))
     original))
 
 (defun +agent-shell-pstack-panel--header-display (model)
   "Replace viewport status in header MODEL while this lead waits."
   (when (and (map-elt model :position)
              (+agent-shell-pstack-panel--waiting (current-buffer)))
-    (map-put! model :status (+agent-shell-pstack-panel-display-status))
+    (map-put! model :status (+agent-shell-pstack-panel--status-text))
     (map-put! model :busy-indicator-frame nil))
   model)
 
-(cl-defun +agent-shell-pstack-panel--read-shell-buffer
-    (original &rest args &key prompt buffers force-short-names)
-  "Show panel status in ORIGINAL's buffer selector with ARGS.
-PROMPT, BUFFERS and FORCE-SHORT-NAMES follow the upstream interface."
-  (let ((buffers (or buffers (agent-shell-buffers))))
+(defun +agent-shell-pstack-panel--candidate-columns (candidate buffer)
+  "Return the status column of switcher CANDIDATE for BUFFER, or nil.
+The value is (START END STATUS-END): the column spans START to END and
+its status text ends at STATUS-END.  Columns are found by the faces
+`agent-shell--read-shell-buffer' gives the name and status."
+  (let* ((name-end (next-single-property-change 0 'face candidate))
+         (start (and name-end
+                     (next-single-property-change name-end 'face candidate)))
+         (status-end (and start
+                          (next-single-property-change start 'face candidate)))
+         (end (if status-end
+                  (or (next-single-property-change status-end 'face candidate)
+                      (length candidate))
+                (length candidate))))
+    (when (and start
+               (eq 'agent-shell-buffer-name (get-text-property 0 'face candidate))
+               (string-suffix-p (substring-no-properties candidate 0 name-end)
+                                (buffer-name buffer))
+               (string-blank-p (substring candidate name-end start))
+               (memq (get-text-property start 'face candidate)
+                     '(agent-shell-success agent-shell-warning agent-shell-error))
+               (equal (substring-no-properties candidate start
+                                               (or status-end end))
+                      (symbol-name (agent-shell-status :shell-buffer buffer))))
+      (list start end (or status-end end)))))
+
+(defun +agent-shell-pstack-panel--switcher-candidates (candidates buffers)
+  "Return CANDIDATES for BUFFERS with In Panel statuses, or nil.
+CANDIDATES are `agent-shell--read-shell-buffer' strings in BUFFERS
+order.  Waiting leads' statuses are replaced and every status column is
+padded to the widest.  Return nil when any candidate is unrecognized."
+  (when-let* (((= (length candidates) (length buffers)))
+              (columns (cl-mapcar
+                        #'+agent-shell-pstack-panel--candidate-columns
+                        candidates buffers))
+              ((not (memq nil columns)))
+              (statuses (cl-mapcar
+                         (lambda (candidate buffer column)
+                           (if (+agent-shell-pstack-panel--waiting buffer)
+                               (+agent-shell-pstack-panel--status-text buffer)
+                             (substring candidate (nth 0 column)
+                                        (nth 2 column))))
+                         candidates buffers columns))
+              (width (1+ (apply #'max (mapcar #'length statuses)))))
+    (cl-mapcar
+     (lambda (candidate column status)
+       (let ((icon (get-text-property 0 'agent-shell--icon candidate)))
+         (propertize (concat (substring candidate 0 (nth 0 column))
+                             (string-pad status width)
+                             (substring candidate (nth 1 column)))
+                     'agent-shell--icon icon)))
+     candidates columns statuses)))
+
+(defun +agent-shell-pstack-panel--read-shell-buffer (original &rest args)
+  "Show In Panel statuses in ORIGINAL's buffer selector, called with ARGS.
+Rewrite only the status column of the candidates ORIGINAL passes to
+`completing-read'.  Call ORIGINAL unchanged when no lead waits, and
+leave its candidates unchanged when they are not recognized."
+  (let ((buffers (or (plist-get args :buffers) (agent-shell-buffers)))
+        (read completing-read-function))
     (if (not (seq-some #'+agent-shell-pstack-panel--waiting buffers))
         (apply original args)
-      (let* ((identifiers
-              (mapcar (lambda (buffer)
-                        (map-nested-elt
-                         (buffer-local-value 'agent-shell--state buffer)
-                         '(:agent-config :identifier)))
-                      buffers))
-             (short-names (or force-short-names
-                              (seq-every-p (lambda (id)
-                                             (eq id (car identifiers)))
-                                           identifiers)))
-             (choices
-              (mapcar
-               (lambda (buffer)
-                 (with-current-buffer buffer
-                   (let* ((config (map-elt agent-shell--state :agent-config))
-                          (name (buffer-name buffer))
-                          (prefix (agent-shell--buffer-name-prefix
-                                   (map-elt config :buffer-name)))
-                          (title (string-trim
-                                  (car (split-string
-                                        (or (map-nested-elt
-                                             agent-shell--state
-                                             '(:session :title)) "") "\n")))))
-                     (cons (propertize
-                            (format "%s  %s  %s"
-                                    (if (and short-names prefix)
-                                        (string-remove-prefix prefix name) name)
-                                    (+agent-shell-pstack-panel-display-status)
-                                    (truncate-string-to-width title 50 nil nil
-                                                              "..."))
-                            'agent-shell--icon
-                            (when agent-shell-show-config-icons
-                              (agent-shell--config-icon :config config)))
-                           buffer))))
-               buffers))
-             (completion-extra-properties
-              '(:affixation-function agent-shell--icon-affixation))
-             (completion-styles (cons 'substring completion-styles))
-             (this-command 'agent-shell--read-shell-buffer)
-             (selection (completing-read (or prompt "Agent shell buffer: ")
-                                         choices nil t)))
-        (or (cdr (assoc selection choices))
-            (user-error "Nothing selected"))))))
+      (let ((completing-read-function
+             (lambda (prompt collection &rest rest)
+               (let* ((completing-read-function read)
+                      (candidates (all-completions "" collection))
+                      (rewritten (+agent-shell-pstack-panel--switcher-candidates
+                                  candidates buffers)))
+                 (if (not rewritten)
+                     (apply read prompt collection rest)
+                   (let* ((metadata (and (functionp collection)
+                                         (funcall collection "" nil 'metadata)))
+                          (selection
+                           (apply read prompt
+                                  (lambda (string pred action)
+                                    (if (eq action 'metadata)
+                                        metadata
+                                      (complete-with-action
+                                       action rewritten string pred)))
+                                  rest))
+                          (index (seq-position rewritten selection)))
+                     (if index (nth index candidates) selection)))))))
+        (apply original args)))))
 
 (defun +agent-shell-pstack-panel--mode-line-text (lead)
   "Return mode-line text for LEAD's running panels, or nil."

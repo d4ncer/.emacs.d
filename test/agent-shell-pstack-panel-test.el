@@ -918,6 +918,20 @@ the panel\\.$"
               (should (eq lead (current-buffer))))))
         (kill-buffer view)))))
 
+(defun +agent-shell-pstack-panel-test--switcher (buffers &optional choose)
+  "Return (CANDIDATES METADATA BUFFER) from the switcher over BUFFERS.
+CHOOSE picks from the candidates, defaulting to the first; BUFFER is
+the switcher's result."
+  (let* (candidates
+         metadata
+         (completing-read-function
+          (lambda (_prompt collection &rest _)
+            (setq candidates (all-completions "" collection)
+                  metadata (funcall collection "" nil 'metadata))
+            (funcall (or choose #'car) candidates)))
+         (buffer (agent-shell--read-shell-buffer :buffers buffers)))
+    (list candidates metadata buffer)))
+
 (defun +agent-shell-pstack-panel-test--displays (lead expected)
   "Check every status display for LEAD contains EXPECTED."
   (let ((agent-shell-show-config-icons nil)
@@ -932,13 +946,14 @@ the panel\\.$"
         (let ((model (agent-shell--make-header-model state :position "1/1"
                                                     :status "View")))
           (should (equal expected (map-elt model :status)))
+          (should (eq '+agent-shell-pstack-panel-status
+                      (get-text-property 0 'face (map-elt model :status))))
           (should (string-search expected
                                  (agent-shell--render-header-model model))))))
-    (cl-letf (((symbol-function 'completing-read)
-               (lambda (_prompt choices &rest _)
-                 (should (string-search expected (caar choices)))
-                 (caar choices))))
-      (should (eq lead (agent-shell--read-shell-buffer :buffers (list lead)))))
+    (pcase-let ((`(,candidates ,_ ,buffer)
+                 (+agent-shell-pstack-panel-test--switcher (list lead))))
+      (should (string-search expected (car candidates)))
+      (should (eq lead buffer)))
     (should (string-search expected
                            (buffer-local-value
                             '+agent-shell-pstack-panel--mode-line lead)))
@@ -1042,6 +1057,144 @@ the panel\\.$"
         (lead-event :kind 'input-submitted)
         (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
         (should (eq 'ready (agent-shell-status :shell-buffer lead)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-switcher ()
+  "Change only a waiting lead's status column in the buffer switcher."
+  (+agent-shell-pstack-panel-test--with
+    (let* ((agent-shell-show-config-icons nil)
+           (agent-shell-buffer-name-format 'default)
+           (ready (generate-new-buffer "Claude Agent @ alpha"))
+           (busy (generate-new-buffer "Claude Agent @ beta-long"))
+           (buffers (list lead ready busy))
+           (titles '("Lead title" "Ready title" "Busy title")))
+      (cl-letf (((symbol-function 'shell-maker-busy)
+                 (lambda () (eq busy (current-buffer))))
+                ((symbol-function 'agent-shell--permission-pending-p) #'ignore)
+                ((symbol-function 'agent-shell-elicitation--pending-p)
+                 #'ignore))
+        (unwind-protect
+            (progn
+              (cl-mapc (lambda (buffer title)
+                         (with-current-buffer buffer
+                           (setq-local agent-shell--state
+                                       `((:agent-config
+                                          (:identifier . claude-code)
+                                          (:buffer-name . "Claude"))
+                                         (:session (:title . ,title))))))
+                       buffers titles)
+              (let ((unadvised
+                     (lambda ()
+                       (advice-remove
+                        'agent-shell--read-shell-buffer
+                        #'+agent-shell-pstack-panel--read-shell-buffer)
+                       (unwind-protect
+                           (car (+agent-shell-pstack-panel-test--switcher
+                                 buffers))
+                         (advice-add
+                          'agent-shell--read-shell-buffer :around
+                          #'+agent-shell-pstack-panel--read-shell-buffer)))))
+                ;; No lead waits: the original runs untouched.
+                (let ((upstream (funcall unadvised))
+                      (advised (car (+agent-shell-pstack-panel-test--switcher
+                                     buffers))))
+                  (should (= 3 (length upstream)))
+                  (cl-mapc (lambda (a b)
+                             (should (equal-including-properties a b)))
+                           upstream advised))
+                (lead-event :kind 'turn-complete :session "s1"
+                            :text (+agent-shell-pstack-panel-test--message
+                                   +agent-shell-pstack-panel-test--how))
+                (should (+agent-shell-pstack-panel--waiting lead))
+                (let* ((status (+agent-shell-pstack-panel-display-status lead))
+                       (upstream (funcall unadvised))
+                       (switched (+agent-shell-pstack-panel-test--switcher
+                                  buffers))
+                       (candidates (nth 0 switched))
+                       (columns
+                        (mapcar (lambda (candidate)
+                                  (next-single-property-change
+                                   (next-single-property-change
+                                    0 'face candidate)
+                                   'face candidate))
+                                candidates))
+                       (title-columns
+                        (cl-mapcar #'string-search titles candidates)))
+                  (should (eq 'agent-shell--icon-affixation
+                              (alist-get 'affixation-function
+                                         (cdr (nth 1 switched)))))
+                  (should (eq lead (nth 2 switched)))
+                  ;; Names and titles keep upstream text and faces.
+                  (cl-mapc
+                   (lambda (candidate original column title-column)
+                     (should (equal-including-properties
+                              (substring candidate 0 column)
+                              (substring original 0 column)))
+                     (should (equal-including-properties
+                              (substring candidate title-column)
+                              (substring original
+                                         (string-search
+                                          (substring-no-properties
+                                           candidate title-column)
+                                          original)))))
+                   candidates upstream columns title-columns)
+                  (dolist (candidate candidates)
+                    (should (eq 'agent-shell-buffer-name
+                                (get-text-property 0 'face candidate))))
+                  (cl-mapc (lambda (candidate column)
+                             (should (eq 'agent-shell-session-title
+                                         (get-text-property column 'face
+                                                            candidate))))
+                           candidates title-columns)
+                  ;; Statuses: In Panel in its face, the others upstream's.
+                  (should (string-prefix-p
+                           "In Panel (how "
+                           (substring (nth 0 candidates) (nth 0 columns))))
+                  (should (string-search status (nth 0 candidates)))
+                  (cl-mapc
+                   (lambda (candidate column face)
+                     (should (eq face (get-text-property column 'face
+                                                         candidate))))
+                   candidates columns
+                   '(+agent-shell-pstack-panel-status
+                     agent-shell-success agent-shell-warning))
+                  (should (string-prefix-p
+                           "ready " (substring (nth 1 candidates)
+                                               (nth 1 columns))))
+                  (should (string-prefix-p
+                           "busy " (substring (nth 2 candidates)
+                                              (nth 2 columns))))
+                  ;; Columns stay aligned, padded to In Panel.
+                  (should (= 1 (length (seq-uniq columns))))
+                  (should (= 1 (length (seq-uniq title-columns))))
+                  (should (= (+ (nth 0 columns) (length status) 1)
+                             (nth 0 title-columns)))
+                  ;; Each choice returns its buffer; input readiness stays.
+                  (dotimes (i 3)
+                    (should (eq (nth i buffers)
+                                (nth 2 (+agent-shell-pstack-panel-test--switcher
+                                        buffers (lambda (c) (nth i c)))))))
+                  (let ((completing-read-function
+                         (lambda (_prompt collection &rest _)
+                           (should (eq 'ready (agent-shell-status
+                                               :shell-buffer lead)))
+                           (car (all-completions "" collection)))))
+                    (should (eq lead (agent-shell--read-shell-buffer
+                                      :buffers buffers))))
+                  (should (eq 'ready (agent-shell-status :shell-buffer lead)))
+                  ;; Unrecognized candidates pass through unchanged.
+                  (should (eq 'kept
+                              (let ((completing-read-function
+                                     (lambda (_prompt collection &rest _)
+                                       (should (equal '("odd")
+                                                      (all-completions
+                                                       "" collection)))
+                                       'kept)))
+                                (+agent-shell-pstack-panel--read-shell-buffer
+                                 (lambda (&rest _)
+                                   (completing-read "" '("odd")))
+                                 :buffers buffers)))))))
+          (kill-buffer ready)
+          (kill-buffer busy))))))
 
 (ert-deftest +agent-shell-pstack-panel-test-no-panel-display ()
   "Ordinary leads retain their status and ready alerts."
