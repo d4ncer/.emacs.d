@@ -1441,10 +1441,12 @@ address or a name."
   "Return whether PANEL's delivered follow-up awaits your reading.
 It is read once you visit its lead or follow-up from the panels view, or
 the lead's shell has been shown since it arrived or is shown now, or the
-lead is gone."
+lead is gone.  A follow-up with no delivery time predates this tracking
+and counts as read."
   (let ((lead (+agent-shell-pstack-panel-lead panel))
         (at (+agent-shell-pstack-panel-delivered-at panel)))
     (and (+agent-shell-pstack-panel-delivered panel)
+         at
          (not (+agent-shell-pstack-panel-seen panel))
          (buffer-live-p lead)
          (not (and at (buffer-local-value 'buffer-display-time lead)

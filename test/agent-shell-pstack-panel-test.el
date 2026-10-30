@@ -2315,6 +2315,11 @@ workspace  \\? all keys$" (regexp-quote arena))
           (should (looking-at-p "\\[needs input\\] how "))
           (should (eq '+agent-shell-pstack-panels-input
                       (get-text-property (point) 'font-lock-face)))
+          ;; A follow-up delivered before delivery times were kept is read.
+          (let ((at (+agent-shell-pstack-panel-delivered-at finished)))
+            (setf (+agent-shell-pstack-panel-delivered-at finished) nil)
+            (should-not (+agent-shell-pstack-panel-unread-p finished))
+            (setf (+agent-shell-pstack-panel-delivered-at finished) at))
           (+agent-shell-pstack-panels-visit)
           (should (eq lead (current-buffer)))
           (should-not (+agent-shell-pstack-panel-unread-p finished))
