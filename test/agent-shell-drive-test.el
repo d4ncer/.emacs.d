@@ -294,7 +294,14 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
              ;; Interpreters and paths a process shows.
              (t "./build.sh" "/bin/bash ./build.sh")
              (t "make test" "/usr/bin/make test")
-             (t "echo ready > /tmp/flag" "bash -c echo ready > /tmp/flag")))
+             (t "echo ready > /tmp/flag" "bash -c echo ready > /tmp/flag")
+             ;; A quoted shell left in the background stays one piece.
+             (t "/bin/sh -c \"sh -c 'sleep 7 & sleep 8' gate & echo $! > f\""
+                "sh -c sleep 7 & sleep 8 gate")
+             (t "sh -c 'sleep 7 & sleep 8' gate & echo $! > f"
+                "sh -c sleep 7 & sleep 8 gate")
+             (nil "sh -c 'sleep 7 & sleep 8' gate & echo $! > f"
+                  "sh -c sleep 7")))
     (pcase-let ((`(,expected ,command ,line) case))
       (should (eq expected
                   (and (+agent-shell-drive--ran-p line (list command)) t)))))

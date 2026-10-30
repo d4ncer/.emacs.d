@@ -624,11 +624,36 @@ shows it, so both sides of a match drop quoting."
   "\\(?:[0-9]*\\|&\\)[<>][<>&|]*[[:space:]]*[^[:space:]<>;&|()]*"
   "Regexp matching a redirection, which a process's command line hides.")
 
+(defun +agent-shell-drive--split (script)
+  "Return SCRIPT's parts between shell operators outside quotes.
+A SCRIPT that is one quoted string is split inside it."
+  (let ((script (string-trim script))
+        (parts nil) (start 0) (quote nil) (index 0))
+    (while (< index (length script))
+      (let ((char (aref script index)))
+        (cond (quote (cond ((eq char quote) (setq quote nil))
+                           ((and (eq char ?\\) (eq quote ?\"))
+                            (setq index (1+ index)))))
+              ((memq char '(?\' ?\")) (setq quote char))
+              ((eq char ?\\) (setq index (1+ index)))
+              ((memq char '(?\; ?& ?| ?\( ?\) ?\n))
+               (push (substring script start index) parts)
+               (setq start (1+ index)))))
+      (setq index (1+ index)))
+    (push (substring script (min start (length script))) parts)
+    (if (and (null (cdr parts)) (> (length script) 1)
+             (memq (aref script 0) '(?\' ?\"))
+             (eq (aref script 0) (aref script (1- (length script))))
+             (not (string-search (string (aref script 0))
+                                 (substring script 1 -1))))
+        (+agent-shell-drive--split (substring script 1 -1))
+      (nreverse parts))))
+
 (defun +agent-shell-drive--pieces (command)
   "Return the simple commands in COMMAND, each normalized.
 A command that ends in & or chains several leaves processes running
 only one piece of it, without the shell -c that wrapped it or its
-redirections."
+redirections.  A quoted piece, such as a nested sh -c, stays whole."
   (seq-uniq
    (seq-remove
     #'string-empty-p
@@ -636,13 +661,14 @@ redirections."
               (+agent-shell-drive--normalize
                (replace-regexp-in-string
                 +agent-shell-drive--simple-prefix ""
-                (string-trim piece))))
-            (split-string
-             (replace-regexp-in-string
-              +agent-shell-drive--redirection " "
-              (replace-regexp-in-string
-               +agent-shell-drive--shell-prefix "" command))
-             "[;&|()\n]+")))))
+                (string-trim
+                 (replace-regexp-in-string
+                  +agent-shell-drive--redirection " " piece)))))
+            ;; With its own shell -c or without, as Codex's argv may be.
+            (append (+agent-shell-drive--split
+                     (replace-regexp-in-string
+                      +agent-shell-drive--shell-prefix "" command))
+                    (+agent-shell-drive--split command))))))
 
 (defconst +agent-shell-drive--interpreters
   '("sh" "bash" "zsh" "dash" "ksh" "node" "python" "python3" "ruby" "perl")
@@ -684,19 +710,22 @@ one piece of it."
 (defun +agent-shell-drive--ran-p (line commands)
   "Return whether a process with command LINE runs one of COMMANDS.
 Its own command, past any shell wrapper, must be one of COMMANDS from
-start to end, past theirs.  A process other than a shell may instead be
-one of a command's simple commands, as a background piece or a link of
-a chain is.  A command that merely holds one, such as a hook a shell
-pipes to or an MCP server's launcher, does not count."
+start to end, past theirs.  It may instead be one of a command's simple
+commands, as a background piece or a link of a chain is; a shell is
+one only with its -c, as a quoted sh -c in the command shows it.  A
+command that merely holds one, such as a hook a shell pipes to or an
+MCP server's launcher, does not count."
   (pcase-let ((`(,script . ,own) (+agent-shell-drive--own line)))
     (and (not (string-empty-p own))
          (seq-some
           (lambda (command)
             (or (equal own (cdr (+agent-shell-drive--own command)))
-                (and (not script)
-                     (member own (mapcar #'+agent-shell-drive--program
-                                         (+agent-shell-drive--pieces
-                                          command))))))
+                (member (if script
+                            (+agent-shell-drive--program
+                             (+agent-shell-drive--normalize line))
+                          own)
+                        (mapcar #'+agent-shell-drive--program
+                                (+agent-shell-drive--pieces command)))))
           commands))))
 
 (defun +agent-shell-drive-commands (shell commands)
