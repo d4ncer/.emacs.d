@@ -644,44 +644,72 @@ redirections."
                +agent-shell-drive--shell-prefix "" command))
              "[;&|()\n]+")))))
 
-(defun +agent-shell-drive--word-search (needle haystack &optional whole)
-  "Return whether NEEDLE appears in HAYSTACK as whole words.
-A path may come before NEEDLE, so /usr/bin/make test holds make test.
-With WHOLE, only the end of HAYSTACK or a shell operator may follow it,
-as when a shell wraps NEEDLE."
-  (string-match-p (concat "\\(?:\\`\\|[[:space:]/]\\)" (regexp-quote needle)
-                          (if whole "\\(?:\\'\\|[[:space:]]+[<>;&|]\\)"
-                            "\\(?:\\'\\|[[:space:]]\\)"))
-                  haystack))
+(defconst +agent-shell-drive--interpreters
+  '("sh" "bash" "zsh" "dash" "ksh" "node" "python" "python3" "ruby" "perl")
+  "Programs a process may show running a script, as node runs npm.")
+
+(defconst +agent-shell-drive--eval-wrapper
+  (rx bos (? "source " (+? nonl) " && ") "eval " (group (+? nonl))
+      (? " < /dev/null") (? " && pwd -P >| " (+ (not space))) eos)
+  "Regexp matching Claude Code's wrapper around a command, which it evals.")
+
+(defun +agent-shell-drive--program (command)
+  "Return normalized COMMAND naming its program without a directory.
+An interpreter running a script, as in node /usr/bin/npm test, gives way
+to the script."
+  (let ((words (split-string command " " t)))
+    (when (and (cdr words)
+               (member (file-name-nondirectory (car words))
+                       +agent-shell-drive--interpreters)
+               (not (string-prefix-p "-" (cadr words))))
+      (pop words))
+    (when words
+      (setcar words (file-name-nondirectory (car words))))
+    (string-join words " ")))
+
+(defun +agent-shell-drive--own (line)
+  "Return (SCRIPT . COMMAND), what command LINE runs, normalized.
+A shell -c, and the eval Claude Code wraps a command in, are stripped;
+SCRIPT is then non-nil, since such a shell runs all of COMMAND, never
+one piece of it."
+  (let ((line (+agent-shell-drive--normalize line)))
+    (if (string-match +agent-shell-drive--shell-prefix line)
+        (let ((script (substring line (match-end 0))))
+          (cons t (+agent-shell-drive--program
+                   (if (string-match +agent-shell-drive--eval-wrapper script)
+                       (match-string 1 script)
+                     script))))
+      (cons nil (+agent-shell-drive--program line)))))
 
 (defun +agent-shell-drive--ran-p (line commands)
   "Return whether a process with command LINE runs one of COMMANDS.
-It does when LINE holds a whole command, as the shell wrapping it does,
-or is one of its simple commands, or holds one that has arguments."
-  (let ((line (+agent-shell-drive--normalize line)))
-    (seq-some
-     (lambda (command)
-       (let ((whole (+agent-shell-drive--normalize command)))
-         (or (and (not (string-empty-p whole))
-                  (+agent-shell-drive--word-search whole line t))
-             (seq-some (lambda (piece)
-                         (or (equal piece line)
-                             (and (string-search " " piece)
-                                  (+agent-shell-drive--word-search
-                                   piece line))))
-                       (+agent-shell-drive--pieces command)))))
-     commands)))
+Its own command, past any shell wrapper, must be one of COMMANDS from
+start to end, past theirs.  A process other than a shell may instead be
+one of a command's simple commands, as a background piece or a link of
+a chain is.  A command that merely holds one, such as a hook a shell
+pipes to or an MCP server's launcher, does not count."
+  (pcase-let ((`(,script . ,own) (+agent-shell-drive--own line)))
+    (and (not (string-empty-p own))
+         (seq-some
+          (lambda (command)
+            (or (equal own (cdr (+agent-shell-drive--own command)))
+                (and (not script)
+                     (member own (mapcar #'+agent-shell-drive--program
+                                         (+agent-shell-drive--pieces
+                                          command))))))
+          commands))))
 
 (defun +agent-shell-drive-commands (shell commands)
   "Return (PID . COMMAND) for each live process running one of COMMANDS.
 COMMANDS are what SHELL's tool calls ran, as `turn-complete' events
 report them.  The processes are those the walk
-`+agent-shell-drive-stop-unconfined' makes finds whose command line
-holds one of COMMANDS, plus their descendants, in pid order; the rest,
-such as MCP servers, hooks and execution hosts its adapter started, are
-left out.  COMMAND is the process's command line, or its name when the
-system hides that.  Return nil while SHELL has no live adapter or
-COMMANDS is nil."
+`+agent-shell-drive-stop-unconfined' makes finds whose own command, past
+any shell wrapper, is one of COMMANDS or one of its simple commands, as
+`+agent-shell-drive--ran-p' says, plus their descendants, in pid order;
+the rest, such as MCP servers, hooks and execution hosts its adapter
+started, are left out.  COMMAND is the process's command line, or its
+name when the system hides that.  Return nil while SHELL has no live
+adapter or COMMANDS is nil."
   (when-let* ((commands)
               (pid (+agent-shell-drive--adapter shell)))
     (let* ((processes (+agent-shell-drive--processes))

@@ -640,11 +640,14 @@ command running, Emacs asks the same shell once to wait for its commands
 and end its turn again with its report, and kills nothing. A command
 counts as running when one of the delegate's execute tool calls since the
 brief ran it: a process the drive library's walk of the adapter's tree
-and process groups finds whose command line holds that tool call's
-command, or one of its simple commands when it ran in the background,
-and that process's descendants. MCP servers, hooks, execution hosts and
-anything else not traceable to a tool call never count, though Emacs
-still stops them with the delegate. A second turn that ends with
+and process groups finds whose own command, past a shell's `-c` or Claude
+Code's eval wrapper and an interpreter such as node, is that tool call's
+command from start to end, or, for a process other than a shell, one of
+its simple commands, as a background piece or a link of a chain is; and
+that process's descendants. A process that merely contains a tool call's
+command, such as a shell piping a hook's input, never counts. MCP servers,
+hooks, execution hosts and anything else not traceable to a tool call
+never count either, though Emacs still stops them with the delegate. A second turn that ends with
 commands still running settles as usual, and the follow-up names them. A
 remote delegate's runner does the same on its host.
 

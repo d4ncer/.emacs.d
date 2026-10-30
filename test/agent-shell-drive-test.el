@@ -270,7 +270,31 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
              (nil "git status"
                   "bash -c cat | example-cli agent-hook --event stop")
              (nil "cd lisp && make" "example-cli exec-host --listen")
-             (nil "make" "make check")))
+             (nil "make" "make check")
+             ;; An agent hook a shell pipes to, and the hook itself.
+             ,@(mapcan
+                (lambda (command)
+                  (list (list nil command
+                              "bash -c echo \"$1\" | example-cli agent-hook \
+--agent codex -- {\"event\":\"stop\"}")
+                        (list nil command
+                              "example-cli agent-hook --agent codex -- \
+{\"event\":\"stop\"}")))
+                '("echo \"$1\"" "echo \"$1\" | jq ." "echo" "codex"
+                  "echo hi; example-cli agent-hook --agent codex"))
+             ;; A shell echoing something else.
+             (nil "echo ready" "bash -c echo ready > /tmp/flag")
+             (nil "echo ready && make" "/bin/bash -c echo ready")
+             (nil "make" "zsh -lc echo $PPID; make")
+             ;; An MCP server's launcher.
+             (nil "npx -y example-mcp-server"
+                  "node /usr/local/bin/npx -y example-mcp-server --stdio")
+             (nil "npx -y example-mcp-server"
+                  "sh -c npx -y example-mcp-server --stdio")
+             ;; Interpreters and paths a process shows.
+             (t "./build.sh" "/bin/bash ./build.sh")
+             (t "make test" "/usr/bin/make test")
+             (t "echo ready > /tmp/flag" "bash -c echo ready > /tmp/flag")))
     (pcase-let ((`(,expected ,command ,line) case))
       (should (eq expected
                   (and (+agent-shell-drive--ran-p line (list command)) t)))))
