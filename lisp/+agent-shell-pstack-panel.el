@@ -54,6 +54,15 @@
 (defconst +agent-shell-pstack-panel-max-timeout 3600
   "Longest timeout, in seconds, a request may ask for.")
 
+(defcustom +agent-shell-pstack-panel-max-runtime 7200
+  "Seconds a phase may run while a member's command is still running.
+At its timeout a phase whose unsettled members still run a command is
+extended, `+agent-shell-pstack-panel--extension' at a time, up to this."
+  :type 'natnum)
+
+(defconst +agent-shell-pstack-panel--extension 60
+  "Seconds a phase is extended at a time while a member's command runs.")
+
 (defconst +agent-shell-pstack-panel-max-members 4
   "Most members a panel may have.")
 
@@ -745,8 +754,9 @@ vendors.
 Each how or interrogate member starts fresh, read-only, in your working \
 directory, and sees only the brief and its own focus.  Use 1 to %d members \
 with unique roles of lowercase letters, digits and hyphens.  The timeout \
-is in seconds, at most %d.  End your turn right after the block.  Emacs starts the panel as soon as \
-the block is complete, and interrupts your turn if you call a tool after it.
+is in seconds, at most %d; a member still running a command at its \
+timeout gets more time, up to %d seconds in all.  End your turn right \
+after the block.  Emacs starts the panel as soon as the block is complete, and interrupts your turn if you call a tool after it.
 Do not wait or poll after the block.  When every member has finished or \
 timed out, Emacs sends you a prompt with each report inline, the path it was \
 saved to, and how to triage the reports.%s"
@@ -760,6 +770,8 @@ saved to, and how to triage the reports.%s"
               (+agent-shell-pstack-panel--names agents)
               +agent-shell-pstack-panel-max-members
               +agent-shell-pstack-panel-max-timeout
+              (max +agent-shell-pstack-panel-max-timeout
+                   +agent-shell-pstack-panel-max-runtime)
               (concat
                (when (assq 'arena shapes)
                  (+agent-shell-pstack-panel--arena-protocol))
@@ -1477,14 +1489,20 @@ and counts as read."
     (cancel-timer timer))
   (setf (+agent-shell-pstack-panel-timer panel) nil))
 
-(defun +agent-shell-pstack-panel--arm (panel seconds)
-  "Expire PANEL's current phase after SECONDS."
+(defun +agent-shell-pstack-panel--arm (panel seconds &optional limit)
+  "Expire PANEL's current phase after SECONDS.
+A command still running then extends it, until LIMIT, a time that
+defaults to `+agent-shell-pstack-panel-max-runtime' from now."
   (+agent-shell-pstack-panel--disarm panel)
   (setf (+agent-shell-pstack-panel-expires panel) (+ (float-time) seconds)
         (+agent-shell-pstack-panel-timer panel)
         (run-at-time seconds nil #'+agent-shell-pstack-panel--expire
                      (+agent-shell-pstack-panel-id panel)
-                     (+agent-shell-pstack-panel-phase panel))))
+                     (+agent-shell-pstack-panel-phase panel)
+                     (or limit
+                         (+ (float-time)
+                            (max seconds
+                                 +agent-shell-pstack-panel-max-runtime))))))
 
 (defun +agent-shell-pstack-panel--finish (panel)
   "End PANEL, then compose its follow-up and deliver it, once.
@@ -2168,19 +2186,39 @@ not ready."))))
       (+agent-shell-pstack-panel-judge-timeout panel)
     (+agent-shell-pstack-panel-timeout panel)))
 
-(defun +agent-shell-pstack-panel--expire (id phase)
+(defun +agent-shell-pstack-panel--expire (id phase &optional limit)
   "Settle the unfinished members of panel ID's PHASE as timed out.
-Do nothing once the panel has left PHASE."
+Do nothing once the panel has left PHASE.  Before LIMIT, a time, extend
+the phase instead while an unsettled member still runs a command."
   (when-let* ((panel (+agent-shell-pstack-panel--find id))
               ((eq phase (+agent-shell-pstack-panel-phase panel))))
     (setf (+agent-shell-pstack-panel-timer panel) nil)
-    (dolist (member (+agent-shell-pstack-panel--phase-members panel))
-      (+agent-shell-pstack-panel--settle
-       panel member 'timeout
-       (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
-         (+agent-shell-drive-partial-text shell))
-       (format "No report within the %d-second timeout."
-               (+agent-shell-pstack-panel--phase-timeout panel))))
+    (if (and limit (< (float-time) limit)
+             (seq-some (lambda (member)
+                         (and (not (+agent-shell-pstack-panel--settled-p member))
+                              (+agent-shell-drive-running-p
+                               (+agent-shell-pstack-panel-member-shell member))))
+                       (+agent-shell-pstack-panel--phase-members panel)))
+        (+agent-shell-pstack-panel--arm
+         panel (min +agent-shell-pstack-panel--extension
+                    (- limit (float-time)))
+         limit)
+      (let* ((timeout (+agent-shell-pstack-panel--phase-timeout panel))
+             (ran (and limit
+                       (- (float-time)
+                          (- limit (max timeout
+                                        +agent-shell-pstack-panel-max-runtime)))))
+             (reason (if (and ran (> ran (1+ timeout)))
+                         (format "No report within the %d-second timeout, \
+extended to %d seconds while its commands ran." timeout (round ran))
+                       (format "No report within the %d-second timeout."
+                               timeout))))
+        (dolist (member (+agent-shell-pstack-panel--phase-members panel))
+          (+agent-shell-pstack-panel--settle
+           panel member 'timeout
+           (when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
+             (+agent-shell-drive-partial-text shell))
+           reason))))
     (+agent-shell-pstack-panels--refresh)))
 
 (defun +agent-shell-pstack-panel--start-member (panel member)

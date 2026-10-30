@@ -97,7 +97,11 @@ its final message with a fenced block, then ends its turn:
 - `members` lists 1 to 4 members. Each `role` matches `[a-z0-9-]+` and is
   unique. Each `agent` is one the protocol named. `focus` is optional.
 - `timeout` is 1 to 3600 seconds. It defaults to
-  `+agent-shell-pstack-panel-default-timeout`, 900.
+  `+agent-shell-pstack-panel-default-timeout`, 900. When it runs out, a
+  phase whose unsettled members still run a command, such as a test
+  suite, is extended a minute at a time, up to `+agent-shell-pstack-panel-max-runtime`, 7200 seconds,
+  from the phase's start. The timeout reason then says how long it ran.
+  Runs on a remote host keep the fixed deadline their job carries.
 
 Emacs reads the first complete block in the lead's message, as it reaches a
 live `turn-complete` or the tool call that ends the message, so a restored
@@ -471,7 +475,7 @@ The request names exactly one member and no rubric or judge:
   with a reason the lead can act on.
 - `timeout` bounds the whole run, preparation included. It defaults to
   `+agent-shell-pstack-panel-default-delegate-timeout`, 2700 seconds, and
-  is at most 3600.
+  is at most 3600, extended while a command runs as above.
 
 A request found mid-turn waits for the lead's interrupted turn to end, as
 an arena's does. The delegate's shell is hidden from `agent-shell-buffers`.

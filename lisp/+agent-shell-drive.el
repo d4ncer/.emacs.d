@@ -832,6 +832,17 @@ Refuse while SHELL has no session, is not ready, or holds an unsent draft."
   "Return the text of CHUNKS, which lists text newest first."
   (apply #'concat (reverse chunks)))
 
+(defun +agent-shell-drive-running-p (shell)
+  "Return whether SHELL has a command tool call still pending or running."
+  (and (buffer-live-p shell)
+       (local-variable-p 'agent-shell--state shell)
+       (seq-some (lambda (entry)
+                   (and (equal (map-elt (cdr entry) :kind) "execute")
+                        (member (map-elt (cdr entry) :status)
+                                '("pending" "in_progress"))))
+                 (map-elt (buffer-local-value 'agent-shell--state shell)
+                          :tool-calls))))
+
 (defun +agent-shell-drive-partial-text (shell)
   "Return the agent text of watched SHELL's current turn."
   (+agent-shell-drive--text

@@ -1449,6 +1449,35 @@ was not ready.")))
       (should (eq 'timeout (+agent-shell-pstack-panel-member-state
                             (car (+agent-shell-pstack-panel-members panel))))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-expiry-extends-running-command ()
+  "Extend a phase while a member's command runs, up to its limit."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       +agent-shell-pstack-panel-test--one))
+    (let* ((panel (car (+agent-shell-pstack-panel-list)))
+           (id (+agent-shell-pstack-panel-id panel))
+           (member (car (+agent-shell-pstack-panel-members panel)))
+           (timeout (+agent-shell-pstack-panel-timeout panel))
+           (call (list (cons :kind "execute") (cons :status "in_progress")))
+           (limit (+ (float-time) +agent-shell-pstack-panel-max-runtime
+                     (- (+ timeout 100)))))
+      (with-current-buffer (+agent-shell-pstack-panel-member-shell member)
+        (setq-local agent-shell--state
+                    (list (cons :tool-calls (list (cons "t1" call))))))
+      (+agent-shell-pstack-panel--expire id 'running limit)
+      (should (eq 'starting (+agent-shell-pstack-panel-member-state member)))
+      (should (timerp (+agent-shell-pstack-panel-timer panel)))
+      (should (< (- (+agent-shell-pstack-panel-expires panel) (float-time))
+                 (1+ +agent-shell-pstack-panel--extension)))
+      (setf (alist-get :status call) "completed")
+      (+agent-shell-pstack-panel--expire id 'running limit)
+      (should (eq 'timeout (+agent-shell-pstack-panel-member-state member)))
+      (should (string-match-p
+               (format "\\`No report within the %d-second timeout, extended \
+to %d seconds while its commands ran\\.\\'" timeout (+ timeout 100))
+               (+agent-shell-pstack-panel-member-error member))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-schema-guard ()
   "Drop finished panels from an older struct layout when the file loads again.
 Keep unfinished ones, including one whose arena manifest has an older
