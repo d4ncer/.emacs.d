@@ -421,6 +421,28 @@ lists the roles whose result equals the base."
         (should (equal (plist-get (car entries) :id)
                        (plist-get (car (last entries)) :id)))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-request-retry ()
+  "The same block in a later turn, after the follow-up started, is new."
+  (+agent-shell-pstack-panel-test--with
+    (let ((text (+agent-shell-pstack-panel-test--message
+                 +agent-shell-pstack-panel-test--how)))
+      (lead-event :kind 'turn-complete :session "s1" :text text)
+      (let ((first (car (+agent-shell-pstack-panel-list))))
+        (setf (+agent-shell-pstack-panel-followup-started first) t)
+        (lead-event :kind 'turn-complete :session "s1" :text text)
+        (lead-event :kind 'turn-complete :session "s1" :text text)
+        (should (= 2 (length (+agent-shell-pstack-panel-list))))
+        (should (equal '(duplicate started started)
+                       (mapcar (lambda (e) (plist-get e :outcome))
+                               (ring-elements
+                                (gethash lead
+                                         +agent-shell-pstack-panel--logs)))))
+        (should-not (equal (+agent-shell-pstack-panel-id first)
+                           (plist-get (car (ring-elements
+                                            (gethash lead
+                                                     +agent-shell-pstack-panel--logs)))
+                                      :id)))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-request-hash-collision ()
   "A shortened id collision cannot discard a different request."
   (+agent-shell-pstack-panel-test--with

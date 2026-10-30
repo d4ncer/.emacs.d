@@ -2277,18 +2277,35 @@ TOOL is the call to interrupt.  Catch, log and message request errors."
           (+agent-shell-pstack-panel--start-request lead session text tool))
       (error (+agent-shell-pstack-panel--log-error err) nil))))
 
+(defun +agent-shell-pstack-panel--request-identity (session block)
+  "Return (ID . DIGEST) for BLOCK requested in SESSION.
+A turn's text may be seen more than once, so within a turn the same block
+keeps its panel's id.  Once that panel's follow-up has started, the block
+comes from a later turn, a retry, and gets the next id."
+  (let ((generation 0) identity)
+    (while (let* ((key (if (zerop generation) block
+                         (format "%s\0%d" block generation)))
+                  (short (+agent-shell-pstack-panel--id session key))
+                  (digest (secure-hash 'sha256 (concat session "\0" key)))
+                  (previous (gethash short
+                                     +agent-shell-pstack-panel--request-digests))
+                  (id (if (and previous (not (equal digest previous)))
+                          digest short))
+                  (panel (+agent-shell-pstack-panel--find id)))
+             (setq identity (cons id digest))
+             (and panel (+agent-shell-pstack-panel-followup-started panel)))
+      (setq generation (1+ generation)))
+    identity))
+
 (defun +agent-shell-pstack-panel--start-request (lead session text &optional tool)
   "Start the panel that LEAD requested in TEXT in SESSION.
 TOOL names the call LEAD made after TEXT; a new request interrupts LEAD.
 Return the panel, or nil when TEXT requests none or one already seen."
   (when-let* ((block (+agent-shell-pstack-panel--block text))
-              (short-id (+agent-shell-pstack-panel--id (or session "") block))
-              (digest (secure-hash 'sha256 (concat session "\0" block)))
-              (id (let ((previous
-                         (gethash short-id
-                                  +agent-shell-pstack-panel--request-digests)))
-                    (if (and previous (not (equal digest previous)))
-                        digest short-id))))
+              (identity (+agent-shell-pstack-panel--request-identity
+                         (or session "") block))
+              (id (car identity))
+              (digest (cdr identity)))
     (if (+agent-shell-pstack-panel--find id)
         (progn (+agent-shell-pstack-panel--log-outcome 'duplicate id) nil)
       (+agent-shell-pstack-panel--log-outcome 'started id)
