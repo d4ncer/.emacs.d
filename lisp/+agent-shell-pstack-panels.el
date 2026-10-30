@@ -564,7 +564,11 @@ or commit there until this finishes")))
       "  " (+agent-shell-pstack-panels--name
             (+agent-shell-pstack-panel-lead panel))
       "  " (+agent-shell-pstack-panels--age
-            (+agent-shell-pstack-panel-created panel)))
+            (+agent-shell-pstack-panel-created panel))
+      (when (buffer-live-p (+agent-shell-pstack-panel-lead panel))
+        (format " · %s"
+                (+agent-shell-pstack-panel-display-status
+                 (+agent-shell-pstack-panel-lead panel)))))
     (+agent-shell-pstack-panels--hint 2 section)
     (when-let* ((rejection (+agent-shell-pstack-panel-rejection panel)))
       (+agent-shell-pstack-panels--lines 2 rejection

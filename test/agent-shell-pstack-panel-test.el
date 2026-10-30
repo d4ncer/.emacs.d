@@ -13,6 +13,8 @@
 (require '+agent-shell-egress)
 (require '+agent-shell-pstack-reload)
 (require 'agent-shell-sandbox-test)
+(require 'agent-shell-notify)
+(require '+agent-shell-projects)
 
 (defun +agent-shell-pstack-panel-test--login (agent)
   "Return a :login reader of a synthetic AGENT login lasting a day."
@@ -873,14 +875,14 @@ the panel\\.$"
                    (format "\\`pstack panels  1 error, 1 running
 .*
 
-\\[error: rejected\\] -  %s   \\*lead\\*  [0-9]+s
+\\[error: rejected\\] -  %s   \\*lead\\*  [0-9]+s · In Panel[^\n]*
   RET visit lead  l request log  \\? all keys
   The block must hold a JSON object
   Follow-up: delivered [0-9]+s ago, unread
 " rejected)
                    (funcall text)))
           (should (string-match-p
-                   (format "^\\[running\\] how  %s   \\*lead\\*  [0-9]+s
+                   (format "^\\[running\\] how  %s   \\*lead\\*  [0-9]+s · In Panel[^\n]*
   RET visit lead  c cancel the panel  l request log  \\? all keys
   data-flow        codex        starting  %s
     RET visit shell  \\? all keys
@@ -916,6 +918,151 @@ the panel\\.$"
               (should (eq lead (current-buffer))))))
         (kill-buffer view)))))
 
+(defun +agent-shell-pstack-panel-test--displays (lead expected)
+  "Check every status display for LEAD contains EXPECTED."
+  (let ((agent-shell-show-config-icons nil)
+        (agent-shell-header-style 'text)
+        (state '((:agent-config . ((:buffer-name . "Fixture"))))))
+    (cl-letf (((symbol-function 'agent-shell--state) (lambda () state)))
+      (with-current-buffer lead
+        (should (string-search expected (agent-shell--busy-indicator-frame)))
+        (let ((major-mode 'agent-shell-mode)
+              (agent-shell-header-style 'none))
+          (should (string-search expected (agent-shell--mode-line-format))))
+        (let ((model (agent-shell--make-header-model state :position "1/1"
+                                                    :status "View")))
+          (should (equal expected (map-elt model :status)))
+          (should (string-search expected
+                                 (agent-shell--render-header-model model))))))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (_prompt choices &rest _)
+                 (should (string-search expected (caar choices)))
+                 (caar choices))))
+      (should (eq lead (agent-shell--read-shell-buffer :buffers (list lead)))))
+    (should (string-search expected
+                           (buffer-local-value
+                            '+agent-shell-pstack-panel--mode-line lead)))
+    (cl-letf (((symbol-function '+agent-shell-projects-shell)
+               (lambda (_) lead))
+              ((symbol-function '+agent-shell-projects--project)
+               (lambda () '(:name "Fixture" :author "lead"
+                             :agents ((:id "lead" :role "author"))))))
+      (with-temp-buffer
+        (+agent-shell-projects--render-home)
+        (should (string-search expected (buffer-string))))
+      (with-temp-buffer
+        (+agent-shell-projects--activity
+         '(:author "lead" :agents ((:id "lead"))) nil nil)
+        (should (string-search expected (buffer-string)))))
+    (with-temp-buffer
+      (magit-insert-section (root)
+        (+agent-shell-pstack-panels--insert-panel
+         (car (+agent-shell-pstack-panel-list))))
+      (should (string-search expected (buffer-string))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-display-and-notify ()
+  "Keep the lead in-panel through delivery and notify on its answer only."
+  (+agent-shell-pstack-panel-test--with
+    (let ((agent-shell-notify--states (make-hash-table :test #'eq))
+          (completion '((:event . turn-complete)
+                        (:data . ((:stop-reason . "end_turn")))))
+          ready-timer alerts)
+      (cl-letf* ((schedule (symbol-function 'run-at-time))
+                 ((symbol-function 'run-at-time)
+                  (lambda (delay repeat function &rest args)
+                    (if (equal delay 0.25)
+                        (setq ready-timer (lambda () (apply function args)))
+                      (apply schedule delay repeat function args))))
+                 ((symbol-function 'cancel-timer)
+                  (let ((cancel (symbol-function 'cancel-timer)))
+                    (lambda (timer) (when (timerp timer) (funcall cancel timer)))))
+                 ((symbol-function 'shell-maker-busy) (lambda () nil))
+                 ((symbol-function 'agent-shell-notify--title) (lambda (_) "Lead"))
+                 ((symbol-function 'agent-shell-notify-send)
+                  (lambda (_title body &rest _) (push body alerts))))
+        (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
+        ;; Notify may subscribe before the panel's request handler.
+        (agent-shell-notify--handle lead completion)
+        (lead-event :kind 'turn-complete :session "s1"
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--how))
+        (funcall ready-timer)
+        (should-not alerts)
+        (let* ((panel (car (+agent-shell-pstack-panel-list)))
+               (status (+agent-shell-pstack-panel-display-status lead)))
+          (should (eq 'ready (agent-shell-status :shell-buffer lead)))
+          (+agent-shell-pstack-panel-test--displays lead status)
+          (member-event "data-flow" :kind 'init-finished)
+          (member-event "data-flow" :kind 'turn-complete :text "A")
+          (member-event "risks" :kind 'init-finished)
+          (member-event "risks" :kind 'turn-complete :text "B")
+          (should (+agent-shell-pstack-panel-delivered panel))
+          (should (equal status (+agent-shell-pstack-panel-display-status lead)))
+          (+agent-shell-pstack-panel-test--displays lead status)
+          (lead-event :kind 'input-submitted)
+          (agent-shell-notify--handle lead '((:event . input-submitted)))
+          (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
+          (should (eq 'ready (agent-shell-status :shell-buffer lead)))
+          (lead-event :kind 'turn-complete :session "s1" :text "Answer")
+          (agent-shell-notify--handle lead completion)
+          (funcall ready-timer)
+          (should (equal '("Ready for input") alerts))
+          (should-not (buffer-local-value
+                       '+agent-shell-pstack-panel--mode-line lead)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-two-panel-display ()
+  "Count all outstanding panels, including delivered follow-ups."
+  (+agent-shell-pstack-panel-test--with
+    (cl-letf (((symbol-function 'shell-maker-busy) (lambda () nil)))
+      (dotimes (i 2)
+        (lead-event :kind 'turn-complete :session (format "s%d" i)
+                    :text (+agent-shell-pstack-panel-test--message
+                           +agent-shell-pstack-panel-test--how)))
+      (let* ((panels (+agent-shell-pstack-panel-list))
+             (status (+agent-shell-pstack-panel-display-status lead)))
+        (should (string-prefix-p "In Panel [2]" status))
+        (dolist (panel panels)
+          (should (string-search (+agent-shell-pstack-panel-id panel) status)))
+        (+agent-shell-pstack-panel-test--displays lead status)
+        (setf (+agent-shell-pstack-panel-followup (car panels)) "Follow-up")
+        (+agent-shell-pstack-panel--deliver (car panels))
+        (should (equal status (+agent-shell-pstack-panel-display-status lead)))
+        (lead-event :kind 'input-submitted)
+        (should (string-prefix-p "In Panel (how "
+                                 (+agent-shell-pstack-panel-display-status lead)))
+        (should-not (string-search "[2]"
+                                  (+agent-shell-pstack-panel-display-status lead)))
+        (setf (+agent-shell-pstack-panel-followup (cadr panels)) "Next follow-up")
+        (+agent-shell-pstack-panel--deliver (cadr panels))
+        (lead-event :kind 'input-submitted)
+        (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
+        (should (eq 'ready (agent-shell-status :shell-buffer lead)))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-no-panel-display ()
+  "Ordinary leads retain their status and ready alerts."
+  (+agent-shell-pstack-panel-test--with
+    (let ((agent-shell-notify--states (make-hash-table :test #'eq)) alerts pending)
+      (cl-letf (((symbol-function 'shell-maker-busy) (lambda () nil))
+                ((symbol-function 'run-at-time)
+                 (lambda (_delay _repeat function &rest args)
+                   (setq pending (lambda () (apply function args)))))
+                ((symbol-function 'agent-shell-notify--title) (lambda (_) "Lead"))
+                ((symbol-function 'agent-shell-notify-send)
+                 (lambda (_title body &rest _) (push body alerts))))
+        (lead-event :kind 'turn-complete :session "s1" :text "Done")
+        (should (eq 'ready (+agent-shell-pstack-panel-display-status lead)))
+        (should-not (+agent-shell-pstack-panel--mode-line-text lead))
+        (should (eq 'unchanged
+                    (+agent-shell-pstack-panel--read-shell-buffer
+                     (lambda (&rest _) 'unchanged) :buffers (list lead))))
+        (should (equal "activity"
+                       (with-current-buffer lead
+                         (+agent-shell-pstack-panel--busy-display "activity"))))
+        (agent-shell-notify--handle
+         lead '((:event . turn-complete) (:data . ((:stop-reason . "end_turn")))))
+        (funcall pending)
+        (should (equal '("Ready for input") alerts))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-mode-line ()
   "Show member progress in the lead's mode line while its panel runs."
   (+agent-shell-pstack-panel-test--with
@@ -935,7 +1082,8 @@ the panel\\.$"
         (lead-event :kind 'turn-complete :session "s1"
                     :text (+agent-shell-pstack-panel-test--message
                            +agent-shell-pstack-panel-test--how))
-        (should (equal "panel 0/2 " (substring-no-properties (funcall item))))
+        (should (equal (format "In Panel (how %s) 0/2 " id)
+                       (substring-no-properties (funcall item))))
         (should (equal (format "pstack panel %s (how)
   data-flow  codex  starting
   risks  claude-code  starting
@@ -947,7 +1095,7 @@ mouse-1: show panels" id)
         ;; `format-mode-line' renders nothing in batch Emacs.
         (unless noninteractive
           (let* ((line (funcall rendered))
-                 (start (string-match "panel 0/2 " line)))
+                 (start (string-match "In Panel .* 0/2 " line)))
             (should start)
             (should (get-text-property start 'help-echo line))))
         (should (equal (list (list lead nil)) updates))
@@ -959,10 +1107,13 @@ mouse-1: show panels" id)
                                 (get-text-property 0 'help-echo
                                                    (funcall item))))
         (member-event "data-flow" :kind 'turn-complete :text "Report A")
-        (should (equal "panel 1/2 " (substring-no-properties (funcall item))))
+        (should (equal (format "In Panel (how %s) 1/2 " id)
+                       (substring-no-properties (funcall item))))
         (should (equal (list (list lead nil) (list lead nil)) updates))
         (member-event "risks" :kind 'init-finished)
         (member-event "risks" :kind 'turn-complete :text "Report B"))
+      (should (string-prefix-p "In Panel" (funcall item)))
+      (lead-event :kind 'input-submitted)
       (should-not (funcall item))
       (unless noninteractive
         (should-not (string-match-p "panel" (funcall rendered))))
@@ -2277,7 +2428,8 @@ workspace  \\? all keys$" (regexp-quote arena))
   "Return the start of panel ID's heading in the current buffer, or nil."
   (save-excursion
     (goto-char (point-min))
-    (when (re-search-forward (concat "^\\[.*" (regexp-quote id)) nil t)
+    (when (re-search-forward
+           (concat "^\\[[^\n]+\\] [^ ]+  " (regexp-quote id) " ") nil t)
       (line-beginning-position))))
 
 (ert-deftest +agent-shell-pstack-panel-test-view-summary ()

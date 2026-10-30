@@ -14,6 +14,8 @@
 (require '+agent-shell-projects-core)
 (require 'magit-section)
 (require 'button)
+(declare-function +agent-shell-pstack-panel-display-status
+                  "+agent-shell-pstack-panel")
 (declare-function markdown-mode "markdown-mode")
 (declare-function diff-buffer-with-file "diff")
 (declare-function +agent-shell-projects-shell "+agent-shell-projects-agent")
@@ -140,7 +142,9 @@
           (insert (format " · %s\n"
                           (if (and buffer (fboundp 'agent-shell-status))
                               (condition-case nil
-                                  (agent-shell-status :shell-buffer buffer)
+                                  (if (fboundp '+agent-shell-pstack-panel-display-status)
+                                      (+agent-shell-pstack-panel-display-status buffer)
+                                    (agent-shell-status :shell-buffer buffer))
                                 (error "disconnected"))
                             "disconnected"))))))
       (when (plist-get project :agents) (insert "\n"))
@@ -428,6 +432,16 @@
 (+agent-shell-projects-register-hook 'window-buffer-change-functions #'+agent-shell-projects--window-changed)
 
 (+agent-shell-projects-register-hook '+agent-shell-projects-change-hook #'+agent-shell-projects--refresh-ui)
+
+(defun +agent-shell-projects--panel-status-changed ()
+  "Refresh agent status in project homes and activity sidebars."
+  (maphash (lambda (_id project)
+             (+agent-shell-projects--refresh-ui project nil t))
+           +agent-shell-projects--projects))
+
+(+agent-shell-projects-register-hook
+ '+agent-shell-pstack-panel-change-hook
+ #'+agent-shell-projects--panel-status-changed)
 
 (define-key +agent-shell-projects-home-mode-map (kbd "g")
             #'+agent-shell-projects-refresh)

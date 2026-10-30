@@ -189,7 +189,9 @@ the drive.\",\"members\":[{\"role\":\"data-flow\",\"agent\":\"fixture-codex\"},\
       (should (= 2 (length live-members)))
       (should-not listed-members)
       (should (memq lead (agent-shell-buffers)))
-      (should (member "panel 0/2 " progress))
+      (should (seq-some (lambda (text)
+                          (string-match-p "In Panel (how .* 0/2 " text))
+                        progress))
       (should-not (buffer-local-value '+agent-shell-pstack-panel--mode-line
                                       lead))
       (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 2")

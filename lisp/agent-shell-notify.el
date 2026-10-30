@@ -21,6 +21,12 @@
 (defvar agent-shell-notify--states (make-hash-table :test #'eq)
   "Alert state for each shell buffer.")
 
+(defvar agent-shell-notify-ready-veto-functions nil
+  "Functions that may suppress a ready alert.
+Each receives the shell buffer and completion event.  Any non-nil return
+vetoes the alert.  Called after the ready delay, once event subscribers
+have processed the completion.")
+
 (defcustom agent-shell-notify-send-function #'agent-shell-notify--macos-send
   "Function called with an alert title and body."
   :type 'function)
@@ -139,7 +145,10 @@
                                        (gethash shell-buffer
                                                 agent-shell-notify--states)
                                        :generation)))
-                        (funcall send)))))
+                        (unless (run-hook-with-args-until-success
+                                 'agent-shell-notify-ready-veto-functions
+                                 shell-buffer event)
+                          (funcall send))))))
                 (funcall send))))))))))
 
 (defun agent-shell-notify--detach (shell-buffer)

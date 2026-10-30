@@ -12,6 +12,8 @@
 
 (declare-function agent-shell-buffers "agent-shell")
 (declare-function agent-shell-status "agent-shell")
+(declare-function +agent-shell-pstack-panel-display-status
+                  "+agent-shell-pstack-panel")
 (declare-function agent-shell-session-id "agent-shell")
 (declare-function agent-shell-get-config "agent-shell")
 (declare-function agent-shell-select-config "agent-shell")
@@ -729,7 +731,10 @@
                    (if (buffer-live-p shell) (pop-to-buffer shell)
                      (user-error "Author is disconnected"))))
         (insert (format " · %s\n%s\n\n"
-                        (if shell (agent-shell-status :shell-buffer shell)
+                        (if shell
+                            (if (fboundp '+agent-shell-pstack-panel-display-status)
+                                (+agent-shell-pstack-panel-display-status shell)
+                              (agent-shell-status :shell-buffer shell))
                           "disconnected")
                         (or (plist-get agent :progress) "")))))))
 

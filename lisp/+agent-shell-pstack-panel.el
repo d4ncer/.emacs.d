@@ -36,6 +36,7 @@
 (require '+agent-shell-sandbox)
 
 (declare-function agent-shell-cwd "agent-shell-project")
+(defvar +agent-shell-pstack-panel-mode)
 
 (defgroup +agent-shell-pstack-panel nil
   "Cross-vendor pstack panels."
@@ -165,7 +166,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 12
+(defconst +agent-shell-pstack-panel--schema 13
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -198,7 +199,8 @@ see `+agent-shell-pstack-panel-unread-p'."
   (logins nil :documentation "Each agent's login result, as admitted.")
   (measure-egress nil :documentation "Whether its members' egress is \
 recorded.")
-  delegate-options identity runner expires cancelled delivered-at seen)
+  delegate-options identity runner expires cancelled delivered-at seen
+  (followup-started nil :documentation "Whether the lead began the follow-up."))
 
 (defvar +agent-shell-pstack-panel-change-hook nil
   "Hook run after any panel changes, with no arguments.")
@@ -340,6 +342,11 @@ Expiry and abandonment reach only the current phase's members.")
 
 (defvar-local +agent-shell-pstack-panel--mode-line nil
   "Mode-line text for this lead's running panels, or nil.")
+(defvar-local +agent-shell-pstack-panel--requested-turn nil
+  "Whether this lead's current turn started a panel.")
+
+(defvar +agent-shell-pstack-panel--delivering nil
+  "Panel whose follow-up is being submitted, before delivery returns.")
 (put '+agent-shell-pstack-panel--mode-line 'risky-local-variable t)
 
 (defconst +agent-shell-pstack-panel--mode-line-construct
@@ -1430,9 +1437,10 @@ address or a name."
   "Send PANEL's follow-up to its lead unless it was already delivered."
   (when (and (+agent-shell-pstack-panel-followup panel)
              (not (+agent-shell-pstack-panel-delivered panel))
-             (+agent-shell-drive-send (+agent-shell-pstack-panel-lead panel)
-                                      (+agent-shell-pstack-panel-followup
-                                       panel)))
+             (let ((+agent-shell-pstack-panel--delivering panel))
+               (+agent-shell-drive-send (+agent-shell-pstack-panel-lead panel)
+                                        (+agent-shell-pstack-panel-followup
+                                         panel))))
     (setf (+agent-shell-pstack-panel-delivered panel) t
           (+agent-shell-pstack-panel-delivered-at panel) (float-time))
     (+agent-shell-pstack-panels--refresh)))
@@ -2293,6 +2301,8 @@ Return the panel, or nil when TEXT requests none or one already seen."
               (+agent-shell-pstack-panel-lead panel) lead)
         (puthash id panel +agent-shell-pstack-panel--panels)
         (puthash id digest +agent-shell-pstack-panel--request-digests)
+        (with-current-buffer lead
+          (setq +agent-shell-pstack-panel--requested-turn t))
         (when tool
           (setf (+agent-shell-pstack-panel-interrupted panel) tool)
           (+agent-shell-drive-interrupt lead)
@@ -2600,6 +2610,15 @@ An arena on a host decides for itself; see
   "Read panel requests from a lead's EVENT and log every handled outcome."
   (let ((lead (plist-get event :shell))
         (kind (plist-get event :kind)))
+    (when (eq kind 'input-submitted)
+      (with-current-buffer lead
+        (setq +agent-shell-pstack-panel--requested-turn nil))
+      (dolist (panel (+agent-shell-pstack-panel-list))
+        (when (and (eq lead (+agent-shell-pstack-panel-lead panel))
+                   (or (+agent-shell-pstack-panel-delivered panel)
+                       (eq panel +agent-shell-pstack-panel--delivering)))
+          (setf (+agent-shell-pstack-panel-followup-started panel) t)))
+      (+agent-shell-pstack-panels--refresh))
     (when (memq kind '(turn-complete tool-call-update prompt-ready clean-up))
       (let* ((final (plist-get event :text))
              (+agent-shell-pstack-panel--log-entry
@@ -3042,20 +3061,115 @@ exited mid-run."
   :doc "Keymap for a lead's panel mode-line item."
   "<mode-line> <mouse-1>" #'+agent-shell-pstack-panels)
 
+(defun +agent-shell-pstack-panel--waiting (lead)
+  "Return LEAD's panels whose follow-ups have not started."
+  (when (and +agent-shell-pstack-panel-mode
+             (buffer-live-p lead)
+             (buffer-local-value '+agent-shell-pstack-mode lead))
+    (seq-filter
+     (lambda (panel)
+       (and (eq lead (+agent-shell-pstack-panel-lead panel))
+            (not (+agent-shell-pstack-panel-followup-started panel))))
+     (+agent-shell-pstack-panel-list))))
+
+(defun +agent-shell-pstack-panel-display-status (&optional shell)
+  "Return the user-facing status for SHELL, defaulting to this buffer.
+Return an In Panel string while a panel's follow-up has not started;
+otherwise return `agent-shell-status' unchanged.  Input readiness must
+continue to use `agent-shell-status' directly."
+  (let* ((shell (or shell (current-buffer)))
+         (panels (+agent-shell-pstack-panel--waiting shell)))
+    (if panels
+        (format "In Panel%s (%s)"
+                (if (cdr panels) (format " [%d]" (length panels)) "")
+                (mapconcat (lambda (panel)
+                             (format "%s %s"
+                                     (or (+agent-shell-pstack-panel-shape panel)
+                                         'request)
+                                     (+agent-shell-pstack-panel-id panel)))
+                           panels "; "))
+      (agent-shell-status :shell-buffer shell))))
+
+(defun +agent-shell-pstack-panel--ready-veto (shell _event)
+  "Suppress a ready alert when SHELL's turn requested a panel."
+  (and +agent-shell-pstack-panel-mode
+       (buffer-local-value '+agent-shell-pstack-mode shell)
+       (buffer-local-value '+agent-shell-pstack-panel--requested-turn shell)))
+
+(defun +agent-shell-pstack-panel--busy-display (original)
+  "Replace the displayed activity ORIGINAL while this lead waits."
+  (if (+agent-shell-pstack-panel--waiting (current-buffer))
+      (concat " " (+agent-shell-pstack-panel-display-status))
+    original))
+
+(defun +agent-shell-pstack-panel--header-display (model)
+  "Replace viewport status in header MODEL while this lead waits."
+  (when (and (map-elt model :position)
+             (+agent-shell-pstack-panel--waiting (current-buffer)))
+    (map-put! model :status (+agent-shell-pstack-panel-display-status))
+    (map-put! model :busy-indicator-frame nil))
+  model)
+
+(cl-defun +agent-shell-pstack-panel--read-shell-buffer
+    (original &rest args &key prompt buffers force-short-names)
+  "Show panel status in ORIGINAL's buffer selector with ARGS.
+PROMPT, BUFFERS and FORCE-SHORT-NAMES follow the upstream interface."
+  (let ((buffers (or buffers (agent-shell-buffers))))
+    (if (not (seq-some #'+agent-shell-pstack-panel--waiting buffers))
+        (apply original args)
+      (let* ((identifiers
+              (mapcar (lambda (buffer)
+                        (map-nested-elt
+                         (buffer-local-value 'agent-shell--state buffer)
+                         '(:agent-config :identifier)))
+                      buffers))
+             (short-names (or force-short-names
+                              (seq-every-p (lambda (id)
+                                             (eq id (car identifiers)))
+                                           identifiers)))
+             (choices
+              (mapcar
+               (lambda (buffer)
+                 (with-current-buffer buffer
+                   (let* ((config (map-elt agent-shell--state :agent-config))
+                          (name (buffer-name buffer))
+                          (prefix (agent-shell--buffer-name-prefix
+                                   (map-elt config :buffer-name)))
+                          (title (string-trim
+                                  (car (split-string
+                                        (or (map-nested-elt
+                                             agent-shell--state
+                                             '(:session :title)) "") "\n")))))
+                     (cons (propertize
+                            (format "%s  %s  %s"
+                                    (if (and short-names prefix)
+                                        (string-remove-prefix prefix name) name)
+                                    (+agent-shell-pstack-panel-display-status)
+                                    (truncate-string-to-width title 50 nil nil
+                                                              "..."))
+                            'agent-shell--icon
+                            (when agent-shell-show-config-icons
+                              (agent-shell--config-icon :config config)))
+                           buffer))))
+               buffers))
+             (completion-extra-properties
+              '(:affixation-function agent-shell--icon-affixation))
+             (completion-styles (cons 'substring completion-styles))
+             (this-command 'agent-shell--read-shell-buffer)
+             (selection (completing-read (or prompt "Agent shell buffer: ")
+                                         choices nil t)))
+        (or (cdr (assoc selection choices))
+            (user-error "Nothing selected"))))))
+
 (defun +agent-shell-pstack-panel--mode-line-text (lead)
   "Return mode-line text for LEAD's running panels, or nil."
-  (when-let* ((panels (seq-filter
-                       (lambda (panel)
-                         (and (eq lead (+agent-shell-pstack-panel-lead panel))
-                              (not (+agent-shell-pstack-panel-rejection panel))
-                              (not (+agent-shell-pstack-panel-followup panel))))
-                       (+agent-shell-pstack-panel-list))))
+  (when-let* ((panels (+agent-shell-pstack-panel--waiting lead)))
     (let ((members (mapcan (lambda (panel)
                              (copy-sequence
                               (+agent-shell-pstack-panel-members panel)))
                            panels)))
       (propertize
-       (format "%s %d/%d " (if (cdr panels) "panels" "panel")
+       (format "%s %d/%d " (+agent-shell-pstack-panel-display-status lead)
                (seq-count #'+agent-shell-pstack-panel--settled-p members)
                (length members))
        'face '+agent-shell-pstack-mode-line
@@ -3091,14 +3205,15 @@ commit there until it finishes")))
     (when (buffer-live-p lead)
       (let ((text (+agent-shell-pstack-panel--mode-line-text lead)))
         (with-current-buffer lead
-          ;; Redisplay adds properties to the shown string.  The help-echo
-          ;; determines the label, so it alone tells whether anything changed.
-          (unless (equal (and text (get-text-property 0 'help-echo text))
-                         (and +agent-shell-pstack-panel--mode-line
-                              (get-text-property
-                               0 'help-echo
-                               +agent-shell-pstack-panel--mode-line)))
+          (unless (equal-including-properties
+                   text +agent-shell-pstack-panel--mode-line)
             (setq +agent-shell-pstack-panel--mode-line text)
+            (when (derived-mode-p 'agent-shell-mode)
+              (agent-shell--update-header-and-mode-line)
+              (when-let* ((viewport (agent-shell-viewport--buffer
+                                    :shell-buffer lead :existing-only t)))
+                (with-current-buffer viewport
+                  (agent-shell-viewport--update-header))))
             (force-mode-line-update)))))))
 
 (defun +agent-shell-pstack-panels--refresh ()
@@ -3260,6 +3375,16 @@ explains the request protocol; see `+agent-shell-pstack-panel-shapes'."
   :group '+agent-shell-pstack-panel
   (if +agent-shell-pstack-panel-mode
       (progn
+        (advice-add 'agent-shell--busy-indicator-frame :filter-return
+                    #'+agent-shell-pstack-panel--busy-display)
+        (advice-add 'agent-shell--make-header-model :filter-return
+                    #'+agent-shell-pstack-panel--header-display)
+        (advice-add 'agent-shell--read-shell-buffer :around
+                    #'+agent-shell-pstack-panel--read-shell-buffer)
+        (with-eval-after-load 'agent-shell-notify
+          (when +agent-shell-pstack-panel-mode
+            (add-hook 'agent-shell-notify-ready-veto-functions
+                      #'+agent-shell-pstack-panel--ready-veto)))
         (add-hook '+agent-shell-pstack-mode-hook
                   #'+agent-shell-pstack-panel--track)
         (add-to-list '+agent-shell-pstack-prime-texts
@@ -3271,6 +3396,14 @@ explains the request protocol; see `+agent-shell-pstack-panel-shapes'."
         (dolist (buffer (buffer-list))
           (when (buffer-local-value '+agent-shell-pstack-mode buffer)
             (with-current-buffer buffer (+agent-shell-pstack-panel--track)))))
+    (advice-remove 'agent-shell--busy-indicator-frame
+                   #'+agent-shell-pstack-panel--busy-display)
+    (advice-remove 'agent-shell--make-header-model
+                   #'+agent-shell-pstack-panel--header-display)
+    (advice-remove 'agent-shell--read-shell-buffer
+                   #'+agent-shell-pstack-panel--read-shell-buffer)
+    (remove-hook 'agent-shell-notify-ready-veto-functions
+                 #'+agent-shell-pstack-panel--ready-veto)
     (remove-hook '+agent-shell-pstack-mode-hook
                  #'+agent-shell-pstack-panel--track)
     (setq +agent-shell-pstack-prime-texts
