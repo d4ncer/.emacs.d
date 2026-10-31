@@ -2773,6 +2773,23 @@ captured commit-opus$" (funcall text)))
           (should (equal `((pstack-panel . ,id) (pstack-panels))
                          (funcall ident))))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-view-leaves-other-buffers-alone ()
+  "Leaving the panels view in a window never redraws the buffer shown next."
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (+agent-shell-pstack-panels)
+      (let ((window (selected-window))
+            (other (generate-new-buffer " *panels-other*")))
+        (unwind-protect
+            (progn
+              (with-current-buffer other (insert "a transcript"))
+              (set-window-buffer window other)
+              (+agent-shell-pstack-panels--shown window)
+              (with-current-buffer other
+                (should-error (+agent-shell-pstack-panels--render))
+                (should (equal "a transcript" (buffer-string)))))
+          (kill-buffer other))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-view-hints ()
   "Name the keys once, in an Actions block, and those acting at point on ?."
   (+agent-shell-pstack-panel-test--with

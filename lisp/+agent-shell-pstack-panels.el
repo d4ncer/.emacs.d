@@ -248,7 +248,8 @@ lists those acting at point.
 (defun +agent-shell-pstack-panels--shown (window)
   "Redraw the panels view WINDOW now shows."
   (with-current-buffer (window-buffer window)
-    (+agent-shell-pstack-panels--render)))
+    (when (derived-mode-p '+agent-shell-pstack-panels-mode)
+      (+agent-shell-pstack-panels--render))))
 
 ;;;; Sections
 
@@ -728,6 +729,8 @@ branch; do not edit or commit there until this finishes"
   (let ((inhibit-read-only t)
         (positions (+agent-shell-pstack-panels--positions))
         (panels (+agent-shell-pstack-panels--sorted)))
+    (unless (derived-mode-p '+agent-shell-pstack-panels-mode)
+      (error "Not in the panels view: %s" (buffer-name)))
     (erase-buffer)
     (magit-insert-section (pstack-panels)
       (insert (+agent-shell-pstack-panels--summary panels) "\n")

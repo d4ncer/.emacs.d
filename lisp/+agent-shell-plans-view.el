@@ -97,7 +97,8 @@
 (defun +agent-shell-plans--shown (window)
   "Redraw the plans view WINDOW shows."
   (with-current-buffer (window-buffer window)
-    (+agent-shell-plans--render)))
+    (when (derived-mode-p '+agent-shell-plans-mode)
+      (+agent-shell-plans--render))))
 
 (defconst +agent-shell-plans--actions
   '(("Act" ("RET" "Visit" "the shell at point" +agent-shell-plans-visit))
@@ -219,6 +220,8 @@
                           (+agent-shell-plans--position (window-start window))))
                   (get-buffer-window-list nil nil t)))
         (shells (+agent-shell-plans--sorted)))
+    (unless (derived-mode-p '+agent-shell-plans-mode)
+      (error "Not in the plans view: %s" (buffer-name)))
     (erase-buffer)
     (magit-insert-section (agent-plans)
       (insert (+agent-shell-plans--summary shells) "\n\n")

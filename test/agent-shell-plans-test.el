@@ -223,5 +223,22 @@
                                    'agent-shell--on-notification)
             (error \"Recorder advice missing\")))")))))
 
+(ert-deftest +agent-shell-plans-test-leaves-other-buffers-alone ()
+  "Leaving the view in a window never redraws the buffer shown next."
+  (+agent-shell-plans-test--with
+    (save-window-excursion
+      (+agent-shell-plans)
+      (let ((window (selected-window))
+            (other (generate-new-buffer " *plans-other*")))
+        (unwind-protect
+            (progn
+              (with-current-buffer other (insert "a transcript"))
+              (set-window-buffer window other)
+              (+agent-shell-plans--shown window)
+              (with-current-buffer other
+                (should-error (+agent-shell-plans--render))
+                (should (equal "a transcript" (buffer-string)))))
+          (kill-buffer other))))))
+
 (provide 'agent-shell-plans-test)
 ;;; agent-shell-plans-test.el ends here
