@@ -64,7 +64,7 @@ extended, `+agent-shell-pstack-panel--extension' at a time, up to this."
   "Seconds a phase is extended at a time while a member's command runs.")
 
 (defconst +agent-shell-pstack-panel-max-members 4
-  "Most members a panel may have.")
+  "Most members a panel may have, unless its shape names its own limit.")
 
 (defcustom +agent-shell-pstack-panel-shapes
   '((how
@@ -88,6 +88,40 @@ as your final message.  Nobody will answer questions during the turn."
      :triage "Triage each finding as the interrogate skill's lead: verify it \
 against the code, then fix it, dismiss it with a concrete reason, or ask.  \
 Findings that several agents agree on are high signal.")
+    (why
+     :summary "members each search one evidence source, such as code \
+history, tickets, chat or docs, for why something is the way it is, citing \
+every source"
+     :max-members 8
+     :contract "Investigate why the thing in the brief is the way it is, \
+from the one evidence source your focus names, such as git history and pull \
+requests, the issue tracker, chat, long-form docs or observability.  Use \
+your tools and MCP servers for that source only, and read and search only: \
+change nothing.  Report what you searched, the direct evidence with a \
+citation for each item (commit, pull request, ticket, message or doc link, \
+or file:line), indirect evidence, contradictions, and gaps, including \
+searches that found nothing.  Mark anything you inferred as inferred.  End \
+your turn with the report as your final message.  Nobody will answer \
+questions during the turn."
+     :triage "Synthesize these reports as the why skill's synthesizer: \
+separate evidence from inference, spot-check each load-bearing citation, \
+keep each member's confidence, and list every source consulted, including \
+those that found nothing or were skipped, with the reason.")
+    (swarm
+     :summary "workers each check one slice of the brief against its done \
+condition and report PASS, ISSUES or BLOCKED with evidence"
+     :max-members 8
+     :contract "You are one worker in a swarm.  Check only the slice your \
+focus names, against the done condition in the brief, and read only: change \
+nothing.  Start your report with one verdict, PASS, ISSUES or BLOCKED, then \
+give the evidence: file:line, the commands you ran and what they printed, or \
+sources.  For ISSUES, list each problem with its evidence; for BLOCKED, say \
+what stopped you.  End your turn with the report as your final message.  \
+Nobody will answer questions during the turn."
+     :triage "Aggregate these reports as the swarm skill's lead: one table \
+of each slice's verdict and evidence, with gaps and timed-out or empty \
+slices called out, and run a missing slice again once if the brief needs \
+it.")
     (arena
      :summary "candidates each implement the brief in a sandboxed worktree, \
 then a read-only judge scores them against your rubric"
@@ -145,10 +179,18 @@ Then merge it, ask for changes in a new delegate panel, or take the work \
 over."))
   "Panel shapes by name.
 Each value is a plist: :summary describes the shape to the lead, :contract
-ends each member's prompt, and :triage ends the follow-up to the lead.  An
+ends each member's prompt, and :triage ends the follow-up to the lead.
+:max-members, when present, replaces
+`+agent-shell-pstack-panel-max-members' for that shape.  An
 arena's :judge ends its judge's prompt, and a sandboxed delegate's prompt
 ends with :sandbox-contract instead of :contract."
   :type '(alist :key-type symbol :value-type plist))
+
+(defun +agent-shell-pstack-panel--max-members (shape)
+  "Return the most members a panel of SHAPE may have."
+  (or (plist-get (alist-get shape +agent-shell-pstack-panel-shapes)
+                 :max-members)
+      +agent-shell-pstack-panel-max-members))
 
 (defcustom +agent-shell-pstack-panel-default-judge-timeout 900
   "Seconds an arena's judge may run when the request names none."
@@ -615,9 +657,9 @@ macOS's sandbox-exec or Linux's bwrap; this Emacs runs on %s" system-type))
                       (+agent-shell-pstack-panel--agents))))
         (unless (and (proper-list-p values)
                      (<= 1 (length values)
-                         +agent-shell-pstack-panel-max-members))
+                         (+agent-shell-pstack-panel--max-members shape)))
           (user-error "Members must list 1 to %d members"
-                      +agent-shell-pstack-panel-max-members))
+                      (+agent-shell-pstack-panel--max-members shape)))
         (let* ((members (mapcar (lambda (value)
                                   (+agent-shell-pstack-panel--parse-member
                                    value agents (if arena 'candidate 'member)))
@@ -751,9 +793,9 @@ file paths\",\"timeout\":%d,\"members\":[{\"role\":\"data-flow\",\"agent\":\
 Shapes: %s.
 Agents: %s.  With two or more members, mix agents so the panel spans \
 vendors.
-Each how or interrogate member starts fresh, read-only, in your working \
-directory, and sees only the brief and its own focus.  Use 1 to %d members \
-with unique roles of lowercase letters, digits and hyphens.  The timeout \
+Each %s member starts fresh, read-only, in your working directory, and \
+sees only the brief and its own focus.  Use 1 to %d members%s, with unique \
+roles of lowercase letters, digits and hyphens.  The timeout \
 is in seconds, at most %d; a member still running a command at its \
 timeout gets more time, up to %d seconds in all.  End your turn right \
 after the block.  Emacs starts the panel as soon as the block is complete, and interrupts your turn if you call a tool after it.
@@ -768,7 +810,22 @@ saved to, and how to triage the reports.%s"
                                    (plist-get (cdr shape) :summary)))
                          shapes "; ")
               (+agent-shell-pstack-panel--names agents)
+              (+agent-shell-pstack-panel--series
+               (seq-remove (lambda (shape)
+                             (memq (car shape) '(arena delegate)))
+                           shapes)
+               "or")
               +agent-shell-pstack-panel-max-members
+              (mapconcat (pcase-lambda (`(,limit . ,own))
+                           (format ", or up to %d for %s" limit
+                                   (+agent-shell-pstack-panel--series own "and")))
+                         (seq-group-by (lambda (shape)
+                                         (plist-get (cdr shape) :max-members))
+                                       (seq-filter (lambda (shape)
+                                                     (plist-get (cdr shape)
+                                                                :max-members))
+                                                   shapes))
+                         "")
               +agent-shell-pstack-panel-max-timeout
               (max +agent-shell-pstack-panel-max-timeout
                    +agent-shell-pstack-panel-max-runtime)

@@ -554,6 +554,21 @@ The block is not valid JSON" (cdar sent)))
       (should (eq 'claude-code
                   (+agent-shell-pstack-panel-member-agent
                    (car (+agent-shell-pstack-panel-members panel))))))
+    (dolist (shape '("why" "swarm"))
+      (let ((panel (+agent-shell-pstack-panel--parse
+                    (format "{\"version\":1,\"shape\":\"%s\",\"brief\":\"b\",\
+\"members\":[%s]}"
+                            shape
+                            (mapconcat (lambda (n)
+                                         (format "{\"role\":\"r%d\",\
+\"agent\":\"codex\"}" n))
+                                       (number-sequence 1 8) ",")))))
+        (should (eq (intern shape) (+agent-shell-pstack-panel-shape panel)))
+        (should (= 8 (length (+agent-shell-pstack-panel-members panel))))
+        (should (seq-every-p (lambda (member)
+                               (eq 'member (+agent-shell-pstack-panel-member-kind
+                                            member)))
+                             (+agent-shell-pstack-panel-members panel)))))
     (let ((member "{\"role\":\"a\",\"agent\":\"codex\"}"))
       (pcase-dolist
           (`(,json ,reason)
@@ -562,7 +577,7 @@ The block is not valid JSON" (cdar sent)))
              (,(format "{\"version\":2,\"shape\":\"how\",\"brief\":\"b\",\
 \"members\":[%s]}" member) "Version must be 1")
              (,(format "{\"version\":1,\"shape\":\"bakeoff\",\"brief\":\"b\",\
-\"members\":[%s]}" member) "shapes: how, interrogate, arena")
+\"members\":[%s]}" member) "shapes: how, interrogate, why, swarm, arena")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\" \",\
 \"members\":[%s]}" member) "Brief")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
@@ -571,6 +586,8 @@ The block is not valid JSON" (cdar sent)))
               "1 to 4 members")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
 \"members\":[%s]}" (string-join (make-list 5 member) ",")) "1 to 4 members")
+             (,(format "{\"version\":1,\"shape\":\"why\",\"brief\":\"b\",\
+\"members\":[%s]}" (string-join (make-list 9 member) ",")) "1 to 8 members")
              ("{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
 \"members\":[{\"role\":\"Bad Role\",\"agent\":\"codex\"}]}" "lowercase")
              ("{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
@@ -2991,22 +3008,28 @@ it up as x would, then forget it\\? \\'" id)
   "Describe arenas only where candidates can run sandboxed."
   (+agent-shell-pstack-panel-test--with
     (let ((protocol (+agent-shell-pstack-panel--protocol)))
-      (should (string-match-p "calls for a how, interrogate, arena or \
-delegate panel" protocol))
-      (should (string-match-p "^Shapes: how (.*); interrogate (.*); arena \
-(candidates each implement" protocol))
+      (should (string-match-p "calls for a how, interrogate, why, swarm, \
+arena or delegate panel" protocol))
+      (should (string-match-p "^Shapes: how (.*); interrogate (.*); why \
+(.*); swarm (.*); arena (candidates each implement" protocol))
       (should (string-match-p "Candidate agents: codex, claude-code\\."
                               protocol))
       (should (string-match-p "\"rubric\", 3 to 6 criteria that only the judge \
 sees" protocol))
       (should (string-match-p "\"judge_timeout\", 900 seconds" protocol))
-      (should (string-match-p "^Request how, interrogate, arena and \
-delegate panels" (+agent-shell-pstack-panel--reminder))))
+      (should (string-match-p "Each how, interrogate, why or swarm member \
+starts fresh" protocol))
+      (should (string-match-p "Use 1 to 4 members, or up to 8 for why and \
+swarm, with unique roles" protocol))
+      (should (string-match-p "^Request how, interrogate, why, swarm, \
+arena and delegate panels" (+agent-shell-pstack-panel--reminder))))
     (pcase-dolist (`(,variable ,shapes ,series)
-                   '((+agent-shell-sandbox-backend "how, interrogate or delegate"
-                                                   "how, interrogate and delegate")
-                     (+agent-shell-sandbox-agents "how or interrogate"
-                                                  "how and interrogate")))
+                   '((+agent-shell-sandbox-backend
+                      "how, interrogate, why, swarm or delegate"
+                      "how, interrogate, why, swarm and delegate")
+                     (+agent-shell-sandbox-agents
+                      "how, interrogate, why or swarm"
+                      "how, interrogate, why and swarm")))
       (cl-progv (list variable) (list nil)
         (let ((protocol (+agent-shell-pstack-panel--protocol)))
           (should (string-match-p (format "calls for a %s panel" shapes)

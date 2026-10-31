@@ -74,6 +74,8 @@ REQUEST may be a rejection string.  This function reads only its arguments."
                         (pcase shape
                           ('how "investigate and explain")
                           ('interrogate "adversarial review")
+                          ('why "find the reasons, with sources")
+                          ('swarm "check each slice")
                           ('arena "implement, compare and judge")
                           ('delegate "implement, test and commit")))
                 'face '+agent-shell-pstack-card-title)
