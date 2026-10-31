@@ -47,6 +47,37 @@
     (+agent-shell-pstack-panel--block
      (+agent-shell-pstack-card-test--source shape)))))
 
+(ert-deftest +agent-shell-pstack-card-test-every-shape ()
+  "Give every registered shape a card label, a protocol entry and a limit."
+  (+agent-shell-pstack-card-test--with
+    (let ((protocol (+agent-shell-pstack-panel--protocol)))
+      (pcase-dolist (`(,shape . ,plist) +agent-shell-pstack-panel-shapes)
+        (dolist (key '(:label :summary :triage))
+          (should (stringp (plist-get plist key))))
+        (should (or (plist-get plist :contract)
+                    (plist-get plist :sandbox-contract)))
+        (should (string-search (format "%s (%s)" shape
+                                       (plist-get plist :summary))
+                               protocol))
+        (unless (eq shape 'delegate)
+          (should (string-search
+                   (format "pstack %s · %s" shape (plist-get plist :label))
+                   (+agent-shell-pstack-card-test--text (symbol-name shape))))
+          (let ((limit (+agent-shell-pstack-panel--max-members shape)))
+            (should-error
+             (+agent-shell-pstack-panel--parse
+              (json-serialize
+               `((version . 1) (shape . ,(symbol-name shape)) (brief . "b")
+                 (members
+                  . ,(apply #'vector
+                            (mapcar (lambda (n)
+                                      `((role . ,(format "r%d" n))
+                                        (agent . "codex")))
+                                    (number-sequence 1 (1+ limit)))))
+                 ,@(when (eq shape 'arena)
+                     '((rubric . ["a" "b" "c"]))))))
+             :type 'user-error)))))))
+
 (ert-deftest +agent-shell-pstack-card-test-how ()
   (+agent-shell-pstack-card-test--with
     (let ((text (+agent-shell-pstack-card-test--text "how")))

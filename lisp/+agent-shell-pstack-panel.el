@@ -69,6 +69,7 @@ extended, `+agent-shell-pstack-panel--extension' at a time, up to this."
 
 (defcustom +agent-shell-pstack-panel-shapes
   '((how
+     :label "investigate and explain"
      :summary "members investigate the brief from their focus and explain \
 it, citing file:line"
      :contract "Investigate the brief from your focus and explain what you \
@@ -79,6 +80,7 @@ first, then open questions.  Nobody will answer questions during the turn."
 conflicts, check each load-bearing claim against the code, then write the \
 explanation.")
     (interrogate
+     :label "adversarial review"
      :summary "members are adversarial reviewers returning findings with \
 severity and file:line evidence"
      :contract "You are an adversarial reviewer.  Try to break the design or \
@@ -90,6 +92,7 @@ as your final message.  Nobody will answer questions during the turn."
 against the code, then fix it, dismiss it with a concrete reason, or ask.  \
 Findings that several agents agree on are high signal.")
     (why
+     :label "find the reasons, with sources"
      :summary "members each search one evidence source, such as code \
 history, tickets, chat or docs, for why something is the way it is, citing \
 every source"
@@ -109,6 +112,7 @@ separate evidence from inference, spot-check each load-bearing citation, \
 keep each member's confidence, and list every source consulted, including \
 those that found nothing or were skipped, with the reason.")
     (swarm
+     :label "check each slice"
      :summary "workers each check one slice of the brief against its done \
 condition and report PASS, ISSUES or BLOCKED with evidence"
      :max-members 8
@@ -124,6 +128,7 @@ of each slice's verdict and evidence, with gaps and timed-out or empty \
 slices called out, and run a missing slice again once if the brief needs \
 it.")
     (reflect
+     :label "review this conversation"
      :summary "members each review your own transcript through one lens \
 and propose durable lessons, each routed to the skill or rule it should \
 change"
@@ -143,6 +148,7 @@ weigh lessons several reviewers share most, and check that an accepted one \
 is not already enforced.  Present the result, and wait for the user's \
 approval before you edit any skill.")
     (arena
+     :label "implement, compare and judge"
      :summary "candidates each implement the brief in a sandboxed worktree, \
 then a read-only judge scores them against your rubric"
      :contract "Implement the task in the current directory, a snapshot of \
@@ -166,6 +172,7 @@ diff with its command above.  Graft the best parts of the others by hand, \
 never by checking their files out over your tree.  Then verify the result \
 as the arena skill says.")
     (delegate
+     :label "implement, test and commit"
      :summary "one agent you choose implements the task, tests it and \
 commits on a branch of its own, in a shell the user can watch"
      :contract "You work alone, with full write access, in your agent's \
@@ -198,13 +205,13 @@ its diff against the commit it started from, and run the tests yourself.  \
 Then merge it, ask for changes in a new delegate panel, or take the work \
 over."))
   "Panel shapes by name.
-Each value is a plist: :summary describes the shape to the lead, :contract
-ends each member's prompt, and :triage ends the follow-up to the lead.
-:max-members, when present, replaces
+Each value is a plist: :label names it on the request card, :summary
+describes it to the lead, :contract ends each member's prompt, and :triage
+ends the follow-up to the lead.  :max-members, when present, replaces
 `+agent-shell-pstack-panel-max-members' for that shape, and :transcript
-gives each member the lead's transcript.  An
-arena's :judge ends its judge's prompt, and a sandboxed delegate's prompt
-ends with :sandbox-contract instead of :contract."
+gives each member the lead's transcript.  An arena's :judge ends its
+judge's prompt, and a sandboxed delegate's prompt ends with
+:sandbox-contract instead of :contract."
   :type '(alist :key-type symbol :value-type plist))
 
 (defun +agent-shell-pstack-panel--max-members (shape)

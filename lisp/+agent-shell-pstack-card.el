@@ -71,14 +71,7 @@ REQUEST may be a rejection string.  This function reads only its arguments."
               (list
                (propertize
                 (format "pstack %s · %s" shape
-                        (pcase shape
-                          ('how "investigate and explain")
-                          ('interrogate "adversarial review")
-                          ('why "find the reasons, with sources")
-                          ('swarm "check each slice")
-                          ('reflect "review this conversation")
-                          ('arena "implement, compare and judge")
-                          ('delegate "implement, test and commit")))
+                        (+agent-shell-pstack-panel--shape request :label))
                 'face '+agent-shell-pstack-card-title)
                (format "%d member%s" (length workers)
                        (if (= 1 (length workers)) "" "s")))
