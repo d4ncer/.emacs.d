@@ -138,6 +138,12 @@ BODY is executed to prepare the response buffer."
    (list #'agent-shell-openai-make-codex-config
          #'agent-shell-anthropic-make-claude-code-config))
   (agent-shell-preferred-agent-config '(preselect . codex))
+  ;; Over ACP neither agent has its plan tool without these, so no plan
+  ;; reaches agent-shell or `+agent-shell-plans'.
+  (agent-shell-anthropic-claude-environment
+   '("CLAUDE_CODE_ENABLE_TODO_TOOLS=1"))
+  (agent-shell-openai-codex-environment
+   '("CODEX_CONFIG={\"tools\":{\"update_plan\":{\"enabled\":true}}}"))
   :init
   (defun +agent-shell-project (&optional arg)
     "Open the current project's agent shell without toggling it.

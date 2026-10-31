@@ -793,7 +793,15 @@ its state and text, including Codex's `step` entries.
 `RET` visits the shell, `n` and `p` move between sections, `g` refreshes,
 `q` quits, and `?` lists the keys at point. Redraws keep point, window
 positions, and folds. ACP plan updates replace the shell's stored plan and
-debounce redraws. Killing a shell forgets its plan. Recording starts when
+debounce redraws. Killing a shell forgets its plan. Over ACP neither agent has
+a plan tool by default, so neither sends plans. `modules/mod-ai.el` turns
+them on: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in
+`agent-shell-anthropic-claude-environment` gives Claude Code `TaskCreate`
+and `TaskUpdate`, and `CODEX_CONFIG` in
+`agent-shell-openai-codex-environment` enables Codex's `update_plan`
+(`tools.update_plan.enabled`). Each adapter reports its tool's calls as
+plan updates. A shell started before these were set has no plan tool until
+it restarts. Recording starts when
 agent-shell loads; Magit sections load when the view first opens.
 
 ## Non-goals
