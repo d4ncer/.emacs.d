@@ -12,7 +12,7 @@ single-harness port cannot, while upstream text stays untouched.
 |---|---|---|
 | 0. Skills in agents | Done | pstack installed in Claude Code and Codex |
 | 1. Sticky mode and guard | Done | `+agent-shell-pstack-mode`, `+agent-shell-pstack-guard-mode` |
-| 2. Cross-vendor panels | Done | `how`, `interrogate`, `why` and `swarm` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees, here or on a remote host |
+| 2. Cross-vendor panels | Done | `how`, `interrogate`, `why`, `swarm` and `reflect` members run as read-only sibling shells; `arena` candidates run in sandboxed worktrees, here or on a remote host |
 | 3. Views | Partial | Live panels and agent plans views; decision trail is planned |
 
 ## Layer 0: install the skills
@@ -58,12 +58,19 @@ Upstream panels mix model families. Ports to one harness lose that, or shell
 out to other vendors' CLIs. Here Emacs starts each panel member as an agent
 shell for a configured agent. `lisp/+agent-shell-pstack-panel.el` holds the
 panels, and `+agent-shell-pstack-panel-mode` is global and enabled with
-agent-shell. It covers the `how`, `interrogate`, `why`, `swarm`, `arena`
-and `delegate` shapes in `+agent-shell-pstack-panel-shapes`. `how`,
-`interrogate`, `why` and `swarm` members only read. A `why` member searches
+agent-shell. It covers the `how`, `interrogate`, `why`, `swarm`, `reflect`,
+`arena` and `delegate` shapes in `+agent-shell-pstack-panel-shapes`. `how`,
+`interrogate`, `why`, `swarm` and `reflect` members only read. A `why` member searches
 one evidence source, such as git history, tickets, chat or docs, through its
 tools and MCP servers, and cites each item it finds. A `swarm` worker checks
-one slice of the brief and leads its report with PASS, ISSUES or BLOCKED. `arena` candidates write code, so each runs in its own
+one slice of the brief and leads its report with PASS, ISSUES or BLOCKED.
+A `reflect` reviewer, up to three of them, reads the lead's own agent-shell
+transcript, whose path Emacs puts in its brief, through one lens and
+proposes lessons routed to the skill or rule each should change; the lead
+sorts them and waits for your approval before editing a skill. A lead that
+keeps no transcript has the request rejected. The transcript holds the
+whole conversation, tool output included, so a reviewer on another vendor
+sees all of it. `arena` candidates write code, so each runs in its own
 sandboxed worktree; see [Run an arena](#run-an-arena) and the design in
 `docs/AGENT-SHELL-PSTACK-ARENA.md`. A `delegate` hands the whole task to
 one agent, which commits on a branch of its own; see
@@ -82,7 +89,8 @@ Run `M-x +agent-shell-pstack-card-refresh` to render an existing conversation.
 A lead is a shell with `+agent-shell-pstack-mode` on. Its priming prompt
 carries the protocol, which names every agent in `agent-shell-agent-configs`
 that has a read-only mode and tells the lead to use panels in place of the
-`how`, `interrogate`, `why`, `swarm` and `arena` skills' own subagents. Every later prompt
+`how`, `interrogate`, `why`, `swarm`, `reflect` and `arena` skills' own
+subagents. Every later prompt
 adds one line that restates the rule and names
 `var/pstack-panels/PROTOCOL.md`, which Emacs rewrites with the current
 protocol, so a lead that compacted its context can reread it. The lead ends
@@ -97,8 +105,8 @@ its final message with a fenced block, then ends its turn:
 
 - `version` is 1.
 - `shape` names an entry in `+agent-shell-pstack-panel-shapes`.
-- `members` lists 1 to 4 members, or up to 8 for a shape whose
-  `:max-members` says so, as `why` and `swarm` do. Each `role` matches `[a-z0-9-]+` and is
+- `members` lists 1 to 4 members, or as many as a shape's `:max-members`
+  allows: 8 for `why` and `swarm`, 3 for `reflect`. Each `role` matches `[a-z0-9-]+` and is
   unique. Each `agent` is one the protocol named. `focus` is optional.
 - `timeout` is 1 to 3600 seconds. It defaults to
   `+agent-shell-pstack-panel-default-timeout`, 900. When it runs out, a

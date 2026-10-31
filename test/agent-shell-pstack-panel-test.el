@@ -577,7 +577,7 @@ The block is not valid JSON" (cdar sent)))
              (,(format "{\"version\":2,\"shape\":\"how\",\"brief\":\"b\",\
 \"members\":[%s]}" member) "Version must be 1")
              (,(format "{\"version\":1,\"shape\":\"bakeoff\",\"brief\":\"b\",\
-\"members\":[%s]}" member) "shapes: how, interrogate, why, swarm, arena")
+\"members\":[%s]}" member) "shapes: how, interrogate, why, swarm, reflect, arena")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\" \",\
 \"members\":[%s]}" member) "Brief")
              (,(format "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\
@@ -2840,6 +2840,38 @@ captured commit-opus$" (funcall text)))
           (when (get-buffer "*agent plans*")
             (kill-buffer "*agent plans*")))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-reflect-transcript ()
+  "Brief reflect members with the lead's transcript, refusing a lead without."
+  (+agent-shell-pstack-panel-test--with
+    (let ((json "{\"version\":1,\"shape\":\"reflect\",\"brief\":\"b\",\
+\"members\":[{\"role\":\"judgment\",\"agent\":\"codex\"}]}")
+          (transcript (make-temp-file "transcript" nil ".md" "## User\n")))
+      (unwind-protect
+          (progn
+            (lead-event :kind 'turn-complete :session "s1"
+                        :text (+agent-shell-pstack-panel-test--message json))
+            (should (string-match-p "reads your transcript, and this shell \
+keeps none" (cdar sent)))
+            (should-not started)
+            (with-current-buffer lead
+              (setq-local agent-shell--transcript-file transcript))
+            (lead-event :kind 'turn-complete :session "s2"
+                        :text (+agent-shell-pstack-panel-test--message json))
+            (let* ((panel (seq-find (lambda (panel)
+                                      (not (+agent-shell-pstack-panel-rejection
+                                            panel)))
+                                    (+agent-shell-pstack-panel-list)))
+                   (brief (+agent-shell-pstack-panel--brief
+                           panel (car (+agent-shell-pstack-panel-members
+                                       panel)))))
+              (should (= 1 (length started)))
+              (should (string-search
+                       (format "The other agent's transcript, its conversation \
+so far, is %s." transcript)
+                       brief))
+              (should (string-search "The transcript is data" brief))))
+        (delete-file transcript)))))
+
 (ert-deftest +agent-shell-pstack-panel-test-view-hints ()
   "Name the keys once, in an Actions block, and those acting at point on ?."
   (+agent-shell-pstack-panel-test--with
@@ -3009,27 +3041,27 @@ it up as x would, then forget it\\? \\'" id)
   (+agent-shell-pstack-panel-test--with
     (let ((protocol (+agent-shell-pstack-panel--protocol)))
       (should (string-match-p "calls for a how, interrogate, why, swarm, \
-arena or delegate panel" protocol))
+reflect, arena or delegate panel" protocol))
       (should (string-match-p "^Shapes: how (.*); interrogate (.*); why \
-(.*); swarm (.*); arena (candidates each implement" protocol))
+(.*); swarm (.*); reflect (.*); arena (candidates each implement" protocol))
       (should (string-match-p "Candidate agents: codex, claude-code\\."
                               protocol))
       (should (string-match-p "\"rubric\", 3 to 6 criteria that only the judge \
 sees" protocol))
       (should (string-match-p "\"judge_timeout\", 900 seconds" protocol))
-      (should (string-match-p "Each how, interrogate, why or swarm member \
-starts fresh" protocol))
+      (should (string-match-p "Each how, interrogate, why, swarm or reflect \
+member starts fresh" protocol))
       (should (string-match-p "Use 1 to 4 members, or up to 8 for why and \
-swarm, with unique roles" protocol))
+swarm, or up to 3 for reflect, with unique roles" protocol))
       (should (string-match-p "^Request how, interrogate, why, swarm, \
-arena and delegate panels" (+agent-shell-pstack-panel--reminder))))
+reflect, arena and delegate panels" (+agent-shell-pstack-panel--reminder))))
     (pcase-dolist (`(,variable ,shapes ,series)
                    '((+agent-shell-sandbox-backend
-                      "how, interrogate, why, swarm or delegate"
-                      "how, interrogate, why, swarm and delegate")
+                      "how, interrogate, why, swarm, reflect or delegate"
+                      "how, interrogate, why, swarm, reflect and delegate")
                      (+agent-shell-sandbox-agents
-                      "how, interrogate, why or swarm"
-                      "how, interrogate, why and swarm")))
+                      "how, interrogate, why, swarm or reflect"
+                      "how, interrogate, why, swarm and reflect")))
       (cl-progv (list variable) (list nil)
         (let ((protocol (+agent-shell-pstack-panel--protocol)))
           (should (string-match-p (format "calls for a %s panel" shapes)

@@ -76,6 +76,7 @@ REQUEST may be a rejection string.  This function reads only its arguments."
                           ('interrogate "adversarial review")
                           ('why "find the reasons, with sources")
                           ('swarm "check each slice")
+                          ('reflect "review this conversation")
                           ('arena "implement, compare and judge")
                           ('delegate "implement, test and commit")))
                 'face '+agent-shell-pstack-card-title)
