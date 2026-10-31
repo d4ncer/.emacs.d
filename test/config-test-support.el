@@ -45,5 +45,30 @@
             ((symbol-function 'keychain-refresh-environment) #'ignore))
     (load (expand-file-name file +config-test-root) nil t)))
 
+(defun +config-test-view-keeps-other-buffers (open shown render &optional
+                                                    refresh)
+  "Check that a view never draws into a buffer it does not own.
+OPEN shows the view in the selected window, SHOWN is its
+`window-buffer-change-functions' entry and RENDER its renderer.
+REFRESH, when given, is its redraw-if-open command.  The window then
+shows another buffer, and each must leave that buffer untouched."
+  (save-window-excursion
+    (funcall open)
+    (let ((window (selected-window))
+          (other (generate-new-buffer " *view-other*")))
+      (unwind-protect
+          (progn
+            (with-current-buffer other
+              (insert "a transcript")
+              (set-buffer-modified-p nil))
+            (set-window-buffer window other)
+            (funcall shown window)
+            (when refresh (funcall refresh))
+            (with-current-buffer other
+              (should-error (funcall render))
+              (should (equal "a transcript" (buffer-string)))
+              (should-not (buffer-modified-p))))
+        (kill-buffer other)))))
+
 (provide 'config-test-support)
 ;;; config-test-support.el ends here

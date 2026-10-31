@@ -112,3 +112,11 @@ For each user-facing change, compare it with these rules and with at least
 one other screen in this configuration, keep keys and their meanings
 consistent across screens, and verify it in a real Emacs (point after a
 refresh, Evil keys, folding) as well as in tests.
+
+A view draws only into its own buffer. Its renderer refuses to run outside
+the view's mode before it erases anything, and any hook or timer that
+redraws checks it is in the view first, since a window that showed the view
+may show something else by then. Each view's tests call
+`+config-test-view-keeps-other-buffers` from `test/config-test-support.el`,
+which leaves the view in a window, switches the window to another buffer
+and checks that buffer survives every redraw path.

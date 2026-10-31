@@ -2793,19 +2793,9 @@ captured commit-opus$" (funcall text)))
 (ert-deftest +agent-shell-pstack-panel-test-view-leaves-other-buffers-alone ()
   "Leaving the panels view in a window never redraws the buffer shown next."
   (+agent-shell-pstack-panel-test--with
-    (save-window-excursion
-      (+agent-shell-pstack-panels)
-      (let ((window (selected-window))
-            (other (generate-new-buffer " *panels-other*")))
-        (unwind-protect
-            (progn
-              (with-current-buffer other (insert "a transcript"))
-              (set-window-buffer window other)
-              (+agent-shell-pstack-panels--shown window)
-              (with-current-buffer other
-                (should-error (+agent-shell-pstack-panels--render))
-                (should (equal "a transcript" (buffer-string)))))
-          (kill-buffer other))))))
+    (+config-test-view-keeps-other-buffers
+     #'+agent-shell-pstack-panels #'+agent-shell-pstack-panels--shown
+     #'+agent-shell-pstack-panels--render #'+agent-shell-pstack-panels--refresh)))
 
 (ert-deftest +agent-shell-pstack-panel-test-view-member-plan ()
   "Show a member's plan progress, and open its card on RET."

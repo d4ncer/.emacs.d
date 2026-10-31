@@ -226,19 +226,9 @@
 (ert-deftest +agent-shell-plans-test-leaves-other-buffers-alone ()
   "Leaving the view in a window never redraws the buffer shown next."
   (+agent-shell-plans-test--with
-    (save-window-excursion
-      (+agent-shell-plans)
-      (let ((window (selected-window))
-            (other (generate-new-buffer " *plans-other*")))
-        (unwind-protect
-            (progn
-              (with-current-buffer other (insert "a transcript"))
-              (set-window-buffer window other)
-              (+agent-shell-plans--shown window)
-              (with-current-buffer other
-                (should-error (+agent-shell-plans--render))
-                (should (equal "a transcript" (buffer-string)))))
-          (kill-buffer other))))))
+    (+config-test-view-keeps-other-buffers
+     #'+agent-shell-plans #'+agent-shell-plans--shown
+     #'+agent-shell-plans--render #'+agent-shell-plans--refresh)))
 
 (provide 'agent-shell-plans-test)
 ;;; agent-shell-plans-test.el ends here
