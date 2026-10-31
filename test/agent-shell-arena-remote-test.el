@@ -1535,5 +1535,40 @@ resumes polling with a fresh follow-up to come."
                 (should (equal 1 (length spawned)))))
           (kill-buffer lead))))))
 
+(ert-deftest +agent-shell-arena-remote-test-runner-extends-deadline ()
+  "Move a passed deadline on while a candidate runs a command, then cancel."
+  (let* ((shell (generate-new-buffer " *candidate*"))
+         (call (list (cons :kind "execute") (cons :status "in_progress")))
+         (member (+agent-shell-pstack-panel--make-member
+                  :role "a" :agent 'codex :kind 'candidate :state 'running
+                  :shell shell))
+         (panel (+agent-shell-pstack-panel--make
+                 :id "p1" :phase 'candidates :members (list member)
+                 :deadline (- (float-time) 1)))
+         (runner (+agent-shell-arena-remote--make-runner
+                  :directory (make-temp-file "runner" t) :panel panel
+                  :limit (+ (float-time) 600)
+                  :job (+agent-shell-arena-remote--make-job :deadline 100)))
+         (cancelled nil))
+    (unwind-protect
+        (cl-letf (((symbol-function '+agent-shell-arena-remote--runner-status)
+                   #'ignore)
+                  ((symbol-function '+agent-shell-pstack-panel-cancel)
+                   (lambda (_panel reason &rest _) (setq cancelled reason))))
+          (with-current-buffer shell
+            (setq-local agent-shell--state
+                        (list (cons :tool-calls (list (cons "t1" call))))))
+          (+agent-shell-arena-remote--runner-tick runner)
+          (should-not cancelled)
+          (should (> (+agent-shell-pstack-panel-deadline panel) (float-time)))
+          (setf (alist-get :status call) "completed"
+                (+agent-shell-pstack-panel-deadline panel) (- (float-time) 1))
+          (+agent-shell-arena-remote--runner-tick runner)
+          (should (equal "The arena reached its 100-second deadline."
+                         cancelled)))
+      (kill-buffer shell)
+      (delete-directory (+agent-shell-arena-remote--runner-directory runner)
+                        t))))
+
 (provide 'agent-shell-arena-remote-test)
 ;;; agent-shell-arena-remote-test.el ends here

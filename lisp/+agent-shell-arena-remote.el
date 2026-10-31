@@ -3639,12 +3639,14 @@ DIRECTORY is the job folder and ROOT the host state folder.  PHASE is
 queued until this runner holds the repository LOCK, then the panel's.
 PREVIOUS is the status an earlier runner left unfinished.  PANEL holds
 the deadline and how each agent's host login stood.  EXPIRED says the
-deadline cancelled the panel.  TRANSCRIPT is a delegate's transcript
+deadline cancelled the panel.  LIMIT is the latest the deadline may move
+to while a member runs a command.  TRANSCRIPT is a delegate's transcript
 writer, a `+agent-shell-arena-remote--recorder'.  QUARANTINE says why
 its delegate's writers could not be shown to have stopped, which keeps
 the repository's lock held."
   job directory root panel (phase 'queued) lock previous done
-  cancelled expired (written "") (beat 0) error ready transcript quarantine)
+  cancelled expired (written "") (beat 0) error ready transcript quarantine
+  limit)
 
 (defvar +agent-shell-arena-remote--runner nil
   "The runner this batch Emacs runs, or nil.")
@@ -3860,7 +3862,11 @@ before any member starts, as a local arena's does."
         (previous (+agent-shell-arena-remote--runner-previous runner)))
     (setf (+agent-shell-arena-remote--runner-phase runner) 'preparing
           (+agent-shell-pstack-panel-deadline panel)
-          (+ (float-time) (+agent-shell-arena-remote-job-deadline job)))
+          (+ (float-time) (+agent-shell-arena-remote-job-deadline job))
+          (+agent-shell-arena-remote--runner-limit runner)
+          (+ (+agent-shell-pstack-panel-deadline panel)
+             (max 0 (- +agent-shell-pstack-panel-max-runtime
+                       (+agent-shell-pstack-panel-timeout panel)))))
     (condition-case err
         (if previous
             (+agent-shell-arena-remote--recover panel previous)
@@ -4267,6 +4273,16 @@ travels.  Nothing here commits."
                                    (buffer-string)))))
         (if (string-empty-p reason) "The arena was cancelled." reason)))))
 
+(defun +agent-shell-arena-remote--runner-extend (runner panel)
+  "Move PANEL's passed deadline on while a member runs a command.
+Return non-nil when it moved, never past RUNNER's limit.  The laptop sees
+the new deadline in the status and keeps the host awake for it."
+  (when-let* ((limit (+agent-shell-arena-remote--runner-limit runner))
+              ((< (float-time) limit))
+              ((+agent-shell-pstack-panel--running-command-p panel)))
+    (setf (+agent-shell-pstack-panel-deadline panel)
+          (min limit (+ (float-time) +agent-shell-pstack-panel--extension)))))
+
 (defun +agent-shell-arena-remote--runner-tick (runner)
   "Check RUNNER's cancel marker, lock and deadline, and beat its heart."
   (unless (+agent-shell-arena-remote--runner-done runner)
@@ -4287,6 +4303,9 @@ travels.  Nothing here commits."
                (+agent-shell-arena-remote-job-id
                 (+agent-shell-arena-remote--runner-job runner)))
           (+agent-shell-arena-remote--runner-start runner)))
+       ((and deadline (> (float-time) deadline)
+             (not (+agent-shell-arena-remote--runner-expired runner))
+             (+agent-shell-arena-remote--runner-extend runner panel)))
        ((and deadline
              (> (float-time)
                 (+ deadline +agent-shell-pstack-panel-arena-grace)))

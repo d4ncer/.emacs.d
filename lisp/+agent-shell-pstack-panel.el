@@ -2186,6 +2186,14 @@ not ready."))))
       (+agent-shell-pstack-panel-judge-timeout panel)
     (+agent-shell-pstack-panel-timeout panel)))
 
+(defun +agent-shell-pstack-panel--running-command-p (panel)
+  "Return whether an unsettled member of PANEL's phase runs a command."
+  (seq-some (lambda (member)
+              (and (not (+agent-shell-pstack-panel--settled-p member))
+                   (+agent-shell-drive-running-p
+                    (+agent-shell-pstack-panel-member-shell member))))
+            (+agent-shell-pstack-panel--phase-members panel)))
+
 (defun +agent-shell-pstack-panel--expire (id phase &optional limit)
   "Settle the unfinished members of panel ID's PHASE as timed out.
 Do nothing once the panel has left PHASE.  Before LIMIT, a time, extend
@@ -2194,11 +2202,7 @@ the phase instead while an unsettled member still runs a command."
               ((eq phase (+agent-shell-pstack-panel-phase panel))))
     (setf (+agent-shell-pstack-panel-timer panel) nil)
     (if (and limit (< (float-time) limit)
-             (seq-some (lambda (member)
-                         (and (not (+agent-shell-pstack-panel--settled-p member))
-                              (+agent-shell-drive-running-p
-                               (+agent-shell-pstack-panel-member-shell member))))
-                       (+agent-shell-pstack-panel--phase-members panel)))
+             (+agent-shell-pstack-panel--running-command-p panel))
         (+agent-shell-pstack-panel--arm
          panel (min +agent-shell-pstack-panel--extension
                     (- limit (float-time)))

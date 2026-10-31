@@ -157,8 +157,13 @@ the job's id, `REPO` the profile's `:host-directory`.
     laptop tells the lead the job is unreachable and stops polling until
     a re-attach.
 12. **Deadline.** The runner's deadline is the job's `deadline` seconds
-    from when it took the lock. Past it, it settles running members as
-    timed out, and two minutes later reports regardless. The laptop
+    from when it took the lock. While an unsettled member of the current
+    phase still runs a command when it passes, the runner moves it on a
+    minute at a time, never more than
+    `+agent-shell-pstack-panel-max-runtime` less the job's `timeout`
+    beyond where it started, and reports each new one in the status.
+    Past it, it settles running members as timed out, and two minutes
+    later reports regardless. The laptop
     extends a Coder workspace's stop time past the deadline before the
     upload and whenever a status reports a later one.
 13. **Report.** Runner, host side. When the panel finishes it writes

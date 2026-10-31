@@ -101,7 +101,8 @@ its final message with a fenced block, then ends its turn:
   phase whose unsettled members still run a command, such as a test
   suite, is extended a minute at a time, up to `+agent-shell-pstack-panel-max-runtime`, 7200 seconds,
   from the phase's start. The timeout reason then says how long it ran.
-  Runs on a remote host keep the fixed deadline their job carries.
+  On a remote host the runner does the same with the run's deadline, and
+  the laptop keeps the workspace awake for each new one.
 
 Emacs reads the first complete block in the lead's message, as it reaches a
 live `turn-complete` or the tool call that ends the message, so a restored
