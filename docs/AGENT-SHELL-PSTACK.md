@@ -738,8 +738,9 @@ and you have not looked since), failed with its kind, on host, judging,
 running, finishing, cancelled, then done. A card's heading shows the state
 as a glyph and a word, then the shape, lead and age. Below it are the
 members, one line each with role, agent and state, and detail lines with
-dim labels: a delegate's branch, a candidate's capture, reports, errors and
-notes on commands left running; the workspace, arena folder or checkout,
+dim labels: a member's plan progress (`RET` opens its card in the agent
+plans view), a delegate's branch, a candidate's capture, reports, errors
+and notes on commands left running; the workspace, arena folder or checkout,
 and a remote one's host; and the follow-up, folded to its first two lines.
 Below the panels it lists each branch-mode delegate an earlier Emacs left
 unreturned.
@@ -748,7 +749,7 @@ unreturned.
 between those at the same level. `?` lists the keys acting at point. `RET`
 visits the lead from a panel, the live shell, transcript or report from a
 member, the folder from a workspace and the whole follow-up from its
-section; a line naming a report, checkout or shell visits that. `c` cancels
+section; a line naming a report, checkout, shell or plan visits that. `c` cancels
 an unfinished panel and `x` cleans up a finished arena or delegate. `D`
 forgets every finished panel whose follow-up was delivered; panels still
 holding a workspace, checkout or branch record are listed in one question,

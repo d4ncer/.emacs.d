@@ -17,6 +17,8 @@
 (require 'magit-section)
 (require '+agent-shell-pstack-panel)
 
+(declare-function +agent-shell-plans "+agent-shell-plans")
+(declare-function +agent-shell-plans-progress "+agent-shell-plans")
 (declare-function +agent-shell-arena-remote-transcript-buffer
                   "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-arena "+agent-shell-arena-remote")
@@ -508,6 +510,11 @@ The line visits TARGET when it is non-nil."
                 (format ", %d commit%s" (length commits)
                         (if (cdr commits) "s" "")))
              ""))))
+      (when-let* (((fboundp '+agent-shell-plans-progress))
+                  ((buffer-live-p shell))
+                  (progress (+agent-shell-plans-progress shell)))
+        (+agent-shell-pstack-panels--detail
+         6 "Plan" (cons 'pstack-plan shell) progress))
       (when-let* ((checkout (plist-get result :checkout)))
         (+agent-shell-pstack-panels--detail
          6 "Checkout" checkout (abbreviate-file-name checkout)))
@@ -774,6 +781,7 @@ message with a pstack-panel block.\n"))
   "Visit TARGET: a file or folder, a buffer, or a tagged panel or record."
   (pcase target
     ((pred stringp) (find-file-other-window target))
+    (`(pstack-plan . ,shell) (+agent-shell-plans shell))
     (`(pstack-transcript . ,remote)
      (pop-to-buffer (+agent-shell-arena-remote-transcript-buffer remote)))
     (`(pstack-lead . ,panel)
@@ -788,7 +796,7 @@ message with a pstack-panel block.\n"))
 
 (defun +agent-shell-pstack-panels-visit ()
   "Visit what the line or section at point is about.
-A line naming a report, checkout or shell visits that.  Otherwise a
+A line naming a report, checkout, shell or plan visits that.  Otherwise a
 panel visits its lead, a member its live shell, transcript or report, a
 workspace its folder, a follow-up its full text, and a record the
 checkout it left."

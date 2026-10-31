@@ -2790,6 +2790,39 @@ captured commit-opus$" (funcall text)))
                 (should (equal "a transcript" (buffer-string)))))
           (kill-buffer other))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-view-member-plan ()
+  "Show a member's plan progress, and open its card on RET."
+  (require '+agent-shell-plans)
+  (+agent-shell-pstack-panel-test--with
+    (save-window-excursion
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--how))
+      (let ((codex (nth 1 (nth 0 started))))
+        (unwind-protect
+            (progn
+              ;; Real members are agent shells, which the plans view lists.
+              (with-current-buffer codex (setq major-mode 'agent-shell-mode))
+              (+agent-shell-plans--note-notification
+               :state (list (cons :buffer codex))
+               :acp-notification
+               '((params . ((update . ((sessionUpdate . "plan")
+                                       (entries . [((content . "Read")
+                                                    (status . "completed"))
+                                                   ((step . "Trace the drive")
+                                                    (status . "in_progress"))])))))))
+              (+agent-shell-pstack-panels)
+              (goto-char (point-min))
+              (should (search-forward
+                       "      Plan       1/2 · Trace the drive\n" nil t))
+              (forward-line -1)
+              (+agent-shell-pstack-panels-visit)
+              (should (equal "*agent plans*" (buffer-name)))
+              (should (eq codex (+agent-shell-plans--shell))))
+          (remhash codex +agent-shell-plans--plans)
+          (when (get-buffer "*agent plans*")
+            (kill-buffer "*agent plans*")))))))
+
 (ert-deftest +agent-shell-pstack-panel-test-view-hints ()
   "Name the keys once, in an Actions block, and those acting at point on ?."
   (+agent-shell-pstack-panel-test--with

@@ -31,6 +31,7 @@ Each value is a plist with :entries and :updated keys.")
 
 (declare-function +agent-shell-plans--render "+agent-shell-plans-view")
 (declare-function +agent-shell-plans--open "+agent-shell-plans-view")
+(declare-function +agent-shell-plans--goto "+agent-shell-plans-view")
 
 (defun +agent-shell-plans--refresh ()
   "Redraw an existing plans view after a burst of changes."
@@ -91,12 +92,38 @@ Each value is a plist with :entries and :updated keys.")
     (when (derived-mode-p 'agent-shell-mode)
       (+agent-shell-plans--watch))))
 
+(defun +agent-shell-plans--text (entry)
+  "Return ENTRY's content or Codex step as one line."
+  (string-join (split-string (or (map-elt entry 'content)
+                               (map-elt entry 'step) "") "[\n\r\t ]+" t)
+               " "))
+
+(defun +agent-shell-plans-progress (shell)
+  "Return SHELL's plan as \"DONE/TOTAL\" and its current step, or nil."
+  (when-let* ((entries (plist-get (gethash shell +agent-shell-plans--plans)
+                                  :entries)))
+    (let ((current (seq-find (lambda (entry)
+                               (equal (map-elt entry 'status) "in_progress"))
+                             entries)))
+      (concat (format "%d/%d" (seq-count (lambda (entry)
+                                           (equal (map-elt entry 'status)
+                                                  "completed"))
+                                         entries)
+                      (length entries))
+              (if current
+                  (concat " · " (truncate-string-to-width
+                                 (+agent-shell-plans--text current)
+                                 70 nil nil "…"))
+                "")))))
+
 ;;;###autoload
-(defun +agent-shell-plans ()
-  "Show the latest plans from live agent shells."
+(defun +agent-shell-plans (&optional shell)
+  "Show the latest plans from live agent shells.
+From Lisp, SHELL names the shell whose card to show unfolded."
   (interactive)
   (require '+agent-shell-plans-view)
-  (+agent-shell-plans--open))
+  (+agent-shell-plans--open)
+  (when shell (+agent-shell-plans--goto shell)))
 
 (provide '+agent-shell-plans)
 ;;; +agent-shell-plans.el ends here

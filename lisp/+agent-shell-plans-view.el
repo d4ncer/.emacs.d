@@ -47,12 +47,6 @@
                    (cdr (assoc "pending" +agent-shell-plans--states)))))
     (propertize label 'font-lock-face face)))
 
-(defun +agent-shell-plans--text (entry)
-  "Return ENTRY's content or Codex step as one line."
-  (string-join (split-string (or (map-elt entry 'content)
-                               (map-elt entry 'step) "") "[\n\r\t ]+" t)
-               " "))
-
 (defun +agent-shell-plans--sorted ()
   "Return shells with plans, working first, then most recently updated."
   (let (shells)
@@ -169,22 +163,13 @@
 
 (defun +agent-shell-plans--insert-card (shell)
   "Insert SHELL's plan as a folded card after a dim rule."
-  (let* ((entries (plist-get (gethash shell +agent-shell-plans--plans) :entries))
-         (done (seq-count (lambda (entry)
-                            (equal (map-elt entry 'status) "completed")) entries))
-         (current (seq-find (lambda (entry)
-                              (equal (map-elt entry 'status) "in_progress"))
-                            entries)))
+  (let ((entries (plist-get (gethash shell +agent-shell-plans--plans) :entries)))
     (insert (propertize (make-string 60 ?─)
                         'font-lock-face '+agent-shell-plans-dim) "\n")
     (magit-insert-section (agent-plan shell t)
       (magit-insert-heading
         (+agent-shell-plans--badge (+agent-shell-plans--state entries))
-        "  " (buffer-name shell) (format " · %d/%d" done (length entries))
-        (if current
-            (concat " · " (truncate-string-to-width
-                           (+agent-shell-plans--text current) 70 nil nil "…"))
-          ""))
+        "  " (buffer-name shell) " · " (+agent-shell-plans-progress shell))
       (mapc #'+agent-shell-plans--insert-entry
             (seq-take entries +agent-shell-plans--preview-entries))
       (when-let* ((rest (nthcdr +agent-shell-plans--preview-entries entries)))
@@ -246,6 +231,15 @@
         (+agent-shell-plans-mode))
       (+agent-shell-plans--render))
     (pop-to-buffer buffer)))
+
+(defun +agent-shell-plans--goto (shell)
+  "Move to SHELL's card and unfold it, or stay put when it has none."
+  (when-let* ((card (seq-find (lambda (section)
+                                (and (eq (oref section type) 'agent-plan)
+                                     (eq (oref section value) shell)))
+                              (oref magit-root-section children))))
+    (goto-char (oref card start))
+    (magit-section-show card)))
 
 (defun +agent-shell-plans--shell ()
   "Return the shell of the card at point, including its folded entries."
