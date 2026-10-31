@@ -33,8 +33,14 @@
                         (directory-files-recursively "modules" "\\.el\\'")
                         (directory-files-recursively "lisp" "\\.el\\'")
                         (directory-files-recursively "test" "\\.el\\'")))
-    (with-temp-buffer (insert-file-contents file) (emacs-lisp-mode) (check-parens)))
-  (princ "Elisp syntax: PASS\n")
+    (with-temp-buffer
+      (insert-file-contents file)
+      (emacs-lisp-mode)
+      (check-parens)
+      (when (search-forward "\t" nil t)
+        (error "%s:%d: tab; indent with spaces" (file-relative-name file)
+               (line-number-at-pos)))))
+  (princ "Elisp syntax and indentation: PASS\n")
   (load (expand-file-name "lisp/+bootstrap" +config-check-root) nil t)
   (load (expand-file-name "test/config-denylist" +config-check-root) nil t)
   (pcase (+config-denylist-check

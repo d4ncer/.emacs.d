@@ -35,9 +35,9 @@
     (+agent-shell-projects--cancel-event project)
     (+agent-shell-projects--detach agent-id)
     (+agent-shell-projects--set project :agents
-				(delq agent (plist-get project :agents)))
+                                (delq agent (plist-get project :agents)))
     (+agent-shell-projects--set project :unenrolled-agents
-				(cons agent (plist-get project :unenrolled-agents)))
+                                (cons agent (plist-get project :unenrolled-agents)))
     (when (equal agent-id (plist-get project :author))
       (+agent-shell-projects--set project :author nil))
     (when (buffer-live-p shell)
@@ -110,9 +110,9 @@ Saved review history and annotations remain available to existing references."
     (when delete-source (+agent-shell-projects--delete-source project artefact))
     (+agent-shell-projects--set artefact :unenrolled (float-time))
     (+agent-shell-projects--set project :artefacts
-				(delq artefact (plist-get project :artefacts)))
+                                (delq artefact (plist-get project :artefacts)))
     (+agent-shell-projects--set project :unenrolled-artefacts
-				(cons artefact (plist-get project :unenrolled-artefacts)))
+                                (cons artefact (plist-get project :unenrolled-artefacts)))
     (when (equal artefact-id (plist-get project :proposal))
       (+agent-shell-projects--set project :proposal nil))
     (+agent-shell-projects--cancel-pending project)

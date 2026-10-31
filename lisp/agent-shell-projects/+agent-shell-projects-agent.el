@@ -440,18 +440,18 @@
       (when (seq-find (lambda (a) (equal (plist-get a :id)
                                          (plist-get annotation :artefact)))
                       (plist-get project :artefacts))
-	(when (and (equal (plist-get annotation :author) "user")
+        (when (and (equal (plist-get annotation :author) "user")
                    (not (plist-get annotation :submitted))
                    (not (plist-get annotation :queued)))
           (push (list :id (plist-get annotation :id) :type "annotation"
                       :annotation (copy-tree annotation)) items))
-	(dolist (reply (plist-get annotation :replies))
+        (dolist (reply (plist-get annotation :replies))
           (when (and (equal (plist-get reply :author) "user")
                      (not (plist-get reply :submitted))
                      (not (plist-get reply :queued)))
             (push (list :id (plist-get reply :id) :type "reply"
-			:annotation (plist-get annotation :id)
-			:reply (copy-tree reply)) items)))))
+                        :annotation (plist-get annotation :id)
+                        :reply (copy-tree reply)) items)))))
     (nreverse items)))
 
 (defun +agent-shell-projects-submit ()

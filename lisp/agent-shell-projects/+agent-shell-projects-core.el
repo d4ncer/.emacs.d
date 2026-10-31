@@ -288,31 +288,31 @@ ARTEFACT can be nil for a project-wide change.")
       (when (plist-get artefact :current)
         (+agent-shell-projects-version artefact (plist-get artefact :current)))
     (if (equal (plist-get artefact :kind) "code")
-	(funcall +agent-shell-projects-code-capture-function project artefact actor)
+        (funcall +agent-shell-projects-code-capture-function project artefact actor)
       (let ((previous-conflict (plist-get artefact :disk-copy))
             (previous-missing (plist-get artefact :missing))
             (source (condition-case nil (+agent-shell-projects-source artefact)
                       (+agent-shell-projects-source-missing nil))))
-	(if (not source)
+        (if (not source)
             (progn
               (+agent-shell-projects--set artefact :missing t)
               (unless previous-missing
-		(+agent-shell-projects--changed project artefact actor))
+                (+agent-shell-projects--changed project artefact actor))
               (if (plist-get artefact :current)
                   (+agent-shell-projects-version artefact (plist-get artefact :current))
-		(signal '+agent-shell-projects-source-missing
-			(list (plist-get artefact :org-id)))))
-	  (pcase-let ((`(,buffer ,start ,end) source))
+                (signal '+agent-shell-projects-source-missing
+                        (list (plist-get artefact :org-id)))))
+          (pcase-let ((`(,buffer ,start ,end) source))
             (let* ((missing (and (not (file-exists-p (plist-get artefact :path)))
-				 (not (buffer-modified-p buffer))))
-		   (_ (+agent-shell-projects--set artefact :missing missing))
-		   (version (+agent-shell-projects-snapshot
+                                 (not (buffer-modified-p buffer))))
+                   (_ (+agent-shell-projects--set artefact :missing missing))
+                   (version (+agent-shell-projects-snapshot
                              project artefact
                              (if missing "" (with-current-buffer buffer
                                               (buffer-substring-no-properties start end))) actor)))
               (when (or (not (equal previous-conflict (plist-get artefact :disk-copy)))
-			(not (eq previous-missing missing)))
-		(+agent-shell-projects--changed project artefact actor))
+                        (not (eq previous-missing missing)))
+                (+agent-shell-projects--changed project artefact actor))
               version)))))))
 
 (defun +agent-shell-projects--source-saved ()
