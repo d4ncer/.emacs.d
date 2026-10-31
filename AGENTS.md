@@ -34,6 +34,13 @@ Guidance for changing this Emacs configuration.
 - Use General for leader and mode bindings, with `:wk` labels where they aid
   discovery. Direct keymap edits are appropriate for local, generated, or
   text-property keymaps.
+- Before building on data an agent sends over ACP, confirm the agent sends
+  it: run `test/agent-shell-probe.el` against the real adapter and read what
+  reached Emacs. A match in a shell's rendered text is not evidence.
+- Edit Elisp with exact text replacement, never a script that finds forms by
+  string position or reindents a region. After each edit, byte-compile the
+  file; `check-parens` passes a paren that closes the wrong form. The gate
+  rejects tabs, and batch `emacs -Q` indents with them unless told not to.
 - Verify the smallest relevant behavior after editing. Check syntax for changed
   Elisp, then run focused byte compilation or ERT tests when they add value.
   Use `emacsclient` for live Emacs inspection when a server is running.
