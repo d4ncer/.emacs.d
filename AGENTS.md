@@ -32,8 +32,17 @@ Guidance for changing this Emacs configuration.
   `:after-call`, `:commands`, and hooks when they suit the loading behavior;
   follow the surrounding module's patterns.
 - Use General for leader and mode bindings, with `:wk` labels where they aid
-  discovery. Direct keymap edits are appropriate for local, generated, or
-  text-property keymaps.
+  discovery. Inside a `use-package` form, bind keys with its `:general`
+  keyword, never `define-key` in `:config`. Direct keymap edits are
+  appropriate for local, generated, or text-property keymaps.
+- Apply a config change to the running Emacs too, and check the live
+  values with plain reads, not `let`. Reloading a library keeps every bound
+  `defcustom` and `defvar`: afterwards reset only options whose default
+  expression changed and whose live value still equals the old default,
+  never global minor modes or values `~/private` sets. `defvar-keymap` also
+  survives a reload, so after changing bindings rebuild the keymap,
+  re-evaluate the module's `use-package` form and check `key-binding` in the
+  real buffer and Evil state.
 - Before building on data an agent sends over ACP, confirm the agent sends
   it: run `test/agent-shell-probe.el` against the real adapter and read what
   reached Emacs. A match in a shell's rendered text is not evidence.
@@ -61,3 +70,20 @@ Guidance for changing this Emacs configuration.
 Use the repository's `[scope] Imperative summary` subject style. Keep the
 subject concise, add a short body for multiple changes, and omit co-author
 footers.
+
+Push only when the complete local gate exits 0; take its status from
+`rc=$?` straight after it, never from grepping its output. A known flaky
+test still needs a rerun that exits 0. After a verified push of a feature
+branch, fast-forward `main` to it and push `main` too, without asking; if
+`main` has diverged, rebase the branch on it first and say so.
+
+## Public repository
+
+This repository is public. Nothing specific to the owner's employer may
+land in it: no work repository names, paths or sizes, remote workspace or
+template names, internal hosts, URLs or tool names, inventories of a work
+machine, or results of experiments on work infrastructure, in code, tests,
+fixtures, docs or commit messages. Work-specific config, profiles and notes
+go in `~/private/` (`+private-config-directory`); public code uses neutral
+examples such as `~/src/big-repo`. The gate checks a private denylist from
+`~/private/` when present. Tell any agent you delegate to the same rule.

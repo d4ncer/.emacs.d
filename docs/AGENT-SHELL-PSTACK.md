@@ -147,6 +147,14 @@ lead's directory. Three layers keep it read-only:
 The guard wraps the default responder, so it leaves members' responders
 alone. Members are never displayed.
 
+Members keep the MCP servers their agent loads, by choice: they give useful
+context even for reading. These layers do not fully contain MCP writes. A
+2026-10-31 probe found that a tool which declares itself read-only runs in
+both agents without Emacs being asked, and that Claude Code in plan mode
+never asks Emacs about MCP calls, relying on the model to decline writes.
+Denying write tools by name in each agent's own permission settings, for
+members only, would close that gap; it is deferred.
+
 A member's prompt is the brief, its focus and the shape's contract. Its report
 is the final text of its turn, after its last tool call. When Claude Code asks
 to leave plan mode with a plan longer than that text, the rejected plan is the
