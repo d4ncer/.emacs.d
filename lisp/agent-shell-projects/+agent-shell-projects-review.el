@@ -15,7 +15,7 @@
 (defun +agent-shell-projects-explanation (artefact version)
   "Return ARTEFACT's explanation for VERSION, if available."
   (seq-find (lambda (entry) (equal (plist-get entry :version)
-                                  (plist-get version :id)))
+                                   (plist-get version :id)))
             (plist-get artefact :explanations)))
 
 (defun +agent-shell-projects--explanation-operation (project agent operation)
@@ -70,7 +70,7 @@
       (+agent-shell-projects--set
        artefact :explanations
        (append (seq-remove (lambda (e) (equal (plist-get e :version)
-                                             (plist-get version :id)))
+                                              (plist-get version :id)))
                            (plist-get artefact :explanations)) (list explanation)))
       (+agent-shell-projects--set request :status "ready")
       (+agent-shell-projects--changed project artefact (plist-get agent :id))
@@ -160,12 +160,12 @@
   (+agent-shell-projects-render-code
    (+agent-shell-projects--project) (+agent-shell-projects--artefact)
    (+agent-shell-projects-version (+agent-shell-projects--artefact)
-                                 +agent-shell-projects--version-id)
+                                  +agent-shell-projects--version-id)
    view +agent-shell-projects--comparison files)
   (when entry
     (goto-char (point-min))
     (when-let* ((position (text-property-any (point-min) (point-max)
-                                            'project-walkthrough-id entry)))
+                                             'project-walkthrough-id entry)))
       (goto-char position))))
 
 (defun +agent-shell-projects-cycle-view ()
@@ -185,7 +185,7 @@
     (+agent-shell-projects-render-code
      (+agent-shell-projects--project) (+agent-shell-projects--artefact)
      (+agent-shell-projects-version (+agent-shell-projects--artefact)
-                                   (plist-get state :version))
+                                    (plist-get state :version))
      (plist-get state :view) (plist-get state :comparison) (plist-get state :focus))
     (goto-char (min (point-max) (plist-get state :point)))))
 
@@ -225,7 +225,7 @@
               (let ((start (point)))
                 (magit-insert-section (decision (plist-get entry :id))
                   (magit-insert-heading
-                   (format "%s [%s]" (plist-get entry :title) (plist-get entry :basis)))
+                    (format "%s [%s]" (plist-get entry :title) (plist-get entry :basis)))
                   (insert (plist-get entry :body) "\n\n")
                   (when (plist-get entry :validation)
                     (insert "Validation\n" (plist-get entry :validation) "\n\n"))
@@ -303,18 +303,18 @@ Choose its destination when saving the draft, unless FILE is supplied."
                            (member (plist-get r :status) '("queued" "sent" "ready"))))
                     (reverse (plist-get project :requests))))
          (request (or existing (+agent-shell-projects-request
-                   project "proposal" agent :destination destination
-                   :parent (plist-get exploration :id)
-                   :versions (mapcar (lambda (a) (list :artefact (plist-get a :id)
-                                                       :version (plist-get a :current))) artefacts)
-                   :instructions
-                   (concat
-                    "Draft a proposal from our conversation and the supplied existing work: "
-                    "problem, success criteria and validation, scope and exclusions, constraints "
-                    "and priorities, possible solutions and tradeoffs, and recommendation. "
-                    "Preserve agreed decisions and their rationale. Distinguish recorded intent, "
-                    "inferred intent, assumptions and open questions. Return a draft operation "
-                    "for this request; the user will edit it and choose where to save it.")))))
+                                project "proposal" agent :destination destination
+                                :parent (plist-get exploration :id)
+                                :versions (mapcar (lambda (a) (list :artefact (plist-get a :id)
+                                                                    :version (plist-get a :current))) artefacts)
+                                :instructions
+                                (concat
+                                 "Draft a proposal from our conversation and the supplied existing work: "
+                                 "problem, success criteria and validation, scope and exclusions, constraints "
+                                 "and priorities, possible solutions and tradeoffs, and recommendation. "
+                                 "Preserve agreed decisions and their rationale. Distinguish recorded intent, "
+                                 "inferred intent, assumptions and open questions. Return a draft operation "
+                                 "for this request; the user will edit it and choose where to save it.")))))
     (+agent-shell-projects-flush project)
     (when (equal (plist-get request :status) "ready")
       (+agent-shell-projects--proposal-ready project request))
@@ -419,7 +419,7 @@ Use the selected workspace when ROOT is omitted.  Initialise Git when needed."
   (interactive)
   (let* ((project (+agent-shell-projects--project))
          (items (seq-filter (lambda (a) (not (equal (plist-get a :kind) "code")))
-                             (plist-get project :artefacts)))
+                            (plist-get project :artefacts)))
          (choices (mapcar (lambda (a) (cons (plist-get a :name) (plist-get a :id))) items))
          (id (cdr (assoc (completing-read "Proposal: " choices nil t) choices))))
     (+agent-shell-projects--set project :proposal id)

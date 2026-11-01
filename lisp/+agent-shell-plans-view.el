@@ -158,7 +158,7 @@
 (defun +agent-shell-plans--insert-entry (entry)
   "Insert ENTRY on one indented line."
   (insert "    " (substring (+agent-shell-plans--badge (map-elt entry 'status))
-                           0 1)
+                            0 1)
           " " (+agent-shell-plans--text entry) "\n"))
 
 (defun +agent-shell-plans--insert-card (shell)

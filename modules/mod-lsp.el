@@ -27,9 +27,9 @@
      tsx-ts-mode typescript-ts-mode yaml-ts-mode))
   :config
   (dolist (entry (with-temp-buffer
-                  (insert-file-contents
-                   (expand-file-name "treesit-grammars.eld" +config-root))
-                  (read (current-buffer))))
+                   (insert-file-contents
+                    (expand-file-name "treesit-grammars.eld" +config-root))
+                   (read (current-buffer))))
     (setf (alist-get (car entry) treesit-language-source-alist) (cdr entry))))
 
 ;;; Flymake - Error checking

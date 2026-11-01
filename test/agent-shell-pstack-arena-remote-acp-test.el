@@ -104,19 +104,19 @@ namespaces; its runner starts under nohup, not systemd."
               '((fixture-codex . "read-only") (fixture-claude . "plan"))
               +agent-shell-sandbox-agents
               '((fixture-codex :mode "agent-full-access"
-                               :prepare pa-test-prepare
-                               :login (lambda ()
-                                        (+agent-shell-sandbox--make-login
-                                         :agent 'fixture-codex
-                                         :access "fixture-access"
-                                         :expires (+ (float-time) 86400))))
+                 :prepare pa-test-prepare
+                 :login (lambda ()
+                          (+agent-shell-sandbox--make-login
+                           :agent 'fixture-codex
+                           :access "fixture-access"
+                           :expires (+ (float-time) 86400))))
                 (fixture-claude :mode "agent-full-access"
                                 :prepare pa-test-prepare
-                               :login (lambda ()
-                                        (+agent-shell-sandbox--make-login
-                                         :agent 'fixture-claude
-                                         :access "fixture-access"
-                                         :expires (+ (float-time) 86400)))))
+                                :login (lambda ()
+                                         (+agent-shell-sandbox--make-login
+                                          :agent 'fixture-claude
+                                          :access "fixture-access"
+                                          :expires (+ (float-time) 86400)))))
               agent-shell-show-welcome-message nil
               agent-shell-show-config-icons nil
               agent-shell-prefer-viewport-interaction nil
@@ -161,7 +161,7 @@ record, and `delivered', which waits for a panel's follow-up."
            (expand-file-name "arenas/" scratch))
           (+agent-shell-pstack-arena-profiles
            `((,lead-repo :host (local . ,host-root)
-                         :host-directory ,host-repo)))
+              :host-directory ,host-repo)))
           (+agent-shell-pstack-panel-directory
            (expand-file-name "reports/" scratch))
           (agent-shell-show-welcome-message nil)
@@ -182,15 +182,15 @@ record, and `delivered', which waits for a panel's follow-up."
                                                                 lead-repo)))))
           (+agent-shell-sandbox-agents
            `((fixture-codex :mode "agent-full-access" :prepare ,prepare
-             :login ,(lambda ()
-                       (+agent-shell-sandbox--make-login
-                        :agent 'fixture-codex :access "fixture-access"
-                        :expires (+ (float-time) 86400))))
+              :login ,(lambda ()
+                        (+agent-shell-sandbox--make-login
+                         :agent 'fixture-codex :access "fixture-access"
+                         :expires (+ (float-time) 86400))))
              (fixture-claude :mode "agent-full-access" :prepare ,prepare
-             :login ,(lambda ()
-                       (+agent-shell-sandbox--make-login
-                        :agent 'fixture-claude :access "fixture-access"
-                        :expires (+ (float-time) 86400))))))
+                             :login ,(lambda ()
+                                       (+agent-shell-sandbox--make-login
+                                        :agent 'fixture-claude :access "fixture-access"
+                                        :expires (+ (float-time) 86400))))))
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
@@ -393,7 +393,7 @@ The follow-up matches the one the same arena gives when run locally."
                                 (and (eq 'remote (nth 0 seen))
                                      (memq (nth 1 seen)
                                            '(preparing candidates capturing
-                                                       judging))))
+                                             judging))))
                               mirrored))
             (should (seq-every-p (lambda (seen) (equal (nth 2 seen) (nth 3 seen)))
                                  mirrored))

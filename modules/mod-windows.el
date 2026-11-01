@@ -78,7 +78,7 @@
                     (derived-mode . grep-mode)
                     (derived-mode . embark-collect-mode)
                     ,(rx bos "*Embark Export: ")
-)
+                    )
                   '(window-width 80))))
 
          ;; Right side - documentation, reference buffers & command outputs.

@@ -179,7 +179,7 @@ Return the record."
   "Return a tshark field line with FIELDS, a plist of column values."
   (mapconcat (lambda (column) (or (plist-get fields column) ""))
              '(:time :ipv4 :ipv6 :tcp :udp :syn :ack :response :query :a
-                     :aaaa :sni)
+               :aaaa :sni)
              "\t"))
 
 (ert-deftest +agent-shell-egress-test-linux-fields ()

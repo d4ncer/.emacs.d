@@ -125,10 +125,10 @@
     (evil-set-initial-state 'excali-mode 'emacs)
     :general
     (:states '(normal motion insert)
-             :prefix "SPC" :non-normal-prefix "C-SPC"
-             "ax" '(nil :wk "Excalidraw")
-             "axn" '(excali-new :wk "new drawing")
-             "axo" '(excali-open :wk "open drawing"))))
+     :prefix "SPC" :non-normal-prefix "C-SPC"
+     "ax" '(nil :wk "Excalidraw")
+     "axn" '(excali-new :wk "new drawing")
+     "axo" '(excali-open :wk "open drawing"))))
 
 (provide 'mod-text)
 ;;; mod-text.el ends here

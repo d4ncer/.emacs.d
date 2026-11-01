@@ -49,9 +49,9 @@
                  (lambda () (push 'keychain events))))
         (let ((system-type 'darwin))
           (eval (+config-test-declaration "modules/mod-core.el"
-                                         'exec-path-from-shell) t)
+                                          'exec-path-from-shell) t)
           (eval (+config-test-declaration "modules/mod-core.el"
-                                         'keychain-environment) t)))
+                                          'keychain-environment) t)))
       (should (equal (nreverse events) '(shell keychain))))))
 
 (provide 'config-activation-test)

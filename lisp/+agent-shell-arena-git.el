@@ -28,9 +28,9 @@
 
 (defcustom +agent-shell-arena-remote-host-kinds
   '((coder :exec +agent-shell-arena-remote--coder-exec
-           :wake +agent-shell-arena-remote--coder-wake
-           :extend +agent-shell-arena-remote--coder-extend
-           :label +agent-shell-arena-remote--coder-label)
+     :wake +agent-shell-arena-remote--coder-wake
+     :extend +agent-shell-arena-remote--coder-extend
+     :label +agent-shell-arena-remote--coder-label)
     (ssh :exec +agent-shell-arena-remote--ssh-exec
          :wake nil :extend nil :label +agent-shell-arena-remote--ssh-label)
     (local :exec +agent-shell-arena-remote--local-exec
@@ -149,7 +149,7 @@ Each element of :connect is an absolute socket path or a function of
 the sandbox returning one or a list of them.  The socket need not exist
 yet, and its true name is what the profile allows."
   :type '(alist :key-type (choice directory function)
-                :value-type (plist :key-type symbol :value-type sexp)))
+          :value-type (plist :key-type symbol :value-type sexp)))
 
 (cl-defstruct (+agent-shell-arena-git-base
                (:constructor +agent-shell-arena-git--base)
@@ -413,15 +413,15 @@ The value is (:cone BOOL :patterns LINES)."
                        (+agent-shell-arena-git-base-toplevel base) args))))
     (when (equal (funcall read "config" "--type=bool" "core.sparseCheckout")
                  "true")
-    (let ((file (funcall read "rev-parse" "--path-format=absolute"
-                         "--git-path" "info/sparse-checkout")))
-      (list :cone (equal (funcall read "config" "--type=bool"
-                                  "core.sparseCheckoutCone")
-                         "true")
-            :patterns (and file (file-readable-p file)
-                           (with-temp-buffer
-                             (insert-file-contents file)
-                             (split-string (buffer-string) "\n" t))))))))
+      (let ((file (funcall read "rev-parse" "--path-format=absolute"
+                           "--git-path" "info/sparse-checkout")))
+        (list :cone (equal (funcall read "config" "--type=bool"
+                                    "core.sparseCheckoutCone")
+                           "true")
+              :patterns (and file (file-readable-p file)
+                             (with-temp-buffer
+                               (insert-file-contents file)
+                               (split-string (buffer-string) "\n" t))))))))
 
 (defun +agent-shell-arena-git-base-at (directory commit prefix sparse)
   "Return a base for COMMIT, which the repository at DIRECTORY holds.
@@ -479,7 +479,7 @@ and nil, or nil and a message, for the reasons an arena's base fails."
       (user-error (+agent-shell-arena-git--later fail (cadr err))))))
 
 (defun +agent-shell-arena-git-capture-base (directory callback
-                                         &optional reuse-head identity message)
+                                                      &optional reuse-head identity message)
   "Snapshot the working tree of the lead at DIRECTORY as a base commit.
 The commit's parent is HEAD and its tree holds tracked and untracked,
 non-ignored files.  With REUSE-HEAD non-nil, a tree equal to HEAD's
@@ -732,7 +732,7 @@ function, not %S" matcher))))
        (assq (car value) +agent-shell-arena-remote-host-kinds)
        (stringp (cdr value))
        (if (plist-get (alist-get (car value)
-                                +agent-shell-arena-remote-host-kinds) :local)
+                                 +agent-shell-arena-remote-host-kinds) :local)
            (file-name-absolute-p (cdr value))
          (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'" (cdr value)))))
 
@@ -812,8 +812,8 @@ with ~/" value)))
                                            (lambda (option)
                                              (not (memq option
                                                         '(:isolation :host
-                                                                     :sandbox
-                                                                     :link))))
+                                                          :sandbox
+                                                          :link))))
                                            options)))
                        (user-error "Arena profile for %s: unknown :delegate \
 key %S" toplevel unknown))
@@ -1723,7 +1723,7 @@ worktree: %s already exists there" target link)))
                 (throw 'refused (format "Git does not ignore the symlink %s \
 in the delegate's worktree, so a commit could take it; ignore it with a \
 pattern that also matches a symlink, such as /%s rather than %s/" path path
-                                        path)))))
+path)))))
           nil)
       (error (format "Cannot link the profile's :delegate :link folders: %s"
                      (error-message-string err))))))
@@ -1865,16 +1865,16 @@ nil, or nil and a message."
                      (+agent-shell-arena-git-delegate-branch manifest))
              (lambda (commits error)
                (if error (funcall fail error)
-               (setf (+agent-shell-arena-git-delegate-commits delegate)
-                     commits)
-               (if (memq (+agent-shell-arena-git-delegate-restore delegate)
-                         '(restored unneeded))
-                   (+agent-shell-arena-git--remove
-                    manifest (lambda (_ error)
-                               (funcall callback (unless error delegate)
-                                        error)))
-                 (+agent-shell-arena-git-write-manifest manifest)
-                 (funcall callback delegate nil))))))))
+                 (setf (+agent-shell-arena-git-delegate-commits delegate)
+                       commits)
+                 (if (memq (+agent-shell-arena-git-delegate-restore delegate)
+                           '(restored unneeded))
+                     (+agent-shell-arena-git--remove
+                      manifest (lambda (_ error)
+                                 (funcall callback (unless error delegate)
+                                          error)))
+                   (+agent-shell-arena-git-write-manifest manifest)
+                   (funcall callback delegate nil))))))))
     (cond
      ((eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
       (let ((role (car (+agent-shell-arena-git-manifest-roles manifest))))

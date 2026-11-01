@@ -9,7 +9,7 @@
 (require '+agent-shell-projects-capture)
 
 (dolist (feature '(+agent-shell-projects +agent-shell-projects-code
-                  +agent-shell-projects-review magit-section agent-shell org))
+                   +agent-shell-projects-review magit-section agent-shell org))
   (when (featurep feature) (error "Capture service loaded %s" feature)))
 (let* ((directory (make-temp-file "headless-project-" t))
        (+agent-shell-projects-directory (expand-file-name "store/" directory))

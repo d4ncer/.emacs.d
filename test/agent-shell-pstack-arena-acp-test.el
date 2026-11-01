@@ -101,7 +101,7 @@ start in `capture-starts'."
                       :expires (+ (float-time) 86400)))))
           (+agent-shell-sandbox-agents
            `((fixture-codex :mode "agent-full-access" :prepare ,prepare
-                            :login ,(funcall login 'fixture-codex))
+              :login ,(funcall login 'fixture-codex))
              (fixture-claude :mode "agent-full-access" :prepare ,prepare
                              :login ,(funcall login 'fixture-claude))))
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))

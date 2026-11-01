@@ -111,7 +111,7 @@
 
 (use-package typescript-ts-mode
   :hook ((js-mode-hook js-ts-mode-hook tsx-ts-mode-hook
-          typescript-mode-hook typescript-ts-mode-hook) . eglot-ensure)
+                       typescript-mode-hook typescript-ts-mode-hook) . eglot-ensure)
   :config
   (pushnew! find-sibling-rules
             ;; Tests -> impl

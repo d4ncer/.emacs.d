@@ -59,8 +59,8 @@
     (cond ((file-symlink-p file) (encode-coding-string (file-symlink-p file) 'utf-8))
           ((file-directory-p file)
            (when (file-exists-p (expand-file-name ".git" file))
-           (encode-coding-string
-            (concat "Submodule " (string-trim
+             (encode-coding-string
+              (concat "Submodule " (string-trim
                                     (+agent-shell-projects--git-text
                                      file "rev-parse" "HEAD"))) 'utf-8)))
           ((file-exists-p file)
@@ -89,7 +89,7 @@
   "Read exact bytes from a saved file RECORD."
   (when (plist-get record :content)
     (base64-decode-string (+agent-shell-projects-content
-                          (list :blob (plist-get record :content))))))
+                           (list :blob (plist-get record :content))))))
 
 (defvar +agent-shell-projects--manifest-cache (make-hash-table :test #'equal))
 
@@ -199,8 +199,8 @@
     (error
      (if (and (equal revision "HEAD")
               (when-let* ((branch (ignore-errors
-                                   (string-trim (+agent-shell-projects--git-text
-                                                 root "symbolic-ref" "--quiet" "HEAD")))))
+                                    (string-trim (+agent-shell-projects--git-text
+                                                  root "symbolic-ref" "--quiet" "HEAD")))))
                 (string-empty-p (+agent-shell-projects--git-text
                                  root "for-each-ref" "--format=%(refname)" branch))))
          (string-trim (+agent-shell-projects--git-text
@@ -210,7 +210,7 @@
 (defun +agent-shell-projects--worker-capture (request)
   "Capture all workspace targets in REQUEST, sharing discovery and file reads."
   (let* ((root (string-trim (+agent-shell-projects--git-text
-                            (plist-get request :root) "rev-parse" "--show-toplevel")))
+                             (plist-get request :root) "rev-parse" "--show-toplevel")))
          (targets (plist-get request :targets))
          (bases (make-hash-table :test #'equal))
          (attempt 0) result)
@@ -237,8 +237,8 @@
           (let* ((base (plist-get target :base))
                  (changed (gethash base changes))
                  (paths (sort (delq nil (delete-dups (cl-mapcan
-                                           (lambda (c) (list (plist-get c :path) (plist-get c :old-path)))
-                                           (copy-tree changed)))) #'string<)))
+                                                      (lambda (c) (list (plist-get c :path) (plist-get c :old-path)))
+                                                      (copy-tree changed)))) #'string<)))
             (setq paths (delq nil paths))
             (dolist (path paths)
               (unless (gethash path files)
@@ -256,7 +256,7 @@
                                       :proposal (plist-get target :proposal))))) prepared)))
         (+agent-shell-projects--worker-progress "Checking workspace consistency")
         (when (and (equal untracked (+agent-shell-projects--git-text
-                                    root "ls-files" "--others" "--exclude-standard" "-z"))
+                                     root "ls-files" "--others" "--exclude-standard" "-z"))
                    (cl-every (lambda (base)
                                (equal (gethash base changes)
                                       (+agent-shell-projects--workspace-changes root base untracked)))
@@ -291,7 +291,7 @@
          (old-offsets (+agent-shell-projects--line-offsets old))
          (new-offsets (+agent-shell-projects--line-offsets new))
          (diff (+agent-shell-projects--diff path (+agent-shell-projects--file-bytes old-record)
-                                          (+agent-shell-projects--file-bytes new-record)))
+                                            (+agent-shell-projects--file-bytes new-record)))
          (old-line 1) (new-line 1) hunks current)
     (dolist (line (cddr (split-string diff "\n")))
       (cond
@@ -340,14 +340,14 @@
             (with-temp-file right (set-buffer-multibyte nil) (insert (or new ""))))
           (with-temp-buffer
             (let ((status (process-file "diff" nil t nil "-u" "-L"
-                                         (concat "a/" path) "-L" (concat "b/" path) left right)))
+                                        (concat "a/" path) "-L" (concat "b/" path) left right)))
               (unless (memq status '(0 1)) (error "Diff failed for %s" path)))
             (buffer-string)))
       (delete-file left) (delete-file right))))
 
 (defun +agent-shell-projects-worker-main (file)
   "Execute the isolated request in FILE and publish a small result."
-    (let* ((request (+agent-shell-projects--read-json file))
+  (let* ((request (+agent-shell-projects--read-json file))
          (+agent-shell-projects-directory (plist-get request :store))
          (+agent-shell-projects--worker-progress-file (concat file ".progress"))
          (+agent-shell-projects--worker-git-count 0)
@@ -357,10 +357,10 @@
      (+agent-shell-projects--json
       (condition-case err
           (let ((result (pcase (plist-get request :kind)
-                  ("capture" (+agent-shell-projects--worker-capture request))
-                  ("diff" (+agent-shell-projects--worker-diff request))
-                  ("init" (+agent-shell-projects--worker-init (plist-get request :root)))
-                  (_ (error "Unknown worker request")))))
+                          ("capture" (+agent-shell-projects--worker-capture request))
+                          ("diff" (+agent-shell-projects--worker-diff request))
+                          ("init" (+agent-shell-projects--worker-init (plist-get request :root)))
+                          (_ (error "Unknown worker request")))))
             (list :ok t :result result :git-calls +agent-shell-projects--worker-git-count
                   :seconds (- (float-time) started)))
         (error (list :ok :false :error (error-message-string err))))))))

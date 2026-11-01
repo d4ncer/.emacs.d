@@ -439,7 +439,7 @@ Settled means one more upstream relabel leaves every label unchanged."
                                 (native-comp-unit-file
                                  (subr-native-comp-unit code))))))
                       '(agent-shell-chat--relabel agent-shell-prompt-ranges
-                                                  shell-maker-start))
+                        shell-maker-start))
               :notifications +bench-notifications
               :new-errors (- (+bench--messages-matching
                               "errored\\|[Ee]rror")
@@ -455,7 +455,7 @@ Settled means one more upstream relabel leaves every label unchanged."
   "Write the CPU profile top-down and bottom-up to FILE.
 Expand every entry holding at least 0.5% of the samples."
   (let* ((profile (profiler-make-profile :type 'cpu :log (profiler-cpu-log)
-                                       :timestamp (current-time)))
+                                         :timestamp (current-time)))
          (total 0)
          (text ""))
     (maphash (lambda (_ count) (cl-incf total count))

@@ -87,7 +87,7 @@
 (ert-deftest +project-files-test-small-watch-set-is-complete ()
   (let ((projectile-watch-max-directories 100))
     (should (equal (sort (+project-files--watch-directories
-                         nil "/tmp/" '("a/b/file" "a/other" "top")) #'string<)
+                          nil "/tmp/" '("a/b/file" "a/other" "top")) #'string<)
                    '("/tmp/" "/tmp/a/" "/tmp/a/b/")))))
 
 (ert-deftest +project-files-test-router-preserves-small-and-remote-finder ()
@@ -259,7 +259,7 @@
                              '("recent/button.ts")))
               (funcall source "newbutton")
               (+project-files-test--write root "cache/test.nul"
-                                         "src/newbutton.ts\0")
+                                          "src/newbutton.ts\0")
               (+project-files-test--wait
                (lambda () (equal candidates
                                  '("src/newbutton.ts"))))

@@ -281,7 +281,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :demand t
   :general
   (:keymaps 'agent-shell-mode-map
-   "C-c p" '(+agent-shell-pstack-mode :wk "pstack mode"))
+            "C-c p" '(+agent-shell-pstack-mode :wk "pstack mode"))
   :config
   (+agent-shell-pstack-guard-mode 1))
 
@@ -291,23 +291,23 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :demand t
   :general
   (:keymaps 'agent-shell-mode-map
-   "C-c P" '(+agent-shell-pstack-panels :wk "pstack panels"))
+            "C-c P" '(+agent-shell-pstack-panels :wk "pstack panels"))
   (:states '(normal motion) :keymaps '+agent-shell-pstack-panels-mode-map
-   "RET" #'+agent-shell-pstack-panels-visit
-   "<return>" #'+agent-shell-pstack-panels-visit
-   "x" #'+agent-shell-pstack-panels-clean
-   "c" #'+agent-shell-pstack-panels-cancel
-   "D" '(+agent-shell-pstack-panels-clear-delivered :wk "clear delivered")
-   "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
-   "?" '(+agent-shell-pstack-panels-keys :wk "keys here")
-   "TAB" #'magit-section-toggle
-   "<tab>" #'magit-section-toggle
-   "n" #'magit-section-forward
-   "p" #'magit-section-backward
-   "M-n" #'magit-section-forward-sibling
-   "M-p" #'magit-section-backward-sibling
-   "gr" #'revert-buffer
-   "q" #'quit-window)
+           "RET" #'+agent-shell-pstack-panels-visit
+           "<return>" #'+agent-shell-pstack-panels-visit
+           "x" #'+agent-shell-pstack-panels-clean
+           "c" #'+agent-shell-pstack-panels-cancel
+           "D" '(+agent-shell-pstack-panels-clear-delivered :wk "clear delivered")
+           "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
+           "?" '(+agent-shell-pstack-panels-keys :wk "keys here")
+           "TAB" #'magit-section-toggle
+           "<tab>" #'magit-section-toggle
+           "n" #'magit-section-forward
+           "p" #'magit-section-backward
+           "M-n" #'magit-section-forward-sibling
+           "M-p" #'magit-section-backward-sibling
+           "gr" #'revert-buffer
+           "q" #'quit-window)
   :config
   ;; Delegates on this config run its tests, which load the built packages.
   (setf (alist-get user-emacs-directory +agent-shell-pstack-arena-profiles
@@ -321,22 +321,22 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :demand t
   :general
   (:keymaps 'agent-shell-mode-map
-   "C-c L" '(+agent-shell-plans :wk "agent plans"))
+            "C-c L" '(+agent-shell-plans :wk "agent plans"))
   (:states '(normal motion) :keymaps '+agent-shell-plans-mode-map
-   "RET" #'+agent-shell-plans-visit
-   "<return>" #'+agent-shell-plans-visit
-   "TAB" #'magit-section-toggle
-   "<tab>" #'magit-section-toggle
-   "n" #'magit-section-forward
-   "p" #'magit-section-backward
-   "C-n" #'magit-section-forward
-   "C-p" #'magit-section-backward
-   "M-n" #'magit-section-forward-sibling
-   "M-p" #'magit-section-backward-sibling
-   "^" #'magit-section-up
-   "g" #'revert-buffer
-   "q" #'quit-window
-   "?" '(+agent-shell-plans-keys :wk "keys here")))
+           "RET" #'+agent-shell-plans-visit
+           "<return>" #'+agent-shell-plans-visit
+           "TAB" #'magit-section-toggle
+           "<tab>" #'magit-section-toggle
+           "n" #'magit-section-forward
+           "p" #'magit-section-backward
+           "C-n" #'magit-section-forward
+           "C-p" #'magit-section-backward
+           "M-n" #'magit-section-forward-sibling
+           "M-p" #'magit-section-backward-sibling
+           "^" #'magit-section-up
+           "g" #'revert-buffer
+           "q" #'quit-window
+           "?" '(+agent-shell-plans-keys :wk "keys here")))
 
 (use-package +agent-shell-arena-remote
   :ensure nil
@@ -354,9 +354,9 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :commands (+agent-shell-pstack-arena-trace)
   :general
   (:keymaps '+agent-shell-pstack-arena-trace-mode-map
-   "C-c C-k" '(+agent-shell-pstack-arena-trace-stop :wk "stop trace"))
+            "C-c C-k" '(+agent-shell-pstack-arena-trace-stop :wk "stop trace"))
   (:states '(normal motion) :keymaps '+agent-shell-pstack-arena-trace-mode-map
-   "q" #'quit-window))
+           "q" #'quit-window))
 
 (use-package +agent-shell-pstack-card
   :ensure nil
@@ -364,11 +364,11 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :demand t
   :general
   (:keymaps '+agent-shell-pstack-card-map
-   "RET" #'+agent-shell-pstack-card-toggle-source
-   "<return>" #'+agent-shell-pstack-card-toggle-source
-   "<mouse-1>" #'+agent-shell-pstack-card-toggle-source
-   "TAB" #'+agent-shell-pstack-card-toggle-brief
-   "<tab>" #'+agent-shell-pstack-card-toggle-brief)
+            "RET" #'+agent-shell-pstack-card-toggle-source
+            "<return>" #'+agent-shell-pstack-card-toggle-source
+            "<mouse-1>" #'+agent-shell-pstack-card-toggle-source
+            "TAB" #'+agent-shell-pstack-card-toggle-brief
+            "<tab>" #'+agent-shell-pstack-card-toggle-brief)
   :config
   (+agent-shell-pstack-card-mode 1))
 
@@ -392,7 +392,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   (general-define-key
    :states '(normal motion)
    :keymaps '(+agent-shell-projects-home-mode-map
-               +agent-shell-projects-sidebar-mode-map)
+              +agent-shell-projects-sidebar-mode-map)
    "?" #'+agent-shell-projects-menu
    "RET" #'+agent-shell-projects-visit-at-point
    "<return>" #'+agent-shell-projects-visit-at-point

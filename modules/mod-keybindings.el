@@ -343,8 +343,8 @@
                                      (buffer-substring-no-properties (region-beginning) (region-end))
                                    (thing-at-point 'symbol t))))
                   (consult-ripgrep (when-let* ((project (project-current)))
-                                    (project-root project))
-                                  selection)))
+                                     (project-root project))
+                                   selection)))
               :wk "search symbol in project")
 
    "t"  '(nil :wk "toggles")

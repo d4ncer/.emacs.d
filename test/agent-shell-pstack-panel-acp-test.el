@@ -66,7 +66,7 @@ sees `cwd' and `reports', the panel report root."
               :name "Codex"
               :failure-patterns
               ,(plist-get (alist-get 'codex (eval (car (get '+agent-shell-sandbox-agents
-                                                           'standard-value))
+                                                            'standard-value))
                                                   t))
                           :failure-patterns))
              (fixture-claude :name "Claude Code")))
@@ -357,7 +357,7 @@ and it failed again."
                    lead "fixture-claude" "error:rate_limit 1")))
       (should (eq 'done (+agent-shell-pstack-panel-member-state member)))
       (should (equal '(:kind rate_limited :message "Internal error"
-                             :source error-data)
+                       :source error-data)
                      (+agent-shell-pstack-panel-member-failure member)))
       (should (equal "REPORT continued after error:rate_limit"
                      (+agent-shell-pstack-panel-acp-test--report member))))))

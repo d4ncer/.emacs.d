@@ -307,10 +307,10 @@ whose standard values cannot be evaluated are left alone.  Rebuild declared
 keymaps in place and re-run the loaded libraries' mod-ai declarations."
   (interactive)
   (let (libraries options modes reset layouts snapshots
-        (carried 0)
-        (keymaps 0)
-        (configured 0)
-        (load-prefer-newer t))
+                  (carried 0)
+                  (keymaps 0)
+                  (configured 0)
+                  (load-prefer-newer t))
     (dolist (feature +agent-shell-pstack-reload--libraries)
       (when (featurep feature)
         (when-let* ((history

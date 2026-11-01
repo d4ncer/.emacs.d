@@ -73,11 +73,11 @@ The sandbox-exec backend reads the host login Keychain instead."
 
 (defcustom +agent-shell-sandbox-agents
   '((claude-code :mode "bypassPermissions"
-                 :prepare +agent-shell-sandbox-prepare-claude
-                 :name "Claude Code"
-                 :login +agent-shell-sandbox--claude-login
-                 :refresh ("claude" "-p" "Reply with the single word OK.")
-                 :relogin "Log Claude Code in again on the host: run claude \
+     :prepare +agent-shell-sandbox-prepare-claude
+     :name "Claude Code"
+     :login +agent-shell-sandbox--claude-login
+     :refresh ("claude" "-p" "Reply with the single word OK.")
+     :relogin "Log Claude Code in again on the host: run claude \
 there and use /login.")
     (codex :mode "agent-full-access"
            :prepare +agent-shell-sandbox-prepare-codex
@@ -391,9 +391,9 @@ what the filesystem permits now."
              paths))))
 
 (cl-defun +agent-shell-sandbox-create (root &key deny-reads allow-reads
-                                             allow-metadata allow-writes
-                                             allow-connects env trace
-                                             deadline read-only protect)
+                                            allow-metadata allow-writes
+                                            allow-connects env trace
+                                            deadline read-only protect)
   "Return a sandbox writing to ROOT, creating its private folders.
 With READ-ONLY non-nil the agent works in ROOT but writes only its
 private temp and config folders and ALLOW-WRITES.
@@ -642,7 +642,7 @@ Every rule that refuses an operation tags the kernel's log of it with
 SANDBOX's tag.  In trace mode each such rule allows the operation with a
 report instead."
   (let* ((tag (+agent-shell-sandbox--string (+agent-shell-sandbox-tag
-                                              sandbox)))
+                                             sandbox)))
          (refuse (lambda (operation filters)
                    (if (+agent-shell-sandbox-trace sandbox)
                        (format "(allow %s (with report) (with message %s)%s)\n"
@@ -1112,7 +1112,7 @@ and `+agent-shell-sandbox-linux-environment'.  The client's own entries
 are dropped, since they may hold this Emacs's whole environment.  An
 egress session gives the launcher alone its observer's folder."
   (let ((prepared (funcall (plist-get (+agent-shell-sandbox-entry agent)
-                                    :prepare)
+                                      :prepare)
                            sandbox)))
     (make-directory (+agent-shell-sandbox--home sandbox) t)
     (with-temp-file (+agent-shell-sandbox--resolver sandbox)

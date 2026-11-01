@@ -119,9 +119,9 @@
     (puthash process job +agent-shell-projects--workers)
     (+agent-shell-projects--set
      job :timeout (+agent-shell-projects-run-at-time +agent-shell-projects-worker-timeout nil
-                              (lambda ()
-                                (+agent-shell-projects--set job :timed-out t)
-                                (+agent-shell-projects--stop-worker process))))
+                                                     (lambda ()
+                                                       (+agent-shell-projects--set job :timed-out t)
+                                                       (+agent-shell-projects--stop-worker process))))
     (when progress
       (+agent-shell-projects--set
        job :progress-timer
@@ -134,15 +134,15 @@
                 (+agent-shell-projects--set job :phase phase)
                 (funcall progress phase))))))))
     (set-process-sentinel process (lambda (p _event)
-                                   (when (memq (process-status p) '(exit signal))
-                                     (+agent-shell-projects--worker-finish p))))
+                                    (when (memq (process-status p) '(exit signal))
+                                      (+agent-shell-projects--worker-finish p))))
     (when (memq (process-status process) '(exit signal)) (+agent-shell-projects--worker-finish process))
     process))
 
 (defun +agent-shell-projects--job-notify (state)
   "Notify the projects associated with capture STATE."
   (dolist (id (delete-dups (mapcar (lambda (r) (plist-get r :project))
-                                 (append (plist-get state :active) (plist-get state :pending)))))
+                                   (append (plist-get state :active) (plist-get state :pending)))))
     (run-hook-with-args '+agent-shell-projects-job-hook (+agent-shell-projects-load id))))
 
 (defun +agent-shell-projects-schedule-capture (project artefact &optional actor callback)
@@ -164,8 +164,8 @@ CALLBACK receives a version after a successful, current capture."
       (+agent-shell-projects--set pending :callbacks (cons callback (plist-get pending :callbacks))))
     (unless (or (plist-get state :process) (timerp (plist-get state :timer)))
       (+agent-shell-projects--set state :timer
-                                 (+agent-shell-projects-run-at-time +agent-shell-projects-capture-delay nil
-                                              #'+agent-shell-projects--start-capture state)))
+                                  (+agent-shell-projects-run-at-time +agent-shell-projects-capture-delay nil
+                                                                     #'+agent-shell-projects--start-capture state)))
     (+agent-shell-projects--job-notify state)
     state))
 
@@ -178,7 +178,7 @@ CALLBACK receives a version after a successful, current capture."
     (list :project (plist-get project :id) :artefact (plist-get artefact :id)
           :base (plist-get artefact :base)
           :proposal (when proposal (list :artefact (plist-get proposal :id)
-                                        :version (plist-get proposal :current))))))
+                                         :version (plist-get proposal :current))))))
 
 (defun +agent-shell-projects--start-capture (state)
   "Start the next coalesced capture in STATE."
@@ -229,7 +229,7 @@ CALLBACK receives a version after a successful, current capture."
         (progn
           (+agent-shell-projects--set state :phase "Capture queued")
           (+agent-shell-projects--set state :timer (+agent-shell-projects-run-at-time +agent-shell-projects-capture-delay nil
-                                                               #'+agent-shell-projects--start-capture state)))
+                                                                                      #'+agent-shell-projects--start-capture state)))
       (remhash (plist-get state :root) +agent-shell-projects--jobs))
     (+agent-shell-projects--job-notify state)))
 
@@ -243,7 +243,7 @@ CALLBACK receives a version after a successful, current capture."
     (dolist (state (hash-table-values +agent-shell-projects--jobs))
       (dolist (key '(:active :pending))
         (+agent-shell-projects--set state key
-                                   (seq-remove matches (plist-get state key))))
+                                    (seq-remove matches (plist-get state key))))
       (unless (or (plist-get state :active) (plist-get state :pending))
         (remhash (plist-get state :root) +agent-shell-projects--jobs)
         (when (timerp (plist-get state :timer))
@@ -265,8 +265,8 @@ CALLBACK receives a version after a successful, current capture."
      (list (if (= (length roots) 1) (car roots)
              (completing-read "Cancel workspace capture: " roots nil t)))))
   (let* ((root (or root (plist-get (+agent-shell-projects-artefact
-                                   (+agent-shell-projects-load +agent-shell-projects--project-id)
-                                   +agent-shell-projects--artefact-id) :path)))
+                                    (+agent-shell-projects-load +agent-shell-projects--project-id)
+                                    +agent-shell-projects--artefact-id) :path)))
          (key (file-name-as-directory (file-truename root)))
          (state (gethash key +agent-shell-projects--jobs)))
     (unless state (user-error "No capture running for this workspace"))

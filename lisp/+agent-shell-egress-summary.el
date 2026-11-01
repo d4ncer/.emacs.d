@@ -50,7 +50,7 @@
              (hash-table-p +agent-shell-pstack-panel--panels)
              (fboundp '+agent-shell-pstack-panel--egress-identity))
     (when-let* ((panel (gethash (plist-get identity :panel)
-                               +agent-shell-pstack-panel--panels))
+                                +agent-shell-pstack-panel--panels))
                 (member (seq-find
                          (lambda (member)
                            (equal (plist-get identity :role)
@@ -77,7 +77,7 @@ use their file modification time.  Invalid records are counted and skipped."
         (counts (make-hash-table :test #'eq))
         records first last (total 0) (invalid 0) (excluded 0))
     (dolist (file (when (file-directory-p directory)
-                   (directory-files-recursively directory "\\.egress\\.json\\'")))
+                    (directory-files-recursively directory "\\.egress\\.json\\'")))
       (cl-incf total)
       (condition-case nil
           (let* ((record (+agent-shell-egress-read file))
@@ -120,7 +120,7 @@ use their file modification time.  Invalid records are counted and skipped."
              (backend (symbol-name
                        (or (+agent-shell-egress-record-backend record) 'none)))
              (bucket (cond ((seq-some #'+agent-shell-egress-summary--names
-                                     destinations) 'named)
+                                      destinations) 'named)
                            (destinations 'addresses-only) (t 'empty)))
              (backend-counts (or (gethash backend coverage)
                                  (puthash backend (make-hash-table) coverage))))
@@ -171,7 +171,7 @@ use their file modification time.  Invalid records are counted and skipped."
                  (observed . ,(vconcat (sort (plist-get row :observed) #'string<)))
                  (agents . ,(vconcat (sort (plist-get row :agents) #'string<)))
                  (repositories . ,(vconcat (sort (plist-get row :repositories)
-                                                #'string<)))
+                                                 #'string<)))
                  (panels . ,(length (plist-get row :panels)))
                  (members . ,(length (plist-get row :members)))
                  (first_seen . ,(plist-get row :first))
@@ -219,15 +219,15 @@ use their file modification time.  Invalid records are counted and skipped."
                         (lambda (&rest values)
                           (apply #'max (mapcar #'string-width values))) cells))
          (format-string (concat (mapconcat (lambda (width)
-                                            (format "%%-%ds" width))
-                                          widths "  ") "\n")))
+                                             (format "%%-%ds" width))
+                                           widths "  ") "\n")))
     (mapconcat (lambda (row) (apply #'format format-string row)) cells "")))
 
 (defun +agent-shell-egress-summary--refresh (&rest _)
   "Refresh the current summary from its source records."
   (setq +agent-shell-egress-summary--data
         (+agent-shell-egress-summary--collect +agent-shell-pstack-panel-directory
-                                             +agent-shell-egress-summary--since))
+                                              +agent-shell-egress-summary--since))
   (let* ((inhibit-read-only t)
          (data +agent-shell-egress-summary--data)
          (counts (plist-get data :counts)))
@@ -262,13 +262,13 @@ use their file modification time.  Invalid records are counted and skipped."
       (if (eq format 'json)
           (insert (json-serialize (vconcat rows)) "\n")
         (dolist (row (cons (mapcar (lambda (column) (cons (car column) (cdr column)))
-                                  +agent-shell-egress-summary--columns) rows))
+                                   +agent-shell-egress-summary--columns) rows))
           (insert (mapconcat
                    (lambda (column)
                      (concat "\"" (string-replace
-                                    "\"" "\"\""
-                                    (+agent-shell-egress-summary--cell
-                                     (alist-get (car column) row))) "\""))
+                                   "\"" "\"\""
+                                   (+agent-shell-egress-summary--cell
+                                    (alist-get (car column) row))) "\""))
                    +agent-shell-egress-summary--columns ",") "\n")))
       (write-region (point-min) (point-max) file nil 'silent))
     (set-file-modes file #o600)))

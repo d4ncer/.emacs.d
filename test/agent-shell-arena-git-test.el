@@ -137,8 +137,8 @@
            (lambda (message) (push (list 'error message) calls))
            (lambda (output) (push (list 'done output) calls)) input))
         (should (equal calls (if (zerop status)
-                                '((done "output"))
-                              '((error "diagnostic")))))))))
+                                 '((done "output"))
+                               '((error "diagnostic")))))))))
 
 (ert-deftest +agent-shell-arena-git-test-run-exited-before-eof ()
   "A command that finishes during input delivery needs no EOF."
@@ -382,7 +382,7 @@ the -c clone flag."
                                     :type 'user-error))))
       (setq +agent-shell-pstack-arena-profiles
             `((,repo :write ((regexp . "^/private/tmp/diff\\."))
-                     :connect ("/tmp/tunnel.sock"))))
+               :connect ("/tmp/tunnel.sock"))))
       (should (+agent-shell-arena-git-profile repo))
       (setq +agent-shell-pstack-arena-profiles '((42 :shared ("x"))))
       (should-error (+agent-shell-arena-git-profile repo) :type 'user-error))))
@@ -400,7 +400,7 @@ result."
                                         "untracked config\n")
                 (setq +agent-shell-pstack-arena-profiles
                       `((,repo :copy ("gen" "local.cfg" "missing")
-                               :files (("tool.cfg" . ignore)))))))
+                         :files (("tool.cfg" . ignore)))))))
            (base (+arena-git-test--base repo))
            (manifest (+arena-git-test--arena base))
            (worktree (+arena-git-test--provision manifest "opus"))

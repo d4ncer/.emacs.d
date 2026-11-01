@@ -48,7 +48,7 @@
     (add-hook '+config-loader-once-hook
               (lambda () (when (= (cl-incf attempts) 1) (error "Retry me"))))
     (+run-hook-once '+config-loader-once-hook
-                   '(+config-loader-first-hook +config-loader-second-hook))
+                    '(+config-loader-first-hook +config-loader-second-hook))
     (should-error (run-hooks '+config-loader-first-hook))
     (run-hooks '+config-loader-first-hook)
     (run-hooks '+config-loader-second-hook)
@@ -58,7 +58,7 @@
 
 (ert-deftest +config-loader-once-guards-initialization-and-recursion ()
   (let (after-init-time +config-loader-first-hook +config-loader-once-hook
-        (calls 0))
+                        (calls 0))
     (add-hook '+config-loader-once-hook
               (lambda () (cl-incf calls) (run-hooks '+config-loader-first-hook)))
     (+run-hook-once '+config-loader-once-hook '(+config-loader-first-hook))

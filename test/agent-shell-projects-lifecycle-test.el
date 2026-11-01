@@ -19,9 +19,9 @@
         (+agent-shell-projects-setup)
         (+agent-shell-projects-setup)
         (should (= 1 (cl-count #'+agent-shell-projects--window-changed
-                              window-buffer-change-functions)))
+                               window-buffer-change-functions)))
         (should (= 1 (cl-count #'+agent-shell-projects-embark-target
-                              embark-target-finders)))
+                               embark-target-finders)))
         (+agent-shell-projects-mode 1)
         (let ((poll +agent-shell-projects--timer))
           (+agent-shell-projects-mode 1)

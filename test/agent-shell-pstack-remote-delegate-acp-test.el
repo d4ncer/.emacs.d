@@ -143,8 +143,8 @@ was delivered."
           (+agent-shell-drive-read-only-modes '((fixture-codex . "read-only")))
           (+agent-shell-sandbox-agents
            `((fixture-codex :mode "agent-full-access" :prepare ,(lambda (_) nil)
-                            :login ,(+remote-delegate-acp-test--login
-                                     'fixture-codex))))
+              :login ,(+remote-delegate-acp-test--login
+                       'fixture-codex))))
           (+agent-shell-pstack-invocations '((fixture-codex . "$poteto-mode")))
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-drive--watchers (make-hash-table :test #'equal))
@@ -351,7 +351,7 @@ Laptop Person <laptop@example.com>\nLaptop Person <laptop@example.com>"
       (should (equal "Scratch\nAn uncommitted edit"
                      (funcall host-git "show" (concat branch ":README"))))
       (should (equal "Lead" (funcall host-git "show" (concat branch
-                                                            ":lead.txt"))))
+                                                             ":lead.txt"))))
       (should (equal '(("Add builder.txt" "Laptop Person <laptop@example.com>"
                         "Laptop Person <laptop@example.com>"))
                      (+remote-delegate-acp-test--branch-commits
@@ -460,7 +460,7 @@ by Emacs as the laptop identity, fetched as the delegate's branch."
   (+remote-delegate-acp-test--skip t)
   (+remote-delegate-acp-test--with
       `(:host (local . ,host-root) :host-directory ,host-repo
-              :delegate (:sandbox t))
+        :delegate (:sandbox t))
     (let* ((panel (funcall delegated "Add the builder file."))
            (id (+agent-shell-pstack-panel-id panel))
            (branch (concat "pstack/delegate/" id))
@@ -516,7 +516,7 @@ follow-up says where."
   (+remote-delegate-acp-test--skip t)
   (+remote-delegate-acp-test--with
       `(:host (local . ,host-root) :host-directory ,host-repo
-              :delegate (:sandbox t))
+        :delegate (:sandbox t))
     (let* ((panel (funcall delegated "Add the builder file. HANG" nil 6))
            (followup (+agent-shell-pstack-panel-followup panel))
            (branch (concat "pstack/delegate/"

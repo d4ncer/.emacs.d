@@ -187,7 +187,7 @@ and reject a bad pattern a function returns."
   (+agent-shell-sandbox-test--with (root)
     (let* ((+agent-shell-sandbox-agents
             '((fixture :mode "full"
-                       :prepare (lambda (_) '("PA_ENV=sandbox")))))
+               :prepare (lambda (_) '("PA_ENV=sandbox")))))
            (maker (+agent-shell-sandbox-client-maker
                    sandbox 'fixture
                    (lambda (buffer)
@@ -223,8 +223,8 @@ and reject a bad pattern a function returns."
   "Return a Claude Code host login expiring at EXPIRES, Unix seconds."
   (json-serialize
    `((claudeAiOauth (accessToken . ,(or access "fixture-claude-access"))
-                    (refreshToken . "fixture-claude-refresh")
-                    (expiresAt . ,(* 1000 expires))))))
+      (refreshToken . "fixture-claude-refresh")
+      (expiresAt . ,(* 1000 expires))))))
 
 (defun +agent-shell-sandbox-test--codex-json (expires)
   "Return a Codex host login whose access token expires at EXPIRES."
@@ -656,8 +656,8 @@ do, never with what the CLI printed."
                                 result))))
       (let* ((+agent-shell-sandbox-agents
               '((claude-code :name "Claude Code"
-                             :login +agent-shell-sandbox--claude-login
-                             :refresh ("pa-no-such-cli"))))
+                 :login +agent-shell-sandbox--claude-login
+                 :refresh ("pa-no-such-cli"))))
              (result (car (+agent-shell-sandbox-test--check
                            '(claude-code) (+ (float-time) 3600)))))
         (should (string-search "pa-no-such-cli could not be started"

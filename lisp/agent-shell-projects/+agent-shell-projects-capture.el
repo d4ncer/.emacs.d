@@ -27,7 +27,7 @@ Return the last completed version, or nil while the first capture is pending."
     (unless (plist-get project :author)
       (+agent-shell-projects--set project :root (plist-get artefact :path)))
     (+agent-shell-projects--set project :artefacts
-                               (append (plist-get project :artefacts) (list artefact)))
+                                (append (plist-get project :artefacts) (list artefact)))
     (+agent-shell-projects--changed project nil "user")
     (+agent-shell-projects-capture-code project artefact)
     artefact))

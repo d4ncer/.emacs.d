@@ -187,7 +187,7 @@ Return a plist with :state and, for a usable attachment, :start and :end."
   (interactive "e")
   (mouse-set-point event)
   (when-let* ((id (seq-some (lambda (o) (overlay-get o 'project-annotation-id))
-                           (overlays-at (point))))
+                            (overlays-at (point))))
               (window (+agent-shell-projects-sidebar (current-buffer))))
     (with-selected-window window
       (goto-char (point-min))
@@ -200,9 +200,9 @@ Return a plist with :state and, for a usable attachment, :start and :end."
 (defun +agent-shell-projects--render-comments (project artefact view)
   "Insert annotation threads for PROJECT, ARTEFACT, and VIEW."
   (let* ((version (and (buffer-local-value '+agent-shell-projects--version-id view)
-                   (+agent-shell-projects-version
-                   artefact (buffer-local-value
-                             '+agent-shell-projects--version-id view))))
+                       (+agent-shell-projects-version
+                        artefact (buffer-local-value
+                                  '+agent-shell-projects--version-id view))))
          (text (if version (+agent-shell-projects-content version) ""))
          (attachments (make-hash-table :test #'equal)))
     (dolist (annotation (plist-get project :annotations))
@@ -233,12 +233,12 @@ Return a plist with :state and, for a usable attachment, :start and :end."
                  (start (point)))
             (magit-insert-section (annotation (plist-get annotation :id) t)
               (magit-insert-heading
-               (format "“%s”%s\n"
-                       (truncate-string-to-width
-                        (replace-regexp-in-string "\n" " "
-                                                  (plist-get annotation :quote)) 42)
-                       (if (equal (plist-get attachment :state) "attached") ""
-                         (format " [%s]" (plist-get attachment :state)))))
+                (format "“%s”%s\n"
+                        (truncate-string-to-width
+                         (replace-regexp-in-string "\n" " "
+                                                   (plist-get annotation :quote)) 42)
+                        (if (equal (plist-get attachment :state) "attached") ""
+                          (format " [%s]" (plist-get attachment :state)))))
               (insert (format "%s%s:\n%s\n"
                               (plist-get annotation :author)
                               (if (plist-get annotation :resolved) " · resolved" "")

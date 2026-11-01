@@ -58,7 +58,7 @@ Use BACKEND, STATE, DAY, NAMES and IP for its observation."
     (let* ((data (+agent-shell-egress-summary--collect directory))
            (rows (plist-get data :rows))
            (host (seq-find (lambda (row) (equal (alist-get 'destination row)
-                                               "api.example.com")) rows)))
+                                                "api.example.com")) rows)))
       (should (= 6 (plist-get data :records)))
       (should (= 2 (length rows)))
       (should (equal ["claude-code" "codex"] (alist-get 'agents host)))
@@ -92,8 +92,8 @@ Use BACKEND, STATE, DAY, NAMES and IP for its observation."
       (should (= 1 (alist-get 'members host)))
       (should (equal ["codex"] (alist-get 'agents host))))
     (should-not (plist-get (+agent-shell-egress-summary--collect
-                           directory (+agent-shell-egress-summary--date "2027-01-01"))
-                          :rows))
+                            directory (+agent-shell-egress-summary--date "2027-01-01"))
+                           :rows))
     (dolist (date '("2026-02-30" "2026-13-01" "yesterday" "2026-1-1"))
       (should-error (+agent-shell-egress-summary--date date) :type 'user-error))))
 
@@ -105,7 +105,7 @@ Use BACKEND, STATE, DAY, NAMES and IP for its observation."
                   'linux-tshark 'finished 1))
            (record (+agent-shell-egress-read file)))
       (should (equal "codex" (plist-get (+agent-shell-egress-record-identity record)
-                                             :agent)))
+                                        :agent)))
       (should (equal "~/src/example"
                      (plist-get (+agent-shell-egress-record-identity record)
                                 :repository)))
@@ -124,8 +124,8 @@ Use BACKEND, STATE, DAY, NAMES and IP for its observation."
        directory "p1" "beta" "claude-code" "~/src/example" 'macos-lsof 'partial 2)
       (let ((rows (plist-get (+agent-shell-egress-summary--collect directory) :rows)))
         (should (seq-every-p (lambda (row)
-                              (equal ["~/src/example"]
-                                     (alist-get 'repositories row))) rows)))
+                               (equal ["~/src/example"]
+                                      (alist-get 'repositories row))) rows)))
       (let ((object (copy-tree (+agent-shell-egress--json record))))
         (dolist (bad '("https://example.com/token" "~/src/example\nsecret"))
           (setf (alist-get 'repository object) bad)
@@ -189,7 +189,7 @@ Use BACKEND, STATE, DAY, NAMES and IP for its observation."
                 (with-temp-buffer
                   (insert-file-contents json)
                   (should (equal rows (append (json-parse-buffer :object-type 'alist)
-                                               nil))))
+                                              nil))))
                 (should (= #o600 (file-modes json)))
                 (+agent-shell-egress-summary-export csv 'csv)
                 (let ((text (+agent-shell-egress-test--text csv)))

@@ -20,7 +20,7 @@
   (add-to-list 'load-path (expand-file-name "lisp/project-files/" root))
   (dolist (package '("projectile" "compat" "consult" "orderless"))
     (add-to-list 'load-path (expand-file-name
-                            (concat "elpaca/builds/" package) root)))
+                             (concat "elpaca/builds/" package) root)))
   (unwind-protect
       (progn
         (dolist (file '("lisp/project-files/+project-files.el" "lisp/project-files/+project-files-worker.el"

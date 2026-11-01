@@ -72,11 +72,11 @@
       (+agent-shell-plans-test--notify shell entries)
       (should (= 1 changes))
       (should (equal entries (plist-get (gethash shell +agent-shell-plans--plans)
-                                      :entries)))
+                                        :entries)))
       (setcdr (assq 'content (car entries)) "Mutated")
       (should (equal "Read" (map-elt (car (plist-get
-                                         (gethash shell +agent-shell-plans--plans)
-                                         :entries)) 'content)))
+                                           (gethash shell +agent-shell-plans--plans)
+                                           :entries)) 'content)))
       (+agent-shell-plans-test--notify
        shell (vector (+agent-shell-plans-test--entry "in_progress" "Write" t)))
       (should (= 2 changes))

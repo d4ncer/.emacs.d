@@ -61,7 +61,7 @@
         (should-error (+agent-shell-projects-request project "question" agent))
         (should-not (plist-get project :requests))
         (should-not (plist-get (+agent-shell-projects-load
-                               (plist-get project :id) t) :requests))))))
+                                (plist-get project :id) t) :requests))))))
 
 (ert-deftest +agent-shell-projects-test-workflow-explanation-arrives-in-view ()
   (+agent-shell-projects-test--isolated

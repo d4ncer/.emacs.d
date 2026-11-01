@@ -388,20 +388,20 @@ The slots from DIRECTORY to LOGINS are not saved."
 
 (defconst +agent-shell-arena-remote--kinds
   `((job +agent-shell-arena-remote-job +agent-shell-arena-remote--make-job
-         (id "id" id) (panel "panel" id)
-         (shape "shape" (enum arena delegate)) (brief "brief" text)
-         (rubric "rubric" (strings)) (timeout "timeout" natnum)
-         (judge-timeout "judge_timeout" (opt natnum))
-         (members "members" (list request-member))
-         (delegate "delegate" (opt (record delegate-job)))
-         (prefix "prefix" text) (base "base" sha)
-         (prerequisite "prerequisite" (opt sha))
-         (sparse "sparse" (opt (record sparse)))
-         (profile "profile" (opt profile)) (repository "repository" text)
-         (code "code" sha) (deadline "deadline" natnum)
-         (ready-file "ready_file" (opt text))
-         (ready "ready" (opt (record ready)))
-         (measure-egress "measure_egress" (opt boolean)))
+     (id "id" id) (panel "panel" id)
+     (shape "shape" (enum arena delegate)) (brief "brief" text)
+     (rubric "rubric" (strings)) (timeout "timeout" natnum)
+     (judge-timeout "judge_timeout" (opt natnum))
+     (members "members" (list request-member))
+     (delegate "delegate" (opt (record delegate-job)))
+     (prefix "prefix" text) (base "base" sha)
+     (prerequisite "prerequisite" (opt sha))
+     (sparse "sparse" (opt (record sparse)))
+     (profile "profile" (opt profile)) (repository "repository" text)
+     (code "code" sha) (deadline "deadline" natnum)
+     (ready-file "ready_file" (opt text))
+     (ready "ready" (opt (record ready)))
+     (measure-egress "measure_egress" (opt boolean)))
     (request-member +agent-shell-arena-remote-request-member
                     +agent-shell-arena-remote--make-request-member
                     (role "role" id) (agent "agent" agent)
@@ -478,7 +478,7 @@ The slots from DIRECTORY to LOGINS are not saved."
                    (state "state" (enum pending starting waiting running done
                                         error timeout))
                    (capture "capture" (opt (enum stopping stopped capturing
-                                               captured failed)))
+                                                 captured failed)))
                    (text "text" (opt text)) (error "error" (opt text))
                    (commit "commit" (opt sha)) (stat "stat" (opt text))
                    (failure "failure" (opt text))
@@ -687,7 +687,7 @@ are ignored.  A job's members must fit its shape."
           (signal '+agent-shell-arena-remote-wire
                   (list (format "%s has version %d, but this Emacs reads up \
 to %d; update it" path version newest))))
-      (setq json (+agent-shell-arena-remote--upgrade kind json))))
+        (setq json (+agent-shell-arena-remote--upgrade kind json))))
     (let ((record
            (apply constructor
                   (mapcan (pcase-lambda (`(,slot ,key ,type))
@@ -712,7 +712,7 @@ to %d; update it" path version newest))))
   "Return VALUE of TYPE as `json-serialize' takes it."
   (pcase type
     (`(opt ,inner) (if (null value) :null
-                   (+agent-shell-arena-remote--encode-value inner value)))
+                     (+agent-shell-arena-remote--encode-value inner value)))
     ((or 'text 'id 'sha 'natnum 'number) value)
     ((or 'agent 'host-kind 'failure-kind `(enum . ,_)) (symbol-name value))
     ('boolean (if value t :false))
@@ -2107,7 +2107,7 @@ it already started as started."
      ((null ladder)
       (funcall fail (format "%s lacks every commit the base bundle could \
 build on (%s) and could not fetch them from origin" label
-                            (string-join (delq nil (reverse tried)) ", "))))
+(string-join (delq nil (reverse tried)) ", "))))
      (t
       (+agent-shell-arena-remote-bundle
        manifest prerequisite (expand-file-name "base.bundle" directory)
@@ -3944,54 +3944,54 @@ timed out; the judge does not run."
   "Recover arena PANEL as `+agent-shell-arena-remote--recover' says.
 MANIFEST is its host arena, or nil, and REPORTS its reports folder."
   (if (or (null manifest)
-            (eq (+agent-shell-arena-remote-status-phase previous) 'preparing))
-        (progn
-          (when manifest
-            (+agent-shell-arena-git-clean manifest #'ignore))
-          (+agent-shell-pstack-panel--fail-preparation
-           panel "The runner stopped while it prepared the arena, so no \
+          (eq (+agent-shell-arena-remote-status-phase previous) 'preparing))
+      (progn
+        (when manifest
+          (+agent-shell-arena-git-clean manifest #'ignore))
+        (+agent-shell-pstack-panel--fail-preparation
+         panel "The runner stopped while it prepared the arena, so no \
 candidate ran.  Request the arena again."))
-      (setf (+agent-shell-pstack-panel-arena panel) manifest)
-      (dolist (member (+agent-shell-pstack-panel-members panel))
-        (let* ((role (+agent-shell-pstack-panel-member-role member))
-               (old (seq-find (lambda (old)
-                                (equal role (+agent-shell-arena-remote-member-role
-                                             old)))
-                              (+agent-shell-arena-remote-status-members
-                               previous)))
-               (state (if old (+agent-shell-arena-remote-member-state old)
-                        'pending))
-               (settled (memq state +agent-shell-pstack-panel--settled))
-               (candidate (eq (+agent-shell-pstack-panel-member-kind member)
-                              'candidate))
-               (git-role (+agent-shell-arena-git-role manifest role)))
-          (setf (+agent-shell-pstack-panel-member-text member)
-                (+agent-shell-arena-remote--report-text reports role))
-          (cond
-           (settled (setf (+agent-shell-pstack-panel-member-state member) state
-                          (+agent-shell-pstack-panel-member-error member)
-                          (+agent-shell-arena-remote-member-error old)
-                          (+agent-shell-pstack-panel-member-failure member)
-                          (+agent-shell-arena-remote--failure old)))
-           (candidate
-            (setf (+agent-shell-pstack-panel-member-state member) 'timeout
-                  (+agent-shell-pstack-panel-member-error member)
-                  "The runner stopped while this candidate ran, so its work \
+    (setf (+agent-shell-pstack-panel-arena panel) manifest)
+    (dolist (member (+agent-shell-pstack-panel-members panel))
+      (let* ((role (+agent-shell-pstack-panel-member-role member))
+             (old (seq-find (lambda (old)
+                              (equal role (+agent-shell-arena-remote-member-role
+                                           old)))
+                            (+agent-shell-arena-remote-status-members
+                             previous)))
+             (state (if old (+agent-shell-arena-remote-member-state old)
+                      'pending))
+             (settled (memq state +agent-shell-pstack-panel--settled))
+             (candidate (eq (+agent-shell-pstack-panel-member-kind member)
+                            'candidate))
+             (git-role (+agent-shell-arena-git-role manifest role)))
+        (setf (+agent-shell-pstack-panel-member-text member)
+              (+agent-shell-arena-remote--report-text reports role))
+        (cond
+         (settled (setf (+agent-shell-pstack-panel-member-state member) state
+                        (+agent-shell-pstack-panel-member-error member)
+                        (+agent-shell-arena-remote-member-error old)
+                        (+agent-shell-pstack-panel-member-failure member)
+                        (+agent-shell-arena-remote--failure old)))
+         (candidate
+          (setf (+agent-shell-pstack-panel-member-state member) 'timeout
+                (+agent-shell-pstack-panel-member-error member)
+                "The runner stopped while this candidate ran, so its work \
 was captured as it stood when the runner restarted."))
-           (t
-            (setf (+agent-shell-pstack-panel-member-state member) 'error
-                  (+agent-shell-pstack-panel-member-error member)
-                  "The runner stopped before the judge finished.")))
-          (when candidate
-            (if (and git-role (+agent-shell-arena-git-role-git-dir git-role))
-                (setf (+agent-shell-pstack-panel-member-capture member) 'stopped)
-              (setf (+agent-shell-pstack-panel-member-capture member) 'failed
-                    (+agent-shell-pstack-panel-member-result member)
-                    (list :error "The candidate never started."))))))
-      (setf (+agent-shell-pstack-panel-phase panel) 'capturing)
-      (+agent-shell-arena-remote--drop-checkouts
-       manifest (+agent-shell-arena-git-manifest-roles manifest)
-       (lambda () (+agent-shell-pstack-panel--advance panel)))))
+         (t
+          (setf (+agent-shell-pstack-panel-member-state member) 'error
+                (+agent-shell-pstack-panel-member-error member)
+                "The runner stopped before the judge finished.")))
+        (when candidate
+          (if (and git-role (+agent-shell-arena-git-role-git-dir git-role))
+              (setf (+agent-shell-pstack-panel-member-capture member) 'stopped)
+            (setf (+agent-shell-pstack-panel-member-capture member) 'failed
+                  (+agent-shell-pstack-panel-member-result member)
+                  (list :error "The candidate never started."))))))
+    (setf (+agent-shell-pstack-panel-phase panel) 'capturing)
+    (+agent-shell-arena-remote--drop-checkouts
+     manifest (+agent-shell-arena-git-manifest-roles manifest)
+     (lambda () (+agent-shell-pstack-panel--advance panel)))))
 
 (defun +agent-shell-arena-remote--recover-delegate (panel previous manifest)
   "Recover delegate PANEL, whose earlier runner left status PREVIOUS.

@@ -67,8 +67,8 @@ lists the roles whose result equals the base."
            '((claude-code . "plan") (codex . "read-only")))
           (+agent-shell-sandbox-agents
            `((claude-code :mode "bypassPermissions"
-                          :login ,(+agent-shell-pstack-panel-test--login
-                                   'claude-code))
+              :login ,(+agent-shell-pstack-panel-test--login
+                       'claude-code))
              (codex :mode "agent-full-access"
                     :login ,(+agent-shell-pstack-panel-test--login 'codex))))
           (lead (generate-new-buffer " *lead*")))
@@ -281,10 +281,10 @@ lists the roles whose result equals the base."
         (let ((entries (ring-elements
                         (gethash lead +agent-shell-pstack-panel--logs))))
           (should (equal '(clean-up prompt-ready turn-complete turn-complete
-                                   turn-complete tool-call-update tool-call-update)
+                           turn-complete tool-call-update tool-call-update)
                          (mapcar (lambda (e) (plist-get e :kind)) entries)))
           (should (equal '(no-block no-block rejected started duplicate
-                                   interrupted no-block)
+                           interrupted no-block)
                          (mapcar (lambda (e) (plist-get e :outcome)) entries)))
           (dolist (index '(4 5))
             (should (equal id (plist-get (nth index entries) :id))))
@@ -410,7 +410,7 @@ lists the roles whose result equals the base."
            (other (replace-regexp-in-string "Explain the drive" "Other task"
                                             json)))
       (dolist (request `(("s1" . ,json) ("s1" . ,other)
-                        ("s2" . ,json) ("s1" . ,json)))
+                         ("s2" . ,json) ("s1" . ,json)))
         (lead-event :kind 'turn-complete :session (car request)
                     :text (+agent-shell-pstack-panel-test--message (cdr request))))
       (should (= 3 (length (+agent-shell-pstack-panel-list))))
@@ -982,7 +982,7 @@ the switcher's result."
               (agent-shell-header-style 'none))
           (should (string-search expected (agent-shell--mode-line-format))))
         (let ((model (agent-shell--make-header-model state :position "1/1"
-                                                    :status "View")))
+                                                     :status "View")))
           (should (equal expected (map-elt model :status)))
           (should (eq '+agent-shell-pstack-panel-status
                       (get-text-property 0 'face (map-elt model :status))))
@@ -999,7 +999,7 @@ the switcher's result."
                (lambda (_) lead))
               ((symbol-function '+agent-shell-projects--project)
                (lambda () '(:name "Fixture" :author "lead"
-                             :agents ((:id "lead" :role "author"))))))
+                            :agents ((:id "lead" :role "author"))))))
       (with-temp-buffer
         (+agent-shell-projects--render-home)
         (should (string-search expected (buffer-string))))
@@ -1527,12 +1527,12 @@ layout, and say that `+agent-shell-pstack-reload' carries them over."
         (remhash "old" +agent-shell-pstack-panel--panels)
         (remhash "old-manifest" +agent-shell-pstack-panel--panels)
         (should (equal '("current" "old" "old-manifest")
-                     (sort (mapcar (lambda (id)
-                                     (if (equal id (+agent-shell-pstack-panel-id
-                                                    current))
-                                         "current"
-                                       id))
-                                   ids)
+                       (sort (mapcar (lambda (id)
+                                       (if (equal id (+agent-shell-pstack-panel-id
+                                                      current))
+                                           "current"
+                                         id))
+                                     ids)
                              #'string<))))
       (should (equal (reverse messages)
                      (list "Dropped 1 finished pstack panel made before the \
@@ -1914,8 +1914,8 @@ no member starts, and the lead learns why."
   (+agent-shell-pstack-panel-test--with
     (let ((+agent-shell-sandbox-agents
            `((claude-code :mode "bypassPermissions"
-                          :login ,(+agent-shell-pstack-panel-test--login
-                                   'claude-code))
+              :login ,(+agent-shell-pstack-panel-test--login
+                       'claude-code))
              (codex :mode "agent-full-access" :name "Codex"
                     :login ,(lambda ()
                               (user-error "No fixture Codex login"))))))
@@ -2345,7 +2345,7 @@ criterion from 1 to 5" brief))
                      (mapcar #'+agent-shell-pstack-panel-member-capture
                              candidates)))
       (should (equal '(:commit "commit-opus" :ref "refs/pstack-arena/x/opus"
-                               :changed nil :stat "")
+                       :changed nil :stat "")
                      (+agent-shell-pstack-panel-member-result
                       (car candidates))))
       (should (equal '(:error "git add: boom")

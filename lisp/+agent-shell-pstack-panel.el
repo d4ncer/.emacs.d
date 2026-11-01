@@ -1331,7 +1331,7 @@ from%s\n"
          (when (+agent-shell-arena-git-delegate-sandbox delegate)
            (+agent-shell-pstack-panel--finalization-text
             delegate (if worktree "in its workspace"
-                             "in your checkout")))
+                       "in your checkout")))
          (if worktree
              (concat
               (format "Workspace: %s\n"
@@ -2990,8 +2990,8 @@ The worktree gets the profile's :delegate :link folders as symlinks; see
            "rev-parse" "--verify" "-q" (concat "refs/heads/" branch))
       (user-error "Branch %s already exists in %s; Emacs never reuses it.  \
 Delete or rename it, then request the delegate again" branch
-                  (abbreviate-file-name
-                   (+agent-shell-arena-git-base-toplevel base))))
+(abbreviate-file-name
+ (+agent-shell-arena-git-base-toplevel base))))
     (let ((manifest (+agent-shell-arena-git-create
                      base (+agent-shell-pstack-panel-id panel)
                      (+agent-shell-arena-git--delegate
@@ -3421,7 +3421,7 @@ commit there until it finishes")))
             (when (derived-mode-p 'agent-shell-mode)
               (agent-shell--update-header-and-mode-line)
               (when-let* ((viewport (agent-shell-viewport--buffer
-                                    :shell-buffer lead :existing-only t)))
+                                     :shell-buffer lead :existing-only t)))
                 (with-current-buffer viewport
                   (agent-shell-viewport--update-header))))
             (force-mode-line-update)))))))

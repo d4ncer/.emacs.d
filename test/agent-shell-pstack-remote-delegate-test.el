@@ -130,28 +130,28 @@ isolation on a host is refused; sandboxing is off unless asked for."
     (should (equal '(:host nil :isolation branch :sandbox t :link nil)
                    (+agent-shell-arena-git-delegate-options
                     `(:host ,host :host-directory "~/src/big-repo"
-                            :delegate (:host local :isolation branch
-                                             :sandbox t)))))
+                      :delegate (:host local :isolation branch
+                                 :sandbox t)))))
     (should (equal '(:host (local . "/tmp/host-root") :isolation worktree
-                           :sandbox t :link nil)
+                     :sandbox t :link nil)
                    (+agent-shell-arena-git-delegate-options
                     '(:host (local . "/tmp/host-root") :host-directory "/r"
-                            :delegate (:sandbox t)))))
+                      :delegate (:sandbox t)))))
     (let ((err (should-error (+agent-shell-arena-git-delegate-options
                               `(:host ,host :host-directory "~/r"
-                                      :delegate (:isolation branch)))
+                                :delegate (:isolation branch)))
                              :type 'user-error)))
       (should (string-match-p "\\`Remote delegates require :isolation \
 worktree; use :delegate (:host local)\nto use :isolation branch on the laptop\\."
                               (cadr err))))
     (should (equal '(:host nil :isolation worktree :sandbox nil
-                           :link ("elpaca"))
+                     :link ("elpaca"))
                    (+agent-shell-arena-git-delegate-options
                     `(:host ,host :host-directory "~/r"
-                            :delegate (:host local :link ("elpaca"))))))
+                      :delegate (:host local :link ("elpaca"))))))
     (let ((err (should-error (+agent-shell-arena-git-delegate-options
                               `(:host ,host :host-directory "~/r"
-                                      :delegate (:link ("elpaca"))))
+                                :delegate (:link ("elpaca"))))
                              :type 'user-error)))
       (should (string-prefix-p "Remote delegates cannot use :delegate :link"
                                (cadr err))))))
@@ -178,8 +178,8 @@ worktree; use :delegate (:host local)\nto use :isolation branch on the laptop\\.
     (let* ((repo (+remote-delegate-test--repo scratch))
            (+agent-shell-pstack-arena-profiles
             `((,repo :host (coder . "example-workspace")
-                     :host-directory "~/src/big-repo"
-                     :delegate (:isolation branch))))
+               :host-directory "~/src/big-repo"
+               :delegate (:isolation branch))))
            (panel (+agent-shell-pstack-panel--make
                    :id "abc123def456" :shape 'delegate :brief "Do it"
                    :timeout 60 :cwd repo :phase 'preparing
@@ -210,7 +210,7 @@ base bundle carries it to a repository holding only the lead's HEAD."
            (head (+remote-delegate-test--git repo "rev-parse" "HEAD"))
            (+agent-shell-pstack-arena-profiles
             `((,repo :host (coder . "example-workspace")
-                     :host-directory "~/src/big-repo")))
+               :host-directory "~/src/big-repo")))
            (panel (+agent-shell-pstack-panel--make
                    :id "abc123def456" :shape 'delegate :brief "Do it"
                    :timeout 60 :cwd repo :phase 'preparing
@@ -290,7 +290,7 @@ Snapshot uncommitted work for pstack delegate abc123def456"
     (let* ((repo (+remote-delegate-test--repo scratch))
            (+agent-shell-pstack-arena-profiles
             `((,repo :host (coder . "example-workspace")
-                     :host-directory "~/src/big-repo")))
+               :host-directory "~/src/big-repo")))
            (panel (+agent-shell-pstack-panel--make
                    :id "abc123def456" :shape 'delegate :brief "Do it"
                    :timeout 60 :cwd repo :phase 'preparing
@@ -1041,10 +1041,10 @@ never a final text, permission or tool argument."
       (dolist (event '((:kind progress :part assistant :text "Reading ")
                        (:kind progress :part assistant :text "the handler.")
                        (:kind progress :part tool :text "Read upload.el"
-                              :status "completed")
+                        :status "completed")
                        (:kind permission :text "secret-token")
                        (:kind turn-complete :stop-reason "end_turn"
-                              :text "FINAL REPORT")))
+                        :text "FINAL REPORT")))
         (+agent-shell-arena-remote--record-transcript runner event))
       (+remote-delegate-test--drain job remote)
       (should (equal '(("assistant" . "Reading the handler.")
@@ -1407,7 +1407,7 @@ tool call with no agent text before it."
           (should-not plain)
           (should (equal '((:kind progress :shell nil :part assistant :text "Hi")
                            (:kind progress :shell nil :part tool
-                                  :text "Run tests" :status "in_progress"))
+                            :text "Run tests" :status "in_progress"))
                          (mapcar (lambda (event) (plist-put event :shell nil))
                                  progress))))
       (kill-buffer shell))))

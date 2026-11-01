@@ -12,8 +12,8 @@
   (unwind-protect
       (progn
         (dolist (name '("early-init.el" "init.el" "elpaca-bootstrap.el"
-                         "emacs-build.eld" "treesit-grammars.eld" "lisp" "modules"
-                         "templates" "file-templates" "ligatures" "test"))
+                        "emacs-build.eld" "treesit-grammars.eld" "lisp" "modules"
+                        "templates" "file-templates" "ligatures" "test"))
           (let ((source (expand-file-name name +config-test-root))
                 (target (expand-file-name name temporary)))
             (if (file-directory-p source)

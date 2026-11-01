@@ -232,7 +232,7 @@ back.  Refuse a token that expires before the deadline."
                                            (buffer-string))))
             (should (equal (list (concat "CODEX_HOME="
                                          (+agent-shell-sandbox-config sandbox))
-                                  "OPENAI_API_KEY=" "CODEX_API_KEY=")
+                                 "OPENAI_API_KEY=" "CODEX_API_KEY=")
                            env))
             (should (= #o600 (file-modes copy)))
             (should (equal "chatgpt" (alist-get 'auth_mode login)))
@@ -371,8 +371,8 @@ while True:
   (let ((deadline (+ (float-time) 10)))
     (while (and (< (float-time) deadline)
                 (not (string-search "\n" (with-current-buffer
-                                              (process-buffer process)
-                                            (buffer-string)))))
+                                             (process-buffer process)
+                                           (buffer-string)))))
       (accept-process-output process 0.05)))
   (string-trim (with-current-buffer (process-buffer process) (buffer-string))))
 

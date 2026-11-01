@@ -399,11 +399,11 @@ is returned as nil."
      :identity
      (append
       (list :panel (+agent-shell-egress--field object 'panel id "panel")
-           :arena (+agent-shell-egress--field object 'arena id "arena" t)
-           :role (+agent-shell-egress--field object 'role id "role")
-           :kind (+agent-shell-egress--field
-                  object 'kind (+agent-shell-egress--member '(candidate judge delegate))
-                  "kind"))
+            :arena (+agent-shell-egress--field object 'arena id "arena" t)
+            :role (+agent-shell-egress--field object 'role id "role")
+            :kind (+agent-shell-egress--field
+                   object 'kind (+agent-shell-egress--member '(candidate judge delegate))
+                   "kind"))
       (when (eql (alist-get 'version object) 2)
         (let ((agent (+agent-shell-egress--field object 'agent id "agent" t))
               (repository

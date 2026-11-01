@@ -91,8 +91,8 @@
    :sparse (+agent-shell-arena-remote--make-sparse
             :cone t :patterns '("/*" "!/*/" "/src/"))
    :profile '(:shared ("vendor") :files (("cfg" . "tmp=@TMP@\n"))
-                      :write ("/tmp/x" (regexp . "^/private/tmp/diff\\."))
-                      :env ("A=1"))
+              :write ("/tmp/x" (regexp . "^/private/tmp/diff\\."))
+              :env ("A=1"))
    :repository "~/src/big-repo" :code (make-string 64 ?c) :deadline 2400))
 
 (defun +arena-remote-test--record (host)
@@ -106,7 +106,7 @@
 (ert-deftest +agent-shell-arena-remote-test-round-trips ()
   "Every record kind reads back equal to what was written."
   (let ((host (+agent-shell-arena-remote--make-host :kind 'coder
-                                                     :name "example-ws"))
+                                                    :name "example-ws"))
         (member (+agent-shell-arena-remote--make-member
                  :role "opus" :agent 'claude-code :kind 'candidate
                  :state 'done :capture 'captured :text "Why" :error nil
@@ -151,8 +151,8 @@
                                               member)))))
                              (+agent-shell-arena-remote-job-members back))))
       (should (equal '(:shared ("vendor") :files (("cfg" . "tmp=@TMP@\n"))
-                               :write ("/tmp/x" (regexp . "^/private/tmp/diff\\."))
-                               :env ("A=1"))
+                       :write ("/tmp/x" (regexp . "^/private/tmp/diff\\."))
+                       :env ("A=1"))
                      (+agent-shell-arena-remote-job-profile back))))))
 
 (ert-deftest +agent-shell-arena-remote-test-failure-kind ()
@@ -244,8 +244,8 @@ turns placeholders back into functions of its own sandbox."
          (sandbox (+agent-shell-sandbox--make :root "/w/opus" :tmp "/tmp/pa-1.2"
                                               :config "/c/pa-config-9")))
     (should (equal plain '(:copy ("local.env") :files (("cfg" . "cache=@TMP@/c\n"))
-                                 :write ("@CONFIG@" (regexp . "^@TMP@/x"))
-                                 :env ("T=@ROOT@"))))
+                           :write ("@CONFIG@" (regexp . "^@TMP@/x"))
+                           :env ("T=@ROOT@"))))
     (should (equal "cache=/tmp/pa-1.2/c\n"
                    (funcall (cdr (assoc "cfg" (plist-get host :files))) sandbox)))
     (should (equal '("/c/pa-config-9" (regexp . "^/tmp/pa-1\\.2/x"))
@@ -395,14 +395,14 @@ replace them; a value of `absent' leaves its key out."
         (local (+agent-shell-arena-remote-parse-host
                 '(local . "/tmp/arena-host"))))
     (should (equal '(git node-adapters systemd-user linux-namespaces bwrap
-                         slirp4netns)
+                     slirp4netns)
                    (+agent-shell-arena-remote--needs
                     coder (+arena-remote-test--job))))
     (should (equal '(git node-adapters systemd-user delegate)
                    (+agent-shell-arena-remote--needs
                     coder (+arena-remote-test--delegate-job nil))))
     (should (equal '(git node-adapters systemd-user delegate linux-namespaces
-                         bwrap slirp4netns)
+                     bwrap slirp4netns)
                    (+agent-shell-arena-remote--needs
                     coder (+arena-remote-test--delegate-job t))))
     (let ((+agent-shell-sandbox-backend 'sandbox-exec))
@@ -523,7 +523,7 @@ will be unavailable"
                       (expand-file-name "remote.json" directory) 'record)))))
       (make-directory directory)
       (dolist (phase '(submitting remote unreachable remote fetching remote
-                                  fetching finished))
+                       fetching finished))
         (+agent-shell-arena-remote--move remote phase)
         (should (eq phase (funcall saved))))
       (should-error (+agent-shell-arena-remote--move remote 'remote))
@@ -629,7 +629,7 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
     (should (equal '(:host (fake . "build-host") :host-directory "~/src/repo")
                    (+agent-shell-arena-git--check-profile
                     "/tmp/" '(:host (fake . "build-host")
-                                    :host-directory "~/src/repo"))))
+                              :host-directory "~/src/repo"))))
     (should (equal "build-host" (+agent-shell-arena-remote--host-label host)))
     (should (string-match-p
              "\"host\":{\"kind\":\"fake\",\"name\":\"build-host\"}" json))
@@ -637,7 +637,7 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
                          (+agent-shell-arena-remote-from-json 'record json))))
     (should-not (+agent-shell-arena-git-host-p '(ssh . "build-host")))
     (dolist (value '(nil (fake . "") (fake . "bad name") (fake . 1)
-                        (unknown . "build-host")))
+                     (unknown . "build-host")))
       (should-not (+agent-shell-arena-git-host-p value)))))
 
 (ert-deftest +agent-shell-arena-remote-test-unknown-host ()
@@ -668,14 +668,14 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
               `((fake :exec ,(lambda (name args)
                                (setq received (cons name args))
                                (append (list "fake-exec" name "--") args))
-                      :label ,(lambda (name) (concat "test host " name)))))
+                 :label ,(lambda (name) (concat "test host " name)))))
              (host (+agent-shell-arena-remote-parse-host
                     '(fake . "build-host"))))
         (+agent-shell-arena-remote--call
          host "printf '%s' \"$1\"" '("two words")
          :callback (lambda (output error) (setq answer (list output error))))
         (should (equal '("build-host" "sh" "-c" "printf '%s' \"$1\""
-                                     "sh" "two words") received))
+                         "sh" "two words") received))
         (should (equal (append '("fake-exec" "build-host" "--") (cdr received))
                        (nth 1 (car spawned))))
         (funcall (nth 2 (car spawned)) 1 "" "unreachable")
@@ -715,12 +715,12 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
     (let* ((events nil)
            (+agent-shell-arena-remote-host-kinds
             `((fake :exec ignore :label identity
-                    :wake ,(lambda (name done)
-                             (push (list 'wake name) events)
-                             (funcall done 'ready nil nil))
-                    :extend ,(lambda (name seconds done)
-                               (push (list 'extend name seconds) events)
-                               (funcall done "extension refused")))))
+               :wake ,(lambda (name done)
+                        (push (list 'wake name) events)
+                        (funcall done 'ready nil nil))
+               :extend ,(lambda (name seconds done)
+                          (push (list 'extend name seconds) events)
+                          (funcall done "extension refused")))))
            (host (+agent-shell-arena-remote-parse-host '(fake . "build-host")))
            (remote (+arena-remote-test--record host))
            (probed nil))
@@ -767,7 +767,7 @@ BODY sees `spawned', each (DIRECTORY COMMAND DONE), newest first."
                       (cons 'local (directory-file-name directory)))))
           (should (equal directory (+agent-shell-arena-remote-host-name host)))
           (should (equal (cons directory (append (list "/bin/sh" "-c" script "sh")
-                                                args))
+                                                 args))
                          (+agent-shell-arena-remote--command host script args)))
           (should (file-directory-p directory))
           (should (equal "nohup" (+agent-shell-arena-remote--launcher host)))
@@ -929,7 +929,7 @@ CAPABILITIES is the file's capabilities field, by default every one."
           (if written
               (format "{\"version\":1,\"written_at\":%S,\
 \"emacs\":{\"path\":\"/nix/bin/emacs\",\"version\":\"31.1\"},%s}\n" written
-                      (or capabilities +arena-remote-test--capabilities))
+(or capabilities +arena-remote-test--capabilities))
             "")))
 
 (defmacro +arena-remote-test--with-submission (&rest body)
@@ -1308,8 +1308,8 @@ result reaches the status as its check ends."
       (with-temp-file expiry (insert (format "%d" (+ (float-time) 86400))))
       (+arena-remote-test--with-admission
           `((claude-code :name "Claude Code"
-                         :login ,(lambda ()
-                                   (user-error "No fixture Claude Code login")))
+             :login ,(lambda ()
+                       (user-error "No fixture Claude Code login")))
             (codex :name "Codex"
                    :login ,(+arena-remote-test--fixture-login 'codex expiry)))
         (add-hook '+agent-shell-pstack-panel-change-hook
@@ -1378,15 +1378,15 @@ refresh has finished and released its lock."
       (with-temp-file later (insert (format "%d" (+ (float-time) 86400))))
       (+arena-remote-test--with-admission
           `((claude-code :name "Claude Code"
-                         :login ,(+arena-remote-test--fixture-login
-                                  'claude-code expiry)
-                         :refresh
-                         ("/bin/sh" "-c"
-                          ,(format "touch %s; sleep 1; echo $(( $(date +%%s) \
+             :login ,(+arena-remote-test--fixture-login
+                      'claude-code expiry)
+             :refresh
+             ("/bin/sh" "-c"
+              ,(format "touch %s; sleep 1; echo $(( $(date +%%s) \
 + 86400 )) > %s; touch %s"
-                                   (shell-quote-argument started-file)
-                                   (shell-quote-argument expiry)
-                                   (shell-quote-argument refreshed))))
+                       (shell-quote-argument started-file)
+                       (shell-quote-argument expiry)
+                       (shell-quote-argument refreshed))))
             (codex :name "Codex"
                    :login ,(+arena-remote-test--fixture-login 'codex later)))
         (setq watch

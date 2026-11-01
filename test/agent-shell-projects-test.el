@@ -100,11 +100,11 @@
        (dolist (buffer (buffer-list))
          (when (and (buffer-live-p buffer)
                     (or (with-current-buffer buffer
-                     (and buffer-file-name
-                          (file-in-directory-p buffer-file-name directory)))
-                   (with-current-buffer buffer
-                     (equal +agent-shell-projects--project-id
-                            (plist-get project :id)))))
+                          (and buffer-file-name
+                               (file-in-directory-p buffer-file-name directory)))
+                        (with-current-buffer buffer
+                          (equal +agent-shell-projects--project-id
+                                 (plist-get project :id)))))
            (with-current-buffer buffer (set-buffer-modified-p nil))
            (kill-buffer buffer)))
        (delete-directory directory t))))
@@ -127,7 +127,7 @@
         (goto-char (point-max)) (insert "second\n") (save-buffer))
       (should (= 2 (length (plist-get artefact :history))))
       (should (equal "α\n" (+agent-shell-projects-content
-                             (+agent-shell-projects-version artefact first))))
+                            (+agent-shell-projects-version artefact first))))
       (clrhash +agent-shell-projects--projects)
       (let* ((restored (+agent-shell-projects-load (plist-get project :id)))
              (item (car (plist-get restored :artefacts))))
@@ -193,7 +193,7 @@
         (+agent-shell-projects-next)
         (should (equal "two\n" (buffer-string))))
       (should (equal "two\n" (with-temp-buffer
-                                (insert-file-contents file) (buffer-string)))))))
+                               (insert-file-contents file) (buffer-string)))))))
 
 (ert-deftest +agent-shell-projects-test-annotations-survive-edits ()
   (+agent-shell-projects-test--isolated
@@ -607,9 +607,9 @@
            :artefact (plist-get artefact :id) :version (plist-get version :id)
            :summary "Preserve compatibility while changing the implementation."
            :walkthrough (list (list :id "compatibility" :title "Preserve consumers"
-                                   :body "Existing consumers retain their behavior."
-                                   :basis "inferred" :files (list "tracked.txt")
-                                   :validation "Not yet verified in Storybook."))))))
+                                    :body "Existing consumers retain their behavior."
+                                    :basis "inferred" :files (list "tracked.txt")
+                                    :validation "Not yet verified in Storybook."))))))
 
 (ert-deftest +agent-shell-projects-test-connected-code-views-and-position ()
   (+agent-shell-projects-test--isolated
@@ -788,8 +788,8 @@ a timer changes the displayed buffer."
              (lambda () (agent-shell-session-id :shell-buffer author)))
             (+agent-shell-projects-open project (plist-get artefact :id))
             (+agent-shell-projects-annotate project artefact
-                                           (+agent-shell-projects-version artefact old)
-                                           0 6 "Change Before to After")
+                                            (+agent-shell-projects-version artefact old)
+                                            0 6 "Change Before to After")
             (+agent-shell-projects-submit)
             (+agent-shell-projects-test--wait-for
              (lambda () (plist-get (car (plist-get project :annotations)) :replies)))
@@ -847,24 +847,24 @@ a timer changes the displayed buffer."
   (+agent-shell-projects-test--isolated
     (+agent-shell-projects-test--agent
       (+agent-shell-projects-associate project shell)
-    (let* ((file (+agent-shell-projects-test--file directory "spec.md" "Original\n"))
-           (artefact (+agent-shell-projects-enrol project file))
-           (source (find-buffer-visiting file)))
-      (with-current-buffer source
-        (erase-buffer) (insert "My unsaved edits\n"))
-      (+agent-shell-projects-test--file directory "spec.md" "Agent edits on disk\n")
-      (with-current-buffer source (set-visited-file-modtime '(0 0 0 0)))
-      (+agent-shell-projects-capture project artefact)
-      (should (plist-get artefact :conflict))
-      (should (equal "Agent edits on disk\n"
-                     (+agent-shell-projects-content
-                      (list :blob (plist-get artefact :disk-copy)))))
-      (with-current-buffer source
-        (should (buffer-modified-p))
-        (should (equal "My unsaved edits\n" (buffer-string))))
-      (save-window-excursion
-        (+agent-shell-projects-open project (plist-get artefact :id))
-        (should-error (+agent-shell-projects-submit) :type 'user-error))))))
+      (let* ((file (+agent-shell-projects-test--file directory "spec.md" "Original\n"))
+             (artefact (+agent-shell-projects-enrol project file))
+             (source (find-buffer-visiting file)))
+        (with-current-buffer source
+          (erase-buffer) (insert "My unsaved edits\n"))
+        (+agent-shell-projects-test--file directory "spec.md" "Agent edits on disk\n")
+        (with-current-buffer source (set-visited-file-modtime '(0 0 0 0)))
+        (+agent-shell-projects-capture project artefact)
+        (should (plist-get artefact :conflict))
+        (should (equal "Agent edits on disk\n"
+                       (+agent-shell-projects-content
+                        (list :blob (plist-get artefact :disk-copy)))))
+        (with-current-buffer source
+          (should (buffer-modified-p))
+          (should (equal "My unsaved edits\n" (buffer-string))))
+        (save-window-excursion
+          (+agent-shell-projects-open project (plist-get artefact :id))
+          (should-error (+agent-shell-projects-submit) :type 'user-error))))))
 
 (ert-deftest +agent-shell-projects-test-native-subtree-anchors-and-current-order ()
   (+agent-shell-projects-test--isolated

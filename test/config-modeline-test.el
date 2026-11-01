@@ -68,7 +68,7 @@
         (+modeline-data-mode 1)
         (+modeline-data-mode 1)
         (should (= 1 (cl-count #'+modeline-vulpea--note-changed
-                              (get-variable-watchers 'vulpea-ui--current-note))))
+                               (get-variable-watchers 'vulpea-ui--current-note))))
         (with-temp-buffer
           (setq major-mode 'vulpea-ui-sidebar-mode)
           (setq-local vulpea-ui--current-note 'changed-note)

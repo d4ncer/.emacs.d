@@ -10,7 +10,7 @@
   (add-to-list 'load-path (expand-file-name "lisp/" root))
   (add-to-list 'load-path (expand-file-name "lisp/agent-shell-projects/" root))
   (dolist (directory (directory-files (expand-file-name "elpaca/builds/" root)
-                                     t "^[^. ]"))
+                                      t "^[^. ]"))
     (when (file-directory-p directory) (add-to-list 'load-path directory)))
   (require 'use-package)
   (require 'general)

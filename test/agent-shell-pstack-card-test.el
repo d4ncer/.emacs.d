@@ -166,7 +166,7 @@
       (insert (agent-shell-markdown-convert
                (+agent-shell-pstack-card-test--source
                 "how" (concat (mapconcat #'identity
-                                          (make-list 70 "words to wrap") " ")
+                                         (make-list 70 "words to wrap") " ")
                               " END-OF-BRIEF"))))
       (goto-char (point-min))
       (let ((text (get-text-property (point) 'display)))

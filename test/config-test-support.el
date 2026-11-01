@@ -11,7 +11,7 @@
   (file-name-directory (directory-file-name (file-name-directory load-file-name))))
 (add-to-list 'load-path (expand-file-name "lisp" +config-test-root))
 (dolist (directory (directory-files (expand-file-name "elpaca/builds" +config-test-root)
-                                  t "^[^. ]"))
+                                    t "^[^. ]"))
   (when (file-directory-p directory) (add-to-list 'load-path directory)))
 (require '+bootstrap)
 (+bootstrap-setup +config-test-root)
@@ -46,7 +46,7 @@
     (load (expand-file-name file +config-test-root) nil t)))
 
 (defun +config-test-view-keeps-other-buffers (open shown render &optional
-                                                    refresh)
+                                                   refresh)
   "Check that a view never draws into a buffer it does not own.
 OPEN shows the view in the selected window, SHOWN is its
 `window-buffer-change-functions' entry and RENDER its renderer.

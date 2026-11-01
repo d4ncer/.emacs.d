@@ -88,20 +88,20 @@ Restores `+agent-shell-perf-mode' and kills the shells in `shells'."
 Return a plist of the first chunk, first agent label and turn-complete
 times, read by a 10 ms timer and event subscriptions."
   (let* (first-chunk first-label complete
-         (chunks (agent-shell-subscribe-to
-                  :shell-buffer shell :event 'agent-message-chunk
-                  :on-event (lambda (_) (unless first-chunk
-                                          (setq first-chunk (float-time))))))
-         (done (agent-shell-subscribe-to
-                :shell-buffer shell :event 'turn-complete
-                :on-event (lambda (_) (setq complete (float-time)))))
-         (timer (run-at-time
-                 0.01 0.01
-                 (lambda ()
-                   (when (and first-chunk (not first-label)
-                              (+agent-shell-perf-acp-test--agent-label-p
-                               shell))
-                     (setq first-label (float-time)))))))
+                     (chunks (agent-shell-subscribe-to
+                              :shell-buffer shell :event 'agent-message-chunk
+                              :on-event (lambda (_) (unless first-chunk
+                                                      (setq first-chunk (float-time))))))
+                     (done (agent-shell-subscribe-to
+                            :shell-buffer shell :event 'turn-complete
+                            :on-event (lambda (_) (setq complete (float-time)))))
+                     (timer (run-at-time
+                             0.01 0.01
+                             (lambda ()
+                               (when (and first-chunk (not first-label)
+                                          (+agent-shell-perf-acp-test--agent-label-p
+                                           shell))
+                                 (setq first-label (float-time)))))))
     (unwind-protect
         (progn
           (should (+agent-shell-drive-send

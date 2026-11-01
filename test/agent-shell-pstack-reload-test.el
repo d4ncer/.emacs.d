@@ -521,7 +521,7 @@ cannot carry running panel %s (+agent-shell-arena-git-manifest.base); \
 retry after it finishes" id))))
         (should-not (boundp '+reload-fixture-loaded))
         (should (memq 'base (mapcar #'car (cl-struct-slot-info
-                                            '+agent-shell-arena-git-manifest))))
+                                           '+agent-shell-arena-git-manifest))))
         (should (eq panel (gethash id +agent-shell-pstack-panel--panels)))
         (+agent-shell-pstack-panel--finish panel)
         (+agent-shell-pstack-reload)

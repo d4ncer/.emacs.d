@@ -29,7 +29,7 @@
 
 (defconst +agent-shell-perf-relabel-boundary-events
   '(input-submitted turn-complete prompt-ready session-restored
-                    permission-request permission-response)
+    permission-request permission-response)
   "Events that keep upstream's immediate chat relabel.")
 
 (defun +agent-shell-perf--throttle-relabel (schedule &rest args)
@@ -126,7 +126,7 @@ ARGS are EMIT's arguments, from `agent-shell--emit-event'."
 
 (defconst +agent-shell-perf--advice
   '((relabel agent-shell-chat--schedule-relabel
-             +agent-shell-perf--throttle-relabel)
+     +agent-shell-perf--throttle-relabel)
     (transcript agent-shell--append-transcript
                 +agent-shell-perf--buffer-transcript)
     (transcript-turn agent-shell--emit-event

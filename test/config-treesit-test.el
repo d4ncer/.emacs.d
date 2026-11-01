@@ -14,7 +14,7 @@
   (should (eq (alist-get 'python-mode major-mode-remap-alist) 'python-ts-mode))
   (should (eq treesit-auto-install-grammar 'ask))
   (dolist (language '(bash c cpp css elixir heex html java javascript jsdoc json
-                          markdown markdown-inline nix python rust tsx typescript yaml))
+                      markdown markdown-inline nix python rust tsx typescript yaml))
     (let ((source (alist-get language treesit-language-source-alist)))
       (should (string-prefix-p "https://" (car source)))
       (should-not (plist-member (cdr source) :commit)))))

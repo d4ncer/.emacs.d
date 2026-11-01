@@ -131,7 +131,7 @@
     (dolist (record (nreverse hunk))
       (magit-insert-section (hunk (cons path (plist-get record :header)))
         (magit-insert-heading
-         (propertize (plist-get record :header) 'face 'diff-hunk-header))
+          (propertize (plist-get record :header) 'face 'diff-hunk-header))
         (dolist (entry (nreverse (plist-get record :lines)))
           (let* ((line (plist-get entry :line)) (side (plist-get entry :side))
                  (text (if (equal side "old") old new)) (start (point)))
@@ -224,7 +224,7 @@
             (new (+agent-shell-projects--manifest-file right path left)))
         (magit-insert-section (file path t)
           (magit-insert-heading
-           (format "%s %s" (cond ((null (plist-get new :content)) "deleted")
+            (format "%s %s" (cond ((null (plist-get new :content)) "deleted")
                                   ((null (plist-get old :content)) "new") (t "modified")) path))
           (magit-insert-section-body
             (when (not (equal (plist-get old :mode) (plist-get new :mode)))
@@ -232,7 +232,7 @@
             (if (or (plist-get old :binary) (plist-get new :binary))
                 (insert "Binary contents changed\n")
               (+agent-shell-projects--load-file-diff artefact version comparison path
-                                                    magit-insert-section--current))))))
+                                                     magit-insert-section--current))))))
     (when (nthcdr (length batch) paths)
       (+agent-shell-projects--more
        "Load more files" parent
@@ -295,32 +295,32 @@
           (+agent-shell-projects--insert-diff-blocks path data (plist-get hunk :blocks)))))
     (when (nthcdr (length batch) hunks)
       (+agent-shell-projects--more "Load more hunks" parent
-                                  (lambda () (+agent-shell-projects--insert-hunks
-                                              path data (nthcdr (length batch) hunks)))))))
+                                   (lambda () (+agent-shell-projects--insert-hunks
+                                               path data (nthcdr (length batch) hunks)))))))
 
 (defun +agent-shell-projects--insert-diff-blocks (path data blocks)
   "Insert at most 200 prepared diff lines from BLOCKS, without subprocesses."
   (when blocks
     (let ((start (point)))
-    (dolist (entry (+agent-shell-projects--read-json (+agent-shell-projects--blob-file (car blocks))))
-      (let* ((line (plist-get entry :line)) (start (point))
-             (side (plist-get entry :side))
-             (record (plist-get data (if (equal side "old") :old :new))))
-        (insert (propertize line 'face (cond ((string-prefix-p "+" line) 'diff-added)
-                                             ((string-prefix-p "-" line) 'diff-removed)
-                                             (t 'default))) "\n")
-        (unless (string-prefix-p "\\" line)
-          (add-text-properties start (point)
-                               (list 'project-diff-file path 'project-diff-side side
-                                     'project-diff-offset (plist-get entry :offset)
-                                     'project-diff-blob (plist-get record :content))))))
-    (+agent-shell-projects--decorate-code
-     (+agent-shell-projects--project) (+agent-shell-projects--artefact)
-     (+agent-shell-projects-version (+agent-shell-projects--artefact) +agent-shell-projects--version-id)
-     start (point)))
+      (dolist (entry (+agent-shell-projects--read-json (+agent-shell-projects--blob-file (car blocks))))
+        (let* ((line (plist-get entry :line)) (start (point))
+               (side (plist-get entry :side))
+               (record (plist-get data (if (equal side "old") :old :new))))
+          (insert (propertize line 'face (cond ((string-prefix-p "+" line) 'diff-added)
+                                               ((string-prefix-p "-" line) 'diff-removed)
+                                               (t 'default))) "\n")
+          (unless (string-prefix-p "\\" line)
+            (add-text-properties start (point)
+                                 (list 'project-diff-file path 'project-diff-side side
+                                       'project-diff-offset (plist-get entry :offset)
+                                       'project-diff-blob (plist-get record :content))))))
+      (+agent-shell-projects--decorate-code
+       (+agent-shell-projects--project) (+agent-shell-projects--artefact)
+       (+agent-shell-projects-version (+agent-shell-projects--artefact) +agent-shell-projects--version-id)
+       start (point)))
     (when (cdr blocks)
       (+agent-shell-projects--more "Load more lines" magit-insert-section--current
-                                  (lambda () (+agent-shell-projects--insert-diff-blocks path data (cdr blocks)))))))
+                                   (lambda () (+agent-shell-projects--insert-diff-blocks path data (cdr blocks)))))))
 
 (defun +agent-shell-projects--diff-text-at (position)
   "Return saved source text for the diff line at POSITION."
@@ -334,8 +334,8 @@
   "Render PROJECT's code ARTEFACT VERSION in VIEW using COMPARISON and FOCUS.
 With NO-DISPLAY, update the buffer without displaying or selecting windows."
   (let* ((buffer (get-buffer-create (format "*Code: %s [%s]*"
-                                           (plist-get artefact :name)
-                                           (substring (plist-get artefact :id) 0 6))))
+                                            (plist-get artefact :name)
+                                            (substring (plist-get artefact :id) 0 6))))
          (view (or view "diff"))
          (comparison (if (equal comparison "reviewed")
                          (if (plist-get artefact :ack)
@@ -368,8 +368,8 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
                  '+agent-shell-projects-code-render-functions project artefact version view)
           (magit-insert-section (code)
             (magit-insert-heading (format "%s · %s" (plist-get artefact :name)
-                                         (if (equal comparison "base")
-                                             "whole solution" "since review")))
+                                          (if (equal comparison "base")
+                                              "whole solution" "since review")))
             (if version
                 (+agent-shell-projects--insert-file-list artefact version comparison focus)
               (insert "Waiting for the first capture. Progress is shown in the sidebar.\n"))))
@@ -441,35 +441,35 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
   (+agent-shell-projects-render-code
    (+agent-shell-projects--project) (+agent-shell-projects--artefact)
    (+agent-shell-projects-version (+agent-shell-projects--artefact)
-                                 +agent-shell-projects--version-id)
+                                  +agent-shell-projects--version-id)
    "diff" (if (equal +agent-shell-projects--comparison "base") "reviewed" "base")))
 
 (defun +agent-shell-projects-code-edit ()
   "Edit the current source file at this diff location."
   (interactive)
   (if (button-at (point)) (push-button)
-  (let* ((path (get-text-property (point) 'project-diff-file))
-         (offset (get-text-property (point) 'project-diff-offset))
-         (project (+agent-shell-projects--project))
-         (artefact (+agent-shell-projects--artefact)))
-    (+agent-shell-projects-assert-active project artefact)
-    (unless path (user-error "Move to a source line in the diff"))
-    (let* ((file (expand-file-name path (plist-get artefact :path)))
-           (saved (+agent-shell-projects--diff-text-at (point))))
-      (find-file file)
-      (widen)
-      (goto-char (point-min))
-      (if (equal saved (buffer-substring-no-properties (point-min) (point-max)))
-          (goto-char (min (point-max) (1+ offset)))
-        (message "Source differs from this diff; inspect current contents"))
-      (setq +agent-shell-projects--project-id (plist-get project :id)
-            +agent-shell-projects--artefact-id (plist-get artefact :id)
-            +agent-shell-projects--version-id (plist-get artefact :current)
-            +agent-shell-projects--observed-event (plist-get artefact :event))
-      (+agent-shell-projects-artefact-mode 1)
-      (setq +agent-shell-projects--code-source-p t)
-      (add-hook 'after-save-hook #'+agent-shell-projects--code-source-saved nil t)
-      (+agent-shell-projects-sidebar (current-buffer))))))
+    (let* ((path (get-text-property (point) 'project-diff-file))
+           (offset (get-text-property (point) 'project-diff-offset))
+           (project (+agent-shell-projects--project))
+           (artefact (+agent-shell-projects--artefact)))
+      (+agent-shell-projects-assert-active project artefact)
+      (unless path (user-error "Move to a source line in the diff"))
+      (let* ((file (expand-file-name path (plist-get artefact :path)))
+             (saved (+agent-shell-projects--diff-text-at (point))))
+        (find-file file)
+        (widen)
+        (goto-char (point-min))
+        (if (equal saved (buffer-substring-no-properties (point-min) (point-max)))
+            (goto-char (min (point-max) (1+ offset)))
+          (message "Source differs from this diff; inspect current contents"))
+        (setq +agent-shell-projects--project-id (plist-get project :id)
+              +agent-shell-projects--artefact-id (plist-get artefact :id)
+              +agent-shell-projects--version-id (plist-get artefact :current)
+              +agent-shell-projects--observed-event (plist-get artefact :event))
+        (+agent-shell-projects-artefact-mode 1)
+        (setq +agent-shell-projects--code-source-p t)
+        (add-hook 'after-save-hook #'+agent-shell-projects--code-source-saved nil t)
+        (+agent-shell-projects-sidebar (current-buffer))))))
 
 (defun +agent-shell-projects--code-source-saved ()
   "Schedule capture after a source save without delaying normal editing."
@@ -505,13 +505,13 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
           (+agent-shell-projects-capture-code project artefact "user")
           (user-error "Capturing source edits; annotate after capture completes"))
         (save-restriction
-        (widen)
-        (list :project (plist-get project :id) :artefact (plist-get artefact :id)
-              :version (plist-get version :id)
-              :start (1- (region-beginning)) :end (1- (region-end))
-              :context (list :space "file" :side "new" :comparison "base"
-                             :path (file-relative-name buffer-file-name (plist-get artefact :path))
-                             :text (buffer-substring-no-properties (point-min) (point-max)))))))))
+          (widen)
+          (list :project (plist-get project :id) :artefact (plist-get artefact :id)
+                :version (plist-get version :id)
+                :start (1- (region-beginning)) :end (1- (region-end))
+                :context (list :space "file" :side "new" :comparison "base"
+                               :path (file-relative-name buffer-file-name (plist-get artefact :path))
+                               :text (buffer-substring-no-properties (point-min) (point-max)))))))))
 
 (defun +agent-shell-projects--code-annotation-text (artefact version annotation)
   "Return the appropriate source text for ANNOTATION on code VERSION."
@@ -521,14 +521,14 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
         (if (equal (plist-get context :space) +agent-shell-projects--code-view)
             (buffer-substring-no-properties (point-min) (point-max))
           (plist-get context :text))
-    (when path
-      (pcase-let* ((`(,left ,right) (+agent-shell-projects--comparison-pair
-                                    artefact version +agent-shell-projects--comparison))
-                   (side (if (equal (plist-get context :side) "old") left right))
-                   (other (if (eq side left) right left))
-                   (file (+agent-shell-projects--manifest-file
-                          side path other (plist-get artefact :path))))
-        (decode-coding-string (or (+agent-shell-projects--file-bytes file) "") 'utf-8-unix))))))
+      (when path
+        (pcase-let* ((`(,left ,right) (+agent-shell-projects--comparison-pair
+                                       artefact version +agent-shell-projects--comparison))
+                     (side (if (equal (plist-get context :side) "old") left right))
+                     (other (if (eq side left) right left))
+                     (file (+agent-shell-projects--manifest-file
+                            side path other (plist-get artefact :path))))
+          (decode-coding-string (or (+agent-shell-projects--file-bytes file) "") 'utf-8-unix))))))
 
 (defun +agent-shell-projects--visit-code-annotation (project annotation)
   "Visit a code ANNOTATION's exact original comparison in PROJECT."
@@ -542,16 +542,16 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
            (plist-get context :space))
           (goto-char (min (point-max) (1+ (plist-get anchor :start))))
           t)
-    (when path
-      (let ((artefact (+agent-shell-projects-artefact
-                       project (plist-get annotation :artefact))))
-        (+agent-shell-projects-render-code
-         project artefact
-         (+agent-shell-projects-version artefact (plist-get anchor :version))
-         "diff" (or (plist-get context :comparison) "base") (list path))
-        (+agent-shell-projects--reveal-annotation (current-buffer)
-                                                  +agent-shell-projects--render-token anchor)
-        t)))))
+      (when path
+        (let ((artefact (+agent-shell-projects-artefact
+                         project (plist-get annotation :artefact))))
+          (+agent-shell-projects-render-code
+           project artefact
+           (+agent-shell-projects-version artefact (plist-get anchor :version))
+           "diff" (or (plist-get context :comparison) "base") (list path))
+          (+agent-shell-projects--reveal-annotation (current-buffer)
+                                                    +agent-shell-projects--render-token anchor)
+          t)))))
 
 (defun +agent-shell-projects--reveal-annotation (buffer token anchor)
   "Reveal ANCHOR in BUFFER incrementally while its render TOKEN is current."
@@ -624,7 +624,7 @@ With NO-DISPLAY, update the buffer without displaying or selecting windows."
                             (overlay-put overlay 'project-annotation-id (plist-get annotation :id))
                             (overlay-put overlay 'face 'highlight)
                             (overlay-put overlay 'help-echo (plist-get annotation :body))))))
-                  (forward-line 1)))))))))))
+                    (forward-line 1)))))))))))
 
 (define-key +agent-shell-projects-code-mode-map (kbd "RET") #'+agent-shell-projects-code-edit)
 (define-key +agent-shell-projects-code-mode-map (kbd "C-c C-e") #'+agent-shell-projects-code-edit)

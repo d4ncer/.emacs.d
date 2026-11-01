@@ -632,8 +632,8 @@ A SCRIPT that is one quoted string is split inside it."
     (while (< index (length script))
       (let ((char (aref script index)))
         (cond (quote (cond ((eq char quote) (setq quote nil))
-                           ((and (eq char ?\\) (eq quote ?\"))
-                            (setq index (1+ index)))))
+                      ((and (eq char ?\\) (eq quote ?\"))
+                       (setq index (1+ index)))))
               ((memq char '(?\' ?\")) (setq quote char))
               ((eq char ?\\) (setq index (1+ index)))
               ((memq char '(?\; ?& ?| ?\( ?\) ?\n))
@@ -1201,8 +1201,8 @@ EVENT is a parsed `turn-complete' or `error' event.  The result is
                             (lambda (pattern)
                               (let ((case-fold-search nil))
                                 (string-match-p
-                               (concat "\\`\\(?:" (cdr pattern) "\\)\\'")
-                               text)))
+                                 (concat "\\`\\(?:" (cdr pattern) "\\)\\'")
+                                 text)))
                             patterns)))
         (list :kind (car pattern) :message text :source 'pattern))))))
 

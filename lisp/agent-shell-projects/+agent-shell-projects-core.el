@@ -31,7 +31,7 @@ ARTEFACT can be nil for a project-wide change.")
 (defvar-local +agent-shell-projects--source-artefacts nil)
 
 (define-error '+agent-shell-projects-source-missing
-  "Cannot locate enrolled Org heading" 'user-error)
+              "Cannot locate enrolled Org heading" 'user-error)
 
 (declare-function org-id-get-create "org-id")
 (declare-function org-id-find "org-id")
@@ -319,7 +319,7 @@ ARTEFACT can be nil for a project-wide change.")
   "Capture enrolled artefacts after this source buffer is saved."
   (when (and +agent-shell-projects--source-project
              (not (plist-get (+agent-shell-projects-load
-                             +agent-shell-projects--source-project) :archived)))
+                              +agent-shell-projects--source-project) :archived)))
     (let ((project (+agent-shell-projects-load
                     +agent-shell-projects--source-project)))
       (dolist (id +agent-shell-projects--source-artefacts)

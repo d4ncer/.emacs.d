@@ -95,7 +95,7 @@ Each value is a plist with :entries and :updated keys.")
 (defun +agent-shell-plans--text (entry)
   "Return ENTRY's content or Codex step as one line."
   (string-join (split-string (or (map-elt entry 'content)
-                               (map-elt entry 'step) "") "[\n\r\t ]+" t)
+                                 (map-elt entry 'step) "") "[\n\r\t ]+" t)
                " "))
 
 (defun +agent-shell-plans-progress (shell)

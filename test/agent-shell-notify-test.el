@@ -70,13 +70,13 @@
 (ert-deftest agent-shell-notify-test-focus-and-dedupe ()
   "Only alert away from the relevant buffer, and replace pending completion."
   (let* ((shell (generate-new-buffer " *notify-shell*"))
-        (agent-shell-notify--states (make-hash-table :test #'eq))
-        (focused t)
-        (sent nil)
-        (pending nil)
-        (cancelled nil)
-        (agent-shell-notify-send-function
-         (lambda (title body) (push (list title body) sent))))
+         (agent-shell-notify--states (make-hash-table :test #'eq))
+         (focused t)
+         (sent nil)
+         (pending nil)
+         (cancelled nil)
+         (agent-shell-notify-send-function
+          (lambda (title body) (push (list title body) sent))))
     (unwind-protect
         (save-window-excursion
           (cl-letf (((symbol-function 'frame-focus-state)

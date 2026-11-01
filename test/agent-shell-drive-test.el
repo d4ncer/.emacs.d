@@ -390,11 +390,11 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
           (notify other '((sessionUpdate . "session_info_update")
                           (_meta (codex (error (message . "Other"))))))
           (should (equal '(:kind provider-warning :message "Busy"
-                                 :info "serverOverloaded" :will-retry t)
+                           :info "serverOverloaded" :will-retry t)
                          (map-into (map-filter (lambda (key _)
                                                  (memq key '(:kind :message
-                                                                   :info
-                                                                   :will-retry)))
+                                                             :info
+                                                             :will-retry)))
                                                (car events))
                                    'plist)))
           (emit shell '((:event . agent-message-chunk)
@@ -456,32 +456,32 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
   (let ((capacity "Selected model is at capacity. Please try a different \
 model.")
         (patterns (plist-get (alist-get 'codex (eval (car (get '+agent-shell-sandbox-agents
-                                                              'standard-value))
+                                                               'standard-value))
                                                      t))
                              :failure-patterns)))
     (should (equal '(:kind rate_limited :message "Slow down" :source error-data)
                    (+agent-shell-drive-failure
                     '(:kind error :message "Internal error"
-                            :data ((errorKind . "rate_limit")
-                                   (message . "Slow down"))))))
+                      :data ((errorKind . "rate_limit")
+                             (message . "Slow down"))))))
     (should (equal '(:kind quota_exhausted :message "Internal error"
-                           :source error-data)
+                     :source error-data)
                    (+agent-shell-drive-failure
                     '(:kind error :message "Internal error"
-                            :data ((codexErrorInfo . "usageLimitExceeded"))))))
+                      :data ((codexErrorInfo . "usageLimitExceeded"))))))
     (should-not (+agent-shell-drive-failure
                  '(:kind error :message "Internal error" :data "detail")))
     (should (equal `(:kind overloaded :message ,capacity :source codex-error)
                    (+agent-shell-drive-failure
                     `(:kind turn-complete :text ,(concat capacity "\n\n")
-                            :provider-errors
-                            (((message . ,capacity)
-                              (codexErrorInfo . "serverOverloaded")))))))
+                      :provider-errors
+                      (((message . ,capacity)
+                        (codexErrorInfo . "serverOverloaded")))))))
     (should-not (+agent-shell-drive-failure
                  `(:kind turn-complete :text ,(concat "Done.  " capacity)
-                         :provider-errors
-                         (((message . ,capacity)
-                           (codexErrorInfo . "serverOverloaded"))))))
+                   :provider-errors
+                   (((message . ,capacity)
+                     (codexErrorInfo . "serverOverloaded"))))))
     (should (equal `(:kind overloaded :message ,capacity :source pattern)
                    (+agent-shell-drive-failure
                     `(:kind turn-complete :text ,(concat " " capacity "\n"))

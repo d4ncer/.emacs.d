@@ -273,8 +273,8 @@
                      versions))
          (bundle
           (list :project (list :id (plist-get project :id)
-                                :name (plist-get project :name)
-                                :root (plist-get project :root))
+                               :name (plist-get project :name)
+                               :root (plist-get project :root))
                 :request request :artefacts
                 (mapcar
                  (lambda (reference)
@@ -341,8 +341,8 @@
 (defun +agent-shell-projects--code-context (version)
   "Expand VERSION's saved code contents for an agent context bundle."
   (let* ((manifest (json-parse-string (+agent-shell-projects-content version)
-                                     :object-type 'plist :array-type 'list
-                                     :null-object nil :false-object :false))
+                                      :object-type 'plist :array-type 'list
+                                      :null-object nil :false-object :false))
          (bases (make-hash-table :test #'equal)))
     (dolist (base (plist-get manifest :base-files))
       (puthash (plist-get base :path) base bases))
@@ -365,7 +365,7 @@
         ((plist-get file :content)
          (decode-coding-string
           (base64-decode-string (+agent-shell-projects-content
-                                (list :blob (plist-get file :content)))) 'utf-8-unix))))
+                                 (list :blob (plist-get file :content)))) 'utf-8-unix))))
 
 (defun +agent-shell-projects-request (project kind agent &rest properties)
   "Create a KIND request to AGENT in PROJECT with PROPERTIES."
@@ -378,8 +378,8 @@
     (set-file-modes (+agent-shell-projects--inbox) #o700)
     (+agent-shell-projects--set
      request :prompt (+agent-shell-projects-store-content
-                       (funcall +agent-shell-projects-context-function
-                                project request)))
+                      (funcall +agent-shell-projects-context-function
+                               project request)))
     (let ((previous (plist-get project :requests)))
       (+agent-shell-projects--set
        project :requests (append previous (list request)))
@@ -680,7 +680,7 @@
   (let ((response
          (condition-case err
              (list :ok t :result (+agent-shell-projects-apply-operation
-                                 (+agent-shell-projects--read-json file)))
+                                  (+agent-shell-projects--read-json file)))
            (error (list :ok :false :error (error-message-string err))))))
     (+agent-shell-projects--atomic-write
      (concat file ".result") (+agent-shell-projects--json response))
@@ -813,8 +813,8 @@
   "Request an editable annotation draft from the current side conversation."
   (interactive)
   (let* ((candidate (if +agent-shell-projects--side-question (current-buffer)
-                  (and (fboundp 'agent-shell-shell-buffer)
-                       (agent-shell-shell-buffer :no-error t :no-create t))))
+                      (and (fboundp 'agent-shell-shell-buffer)
+                           (agent-shell-shell-buffer :no-error t :no-create t))))
          (shell (and candidate (buffer-local-value
                                 '+agent-shell-projects--side-question candidate) candidate))
          (project (if shell
@@ -825,7 +825,7 @@
                                   (and (equal (plist-get r :kind) "question")
                                        (not (equal (plist-get r :status) "cancelled"))
                                        (seq-find (lambda (a) (equal (plist-get a :id)
-                                                                   (plist-get r :agent)))
+                                                                    (plist-get r :agent)))
                                                  (plist-get project :agents))))
                                 (plist-get project :requests)))
          (question-id (or (and shell (buffer-local-value
@@ -834,10 +834,10 @@
                                 (completing-read
                                  "Side question: "
                                  (mapcar (lambda (q) (cons (plist-get q :question)
-                                                          (plist-get q :id)))
+                                                           (plist-get q :id)))
                                          questions) nil t)
                                 (mapcar (lambda (q) (cons (plist-get q :question)
-                                                         (plist-get q :id)))
+                                                          (plist-get q :id)))
                                         questions)))))
          (question (+agent-shell-projects--request project question-id))
          (existing (seq-find
@@ -962,7 +962,7 @@ HEADING is a new heading title or a marker at an existing Org heading."
 (define-key +agent-shell-projects-annotation-map (kbd "q")
             #'+agent-shell-projects-target-ask)
 (+agent-shell-projects-register-hook '+agent-shell-projects-request-ready-hook
-          #'+agent-shell-projects--outcome-ready)
+                                     #'+agent-shell-projects--outcome-ready)
 
 (provide '+agent-shell-projects-agent)
 ;;; +agent-shell-projects-agent.el ends here
