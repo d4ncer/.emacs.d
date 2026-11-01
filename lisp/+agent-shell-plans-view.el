@@ -20,15 +20,33 @@
   "Face for completed work." :group '+agent-shell-plans)
 (defface +agent-shell-plans-pending '((t :inherit font-lock-doc-face))
   "Face for pending work." :group '+agent-shell-plans)
+(defface +agent-shell-plans-needs-you '((t :inherit warning))
+  "Face for a proposed plan that waits for your answer."
+  :group '+agent-shell-plans)
 (defface +agent-shell-plans-dim '((t :inherit shadow))
   "Face for rules and supporting detail." :group '+agent-shell-plans)
 (defface +agent-shell-plans-key '((t :inherit help-key-binding))
   "Face for keys in the Actions block." :group '+agent-shell-plans)
 
 (defconst +agent-shell-plans--states
-  '(("in_progress" "● WORKING" +agent-shell-plans-working)
+  '(("needs_you" "◆ NEEDS YOU" +agent-shell-plans-needs-you)
+    ("in_progress" "● WORKING" +agent-shell-plans-working)
     ("completed" "✓ DONE" +agent-shell-plans-done)
-    ("pending" "◌ PENDING" +agent-shell-plans-pending)))
+    ("pending" "◌ PENDING" +agent-shell-plans-pending)
+    ("approved" "✓ APPROVED" +agent-shell-plans-done)
+    ("revised" "↺ REVISING" +agent-shell-plans-pending)
+    ("cancelled" "✗ DECLINED" +agent-shell-plans-dim))
+  "Card states, most urgent first, with their badge and face.")
+
+(defun +agent-shell-plans--card-state (plan)
+  "Return the state of PLAN's card.
+A proposal waiting for an answer comes first, then the entries' state,
+then how the proposal was answered."
+  (let ((proposal (plist-get plan :proposal))
+        (entries (plist-get plan :entries)))
+    (cond ((and proposal (not (plist-get proposal :answer))) "needs_you")
+          (entries (+agent-shell-plans--state entries))
+          (t (symbol-name (plist-get proposal :answer))))))
 
 (defun +agent-shell-plans--state (entries)
   "Return the aggregate state of ENTRIES."
@@ -54,7 +72,8 @@
                (when (and (buffer-live-p shell)
                           (with-current-buffer shell
                             (derived-mode-p 'agent-shell-mode))
-                          (plist-get plan :entries))
+                          (or (plist-get plan :entries)
+                              (plist-get plan :proposal)))
                  (push shell shells)))
              +agent-shell-plans--plans)
     (sort shells
@@ -62,9 +81,9 @@
             (let* ((a (gethash a +agent-shell-plans--plans))
                    (b (gethash b +agent-shell-plans--plans))
                    (rank (lambda (plan)
-                           (pcase (+agent-shell-plans--state
-                                   (plist-get plan :entries))
-                             ("in_progress" 0) ("pending" 1) (_ 2))))
+                           (pcase (+agent-shell-plans--card-state plan)
+                             ("needs_you" 0) ("in_progress" 1) ("pending" 2)
+                             ("revised" 3) (_ 4))))
                    (ra (funcall rank a)) (rb (funcall rank b)))
               (if (= ra rb) (> (plist-get a :updated) (plist-get b :updated))
                 (< ra rb)))))))
@@ -139,11 +158,9 @@
         (pcase-lambda (`(,status ,label ,face))
           (let ((count (seq-count
                         (lambda (shell)
-                          (equal status (+agent-shell-plans--state
-                                         (plist-get (gethash
-                                                     shell
-                                                     +agent-shell-plans--plans)
-                                                    :entries))))
+                          (equal status (+agent-shell-plans--card-state
+                                         (gethash shell
+                                                  +agent-shell-plans--plans))))
                         shells)))
             (when (> count 0)
               (propertize (format "%d %s" count
@@ -161,15 +178,38 @@
                             0 1)
           " " (+agent-shell-plans--text entry) "\n"))
 
+(defun +agent-shell-plans--title (text)
+  "Return the first non-blank line of markdown TEXT without its markup."
+  (let ((line (seq-find (lambda (line) (not (string-blank-p line)))
+                        (split-string text "\n"))))
+    (string-trim (replace-regexp-in-string "\\`[#*>\t -]+\\|[*`_]+" ""
+                                           (or line "")))))
+
+(defun +agent-shell-plans--insert-proposal (shell proposal)
+  "Insert SHELL's PROPOSAL folded under its first line."
+  (magit-insert-section (agent-plan-proposal shell t)
+    (magit-insert-heading
+      "    " (propertize "Proposed plan" 'font-lock-face
+                         '+agent-shell-plans-dim)
+      "  " (truncate-string-to-width
+            (+agent-shell-plans--title (plist-get proposal :text))
+            70 nil nil "…"))
+    (dolist (line (split-string (plist-get proposal :text) "\n"))
+      (insert (if (string-blank-p line) "" (concat "      " line)) "\n"))))
+
 (defun +agent-shell-plans--insert-card (shell)
   "Insert SHELL's plan as a folded card after a dim rule."
-  (let ((entries (plist-get (gethash shell +agent-shell-plans--plans) :entries)))
+  (let* ((plan (gethash shell +agent-shell-plans--plans))
+         (entries (plist-get plan :entries))
+         (proposal (plist-get plan :proposal)))
     (insert (propertize (make-string 60 ?─)
                         'font-lock-face '+agent-shell-plans-dim) "\n")
     (magit-insert-section (agent-plan shell t)
       (magit-insert-heading
-        (+agent-shell-plans--badge (+agent-shell-plans--state entries))
-        "  " (buffer-name shell) " · " (+agent-shell-plans-progress shell))
+        (+agent-shell-plans--badge (+agent-shell-plans--card-state plan))
+        "  " (buffer-name shell) " · "
+        (or (+agent-shell-plans-progress shell) "proposed plan"))
+      (when proposal (+agent-shell-plans--insert-proposal shell proposal))
       (mapc #'+agent-shell-plans--insert-entry
             (seq-take entries +agent-shell-plans--preview-entries))
       (when-let* ((rest (nthcdr +agent-shell-plans--preview-entries entries)))

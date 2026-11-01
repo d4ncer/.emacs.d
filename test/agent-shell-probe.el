@@ -10,6 +10,7 @@
 ;;
 ;;   (load "~/.emacs.d/test/agent-shell-probe.el")
 ;;   (+agent-shell-probe-start 'codex "Make a two-step plan." :policy nil)
+;;   (+agent-shell-probe-start 'codex '("/plan" "Plan a README.") :policy nil)
 ;;   (+agent-shell-probe-result ID)   ; nil until done
 ;;
 ;; Each probe keeps its own inputs, so several can run at once.
@@ -53,6 +54,10 @@
     (pcase kind
       ("plan" (+agent-shell-probe--update
                id :plan (lambda (_) (append (map-elt update 'entries) nil))))
+      ("plan_update" (+agent-shell-probe--update
+                      id :plan-updates
+                      (lambda (plans) (append plans
+                                              (list (map-elt update 'plan))))))
       ("tool_call"
        (+agent-shell-probe--update
         id :tools (lambda (tools)
@@ -71,18 +76,22 @@
         (+agent-shell-drive-kill (plist-get probe :shell) "probe done")))))
 
 (defun +agent-shell-probe--send (id)
-  "Send probe ID its prompt once its shell is ready, retrying briefly."
-  (let ((probe (gethash id +agent-shell-probe--probes)))
-    (unless (or (plist-get probe :done) (plist-get probe :sent))
-      (if (+agent-shell-drive-send (plist-get probe :shell)
-                                   (plist-get probe :prompt))
-          (+agent-shell-probe--update id :sent #'always)
-        (run-at-time 1 nil #'+agent-shell-probe--send id)))))
+  "Send probe ID its next prompt once its shell is ready, retrying briefly.
+Return non-nil when one was sent, nil when none is left."
+  (let* ((probe (gethash id +agent-shell-probe--probes))
+         (prompts (plist-get probe :pending)))
+    (when (and prompts (not (plist-get probe :done)))
+      (if (+agent-shell-drive-send (plist-get probe :shell) (car prompts))
+          (+agent-shell-probe--update id :pending #'cdr)
+        (run-at-time 1 nil #'+agent-shell-probe--send id))
+      t)))
 
 (cl-defun +agent-shell-probe-start (agent prompt &key (policy 'read-only)
                                           environment directory (timeout 300))
   "Start a probe of AGENT with PROMPT, and return its id.
-POLICY and ENVIRONMENT are as `+agent-shell-drive-start' takes them, and
+PROMPT is a string, or a list of them sent one turn after another, such
+as a slash command that sets a mode and then the prompt.  POLICY and
+ENVIRONMENT are as `+agent-shell-drive-start' takes them, and
 DIRECTORY defaults to a fresh temporary one.  The probe gives up after
 TIMEOUT seconds."
   (advice-add 'agent-shell--on-notification :after #'+agent-shell-probe--note)
@@ -92,7 +101,9 @@ TIMEOUT seconds."
                  :directory (or directory
                                 (file-name-as-directory
                                  (make-temp-file "agent-probe" t))))))
-    (puthash id (list :agent agent :prompt prompt :policy policy
+    (puthash id (list :agent agent :prompt prompt
+                      :pending (if (listp prompt) prompt (list prompt))
+                      :policy policy
                       :environment environment :shell shell
                       :ran (with-current-buffer shell
                              (map-nested-elt agent-shell--state
@@ -107,18 +118,20 @@ TIMEOUT seconds."
        (pcase (plist-get event :kind)
          ('init-finished (+agent-shell-probe--send id))
          ('turn-complete
-          (+agent-shell-probe--finish id (plist-get event :text))))))
+          (unless (+agent-shell-probe--send id)
+            (+agent-shell-probe--finish id (plist-get event :text)))))))
     id))
 
 (defun +agent-shell-probe-result (id)
   "Return probe ID's record once it is done, or nil while it runs.
 The record names the agent that ran (:ran), the :prompt it got, its
-session update kinds with counts (:updates), its latest :plan, its
-:tools as (KIND TITLE) and its final :text, or :timeout."
+session update kinds with counts (:updates), its latest :plan, every
+:plan-updates payload, its :tools as (KIND TITLE) and its last turn's
+final :text, or :timeout."
   (let ((probe (gethash id +agent-shell-probe--probes)))
     (when (plist-get probe :done)
       (cl-loop for (key value) on probe by #'cddr
-               unless (memq key '(:shell :timer :sent :done))
+               unless (memq key '(:shell :timer :pending :done))
                append (list key value)))))
 
 (provide 'agent-shell-probe)

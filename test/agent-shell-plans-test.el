@@ -11,6 +11,8 @@
 (require '+agent-shell-plans-view)
 
 (declare-function agent-shell--on-notification "agent-shell")
+(declare-function agent-shell--on-request "agent-shell")
+(declare-function agent-shell--send-permission-response "agent-shell")
 
 (defmacro +agent-shell-plans-test--with (&rest body)
   "Run BODY with isolated shells, plans and an advised notification stub."
@@ -176,6 +178,87 @@
     (+agent-shell-plans--render)
     (should (string-match-p "✓ DONE.*1/1" (buffer-string)))
     (should-not (string-match-p "1/1 · Finished" (buffer-string)))))
+
+(ert-deftest +agent-shell-plans-test-proposed-plan ()
+  "Record a plan proposed for approval, show it first until it is answered,
+keep it across plan updates, and record the answer by the option's kind."
+  (+agent-shell-plans-test--with
+    (cl-letf (((symbol-function 'agent-shell--on-request) #'ignore)
+              ((symbol-function 'agent-shell--send-permission-response)
+               #'ignore))
+      (advice-add 'agent-shell--on-request :after
+                  #'+agent-shell-plans--note-request)
+      (advice-add 'agent-shell--send-permission-response :after
+                  #'+agent-shell-plans--note-response)
+      (let ((request
+             (lambda (id plan)
+               (agent-shell--on-request
+                :state (list (cons :buffer shell))
+                :acp-request
+                `((method . "session/request_permission")
+                  (params
+                   . ((toolCall . ((toolCallId . ,id) (kind . "switch_mode")
+                                   (rawInput . ((plan . ,plan)))))
+                      (options
+                       . [((optionId . "implement_plan") (kind . "allow_once"))
+                          ((optionId . "revise_plan")
+                           (kind . "reject_once"))])))))))
+            (answer (lambda (id option)
+                      (agent-shell--send-permission-response
+                       :state (list (cons :buffer shell))
+                       :tool-call-id id :option-id option))))
+        (funcall request "edit-1" nil)
+        (funcall request "edit-2" "  ")
+        (should-not (gethash shell +agent-shell-plans--plans))
+        (+agent-shell-plans-test--notify
+         other (vector (+agent-shell-plans-test--entry "in_progress" "Work")))
+        (funcall request "plan-review:1"
+                 "# Add a **short** README\n\nCreate `README.md`.\n")
+        (+agent-shell-plans-test--notify
+         shell (vector (+agent-shell-plans-test--entry "pending" "Write")))
+        (should (equal "plan-review:1"
+                       (plist-get (plist-get (gethash shell
+                                                      +agent-shell-plans--plans)
+                                             :proposal)
+                                  :id)))
+        (+agent-shell-plans)
+        (should (string-match-p "1 needs you, 1 working" (buffer-string)))
+        (let ((card (+agent-shell-plans-test--card shell)))
+          (should (eq card (car (seq-filter
+                                 (lambda (section)
+                                   (eq (oref section type) 'agent-plan))
+                                 (oref magit-root-section children)))))
+          (should (looking-at "◆ NEEDS YOU  .*plan shell\\* · 0/1"))
+          (magit-section-toggle card)
+          (let ((proposal (car (oref card children))))
+            (goto-char (oref proposal start))
+            (should (looking-at "    Proposed plan  Add a short README$"))
+            (should (oref proposal hidden))
+            (magit-section-toggle proposal)
+            (goto-char (oref proposal content))
+            (should (looking-at "      # Add a \\*\\*short\\*\\* README\n\n\
+      Create `README\\.md`\\.\n"))))
+        (funcall answer "other-call" "implement_plan")
+        (should-not (plist-get (plist-get (gethash shell
+                                                   +agent-shell-plans--plans)
+                                          :proposal)
+                               :answer))
+        (funcall answer "plan-review:1" "revise_plan")
+        (should (eq 'revised (plist-get (plist-get (gethash
+                                                    shell
+                                                    +agent-shell-plans--plans)
+                                                   :proposal)
+                                        :answer)))
+        (+agent-shell-plans-test--notify shell [])
+        (should (equal "revised" (+agent-shell-plans--card-state
+                                  (gethash shell +agent-shell-plans--plans))))
+        (funcall request "plan-review:2" "Second plan")
+        (funcall answer "plan-review:2" "implement_plan")
+        (should (equal "approved" (+agent-shell-plans--card-state
+                                   (gethash shell +agent-shell-plans--plans))))
+        (revert-buffer)
+        (should (string-match-p "✓ APPROVED  .*plan shell\\* · proposed plan"
+                                (buffer-string)))))))
 
 (ert-deftest +agent-shell-plans-test-preserve-place-folds-and-return ()
   (+agent-shell-plans-test--with

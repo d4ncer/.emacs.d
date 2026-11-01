@@ -842,6 +842,17 @@ plan updates. A shell started before these were set has no plan tool until
 it restarts. Recording starts when
 agent-shell loads; Magit sections load when the view first opens.
 
+A plan proposed for approval gets a card too. Codex's plan mode (`/plan`)
+ends its turn with a permission request, "Implement this plan?", whose
+raw input is the plan's markdown; agent-shell shows it as "Proposed plan".
+The view keeps the latest proposal per shell as a folded `Proposed plan`
+section headed by its first line. Its card reads `◆ NEEDS YOU` and comes
+first until you answer, then `✓ APPROVED` or `↺ REVISING` by the kind of
+option you chose, unless the shell's plan entries say more. codex-acp
+streams the plan as `plan_update` only to a client that declares
+`clientCapabilities.plan`. acp.el does not, so the plan also arrives as
+ordinary message text, and declaring it would change every Codex shell.
+
 ## Non-goals
 
 - Reimplementing playbooks in Elisp.

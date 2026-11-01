@@ -9,6 +9,7 @@
 (require 'cl-lib)
 (require 'map)
 (require 'seq)
+(require 'subr-x)
 
 (defgroup +agent-shell-plans nil
   "Live plans from agent shells."
@@ -22,8 +23,12 @@
 The latest entries are already stored when this hook runs.")
 
 (defvar +agent-shell-plans--plans (make-hash-table :test #'eq)
-  "Shell buffers mapped to their latest plan entries and update order.
-Each value is a plist with :entries and :updated keys.")
+  "Shell buffers mapped to their latest plan and update order.
+Each value is a plist with :entries, the latest plan entries, :proposal,
+the latest plan proposed for approval, and :updated.  A proposal is a
+plist: :id, its tool call; :text, its markdown; :kinds, its options'
+kinds by id; and :answer, nil while it waits, then `approved', `revised'
+or `cancelled'.")
 
 (defvar +agent-shell-plans--serial 0)
 (defvar +agent-shell-plans--timer nil)
@@ -73,19 +78,71 @@ Each value is a plist with :entries and :updated keys.")
                (equal (map-elt update 'sessionUpdate) "plan")
                (let ((entries (map-elt update 'entries)))
                  (or (listp entries) (vectorp entries))))
-      (let ((entries (map-elt update 'entries)))
-        (if (seq-empty-p entries)
-            (remhash shell +agent-shell-plans--plans)
-          (puthash shell
-                   (list :entries (copy-tree (append entries nil) t)
-                         :updated (cl-incf +agent-shell-plans--serial))
-                   +agent-shell-plans--plans)))
-      (with-current-buffer shell
-        (add-hook 'kill-buffer-hook #'+agent-shell-plans--forget nil t))
-      (run-hooks '+agent-shell-plans-change-hook))))
+      (+agent-shell-plans--store
+       shell :entries (and (not (seq-empty-p (map-elt update 'entries)))
+                           (copy-tree (append (map-elt update 'entries) nil)
+                                      t))))))
+
+(defun +agent-shell-plans--store (shell key value)
+  "Set SHELL's plan KEY to VALUE, then announce the change.
+A shell left with neither entries nor a proposal is forgotten."
+  (let ((plan (plist-put (copy-sequence (gethash shell +agent-shell-plans--plans))
+                         key value)))
+    (if (or (plist-get plan :entries) (plist-get plan :proposal))
+        (puthash shell (plist-put plan :updated
+                                  (cl-incf +agent-shell-plans--serial))
+                 +agent-shell-plans--plans)
+      (remhash shell +agent-shell-plans--plans)))
+  (with-current-buffer shell
+    (add-hook 'kill-buffer-hook #'+agent-shell-plans--forget nil t))
+  (run-hooks '+agent-shell-plans-change-hook))
+
+(defun +agent-shell-plans--note-request (&rest args)
+  "Record the plan a permission request in ARGS proposes for approval.
+Codex's plan mode ends its turn this way, with the plan's markdown as the
+tool call's raw input; codex-acp sends plan_update only to clients that
+declare a plan capability, which agent-shell does not."
+  (let* ((shell (map-elt (plist-get args :state) :buffer))
+         (request (plist-get args :acp-request))
+         (call (map-nested-elt request '(params toolCall)))
+         (text (map-nested-elt call '(rawInput plan))))
+    (when (and (buffer-live-p shell)
+               (equal (map-elt request 'method) "session/request_permission")
+               (stringp text) (not (string-blank-p text)))
+      (+agent-shell-plans--store
+       shell :proposal
+       (list :id (map-elt call 'toolCallId) :text (string-trim text)
+             :kinds (mapcar (lambda (option)
+                              (cons (map-elt option 'optionId)
+                                    (map-elt option 'kind)))
+                            (map-nested-elt request '(params options))))))))
+
+(cl-defun +agent-shell-plans--note-response (&key state tool-call-id option-id
+                                                  cancelled
+                                                  &allow-other-keys)
+  "Record how the user answered a proposed plan's permission request.
+STATE, TOOL-CALL-ID, OPTION-ID and CANCELLED are as agent-shell sends them."
+  (let* ((shell (map-elt state :buffer))
+         (proposal (plist-get (gethash shell +agent-shell-plans--plans)
+                              :proposal)))
+    (when (and proposal (equal tool-call-id (plist-get proposal :id)))
+      (+agent-shell-plans--store
+       shell :proposal
+       (plist-put (copy-sequence proposal) :answer
+                  (cond (cancelled 'cancelled)
+                        ((string-prefix-p
+                          "allow" (or (alist-get option-id
+                                                 (plist-get proposal :kinds)
+                                                 nil nil #'equal)
+                                      ""))
+                         'approved)
+                        (t 'revised)))))))
 
 (advice-add 'agent-shell--on-notification :after
             #'+agent-shell-plans--note-notification)
+(advice-add 'agent-shell--on-request :after #'+agent-shell-plans--note-request)
+(advice-add 'agent-shell--send-permission-response :after
+            #'+agent-shell-plans--note-response)
 (add-hook 'agent-shell-mode-hook #'+agent-shell-plans--watch)
 (dolist (buffer (buffer-list))
   (with-current-buffer buffer
