@@ -40,7 +40,7 @@
       (when (search-forward "\t" nil t)
         (error "%s:%d: tab; indent with spaces" (file-relative-name file)
                (line-number-at-pos)))))
-  (princ "Elisp syntax and indentation: PASS\n")
+  (princ "Elisp syntax and tabs: PASS\n")
   (load (expand-file-name "lisp/+bootstrap" +config-check-root) nil t)
   (load (expand-file-name "test/config-denylist" +config-check-root) nil t)
   (pcase (+config-denylist-check
@@ -75,7 +75,12 @@
    "-l" "agent-shell-pstack-arena-sandbox-test"
    "-l" "agent-shell-pstack-arena-trace-test"
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"
+   "-l" "elisp-tools-test"
    "-f" "ert-run-tests-batch-and-exit")
+  (+config-check-process "Elisp indentation"
+                         "-l" (expand-file-name "lisp/+elisp-tools"
+                                                +config-check-root)
+                         "-f" "+elisp-tools-batch" "indent")
   (+config-check-process "Native syntax configuration" "-l" "config-treesit-test"
                          "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Every module and the theme" "-l" "config-modules-test"

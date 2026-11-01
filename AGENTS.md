@@ -46,10 +46,18 @@ Guidance for changing this Emacs configuration.
 - Before building on data an agent sends over ACP, confirm the agent sends
   it: run `test/agent-shell-probe.el` against the real adapter and read what
   reached Emacs. A match in a shell's rendered text is not evidence.
-- Edit Elisp with exact text replacement, never a script that finds forms by
-  string position or reindents a region. After each edit, byte-compile the
-  file; `check-parens` passes a paren that closes the wrong form. The gate
-  rejects tabs, and batch `emacs -Q` indents with them unless told not to.
+- Edit Elisp with exact text replacement or `lisp/+elisp-tools.el`, never a
+  script that finds forms by string position or reindents a region. The
+  tool replaces, inserts or deletes a top-level form by name, reindents
+  only that form as the live configuration would, byte-compiles the file
+  and prints the new warnings about the form:
+  `emacs -Q --batch -l lisp/+elisp-tools.el -f +elisp-tools-batch replace
+  FILE NAME SOURCE`; its Commentary lists the commands. After an exact
+  replacement, byte-compile the file; `check-parens` passes a paren that
+  closes the wrong form.
+- The gate fails when reindenting any tracked Elisp moves a line; `indent
+  --fix FILE...` rewrites them. Plain batch `emacs -Q` indents differently
+  from the configuration, and with tabs, which the gate also rejects.
 - Verify the smallest relevant behavior after editing. Check syntax for changed
   Elisp, then run focused byte compilation or ERT tests when they add value.
   Use `emacsclient` for live Emacs inspection when a server is running.
