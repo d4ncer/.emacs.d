@@ -309,10 +309,15 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
            "gr" #'revert-buffer
            "q" #'quit-window)
   :config
-  ;; Delegates on this config run its tests, which load the built packages.
+  ;; Delegates and arena candidates run this config's tests, which load the
+  ;; built packages and native code compiled for them.  The preflight
+  ;; refuses an arena whose candidates could not load the test harness.
   (setf (alist-get user-emacs-directory +agent-shell-pstack-arena-profiles
                    nil nil #'equal)
-        '(:delegate (:link ("elpaca"))))
+        `(:shared ("elpaca")
+          :read (,(expand-file-name "eln-cache/" user-emacs-directory))
+          :preflight "emacs -Q --batch -L test -l config-test-support"
+          :delegate (:link ("elpaca"))))
   (+agent-shell-pstack-panel-mode 1))
 
 (use-package +agent-shell-plans

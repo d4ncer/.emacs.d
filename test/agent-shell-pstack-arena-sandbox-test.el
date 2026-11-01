@@ -165,6 +165,63 @@ environment, with the generated files left out of the result."
                                 (+arena-git-test--capture manifest "opus")))))
             (+arena-sandbox-test--discard sandbox)))))))
 
+(defun +arena-sandbox-test--preflight (repo command &optional cancel)
+  "Provision candidate opus of REPO and run COMMAND as its preflight.
+With CANCEL, stop it at once.  Return (REASON SANDBOX-CONFIG WORKTREE)."
+  (let* ((+agent-shell-pstack-arena-profiles `((,repo :preflight ,command)))
+         (+agent-shell-pstack-panel-directory
+          (expand-file-name "reports/" +arena-git-test--scratch))
+         (manifest (+arena-git-test--arena (+arena-git-test--base repo)))
+         (worktree (+arena-git-test--provision manifest "opus"))
+         (panel (+agent-shell-pstack-panel--make
+                 :id "panel1" :shape 'arena :timeout 60 :arena manifest
+                 :members (list (+agent-shell-pstack-panel--make-member
+                                 :role "opus" :agent 'codex :kind 'candidate
+                                 :state 'pending))))
+         (config nil) (outcome nil) (deadline (+ (float-time) 60)))
+    (+agent-shell-pstack-panel--fix-deadline panel 600)
+    (cl-letf* ((create (symbol-function '+agent-shell-pstack-arena-sandbox))
+               ((symbol-function '+agent-shell-pstack-arena-sandbox)
+                (lambda (&rest args)
+                  (let ((sandbox (apply create args)))
+                    (setq config (+agent-shell-sandbox-config sandbox))
+                    sandbox))))
+      (let ((stop (+agent-shell-pstack-panel--preflight
+                   panel (lambda (reason) (setq outcome (list reason))))))
+        (when cancel (funcall stop))))
+    (while (and (not outcome) (< (float-time) deadline))
+      (accept-process-output nil 0.1))
+    (should outcome)
+    (list (car outcome) config worktree)))
+
+(ert-deftest +arena-sandbox-test-preflight ()
+  "Run a profile's preflight in a candidate's worktree under its sandbox,
+refusing the arena when it fails, cannot read the lead, changes the
+worktree, runs too long or is cancelled.  Its sandbox always goes."
+  (+arena-sandbox-test--on-macos
+    (+arena-git-test--with-scratch
+      (let ((repo (+arena-git-test--repo "a.txt" "a\n" "deps/d" "dep\n")))
+        (pcase-dolist (`(,command ,expected)
+                       `(("test -f a.txt && test \"$PWD\" != /" nil)
+                         ("echo before; echo boom; exit 3"
+                          "failed with status 3 .*:\nbefore\nboom\\'")
+                         (,(concat "cat " (expand-file-name "a.txt" repo))
+                          "failed with status 1")
+                         ("echo b > b.txt" "changed the candidate's worktree.*:\n.*b\\.txt")))
+          (pcase-let ((`(,reason ,config ,_)
+                       (+arena-sandbox-test--preflight repo command)))
+            (if expected
+                (should (string-match-p expected reason))
+              (should-not reason))
+            (should-not (file-exists-p config))))
+        (let ((+agent-shell-pstack-panel-preflight-timeout 1))
+          (should (string-match-p
+                   "ran past 1 seconds"
+                   (car (+arena-sandbox-test--preflight repo "sleep 30")))))
+        (should (string-match-p
+                 "cancelled during its preflight"
+                 (car (+arena-sandbox-test--preflight repo "sleep 30" t))))))))
+
 (ert-deftest +arena-sandbox-test-profile-results-checked ()
   "Reject what a profile's functions return when it is malformed, and
 leave no private folders behind."

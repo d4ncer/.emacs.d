@@ -1154,6 +1154,44 @@ egress session gives the launcher alone its observer's folder."
                           (+agent-shell-egress-launch-environment session))))
           client)))))
 
+(defun +agent-shell-sandbox-command (sandbox command)
+  "Return how to run COMMAND, a list, confined to SANDBOX with no agent.
+The value is (PROGRAM-AND-ARGUMENTS . ENVIRONMENT): run the first with
+the second ahead of the process environment.  On macOS that is
+sandbox-exec with SANDBOX's profile; on Linux it is the launcher and
+bwrap inside SANDBOX's mounts, with only ENVIRONMENT's entries."
+  (if (eq +agent-shell-sandbox-backend 'bwrap)
+      (let* ((program (or (executable-find (car command)) (car command)))
+             (install (+agent-shell-sandbox--install program))
+             (mounts (+agent-shell-sandbox-linux-mounts
+                      sandbox
+                      (unless (+agent-shell-sandbox-linux-visible-p
+                               install
+                               (+agent-shell-sandbox-linux-mounts sandbox))
+                        (list install))))
+             (environment
+              (seq-uniq (append (+agent-shell-sandbox-environment sandbox)
+                                (+agent-shell-sandbox-linux-environment
+                                 sandbox mounts))
+                        (lambda (a b)
+                          (equal (car (split-string a "="))
+                                 (car (split-string b "=")))))))
+        (make-directory (+agent-shell-sandbox--home sandbox) t)
+        (with-temp-file (+agent-shell-sandbox--resolver sandbox)
+          (insert "nameserver 10.0.2.3\n"))
+        (cons (append (list "/bin/bash" (+agent-shell-sandbox--launcher)
+                            (mapconcat (lambda (entry)
+                                         (car (split-string entry "=")))
+                                       environment " "))
+                      (+agent-shell-sandbox-linux-arguments
+                       mounts (cons program (cdr command))))
+              environment))
+    (let ((profile (expand-file-name "command.sb"
+                                     (+agent-shell-sandbox-config sandbox))))
+      (with-temp-file profile (insert (+agent-shell-sandbox-profile sandbox)))
+      (cons (append (list "/usr/bin/sandbox-exec" "-f" profile) command)
+            (+agent-shell-sandbox-environment sandbox)))))
+
 ;;;; Host logins and arena admission (both backends)
 
 (defconst +agent-shell-sandbox--claude-service "Claude Code-credentials"

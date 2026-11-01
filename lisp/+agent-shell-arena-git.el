@@ -129,6 +129,12 @@ matches applies.  PROFILE is a plist with any of these keys:
           before collecting or cleaning, such as a package folder its
           tests need.  Only a worktree delegate on this machine takes
           :link.
+:preflight A shell command run in an arena's first candidate worktree,
+          confined to its sandbox, before logins are checked or any
+          member starts, such as one that loads the test harness.  A
+          failure, a run past `+agent-shell-pstack-panel-preflight-timeout'
+          or a change to the worktree refuses the arena with the
+          command's last output.  Not with :host.
 
 Paths in :shared, :private, :copy and :files are relative to the top
 level and stay inside it.  Each element of :write and :read is an
@@ -858,8 +864,13 @@ since a delegate otherwise runs on the profile's :host" setting)))
                                 (funcall fail "each :delegate :link path"
                                          "untracked and ignored by git in \
 the lead's checkout" path))))))))
+                  (:preflight
+                   (unless (and (stringp value) (not (string-empty-p value)))
+                     (funcall fail key "a shell command" value)))
                   (_ (user-error "Arena profile for %s: unknown key %S"
                                  toplevel key))))
+    (when (and (plist-get profile :host) (plist-get profile :preflight))
+      (user-error "Arena profile for %s: :preflight runs only on this machine, so it cannot go with :host" toplevel))
     (when (and (plist-get profile :host)
                (not (plist-get profile :host-directory)))
       (funcall fail :host-directory "the host's checkout when :host is set"

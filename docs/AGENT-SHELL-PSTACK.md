@@ -363,6 +363,20 @@ keys:
   drive this Emacs.
 - `:env` lists `NAME=VALUE` entries, or is a function of the sandbox
   returning them. They win over the defaults.
+- `:preflight` is a shell command run in the first candidate's worktree,
+  confined to its sandbox, before logins are checked or any member
+  starts. A failure, a run past
+  `+agent-shell-pstack-panel-preflight-timeout` (600 s) or a change to
+  the worktree refuses the arena with the command's last ten lines, so a
+  missing dependency costs seconds rather than the candidates' budget. It
+  runs only on this machine, so it cannot go with `:host`.
+
+This configuration's own profile, in `modules/mod-ai.el`, shares
+`elpaca`, lets candidates read the native code in `eln-cache`, and
+preflights by loading the test harness. A candidate can then run most
+tests, but not the full gate: about 90 tests need what a candidate must
+not have, such as running `sandbox-exec` inside its own sandbox or
+writing arena state outside its worktree.
 
 Paths in `:shared`, `:private`, `:copy` and `:files` are relative to the
 top level. Copied and generated files never reach a candidate's result.

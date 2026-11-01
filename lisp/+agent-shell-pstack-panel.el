@@ -277,7 +277,8 @@ see `+agent-shell-pstack-panel-unread-p'."
   (deadline nil :documentation "Absolute time an arena should end, set once.")
   (limit nil :documentation "Absolute time no member may run past, set with \
 the deadline.")
-  (login-check nil :documentation "Cancels login admission until it ends.")
+  (login-check nil :documentation "Cancels the preflight or login admission \
+until it ends.")
   (logins nil :documentation "Each agent's login result, as admitted.")
   (measure-egress nil :documentation "Whether its members' egress is \
 recorded.")
@@ -299,6 +300,11 @@ made; see `+agent-shell-pstack-panel--fail'."
 
 (defcustom +agent-shell-pstack-panel-arena-preparation-allowance 1800
   "Seconds allowed for provisioning and host login admission in an arena."
+  :type 'natnum)
+
+(defcustom +agent-shell-pstack-panel-preflight-timeout 600
+  "Seconds an arena's :preflight command may run before it is refused.
+See `+agent-shell-pstack-arena-profiles'."
   :type 'natnum)
 
 (defcustom +agent-shell-pstack-panel-arena-overhead 300
@@ -2698,6 +2704,116 @@ candidate's worktree.  It writes only its private folders."
      :read-only t :deadline deadline)))
 
 (defun +agent-shell-pstack-panel--launch (panel)
+  "Run PANEL's preflight, then admit its logins and start its candidates.
+The preflight is its repository's :preflight command, when the arena
+profile names one; see `+agent-shell-pstack-panel--preflight'.  A panel
+that ended during it gets its follow-up once it has stopped."
+  (if (not (plist-get (+agent-shell-arena-git-profile
+                       (+agent-shell-arena-git-manifest-toplevel
+                        (+agent-shell-pstack-panel-arena panel)))
+                      :preflight))
+      (+agent-shell-pstack-panel--admit panel)
+    (setf (+agent-shell-pstack-panel-login-check panel)
+          (+agent-shell-pstack-panel--preflight
+           panel
+           (lambda (reason)
+             (let ((ended (eq (+agent-shell-pstack-panel-phase panel)
+                              'finished)))
+               (setf (+agent-shell-pstack-panel-login-check panel) nil)
+               (+agent-shell-pstack-panel--preparing
+                panel reason
+                (lambda () (+agent-shell-pstack-panel--admit panel)))
+               (when ended (+agent-shell-pstack-panel--finalize panel))
+               (+agent-shell-pstack-panels--refresh)))))))
+
+(defun +agent-shell-pstack-panel--preflight (panel callback)
+  "Run the :preflight command of PANEL's arena profile, then call CALLBACK.
+It runs in the first candidate's worktree, confined to that candidate's
+sandbox, before any login is checked or member starts.  CALLBACK gets
+nil, or why the arena cannot run: the command failed, ran past
+`+agent-shell-pstack-panel-preflight-timeout', or changed the worktree.
+Return a function that stops the command; CALLBACK still runs, once."
+  (let* ((manifest (+agent-shell-pstack-panel-arena panel))
+         (command (plist-get (+agent-shell-arena-git-profile
+                              (+agent-shell-arena-git-manifest-toplevel
+                               manifest))
+                             :preflight))
+         (role (+agent-shell-arena-git-role
+                manifest (+agent-shell-pstack-panel-member-role
+                          (car (+agent-shell-pstack-panel--unsettled
+                                panel 'candidate)))))
+         (worktree (+agent-shell-arena-git-role-worktree role))
+         (sandbox (+agent-shell-pstack-arena-sandbox
+                   manifest (+agent-shell-arena-git-role-name role)
+                   (+agent-shell-pstack-panel--horizon panel)))
+         (stopped nil)
+         (process nil)
+         (timer nil))
+    (cl-flet ((done (process-or-error)
+                (when timer (cancel-timer timer))
+                (let* ((ran (processp process-or-error))
+                       (output (if ran
+                                   (with-current-buffer
+                                       (process-buffer process-or-error)
+                                     (string-trim (buffer-string)))
+                                 ""))
+                       (tail (string-join (last (split-string output "\n") 10)
+                                          "\n"))
+                       (status (and ran (process-exit-status process-or-error)))
+                       (changed (and (eql status 0) (not stopped)
+                                     (string-trim
+                                      (+agent-shell-arena-git--read-in
+                                       (+agent-shell-arena-git-role-git-dir
+                                        role)
+                                       worktree "status" "--porcelain"))))
+                       (reason
+                        (cond
+                         ((not ran) process-or-error)
+                         ((eq stopped 'timeout)
+                          (format "The arena's preflight `%s' ran past %d \
+seconds, so no member started." command
++agent-shell-pstack-panel-preflight-timeout))
+                         (stopped "The arena was cancelled during its \
+preflight.")
+                         ((not (eql status 0))
+                          (format "The arena's preflight `%s' failed with \
+status %s in a candidate's worktree, so no member started:\n%s"
+                                  command status tail))
+                         ((not (string-empty-p changed))
+                          (format "The arena's preflight `%s' changed the \
+candidate's worktree, so no member started:\n%s" command changed)))))
+                  (when ran (kill-buffer (process-buffer process-or-error)))
+                  (+agent-shell-sandbox-discard
+                   sandbox (lambda (&rest _) (funcall callback reason))))))
+      (condition-case err
+          (let* ((run (+agent-shell-sandbox-command
+                       sandbox (list "/bin/sh" "-c" command)))
+                 (default-directory (file-name-as-directory worktree))
+                 (process-environment (append (cdr run) process-environment)))
+            (setq process
+                  (make-process
+                   :name "pstack-arena-preflight" :noquery t
+                   :connection-type 'pipe
+                   :buffer (generate-new-buffer " *pstack-arena-preflight*" t)
+                   :command (car run)
+                   :sentinel (lambda (process _event)
+                               (unless (process-live-p process)
+                                 (done process)))))
+            (process-send-eof process)
+            (setq timer
+                  (run-at-time +agent-shell-pstack-panel-preflight-timeout nil
+                               (lambda ()
+                                 (setq stopped 'timeout)
+                                 (+agent-shell-sandbox-terminate
+                                  process #'ignore)))))
+        (error (run-at-time 0 nil (lambda ()
+                                    (done (error-message-string err))))))
+      (lambda ()
+        (unless stopped (setq stopped 'cancelled))
+        (when (process-live-p process)
+          (+agent-shell-sandbox-terminate process #'ignore))))))
+
+(defun +agent-shell-pstack-panel--admit (panel)
   "Check every member's host login, then start PANEL's candidates.
 One refused login, even the judge's, refuses the whole arena, and no
 member starts before every login is checked.  A panel that ended while
