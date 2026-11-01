@@ -1544,10 +1544,9 @@ resumes polling with a fresh follow-up to come."
                   :shell shell))
          (panel (+agent-shell-pstack-panel--make
                  :id "p1" :phase 'candidates :members (list member)
-                 :deadline (- (float-time) 1)))
+                 :deadline (- (float-time) 1) :limit (+ (float-time) 600)))
          (runner (+agent-shell-arena-remote--make-runner
                   :directory (make-temp-file "runner" t) :panel panel
-                  :limit (+ (float-time) 600)
                   :job (+agent-shell-arena-remote--make-job :deadline 100)))
          (cancelled nil))
     (unwind-protect

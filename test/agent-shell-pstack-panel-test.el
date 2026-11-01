@@ -1477,18 +1477,18 @@ was not ready.")))
            (member (car (+agent-shell-pstack-panel-members panel)))
            (timeout (+agent-shell-pstack-panel-timeout panel))
            (call (list (cons :kind "execute") (cons :status "in_progress")))
-           (limit (+ (float-time) +agent-shell-pstack-panel-max-runtime
-                     (- (+ timeout 100)))))
+           (started (- (float-time) timeout 100))
+           (limit (+ started +agent-shell-pstack-panel-max-runtime)))
       (with-current-buffer (+agent-shell-pstack-panel-member-shell member)
         (setq-local agent-shell--state
                     (list (cons :tool-calls (list (cons "t1" call))))))
-      (+agent-shell-pstack-panel--expire id 'running limit)
+      (+agent-shell-pstack-panel--expire id 'running limit started)
       (should (eq 'starting (+agent-shell-pstack-panel-member-state member)))
       (should (timerp (+agent-shell-pstack-panel-timer panel)))
       (should (< (- (+agent-shell-pstack-panel-expires panel) (float-time))
                  (1+ +agent-shell-pstack-panel--extension)))
       (setf (alist-get :status call) "completed")
-      (+agent-shell-pstack-panel--expire id 'running limit)
+      (+agent-shell-pstack-panel--expire id 'running limit started)
       (should (eq 'timeout (+agent-shell-pstack-panel-member-state member)))
       (should (string-match-p
                (format "\\`No report within the %d-second timeout, extended \
@@ -1869,7 +1869,7 @@ counts the cancellations."
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-login-barrier ()
   "Check every member's login, the judge's too, before any member starts,
-against the arena's deadline plus its grace.  Each result shows as it
+against the arena's limit plus its grace.  Each result shows as it
 lands, and every candidate's sandbox gets that same deadline."
   (+agent-shell-pstack-panel-test--with
     (+agent-shell-pstack-panel-test--with-checks
@@ -1879,7 +1879,8 @@ lands, and every candidate's sandbox gets that same deadline."
       (+agent-shell-pstack-panel-test--drain)
       (let* ((panel (car (+agent-shell-pstack-panel-list)))
              (stop (+agent-shell-pstack-panel-deadline panel))
-             (horizon (+ stop +agent-shell-pstack-panel-arena-grace)))
+             (horizon (+ stop (- +agent-shell-pstack-panel-max-runtime 60)
+                         +agent-shell-pstack-panel-arena-grace)))
         (should (= 1 (length checks)))
         (should (< (abs (- stop (+ (float-time)
                                    (+agent-shell-pstack-panel-arena-budget
@@ -1907,6 +1908,45 @@ lands, and every candidate's sandbox gets that same deadline."
           (should (= horizon (+agent-shell-sandbox-deadline (nth 2 entry)))))
         (should (= stop (+agent-shell-pstack-panel-deadline panel)))
         (should (= 0 cancelled))))))
+
+(ert-deftest +agent-shell-pstack-panel-test-login-horizon ()
+  "Logins must outlast the latest moment any member may run: the panel's
+limit, which its phase timers never pass, plus the capture grace.  The
+limit lets running commands extend the timeout up to the runtime cap."
+  (let* ((+agent-shell-pstack-panel-max-runtime 7200)
+         (panel (+agent-shell-pstack-panel--make
+                 :id "horizon" :timeout 900 :judge-timeout 900
+                 :phase 'candidates))
+         (armed nil))
+    (should-not (+agent-shell-pstack-panel--horizon panel))
+    (+agent-shell-pstack-panel--fix-deadline panel 3900)
+    (let ((deadline (+agent-shell-pstack-panel-deadline panel))
+          (limit (+agent-shell-pstack-panel-limit panel)))
+      (should (< (abs (- deadline (+ (float-time) 3900))) 5))
+      (should (= limit (+ deadline (- 7200 900))))
+      (should (= (+ limit +agent-shell-pstack-panel-arena-grace)
+                 (+agent-shell-pstack-panel--horizon panel)))
+      (cl-letf (((symbol-function 'run-at-time)
+                 (lambda (seconds _repeat _function &rest args)
+                   (push (cons seconds args) armed)
+                   'timer))
+                ((symbol-function 'cancel-timer) #'ignore))
+        (+agent-shell-pstack-panel--arm panel 900)
+        (pcase-let ((`(,seconds ,_ ,_ ,phase-limit ,_) (car armed)))
+          (should (= 900 seconds))
+          (should (<= phase-limit limit)))
+        (+agent-shell-pstack-panel--arm panel 99999 (+ (float-time) 99999))
+        (pcase-let ((`(,_ ,_ ,_ ,phase-limit ,_) (car armed)))
+          (should (= phase-limit limit))
+          (should (<= (+agent-shell-pstack-panel-expires panel) limit)))
+        (setf (+agent-shell-pstack-panel-limit panel) (- (float-time) 1))
+        (+agent-shell-pstack-panel--arm panel 900)
+        (should (= 0 (caar armed)))))
+    (+agent-shell-pstack-panel--fix-deadline panel 100)
+    (setf (+agent-shell-pstack-panel-timeout panel) 9000)
+    (+agent-shell-pstack-panel--fix-deadline panel 100)
+    (should (= (+agent-shell-pstack-panel-deadline panel)
+               (+agent-shell-pstack-panel-limit panel)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-arena-login-refused ()
   "One refused login, here the judge's alone, refuses the whole arena:
@@ -2130,7 +2170,7 @@ a timer of its own."
         (should (eq sandbox (+agent-shell-pstack-panel-member-sandbox judge)))
         (should (+agent-shell-sandbox-read-only sandbox))
         (should (= deadline (+agent-shell-pstack-panel-deadline panel)))
-        (should (= (+ deadline +agent-shell-pstack-panel-arena-grace)
+        (should (= (+agent-shell-pstack-panel--horizon panel)
                    (+agent-shell-sandbox-deadline sandbox)))
         (should (equal (file-truename checkouts)
                        (+agent-shell-sandbox-root sandbox)))

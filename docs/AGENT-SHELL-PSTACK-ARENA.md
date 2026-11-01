@@ -246,7 +246,7 @@ starts, its panel checks every agent its members use, the judge's
 included, with `+agent-shell-sandbox-check-logins`. A laptop and a host's
 runner do this through the same `+agent-shell-pstack-panel--launch`.
 
-1. Each login must outlast the arena's deadline plus
+1. Each login must outlast the arena's horizon, its limit plus
    `+agent-shell-pstack-panel-arena-grace`, 2 minutes, plus
    `+agent-shell-sandbox-login-margin`, 10 minutes.
 2. A login that falls short is refreshed once on the host, outside any
@@ -283,10 +283,14 @@ starts. `+agent-shell-pstack-panel-arena-budget` adds the preparation
 allowance, 30 minutes, the candidates' timeout once, since they run in
 parallel, the judge's timeout, and 5 minutes of overhead. A host's runner
 fixes the deadline from the same budget when it takes the repository's
-lock. Every candidate and judge sandbox is given that deadline plus the
-grace explicitly, so arenas running at once never share one. Phase timers
-are unchanged. On a host, the runner also cancels the arena at its
-deadline and reports regardless 2 minutes later.
+lock. With it comes the arena's limit: the deadline plus what
+`+agent-shell-pstack-panel-max-runtime` allows beyond the candidates'
+timeout, the most a running command may extend it. No phase timer runs
+past the limit. Every candidate and judge sandbox is given the limit plus
+the grace explicitly, so arenas running at once never share one, and no
+member outlives its token. On a host, the runner also cancels the arena
+at its deadline, unless a member runs a command, and reports regardless
+2 minutes later. docs/PSTACK-TIMEOUTS.md maps every clock.
 
 `+agent-shell-sandbox` owns the readers, the check, the lock and the
 refresh. `+agent-shell-pstack-panel` owns admission and the deadline.

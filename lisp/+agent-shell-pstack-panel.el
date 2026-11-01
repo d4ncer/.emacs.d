@@ -245,7 +245,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 13
+(defconst +agent-shell-pstack-panel--schema 14
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -275,6 +275,8 @@ see `+agent-shell-pstack-panel-unread-p'."
   (schema +agent-shell-pstack-panel--schema) (phase 'running)
   rubric judge-timeout arena sink remote
   (deadline nil :documentation "Absolute time an arena should end, set once.")
+  (limit nil :documentation "Absolute time no member may run past, set with \
+the deadline.")
   (login-check nil :documentation "Cancels login admission until it ends.")
   (logins nil :documentation "Each agent's login result, as admitted.")
   (measure-egress nil :documentation "Whether its members' egress is \
@@ -313,10 +315,21 @@ Candidates run in parallel, so their timeout counts once."
   (+ +agent-shell-pstack-panel-arena-preparation-allowance
      timeout judge-timeout +agent-shell-pstack-panel-arena-overhead))
 
+(defun +agent-shell-pstack-panel--fix-deadline (panel seconds)
+  "Fix PANEL's deadline SECONDS from now, and its limit with it.
+The limit lets a member's running command extend the deadline by what
+`+agent-shell-pstack-panel-max-runtime' allows beyond PANEL's timeout."
+  (setf (+agent-shell-pstack-panel-deadline panel) (+ (float-time) seconds)
+        (+agent-shell-pstack-panel-limit panel)
+        (+ (+agent-shell-pstack-panel-deadline panel)
+           (max 0 (- +agent-shell-pstack-panel-max-runtime
+                     (+agent-shell-pstack-panel-timeout panel))))))
+
 (defun +agent-shell-pstack-panel--horizon (panel)
-  "Return the time PANEL's sandboxed members' logins must outlast."
-  (when-let* ((deadline (+agent-shell-pstack-panel-deadline panel)))
-    (+ deadline +agent-shell-pstack-panel-arena-grace)))
+  "Return the time PANEL's sandboxed members' logins must outlast.
+That is its limit, which no member runs past, plus the capture grace."
+  (when-let* ((limit (+agent-shell-pstack-panel-limit panel)))
+    (+ limit +agent-shell-pstack-panel-arena-grace)))
 
 (declare-function +agent-shell-egress-open "+agent-shell-egress")
 (declare-function +agent-shell-egress-close "+agent-shell-egress")
@@ -1585,20 +1598,24 @@ and counts as read."
     (cancel-timer timer))
   (setf (+agent-shell-pstack-panel-timer panel) nil))
 
-(defun +agent-shell-pstack-panel--arm (panel seconds &optional limit)
-  "Expire PANEL's current phase after SECONDS.
+(defun +agent-shell-pstack-panel--arm (panel seconds &optional limit started)
+  "Expire PANEL's current phase, which STARTED or starts now, after SECONDS.
 A command still running then extends it, until LIMIT, a time that
-defaults to `+agent-shell-pstack-panel-max-runtime' from now."
+defaults to `+agent-shell-pstack-panel-max-runtime' from now.  Neither
+passes PANEL's own limit, when it has one."
   (+agent-shell-pstack-panel--disarm panel)
-  (setf (+agent-shell-pstack-panel-expires panel) (+ (float-time) seconds)
-        (+agent-shell-pstack-panel-timer panel)
-        (run-at-time seconds nil #'+agent-shell-pstack-panel--expire
-                     (+agent-shell-pstack-panel-id panel)
-                     (+agent-shell-pstack-panel-phase panel)
-                     (or limit
-                         (+ (float-time)
-                            (max seconds
-                                 +agent-shell-pstack-panel-max-runtime))))))
+  (let* ((now (float-time))
+         (cap (+agent-shell-pstack-panel-limit panel))
+         (limit (or limit (+ now (max seconds
+                                      +agent-shell-pstack-panel-max-runtime))))
+         (limit (if cap (min limit cap) limit))
+         (seconds (max 0 (min seconds (- limit now)))))
+    (setf (+agent-shell-pstack-panel-expires panel) (+ now seconds)
+          (+agent-shell-pstack-panel-timer panel)
+          (run-at-time seconds nil #'+agent-shell-pstack-panel--expire
+                       (+agent-shell-pstack-panel-id panel)
+                       (+agent-shell-pstack-panel-phase panel)
+                       limit (or started now)))))
 
 (defun +agent-shell-pstack-panel--finish (panel)
   "End PANEL, then compose its follow-up and deliver it, once.
@@ -2290,10 +2307,11 @@ not ready."))))
                     (+agent-shell-pstack-panel-member-shell member))))
             (+agent-shell-pstack-panel--phase-members panel)))
 
-(defun +agent-shell-pstack-panel--expire (id phase &optional limit)
+(defun +agent-shell-pstack-panel--expire (id phase &optional limit started)
   "Settle the unfinished members of panel ID's PHASE as timed out.
 Do nothing once the panel has left PHASE.  Before LIMIT, a time, extend
-the phase instead while an unsettled member still runs a command."
+the phase instead while an unsettled member still runs a command.
+STARTED is when the phase began."
   (when-let* ((panel (+agent-shell-pstack-panel--find id))
               ((eq phase (+agent-shell-pstack-panel-phase panel))))
     (setf (+agent-shell-pstack-panel-timer panel) nil)
@@ -2302,12 +2320,9 @@ the phase instead while an unsettled member still runs a command."
         (+agent-shell-pstack-panel--arm
          panel (min +agent-shell-pstack-panel--extension
                     (- limit (float-time)))
-         limit)
+         limit started)
       (let* ((timeout (+agent-shell-pstack-panel--phase-timeout panel))
-             (ran (and limit
-                       (- (float-time)
-                          (- limit (max timeout
-                                        +agent-shell-pstack-panel-max-runtime)))))
+             (ran (and started (- (float-time) started)))
              (reason (if (and ran (> ran (1+ timeout)))
                          (format "No report within the %d-second timeout, \
 extended to %d seconds while its commands ran." timeout (round ran))
@@ -2586,10 +2601,10 @@ the arena runs there instead; see `+agent-shell-arena-remote-launch'."
 Then start its members.  PANEL is preparing.  Its deadline is fixed now,
 unless a host's runner fixed it already."
   (unless (+agent-shell-pstack-panel-deadline panel)
-    (setf (+agent-shell-pstack-panel-deadline panel)
-          (+ (float-time) (+agent-shell-pstack-panel-arena-budget
-                           (+agent-shell-pstack-panel-timeout panel)
-                           (+agent-shell-pstack-panel-judge-timeout panel)))))
+    (+agent-shell-pstack-panel--fix-deadline
+     panel (+agent-shell-pstack-panel-arena-budget
+            (+agent-shell-pstack-panel-timeout panel)
+            (+agent-shell-pstack-panel-judge-timeout panel))))
   (let ((manifest (+agent-shell-arena-git-create
                    base (+agent-shell-pstack-panel-id panel))))
     (setf (+agent-shell-pstack-panel-arena panel) manifest)
@@ -2926,9 +2941,9 @@ must be clean.  A worktree, here or on a host, starts from the snapshot
 of the lead's working tree an arena takes, or HEAD when that is clean.
 A delegate needs the laptop user's git identity first.  The panel's
 timeout starts now and covers this preparation too."
-  (setf (+agent-shell-pstack-panel-phase panel) 'preparing
-        (+agent-shell-pstack-panel-deadline panel)
-        (+ (float-time) (+agent-shell-pstack-panel-timeout panel)))
+  (setf (+agent-shell-pstack-panel-phase panel) 'preparing)
+  (+agent-shell-pstack-panel--fix-deadline
+   panel (+agent-shell-pstack-panel-timeout panel))
   (+agent-shell-arena-git-repository
    (+agent-shell-pstack-panel-cwd panel)
    (lambda (base error)

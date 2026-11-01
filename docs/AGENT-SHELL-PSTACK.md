@@ -114,7 +114,9 @@ its final message with a fenced block, then ends its turn:
   suite, is extended a minute at a time, up to `+agent-shell-pstack-panel-max-runtime`, 7200 seconds,
   from the phase's start. The timeout reason then says how long it ran.
   On a remote host the runner does the same with the run's deadline, and
-  the laptop keeps the workspace awake for each new one.
+  the laptop keeps the workspace awake for each new one. An arena or delegate
+  never runs past its limit, which its members' logins must outlast;
+  docs/PSTACK-TIMEOUTS.md lists every clock and what owns it.
 
 Emacs reads the first complete block in the lead's message, as it reaches a
 live `turn-complete` or the tool call that ends the message, so a restored
