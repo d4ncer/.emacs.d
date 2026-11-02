@@ -299,9 +299,11 @@ import socket, time
 connection = socket.create_connection(('127.0.0.1', %d))
 connection.sendall(b'GET /%s HTTP/1.1\\r\\n\\r\\n')
 time.sleep(30)\"; :" port +agent-shell-egress-test--canary))))
-           (file (expand-file-name "p1/opus.egress.json" directory)))
+           (file (expand-file-name "p1/opus.egress.json" directory))
+           (session nil))
       (unwind-protect
-          (let ((session (+agent-shell-egress-open sandbox file identity)))
+          (progn
+            (setq session (+agent-shell-egress-open sandbox file identity))
             (+agent-shell-egress-attach
              session (lambda () (process-id adapter)))
             (+agent-shell-egress-test--wait
@@ -323,6 +325,9 @@ time.sleep(30)\"; :" port +agent-shell-egress-test--canary))))
               (should-not (string-search
                            +agent-shell-egress-test--canary
                            (+agent-shell-egress-test--text file)))))
+        (when-let* ((timer (and session
+                                (+agent-shell-egress--session-timer session))))
+          (cancel-timer timer))
         (+agent-shell-sandbox-kill-tree (process-id adapter))
         (delete-process adapter)
         (delete-process server)))))
