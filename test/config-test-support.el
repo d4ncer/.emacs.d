@@ -91,19 +91,25 @@ shows another buffer, and each must leave that buffer untouched."
                          "-o" "pid=" "-p" (number-to-string (emacs-pid))))))
 
 (defun +config-test--probe-mmdc ()
-  "Return whether the Mermaid CLI renders a trial diagram."
-  (when-let* ((program (executable-find "mmdc")))
-    (let* ((directory (make-temp-file "config-test-mmdc-" t))
-           (input (expand-file-name "probe.mmd" directory))
-           (output (expand-file-name "probe.png" directory)))
-      (unwind-protect
-          (progn
-            (with-temp-file input (insert "flowchart TD\nA --> B\n"))
-            (and (eql 0 (ignore-errors
-                          (call-process program nil nil nil "-i" input
-                                        "-o" output "--quiet")))
-                 (file-exists-p output)))
-        (delete-directory directory t)))))
+  "Return t if the Mermaid CLI renders a trial diagram.
+Return nil when it fails inside a sandbox, which forbids its browser,
+and otherwise a message saying why it is missing or broken."
+  (if-let* ((program (executable-find "mmdc")))
+      (let* ((directory (make-temp-file "config-test-mmdc-" t))
+             (input (expand-file-name "probe.mmd" directory))
+             (output (expand-file-name "probe.png" directory)))
+        (unwind-protect
+            (with-temp-buffer
+              (with-temp-file input (insert "flowchart TD\nA --> B\n"))
+              (let ((status (ignore-errors
+                              (call-process program nil t nil "-i" input
+                                            "-o" output "--quiet"))))
+                (cond ((and (eql 0 status) (file-exists-p output)) t)
+                      ((not (+config-test-capable-p 'sandbox-exec)) nil)
+                      (t (format "%s exited %s: %s" program status
+                                 (string-trim (buffer-string)))))))
+          (delete-directory directory t)))
+    "mmdc is not on `exec-path'; install @mermaid-js/mermaid-cli"))
 
 (defconst +config-test--capabilities
   '((tmp "making folders in /tmp" +config-test--probe-tmp)
@@ -113,29 +119,37 @@ shows another buffer, and each must leave that buffer untouched."
   "Each capability a test may need: (NAME DESCRIPTION PROBE).")
 
 (defvar +config-test--probed nil
-  "Alist of each probed capability and whether it is there.")
+  "Alist of each probed capability and its probe's outcome.")
 
-(defun +config-test-capable-p (capability)
-  "Return whether this process has CAPABILITY, probing it once.
-CAPABILITY names an entry of `+config-test--capabilities'."
+(defun +config-test--outcome (capability)
+  "Return CAPABILITY's probe outcome, probing it once.
+The outcome is t when it is there, nil when this process may not use it,
+or a message saying why it is broken.  CAPABILITY names an entry of
+`+config-test--capabilities'."
   (let ((cached (assq capability +config-test--probed)))
     (if cached
         (cdr cached)
-      (let ((value (and (funcall (nth 2 (or (assq capability
-                                                  +config-test--capabilities)
-                                            (error "Unknown capability %s"
-                                                   capability))))
-                        t)))
+      (let ((value (funcall (nth 2 (or (assq capability
+                                             +config-test--capabilities)
+                                       (error "Unknown capability %s"
+                                              capability))))))
         (push (cons capability value) +config-test--probed)
         value))))
 
+(defun +config-test-capable-p (capability)
+  "Return whether this process has CAPABILITY; see `+config-test--outcome'."
+  (eq t (+config-test--outcome capability)))
+
 (defun +config-test-require (&rest capabilities)
-  "Skip the current test unless this process has every one of CAPABILITIES."
+  "Skip the current test unless this process may use every CAPABILITIES.
+A capability that is broken rather than forbidden fails the test."
   (dolist (capability capabilities)
-    (unless (+config-test-capable-p capability)
-      (ert-skip (format "Needs %s, which this process cannot do"
-                        (nth 1 (assq capability
-                                     +config-test--capabilities)))))))
+    (let ((outcome (+config-test--outcome capability)))
+      (cond ((stringp outcome) (ert-fail outcome))
+            ((not outcome)
+             (ert-skip (format "Needs %s, which this process cannot do"
+                               (nth 1 (assq capability
+                                            +config-test--capabilities)))))))))
 
 (defvar +agent-shell-sandbox-tmp-parent)
 
