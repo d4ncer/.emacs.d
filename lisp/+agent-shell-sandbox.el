@@ -184,12 +184,24 @@ folders, not ROOT.")
   "Folder each sandbox's private temp folder, pa-HEX, is made in.
 Keep it short: Claude Code needs that folder under about 30 bytes to
 hold AF_UNIX socket paths.  A process already confined to a sandbox
-may write only its own temp folder, not /tmp."
+may write only its own temp folder, not /tmp.  Read once, when the
+first sandbox is made; a change applies after Emacs restarts."
   :type 'directory)
 
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
   (directory-file-name (file-truename (expand-file-name path))))
+
+(defvar +agent-shell-sandbox--tmp-parent nil
+  "True name of the folder every sandbox's private temp folder is made in.
+Fixed on first use from `+agent-shell-sandbox-tmp-parent', so one pattern
+covers every sandbox's, including those already running.")
+
+(defun +agent-shell-sandbox--tmp-parent ()
+  "Return the folder private temp folders are made in."
+  (or +agent-shell-sandbox--tmp-parent
+      (setq +agent-shell-sandbox--tmp-parent
+            (+agent-shell-sandbox--path +agent-shell-sandbox-tmp-parent))))
 
 (defvar +agent-shell-sandbox--config-parent nil
   "True name of the folder every sandbox's config folder is made in.
@@ -207,8 +219,7 @@ Fixed on first use, so one pattern covers every sandbox's.")
   ;; matches it, so the class is repeated.
   (list (cons 'regexp
               (concat "^" (+agent-shell-sandbox-regexp-quote
-                           (+agent-shell-sandbox--path
-                            +agent-shell-sandbox-tmp-parent))
+                           (+agent-shell-sandbox--tmp-parent))
                       "/pa-" (apply #'concat (make-list 8 "[0-9a-f]"))
                       "(/|$)"))
         (cons 'regexp
@@ -225,8 +236,9 @@ Fixed on first use, so one pattern covers every sandbox's.")
                     +agent-shell-sandbox-secret-reads)))
 
 (defun +agent-shell-sandbox--make-tmp ()
-  "Create and return a fresh pa-HEX folder in `+agent-shell-sandbox-tmp-parent'."
-  (let ((parent (+agent-shell-sandbox--path +agent-shell-sandbox-tmp-parent)))
+  "Create and return a fresh pa-HEX folder in the temp parent.
+See `+agent-shell-sandbox--tmp-parent'."
+  (let ((parent (+agent-shell-sandbox--tmp-parent)))
     (catch 'made
       (dotimes (_ 10)
         (let ((path (format "%s/pa-%08x" parent (random #x100000000))))
