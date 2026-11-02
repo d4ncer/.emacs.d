@@ -152,8 +152,9 @@
 (ert-deftest +agent-shell-mermaid-test-needs-mmdc ()
   "Without a working mmdc a test fails, and skips only inside a sandbox."
   (let* ((bin (make-temp-file "mmdc-bin-" t))
-         (run (lambda (exec-path confined)
-                (let ((+config-test--probed (and confined '((sandbox-exec)))))
+         (run (lambda (path confined)
+                (let ((exec-path path)
+                      (+config-test--probed (and confined '((sandbox-exec)))))
                   (ert-run-test
                    (make-ert-test
                     :body (lambda () (+config-test-require 'mmdc))))))))
