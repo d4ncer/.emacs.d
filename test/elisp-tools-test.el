@@ -186,5 +186,11 @@ takes the form and the blank line after it."
                                    "insert" file "--end" "-"))))
       (should (eql 1 (car (funcall run nil "show" file "+scratch-two")))))))
 
+(ert-deftest +elisp-tools-test-files-ignore-git-messages ()
+  "Tracked files leave out whatever git writes to its error output."
+  (let ((process-environment (cons "GIT_TRACE=1" process-environment)))
+    (should (seq-every-p (lambda (file) (string-suffix-p ".el" file))
+                         (+elisp-tools-files)))))
+
 (provide 'elisp-tools-test)
 ;;; elisp-tools-test.el ends here
