@@ -154,7 +154,8 @@
   (let* ((bin (make-temp-file "mmdc-bin-" t))
          (run (lambda (path confined)
                 (let ((exec-path path)
-                      (+config-test--probed (and confined '((sandbox-exec)))))
+                      (+config-test--probed
+                       (list (cons 'sandbox-exec (not confined)))))
                   (ert-run-test
                    (make-ert-test
                     :body (lambda () (+config-test-require 'mmdc))))))))
