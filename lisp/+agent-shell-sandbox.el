@@ -147,7 +147,9 @@ can still open a path inside one."
 Paths are true names without a trailing slash."
   (root nil :read-only t :documentation "Working tree, writable unless \
 READ-ONLY.")
-  (tmp nil :read-only t :documentation "Private temp folder, /tmp/pa-HEX.")
+  (tmp nil :read-only t
+       :documentation "Private temp folder, pa-HEX in \
+`+agent-shell-sandbox-tmp-parent'.")
   (config nil :read-only t :documentation "Private agent config folder.")
   (deny-reads nil :read-only t :documentation "Folders the agent cannot read.")
   (allow-reads nil :read-only t
@@ -178,6 +180,13 @@ folders, not ROOT.")
 
 (declare-function +agent-shell-egress-launch-environment "+agent-shell-egress")
 
+(defcustom +agent-shell-sandbox-tmp-parent "/tmp"
+  "Folder each sandbox's private temp folder, pa-HEX, is made in.
+Keep it short: Claude Code needs that folder under about 30 bytes to
+hold AF_UNIX socket paths.  A process already confined to a sandbox
+may write only its own temp folder, not /tmp."
+  :type 'directory)
+
 (defun +agent-shell-sandbox--path (path)
   "Return PATH's true name without a trailing slash."
   (directory-file-name (file-truename (expand-file-name path))))
@@ -198,7 +207,8 @@ Fixed on first use, so one pattern covers every sandbox's.")
   ;; matches it, so the class is repeated.
   (list (cons 'regexp
               (concat "^" (+agent-shell-sandbox-regexp-quote
-                           (+agent-shell-sandbox--path "/tmp"))
+                           (+agent-shell-sandbox--path
+                            +agent-shell-sandbox-tmp-parent))
                       "/pa-" (apply #'concat (make-list 8 "[0-9a-f]"))
                       "(/|$)"))
         (cons 'regexp
@@ -215,16 +225,16 @@ Fixed on first use, so one pattern covers every sandbox's.")
                     +agent-shell-sandbox-secret-reads)))
 
 (defun +agent-shell-sandbox--make-tmp ()
-  "Create and return a fresh /tmp/pa-HEX folder.
-Claude Code needs it under about 30 bytes to hold AF_UNIX socket paths."
-  (catch 'made
-    (dotimes (_ 10)
-      (let ((path (format "/tmp/pa-%08x" (random #x100000000))))
-        (condition-case nil
-            (progn (make-directory path) (set-file-modes path #o700)
-                   (throw 'made path))
-          (file-already-exists nil))))
-    (error "Could not create a private temp folder in /tmp")))
+  "Create and return a fresh pa-HEX folder in `+agent-shell-sandbox-tmp-parent'."
+  (let ((parent (+agent-shell-sandbox--path +agent-shell-sandbox-tmp-parent)))
+    (catch 'made
+      (dotimes (_ 10)
+        (let ((path (format "%s/pa-%08x" parent (random #x100000000))))
+          (condition-case nil
+              (progn (make-directory path) (set-file-modes path #o700)
+                     (throw 'made path))
+            (file-already-exists nil))))
+      (error "Could not create a private temp folder in %s" parent))))
 
 (defun +agent-shell-sandbox--resolve (sandbox items check kind)
   "Return ITEMS with each function called with SANDBOX, flattened.

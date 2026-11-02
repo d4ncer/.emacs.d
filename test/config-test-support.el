@@ -70,5 +70,47 @@ shows another buffer, and each must leave that buffer untouched."
               (should-not (buffer-modified-p))))
         (kill-buffer other)))))
 
+(defun +config-test--probe-tmp ()
+  "Return whether this process may make a folder in /tmp."
+  (condition-case nil
+      (progn (delete-directory (make-temp-file "/tmp/config-test-" t)) t)
+    (file-error nil)))
+
+(defconst +config-test--capabilities
+  '((tmp "making folders in /tmp" +config-test--probe-tmp))
+  "Each capability a test may need: (NAME DESCRIPTION PROBE).")
+
+(defvar +config-test--probed nil
+  "Alist of each probed capability and whether it is there.")
+
+(defun +config-test-capable-p (capability)
+  "Return whether this process has CAPABILITY, probing it once.
+CAPABILITY names an entry of `+config-test--capabilities'."
+  (let ((cached (assq capability +config-test--probed)))
+    (if cached
+        (cdr cached)
+      (let ((value (and (funcall (nth 2 (or (assq capability
+                                                  +config-test--capabilities)
+                                            (error "Unknown capability %s"
+                                                   capability))))
+                        t)))
+        (push (cons capability value) +config-test--probed)
+        value))))
+
+(defun +config-test-require (&rest capabilities)
+  "Skip the current test unless this process has every one of CAPABILITIES."
+  (dolist (capability capabilities)
+    (unless (+config-test-capable-p capability)
+      (ert-skip (format "Needs %s, which this process cannot do"
+                        (nth 1 (assq capability
+                                     +config-test--capabilities)))))))
+
+(defvar +agent-shell-sandbox-tmp-parent)
+
+(with-eval-after-load '+agent-shell-sandbox
+  (unless (+config-test-capable-p 'tmp)
+    (setq +agent-shell-sandbox-tmp-parent
+          (directory-file-name temporary-file-directory))))
+
 (provide 'config-test-support)
 ;;; config-test-support.el ends here

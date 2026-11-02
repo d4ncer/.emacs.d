@@ -8,6 +8,7 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'config-test-support)
 (require '+agent-shell-sandbox)
 (require 'server)
 
@@ -73,10 +74,16 @@ so deleting the tree needs owner write permission back first."
 (ert-deftest +agent-shell-sandbox-test-create ()
   "Give a sandbox real paths and a short private temp folder."
   (+agent-shell-sandbox-test--with (root denied)
-    (let ((tmp (+agent-shell-sandbox-tmp sandbox)))
+    (let ((tmp (+agent-shell-sandbox-tmp sandbox))
+          (default (eval (car (get '+agent-shell-sandbox-tmp-parent
+                                   'standard-value))
+                         t)))
       (should (equal root (+agent-shell-sandbox-root sandbox)))
-      (should (string-match-p "\\`/private/tmp/pa-[0-9a-f]\\{8\\}\\'" tmp))
-      (should (<= (length tmp) 30))
+      (should (equal (file-truename +agent-shell-sandbox-tmp-parent)
+                     (directory-file-name (file-name-directory tmp))))
+      (should (string-match-p "/pa-[0-9a-f]\\{8\\}\\'" tmp))
+      (should (<= (length (format "%s/pa-%08x" (file-truename default) 0))
+                  30))
       (should (file-directory-p tmp))
       (should (file-directory-p (+agent-shell-sandbox-config sandbox)))
       (should (equal denied
