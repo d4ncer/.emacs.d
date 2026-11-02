@@ -316,8 +316,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
                    nil nil #'equal)
         `(:shared ("elpaca")
           :read (,(expand-file-name "eln-cache/" user-emacs-directory))
-          :preflight "emacs -Q --batch -L test -l config-test-support"
-          :delegate (:link ("elpaca"))))
+          :preflight "emacs -Q --batch -L test -l config-test-support"))
   (+agent-shell-pstack-panel-mode 1))
 
 (use-package +agent-shell-plans

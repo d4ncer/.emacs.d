@@ -859,6 +859,10 @@ since a delegate otherwise runs on the profile's :host" setting)))
                               (when (member path '("." ".git"))
                                 (funcall fail "each :delegate :link path"
                                          "a folder below the top level" path))
+                              (when (member path (plist-get profile :shared))
+                                (funcall fail "each :delegate :link path"
+                                         "absent from :shared, which already \
+links it into the delegate's worktree" path))
                               (unless (+agent-shell-arena-git--read
                                        toplevel "check-ignore" "-q" "--" path)
                                 (funcall fail "each :delegate :link path"
