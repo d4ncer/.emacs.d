@@ -7,6 +7,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require '+agent-shell-arena-git)
 (require 'agent-shell-sandbox-test)
@@ -349,6 +350,7 @@ the -c clone flag."
 
 (ert-deftest +agent-shell-arena-git-test-profile-validation ()
   "Reject a malformed profile with an error naming the key."
+  (+config-test-require 'sandbox-exec)
   (+arena-git-test--with-scratch
     (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
       (pcase-dolist (`(,profile ,key)

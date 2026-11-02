@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require '+agent-shell-egress)
 
@@ -277,6 +278,7 @@ counted, never copied."
 canary it sends."
   (skip-unless (and (eq system-type 'darwin) (executable-find "python3")
                     (file-executable-p "/usr/sbin/lsof")))
+  (+config-test-require 'ps)
   (+agent-shell-egress-test--with
     (let* ((+agent-shell-sandbox-backend 'sandbox-exec)
            (+agent-shell-egress-interval 0.2)

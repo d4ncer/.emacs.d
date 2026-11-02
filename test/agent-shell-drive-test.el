@@ -6,6 +6,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require '+agent-shell-drive)
 
@@ -988,6 +989,7 @@ full")
 
 (ert-deftest +agent-shell-drive-test-stop-unconfined ()
   "End the adapter's tree and the orphans in its group, and nothing else."
+  (+config-test-require 'ps)
   (+agent-shell-drive-test--with-shells (shell)
     (let* ((pids (make-temp-file "drive-pids-"))
            (adapter (make-process
@@ -1035,6 +1037,7 @@ wait" "sh" pids)))
 
 (ert-deftest +agent-shell-drive-test-commands ()
   "List the live processes running a tool call's command, by command line."
+  (+config-test-require 'ps)
   (+agent-shell-drive-test--with-shells (shell)
     (let* ((pids (make-temp-file "drive-pids-"))
            (adapter (make-process

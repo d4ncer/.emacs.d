@@ -132,6 +132,7 @@ unix-socket))" tag))
 (ert-deftest +agent-shell-sandbox-test-pattern-validation ()
   "Accept patterns anchored below a folder under the root, and reject any
 that could match / or the whole filesystem."
+  (+config-test-require 'sandbox-exec)
   (dolist (re '("^/private/tmp/diff\\."
                 "^/private/tmp/diff\\.[A-Za-z0-9]+$"
                 "^/private/var/folders/x/T/xcode_locator-[0-9]+\\.o$"
@@ -151,6 +152,7 @@ that could match / or the whole filesystem."
 (ert-deftest +agent-shell-sandbox-test-pattern-allowances ()
   "Take patterns from lists and functions, render them as regex filters,
 and reject a bad pattern a function returns."
+  (+config-test-require 'sandbox-exec)
   (let* ((root (file-truename (make-temp-file "pa-test-" t)))
          (pattern '(regexp . "^/private/tmp/diff\\."))
          (sandbox (+agent-shell-sandbox-create
@@ -980,6 +982,7 @@ SECRET is denied to both, and OPEN inside it is readable by A alone."
   "Refuse reads of other sandboxes' private folders and of secrets.
 A sandbox reads its own private folders, a path allowance inside a
 secret, and anything else not denied."
+  (+config-test-require 'sandbox-exec)
   (+agent-shell-sandbox-test--with-pair
     (pcase-dolist (`(,sandbox ,path ,readable)
                    (+agent-shell-sandbox-test--private-reads a b secret open))
@@ -991,6 +994,7 @@ secret, and anything else not denied."
 
 (ert-deftest +agent-shell-sandbox-test-readable-p-patterns ()
   "Refuse a path only a pattern allowance opens, erring towards refusal."
+  (+config-test-require 'sandbox-exec)
   (let* ((secret (file-truename (make-temp-file "pa-test-" t)))
          (+agent-shell-sandbox-secret-reads (list secret))
          (sandbox (+agent-shell-sandbox-create
@@ -1079,6 +1083,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
 (ert-deftest +agent-shell-sandbox-test-toolchain-temp ()
   "Run Java and Go inside the sandbox with their temp folders private."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (skip-unless (and (executable-find "java") (executable-find "go")
                       (eql 0 (call-process "/usr/libexec/java_home" nil nil
                                            nil))))
@@ -1099,6 +1104,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
 (ert-deftest +agent-shell-sandbox-test-user-folders ()
   "Write the per-user temp files toolchains need, and nothing else there."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+agent-shell-sandbox-test--with (root)
       (let* ((temp (file-truename (string-trim
                                    (shell-command-to-string
@@ -1121,6 +1127,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
 (ert-deftest +agent-shell-sandbox-test-confines-files ()
   "Write inside the root and private folders, but nowhere else."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+agent-shell-sandbox-test--with (root denied outside)
       (let ((secret (expand-file-name "secret" denied))
             (run (lambda (&rest command)
@@ -1144,6 +1151,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
 (ert-deftest +agent-shell-sandbox-test-read-only ()
   "Let a read-only sandbox read its root and write only its private folders."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+agent-shell-sandbox-test--with (root)
       (let* ((judge (+agent-shell-sandbox-create root :read-only t))
              (run (lambda (&rest command)
@@ -1169,6 +1177,7 @@ Keep JAVA_TOOL_OPTIONS the user already had."
 A read allowance inside a secret opens just that path.  Each outcome
 matches `+agent-shell-sandbox-readable-p'."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+agent-shell-sandbox-test--with-pair
       (let ((cases (+agent-shell-sandbox-test--private-reads a b secret open)))
         (pcase-dolist (`(,sandbox ,path ,readable) cases)
@@ -1188,6 +1197,7 @@ matches `+agent-shell-sandbox-readable-p'."
 A pattern sandbox-exec cannot compile is rejected when the sandbox is
 made."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((shared (format "/private/tmp/pa-pattern-%08x"
                            (random #x100000000)))
            (root (file-truename (make-temp-file "pa-test-" t)))
@@ -1240,6 +1250,7 @@ made."
   "Read, but never write, a shared folder linked from a denied checkout.
 The link resolves into the denied folder, so only the allowance opens it."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((root (file-truename (make-temp-file "pa-test-" t)))
            (lead (file-truename (make-temp-file "pa-test-" t)))
            (shared (expand-file-name "elpaca" lead))
@@ -1276,6 +1287,7 @@ The link resolves into the denied folder, so only the allowance opens it."
 (ert-deftest +agent-shell-sandbox-test-quoted-root ()
   "Confine a root whose path holds quotes, spaces and backslashes."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((parent (file-truename (make-temp-file "pa-test-" t)))
            (root (expand-file-name "a \"b\" \\c" parent)))
       (unwind-protect
@@ -1297,6 +1309,7 @@ The link resolves into the denied folder, so only the allowance opens it."
 (ert-deftest +agent-shell-sandbox-test-blocks-unix-sockets ()
   "Refuse connections to a local unix socket that works unconfined."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (skip-unless (executable-find "python3"))
     (+agent-shell-sandbox-test--with (root)
       (let* ((socket (format "/tmp/pa-sock-%08x" (random #x100000000)))
@@ -1340,6 +1353,7 @@ however the path reaches it."
 (ert-deftest +agent-shell-sandbox-test-allows-listed-sockets ()
   "Connect to a listed unix socket and to no other."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (skip-unless (executable-find "python3"))
     (let* ((name (format "/tmp/pa-sock-%08x" (random #x100000000)))
            (allowed (concat name "-tunnel.sock"))
@@ -1400,6 +1414,7 @@ socket.socket(socket.AF_UNIX).connect(sys.argv[1])" socket))))
 (ert-deftest +agent-shell-sandbox-test-kill-tree ()
   "Kill a process's descendants even in their own session."
   (+agent-shell-sandbox-test--on-macos
+    (+config-test-require 'ps)
     (let* ((default-directory "/")
            (parent (make-process
                     :name "pa-test-tree" :noquery t :connection-type 'pipe

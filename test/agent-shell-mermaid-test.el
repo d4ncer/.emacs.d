@@ -6,6 +6,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require 'agent-shell-markdown)
 (require '+agent-shell-mermaid nil t)
@@ -36,6 +37,7 @@
 
 (ert-deftest +agent-shell-mermaid-test-copied-response-and-cache ()
   "Render a copied response after its temporary work buffer has died."
+  (+config-test-require 'mmdc)
   (should (fboundp '+agent-shell-mermaid--render-hook))
   (+agent-shell-mermaid-test--isolated
     (let ((source "```mermaid\nflowchart TD\nA --> B\n```\n"))
@@ -55,6 +57,7 @@
 
 (ert-deftest +agent-shell-mermaid-test-incomplete-fence ()
   "Leave a streaming Mermaid block alone until its closing fence arrives."
+  (+config-test-require 'mmdc)
   (should (fboundp '+agent-shell-mermaid--render-hook))
   (+agent-shell-mermaid-test--isolated
     (with-temp-buffer
@@ -70,6 +73,7 @@
 
 (ert-deftest +agent-shell-mermaid-test-existing-block ()
   "Refresh source blocks whose fences agent-shell has already removed."
+  (+config-test-require 'mmdc)
   (should (fboundp '+agent-shell-mermaid-refresh))
   (+agent-shell-mermaid-test--isolated
     (let* ((source "```mermaid\nflowchart LR\nA --> B\n```\n")

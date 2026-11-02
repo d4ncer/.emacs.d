@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require 'agent-shell-arena-git-test)
 (require '+agent-shell-pstack-panel)
@@ -79,6 +80,7 @@ given, so arenas running at once never share one."
   "Run git status and git diff in a candidate, never the lead's files.
 The lead's git directory stays unwritable."
   (+arena-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+arena-git-test--with-scratch
       (let ((repo (+arena-git-test--repo "a.txt" "a\n")))
         (pcase-let ((`(,manifest ,worktree ,sandbox)
@@ -110,6 +112,7 @@ The lead's git directory stays unwritable."
   "Apply a repository's profile: generated files, allowances and
 environment, with the generated files left out of the result."
   (+arena-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+arena-git-test--with-scratch
       (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "tools/t" "tool\n"))
              (cache (expand-file-name "cache" +arena-git-test--scratch))
@@ -199,6 +202,7 @@ With CANCEL, stop it at once.  Return (REASON SANDBOX-CONFIG WORKTREE)."
 refusing the arena when it fails, cannot read the lead, changes the
 worktree, runs too long or is cancelled.  Its sandbox always goes."
   (+arena-sandbox-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (+arena-git-test--with-scratch
       (let ((repo (+arena-git-test--repo "a.txt" "a\n" "deps/d" "dep\n")))
         (pcase-dolist (`(,command ,expected)

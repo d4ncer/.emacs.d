@@ -76,8 +76,40 @@ shows another buffer, and each must leave that buffer untouched."
       (progn (delete-directory (make-temp-file "/tmp/config-test-" t)) t)
     (file-error nil)))
 
+(defun +config-test--probe-sandbox-exec ()
+  "Return whether sandbox-exec, where installed, can confine a process."
+  (or (not (file-executable-p "/usr/bin/sandbox-exec"))
+      (eql 0 (ignore-errors
+               (call-process "/usr/bin/sandbox-exec" nil nil nil
+                             "-p" "(version 1)(allow default)"
+                             "/usr/bin/true")))))
+
+(defun +config-test--probe-ps ()
+  "Return whether /bin/ps can list this process."
+  (eql 0 (ignore-errors
+           (call-process "/bin/ps" nil nil nil
+                         "-o" "pid=" "-p" (number-to-string (emacs-pid))))))
+
+(defun +config-test--probe-mmdc ()
+  "Return whether the Mermaid CLI renders a trial diagram."
+  (when-let* ((program (executable-find "mmdc")))
+    (let* ((directory (make-temp-file "config-test-mmdc-" t))
+           (input (expand-file-name "probe.mmd" directory))
+           (output (expand-file-name "probe.png" directory)))
+      (unwind-protect
+          (progn
+            (with-temp-file input (insert "flowchart TD\nA --> B\n"))
+            (and (eql 0 (ignore-errors
+                          (call-process program nil nil nil "-i" input
+                                        "-o" output "--quiet")))
+                 (file-exists-p output)))
+        (delete-directory directory t)))))
+
 (defconst +config-test--capabilities
-  '((tmp "making folders in /tmp" +config-test--probe-tmp))
+  '((tmp "making folders in /tmp" +config-test--probe-tmp)
+    (sandbox-exec "starting sandbox-exec" +config-test--probe-sandbox-exec)
+    (ps "running /bin/ps" +config-test--probe-ps)
+    (mmdc "rendering with the Mermaid CLI" +config-test--probe-mmdc))
   "Each capability a test may need: (NAME DESCRIPTION PROBE).")
 
 (defvar +config-test--probed nil

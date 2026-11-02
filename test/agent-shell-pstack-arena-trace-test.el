@@ -8,6 +8,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require 'agent-shell-arena-git-test)
 (require '+agent-shell-pstack-arena-trace)
@@ -148,6 +149,7 @@ With ENFORCE, run it under the candidate profile instead."
 them and nothing inside, then clean up after a failing command.
 The kernel drops the odd report, so each kind is made several times."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "b.txt" "b\n"
                                         "c.txt" "c\n"))
            (outside (format "/private/tmp/pa-trace-test-%08x"
@@ -184,6 +186,7 @@ for name in 'xyz': open(os.path.join('%s', name), 'w')\" && cat %s && exit 3"
   "Under the candidate profile, refuse a write outside the sandbox and
 report it, but not the writes the profile allows."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
            (outside (format "/private/tmp/pa-enforce-test-%08x"
                             (random #x100000000)))
@@ -220,6 +223,7 @@ operation." text))
   "Remove read-only trees the command left in its private temp folder and
 its worktree."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
            (run (+arena-trace-test--trace
                  repo (concat +arena-trace-test--lock
@@ -238,6 +242,7 @@ its worktree."
   "Remove the worktree even when a private folder cannot be deleted, and
 say why the folder stayed."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
            (run (+arena-trace-test--trace
                  repo "touch \"$TMPDIR/pinned\" && chflags uchg \"$TMPDIR/pinned\""))
@@ -257,6 +262,7 @@ say why the folder stayed."
 (ert-deftest +arena-trace-test-read-only-git ()
   "Run git status in a candidate without touching the lead's git directory."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
            (run (+arena-trace-test--trace repo "git status --short"))
            (text (+arena-trace-test--text run)))
@@ -271,6 +277,7 @@ was reported." text))
 (ert-deftest +arena-trace-test-killed-buffer ()
   "Killing the buffer mid-run kills the command and cleans up."
   (+arena-trace-test--on-macos
+    (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n"))
            (run (+agent-shell-pstack-arena-trace repo "sleep 30")))
       (+arena-trace-test--wait

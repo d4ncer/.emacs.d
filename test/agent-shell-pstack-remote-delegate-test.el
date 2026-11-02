@@ -10,6 +10,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require '+agent-shell-arena-remote)
 
@@ -1340,6 +1341,7 @@ record is written, and stopping the lease stops the scope."
 (ert-deftest +agent-shell-pstack-remote-delegate-test-process-lease ()
   "Without a scope, a lease kills only the adapter whose pid still has its
 recorded start time, with its process tree."
+  (+config-test-require 'ps)
   (let* ((directory (make-temp-file "pa-lease-" t))
          (file (expand-file-name "lease.json" directory))
          (process (make-process :name "pa-lease" :noquery t
