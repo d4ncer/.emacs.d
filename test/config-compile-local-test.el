@@ -49,6 +49,24 @@
                            #'string<)
                      '("missing.el" "older.el"))))))
 
+(ert-deftest +compile-local-test-struct-users-go-stale ()
+  "Bytecode older than the source of a struct it uses is stale."
+  (+compile-local-test--with-dir
+    (let ((write (lambda (name text age)
+                   (+compile-local-test--write (expand-file-name name dir)
+                                               text age))))
+      (funcall write "owner.el" "(cl-defstruct (+clt-rec (:copier nil)) a b)\n" 20)
+      (funcall write "owner.elc" "" 0)
+      (funcall write "user.el" "(+clt-rec-b r)\n" 60)
+      (funcall write "user.elc" "" 30)
+      (funcall write "rebuilt.el" "(+clt-rec-b r)\n" 60)
+      (funcall write "rebuilt.elc" "" 10)
+      (funcall write "other.el" "(other)\n" 60)
+      (funcall write "other.elc" "" 30)
+      (should (equal (mapcar #'file-name-nondirectory
+                             (+compile-local-stale-files dir))
+                     '("user.el"))))))
+
 (ert-deftest +compile-local-test-compiles-in-background-and-logs-failures ()
   "Good libraries get bytecode; a failing one is named in the log buffer."
   (+compile-local-test--with-dir
