@@ -89,6 +89,28 @@ so deleting the tree needs owner write permission back first."
       (should (equal denied
                      (car (+agent-shell-sandbox-deny-reads sandbox)))))))
 
+(ert-deftest +agent-shell-sandbox-test-tmp-parent-change ()
+  "Changing the temp parent leaves every private temp folder denied."
+  (let* ((one (file-truename (make-temp-file "pa-parent-" t)))
+         (two (file-truename (make-temp-file "pa-parent-" t)))
+         (root (file-truename (make-temp-file "pa-test-" t)))
+         (+agent-shell-sandbox-backend 'sandbox-exec)
+         (+agent-shell-sandbox--tmp-parent nil)
+         (+agent-shell-sandbox-tmp-parent one)
+         (first (+agent-shell-sandbox-create root))
+         (second (progn (setq +agent-shell-sandbox-tmp-parent two)
+                        (+agent-shell-sandbox-create root))))
+    (unwind-protect
+        (progn
+          (should-not (+agent-shell-sandbox-readable-p
+                       second (+agent-shell-sandbox-tmp first)))
+          (should-not (+agent-shell-sandbox-readable-p
+                       first (+agent-shell-sandbox-tmp second))))
+      (dolist (directory (list one two root
+                               (+agent-shell-sandbox-config first)
+                               (+agent-shell-sandbox-config second)))
+        (delete-directory directory t)))))
+
 (ert-deftest +agent-shell-sandbox-test-profile ()
   "Allow writes only to the sandbox's folders and keep reads of others out.
 Every refusal carries the sandbox's tag."
