@@ -149,5 +149,24 @@
       (when (buffer-live-p image-buffer) (kill-buffer image-buffer))
       (delete-file file))))
 
+(ert-deftest +agent-shell-mermaid-test-needs-mmdc ()
+  "Without a working mmdc a test fails, and skips only inside a sandbox."
+  (let* ((bin (make-temp-file "mmdc-bin-" t))
+         (run (lambda (exec-path confined)
+                (let ((+config-test--probed (and confined '((sandbox-exec)))))
+                  (ert-run-test
+                   (make-ert-test
+                    :body (lambda () (+config-test-require 'mmdc))))))))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "mmdc" bin)
+            (insert "#!/bin/sh\necho broken >&2\nexit 1\n"))
+          (set-file-modes (expand-file-name "mmdc" bin) #o755)
+          (should (ert-test-failed-p (funcall run nil nil)))
+          (should (ert-test-failed-p (funcall run nil t)))
+          (should (ert-test-failed-p (funcall run (list bin) nil)))
+          (should (ert-test-skipped-p (funcall run (list bin) t))))
+      (delete-directory bin t))))
+
 (provide 'agent-shell-mermaid-test)
 ;;; agent-shell-mermaid-test.el ends here
