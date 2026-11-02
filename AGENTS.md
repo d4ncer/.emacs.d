@@ -75,7 +75,9 @@ subject concise, add a short body for multiple changes, and omit co-author
 footers.
 
 Push only when the complete local gate exits 0; take its status from
-`rc=$?` straight after it, never from grepping its output. A known flaky
+`rc=$?` straight after it, never from grepping its output. This standing
+permission is the user asking to push, so push a verified commit without
+asking again. A known flaky
 test still needs a rerun that exits 0. After a verified push of a feature
 branch, fast-forward `main` to it and push `main` too, without asking; if
 `main` has diverged, rebase the branch on it first and say so.
