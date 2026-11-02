@@ -9,6 +9,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'config-test-support)
 (require 'cl-lib)
 (require '+agent-shell-arena-remote)
 
@@ -1358,6 +1359,7 @@ result reaches the status as its check ends."
 (ert-deftest +agent-shell-arena-remote-test-login-refresh-drains-on-exit ()
   "A runner cancelled while it refreshes a host login exits only once the
 refresh has finished and released its lock."
+  (+config-test-require 'sandbox-exec)
   (+arena-remote-test--with-scratch
     (let* ((root scratch)
            (directory (file-name-as-directory
