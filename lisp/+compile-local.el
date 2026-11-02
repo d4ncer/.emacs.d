@@ -40,16 +40,56 @@ Files that declare `no-byte-compile' never count."
          (insert-file-contents file)
          (not (re-search-forward "no-byte-compile: *t" nil t)))))
 
+(defun +compile-local--structs (file)
+  "Return the names of the structs FILE defines with `cl-defstruct'."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (let (names)
+      (while (re-search-forward
+              "^(cl-defstruct[ \t\n]+(?\\([^ \t\n()]+\\)" nil t)
+        (push (match-string 1) names))
+      names)))
+
+(defun +compile-local--uses-newer-struct-p (file owners)
+  "Return non-nil if FILE's .elc predates the source of a struct it uses.
+OWNERS is an alist of (SOURCE . STRUCT-NAMES).  Bytecode inlines struct
+accessors, so it reads the wrong slots once the struct changes."
+  (let* ((elc (concat file "c"))
+         (names (and (file-exists-p elc)
+                     (cl-loop for (source . structs) in owners
+                              when (and (not (equal source file))
+                                        (file-newer-than-file-p source elc))
+                              append structs))))
+    (when names
+      (with-temp-buffer
+        (insert-file-contents file)
+        (cl-some (lambda (name)
+                   (goto-char (point-min))
+                   (search-forward (concat name "-") nil t))
+                 names)))))
+
 (defun +compile-local-stale-files (directory)
   "Return the stale .el files under DIRECTORY; see `+compile-local-stale-p'.
-Only files in a `load-path' directory count, since nothing loads the rest."
-  (let ((loadable (mapcar (lambda (dir) (file-name-as-directory
-                                         (expand-file-name dir)))
-                          load-path)))
+Only files in a `load-path' directory count, since nothing loads the rest.
+Outside package builds, which Elpaca rebuilds itself, a file is also stale
+when it mentions a struct whose source is newer than its bytecode."
+  (let* ((loadable (mapcar (lambda (dir) (file-name-as-directory
+                                          (expand-file-name dir)))
+                           load-path))
+         (files (seq-filter (lambda (file)
+                              (member (file-name-directory file) loadable))
+                            (+compile-local--sources
+                             (expand-file-name directory))))
+         (owners (unless (and (bound-and-true-p elpaca-builds-directory)
+                              (file-in-directory-p directory
+                                                   elpaca-builds-directory))
+                   (cl-loop for file in files
+                            for structs = (+compile-local--structs file)
+                            when structs collect (cons file structs)))))
     (seq-filter (lambda (file)
-                  (and (member (file-name-directory file) loadable)
-                       (+compile-local-stale-p file)))
-                (+compile-local--sources (expand-file-name directory)))))
+                  (or (+compile-local-stale-p file)
+                      (+compile-local--uses-newer-struct-p file owners)))
+                files)))
 
 (defun +compile-local--form (files)
   "Return the batch form that byte-compiles FILES with this `load-path'."
