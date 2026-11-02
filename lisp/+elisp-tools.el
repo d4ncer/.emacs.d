@@ -49,7 +49,11 @@
 (defun +elisp-tools-files ()
   "Return the absolute names of the tracked Elisp files."
   (let ((default-directory +elisp-tools-root))
-    (mapcar #'expand-file-name (process-lines "git" "ls-files" "--" "*.el"))))
+    (with-temp-buffer
+      (unless (eql 0 (call-process "git" nil '(t nil) nil
+                                   "ls-files" "--" "*.el"))
+        (error "git ls-files failed in %s" default-directory))
+      (mapcar #'expand-file-name (split-string (buffer-string) "\n" t)))))
 
 (defun +elisp-tools--forms (file)
   "Return the top-level forms FILE reads to, ignoring a trailing error."
