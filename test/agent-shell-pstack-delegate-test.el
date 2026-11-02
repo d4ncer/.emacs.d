@@ -309,7 +309,7 @@ To merge: git merge --ff-only %s, or push it" base branch branch)
     (process-file "git" nil nil nil "commit" "-q" "-m" "Ignore deps")))
 
 (ert-deftest +agent-shell-pstack-delegate-test-link-profile ()
-  "Refuse :delegate :link paths that are outside, tracked or not ignored."
+  "Refuse :delegate :link paths outside, tracked, unignored or in :shared."
   (+agent-shell-pstack-delegate-test--with
     (+agent-shell-pstack-delegate-test--deps repo "/deps")
     (should (+agent-shell-arena-git--check-profile
@@ -332,7 +332,14 @@ with :isolation branch, where the delegate works in the lead's own checkout")))
       (let ((err (should-error (+agent-shell-arena-git--check-profile
                                 repo (list :delegate delegate))
                                :type 'user-error)))
-        (should (string-search reason (cadr err)))))))
+        (should (string-search reason (cadr err)))))
+    (let ((err (should-error (+agent-shell-arena-git--check-profile
+                              repo '(:shared ("deps")
+                                     :delegate (:link ("deps"))))
+                             :type 'user-error)))
+      (should (string-search "each :delegate :link path must be absent from \
+:shared, which already links it into the delegate's worktree, not \"deps\""
+                             (cadr err))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-link ()
   "Link ignored folders into a worktree delegate, never committing them."
