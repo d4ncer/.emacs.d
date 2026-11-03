@@ -147,31 +147,43 @@ With ENFORCE, run it under the candidate profile instead."
 (ert-deftest +arena-trace-test-reports-what-it-would-refuse ()
   "Let writes outside the sandbox and reads of the lead through, report
 them and nothing inside, then clean up after a failing command.
-The kernel drops the odd report, so each kind is made several times."
+The log drops reports, most of all a burst from one process, so each
+write has a process of its own and an absence is traced again, as the
+report itself advises."
   (+arena-trace-test--on-macos
     (+config-test-require 'sandbox-exec)
     (let* ((repo (+arena-git-test--repo "a.txt" "a\n" "b.txt" "b\n"
                                         "c.txt" "c\n"))
-           (outside (format "/private/tmp/pa-trace-test-%08x"
-                            (random #x100000000)))
-           (run (+arena-trace-test--trace
-                 repo (format "touch inside.txt && python3 -c \"import os
-os.mkdir('%s')
-for name in 'xyz': open(os.path.join('%s', name), 'w')\" && cat %s && exit 3"
-                              outside outside
-                              (mapconcat (lambda (name)
-                                           (expand-file-name name repo))
-                                         '("a.txt" "b.txt" "c.txt") " "))))
-           (text (+arena-trace-test--text run))
-           (reports (substring text (or (string-search "What the" text) 0))))
+           (writes "^file-write-create\n\\(  .*\n\\)*  %s.*  (.*Python")
+           traces)
       (unwind-protect
-          (progn
+          (pcase-let
+              ((`(,outside ,text ,reports)
+                (cl-loop
+                 repeat 3
+                 for outside = (format "/private/tmp/pa-trace-test-%08x"
+                                       (random #x100000000))
+                 for run = (+arena-trace-test--trace
+                            repo
+                            (format "touch inside.txt && mkdir %s && \
+for name in x y z; do python3 -c \"open('%s/' + '$name', 'w')\"; done && \
+cat %s && exit 3"
+                                    outside outside
+                                    (mapconcat (lambda (name)
+                                                 (expand-file-name name repo))
+                                               '("a.txt" "b.txt" "c.txt") " ")))
+                 for text = (+arena-trace-test--text run)
+                 for reports = (substring text (or (string-search "What the"
+                                                                  text)
+                                                   0))
+                 do (push (cons outside run) traces)
+                 until (string-match-p (format writes (regexp-quote outside))
+                                       reports)
+                 finally return (list outside text reports))))
             (should (file-exists-p (expand-file-name "z" outside)))
             (should (string-match-p "^Exit status 3\\.$" text))
-            (should (string-match-p
-                     (format "^file-write-create\n\\(  .*\n\\)*  %s.*  (.*Python"
-                             (regexp-quote outside))
-                     reports))
+            (should (string-match-p (format writes (regexp-quote outside))
+                                    reports))
             (should (string-match-p
                      (format "^file-read-data\n\\(  .*\n\\)*  %s.*  (.*cat"
                              (regexp-quote repo))
@@ -179,8 +191,9 @@ for name in 'xyz': open(os.path.join('%s', name), 'w')\" && cat %s && exit 3"
             (should-not (string-search "inside.txt" reports))
             (should (string-match-p "^Output:\na\nb\nc$" text))
             (should (+arena-trace-test--cleaned-p repo)))
-        (delete-directory outside t)
-        (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run))))))
+        (pcase-dolist (`(,outside . ,run) traces)
+          (delete-directory outside t)
+          (kill-buffer (+agent-shell-pstack-arena-trace-run-buffer run)))))))
 
 (ert-deftest +arena-trace-test-enforced-refusals ()
   "Under the candidate profile, refuse a write outside the sandbox and
