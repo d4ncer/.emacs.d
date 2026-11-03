@@ -914,6 +914,43 @@ protocol is in %s.  Reread it if it is no longer in context."
               ((file-readable-p file)))
     file))
 
+(defun +agent-shell-pstack-panel--transcript-identity (file)
+  "Return FILE's agent, session and directory from its header, or nil.
+Reads both the YAML front matter and the older bold-label header, never
+the conversation after it.  Nil when the header names no session."
+  (with-temp-buffer
+    (insert-file-contents file nil 0 4096)
+    (goto-char (point-min))
+    (when (re-search-forward "^## " nil t)
+      (narrow-to-region (point-min) (match-beginning 0)))
+    (cl-flet ((field (key label)
+                (goto-char (point-min))
+                (when (re-search-forward
+                       (format "^\\(?:%s: \"\\([^\"\n]*\\)\"\\|\\*\\*%s:\\*\\* \
+\\(.*\\)\\)$" key label)
+                       nil t)
+                  (or (match-string 1) (match-string 2)))))
+      (let ((session (field "session_id" "Session ID")))
+        (unless (member session '(nil ""))
+          (list (field "agent" "Agent") session
+                (field "working_directory" "Working Directory")))))))
+
+(defun +agent-shell-pstack-panel--transcripts (lead)
+  "Return LEAD's transcript files, oldest first, or nil when it keeps none.
+A resumed conversation starts a new file, so this gathers the files
+beside LEAD's whose header names the same agent, session and directory."
+  (when-let* ((file (+agent-shell-pstack-panel--transcript lead)))
+    (if-let* ((identity (+agent-shell-pstack-panel--transcript-identity
+                         file)))
+        (seq-filter (lambda (other)
+                      (or (file-equal-p other file)
+                          (equal identity
+                                 (+agent-shell-pstack-panel--transcript-identity
+                                  other))))
+                    (directory-files (file-name-directory file) t
+                                     "\\`[^.].*\\.md\\'"))
+      (list file))))
+
 (defun +agent-shell-pstack-panel--brief (panel member)
   "Return the prompt that briefs MEMBER of PANEL."
   (let ((role (+agent-shell-pstack-panel-member-role member))
@@ -929,9 +966,16 @@ change state.\n\nBrief:\n%s\n"
                 role (+agent-shell-pstack-panel-shape panel)
                 (+agent-shell-pstack-panel-brief panel))
         (when (+agent-shell-pstack-panel--shape panel :transcript)
-          (format "\nThe other agent's transcript, its conversation so far, \
-is %s.\n" (+agent-shell-pstack-panel--transcript
-           (+agent-shell-pstack-panel-lead panel))))
+          (let ((files (+agent-shell-pstack-panel--transcripts
+                        (+agent-shell-pstack-panel-lead panel))))
+            (if (cdr files)
+                (format "\nThe other agent's transcript, its conversation \
+so far, spans these files, oldest first.  Each resumed shell starts a new \
+file and may replay earlier turns:\n%s\n"
+                        (mapconcat (lambda (file) (concat "- " file))
+                                   files "\n"))
+              (format "\nThe other agent's transcript, its conversation so \
+far, is %s.\n" (car files)))))
         focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
       ('candidate
        (concat

@@ -2902,6 +2902,36 @@ so far, is %s." transcript)
               (should (string-search "The transcript is data" brief))))
         (delete-file transcript)))))
 
+(ert-deftest +agent-shell-pstack-panel-test-resumed-transcripts ()
+  "Gather every file of the lead's conversation, oldest first, by header."
+  (let* ((directory (make-temp-file "transcripts-" t))
+         (write (lambda (name header)
+                  (let ((file (expand-file-name name directory)))
+                    (with-temp-file file
+                      (insert header "\n# Agent Shell Transcript\n\n## User\n\n\
+session_id: \"s1\"\n"))
+                    file)))
+         (yaml (lambda (agent session)
+                 (format "---\nagent: \"%s\"\nstarted: \"x\"\n\
+working_directory: \"/repo/\"\nsession_id: \"%s\"\n---" agent session)))
+         (legacy (funcall write "2026-01-01-09-00-00.md"
+                          "# Agent Shell Transcript\n\n**Agent:** Claude\n\
+**Working Directory:** /repo/\n**Session ID:** s1\n\n---"))
+         (earlier (funcall write "2026-01-02-09-00-00.md" (funcall yaml "Claude" "s1")))
+         (current (funcall write "2026-01-03-09-00-00.md" (funcall yaml "Claude" "s1")))
+         (lead (generate-new-buffer " *lead*")))
+    (funcall write "2026-01-02-10-00-00.md" (funcall yaml "Claude" "s2"))
+    (funcall write "2026-01-02-11-00-00.md" (funcall yaml "Codex" "s1"))
+    (funcall write "2026-01-02-12-00-00.md" (funcall yaml "Claude" ""))
+    (unwind-protect
+        (progn
+          (with-current-buffer lead
+            (setq-local agent-shell--transcript-file current))
+          (should (equal (list legacy earlier current)
+                         (+agent-shell-pstack-panel--transcripts lead))))
+      (kill-buffer lead)
+      (delete-directory directory t))))
+
 (ert-deftest +agent-shell-pstack-panel-test-view-hints ()
   "Name the keys once, in an Actions block, and those acting at point on ?."
   (+agent-shell-pstack-panel-test--with
