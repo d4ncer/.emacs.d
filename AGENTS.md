@@ -55,6 +55,10 @@ Guidance for changing this Emacs configuration.
   from the configuration, and with tabs, which the gate also rejects.
 - Verify the smallest relevant behavior after editing. Check syntax for changed
   Elisp, then run focused byte compilation or ERT tests when they add value.
+  Run test files with `emacs -Q --batch -l test/run-ert.el FILE...
+  [--select REGEXP]`, which loads them as the gate does, never with a
+  hand-built `emacs -Q` command: that misses packages or loads stale
+  bytecode.
   Use `emacsclient` for live Emacs inspection when a server is running.
   Run `emacs -Q --batch -l test/run-config.el` for the complete local gate.
   See `docs/DEPENDENCIES.md` for package updates and the fresh install check.
