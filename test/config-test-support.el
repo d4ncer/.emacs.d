@@ -17,6 +17,7 @@
 (+bootstrap-setup +config-test-root)
 (require 'use-package-ensure)
 (require 'general)
+(require '+compile-local)
 (setq use-package-ensure-function #'ignore)
 
 (defun +config-test-declaration (file package)
@@ -69,6 +70,23 @@ shows another buffer, and each must leave that buffer untouched."
               (should (equal "a transcript" (buffer-string)))
               (should-not (buffer-modified-p))))
         (kill-buffer other)))))
+
+(defun +config-test-recompile-stale ()
+  "Recompile local libraries whose existing bytecode is stale.
+Bytecode inlines other libraries' struct accessors, which
+`load-prefer-newer' cannot see change; see `+compile-local-stale-files'.
+A library without bytecode loads from source, so it is left alone.
+Signal an error, with the compiler's output, if one fails."
+  (when-let* ((process
+               (+compile-local-compile
+                (seq-filter (lambda (file) (file-exists-p (concat file "c")))
+                            (+compile-local-stale-files +lisp-dir)))))
+    (while (process-live-p process)
+      (accept-process-output process 0.1))
+    (unless (zerop (process-exit-status process))
+      (error "Recompiling stale libraries failed:\n%s"
+             (with-current-buffer (process-buffer process)
+               (buffer-string))))))
 
 (defun +config-test--probe-tmp ()
   "Return whether this process may make a folder in /tmp."

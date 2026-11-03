@@ -52,6 +52,9 @@
      (princ (format "Denylisted text in tracked files:\n  %s\n"
                     (string-join locations "\n  ")))
      (error "Public repository denylist failed")))
+  (+config-check-process "Stale local bytecode recompiled"
+                         "-l" "config-test-support"
+                         "-f" "+config-test-recompile-stale")
   (+config-check-process
    "Core, activation, caching, compatibility and lifecycle"
    "-l" "config-test-support" "-l" "config-core-test"

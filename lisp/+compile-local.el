@@ -115,31 +115,35 @@ when it mentions a struct whose source is newer than its bytecode."
         (message "%s local librar%s failed to byte-compile; see %s"
                  failed (if (= failed 1) "y" "ies") +compile-local-buffer)))))
 
+(defun +compile-local-compile (files)
+  "Byte-compile FILES in a batch Emacs and return its process.
+Return nil when FILES is empty or a compilation is already running.
+Output, including warnings and failures, goes to `+compile-local-buffer'."
+  (when (and files (not (process-live-p +compile-local--process)))
+    (message "Byte-compiling %d stale librar%s in the background"
+             (length files) (if (cdr files) "ies" "y"))
+    (let ((buffer (get-buffer-create +compile-local-buffer)))
+      (with-current-buffer buffer (erase-buffer))
+      (setq +compile-local--process
+            (make-process
+             :name "compile-local" :buffer buffer :noquery t
+             :connection-type 'pipe :sentinel #'+compile-local--sentinel
+             :command (list (expand-file-name invocation-name
+                                              invocation-directory)
+                            "-Q" "--batch" "--eval"
+                            (prin1-to-string
+                             (+compile-local--form files))))))))
+
 (defun +compile-local-start (&optional directories)
   "Byte-compile stale libraries under DIRECTORIES in a batch Emacs.
 DIRECTORIES defaults to `+lisp-dir' and `elpaca-builds-directory'.
-Return the process, or nil when nothing is stale or a compilation is
-already running.  Output, including warnings and failures, goes to
-`+compile-local-buffer'."
+Return the process, or nil; see `+compile-local-compile'."
   (interactive)
-  (let ((files (mapcan #'+compile-local-stale-files
-                       (or directories
-                           (list +lisp-dir
-                                 (bound-and-true-p elpaca-builds-directory))))))
-    (when (and files (not (process-live-p +compile-local--process)))
-      (message "Byte-compiling %d stale librar%s in the background"
-               (length files) (if (cdr files) "ies" "y"))
-      (let ((buffer (get-buffer-create +compile-local-buffer)))
-        (with-current-buffer buffer (erase-buffer))
-        (setq +compile-local--process
-              (make-process
-               :name "compile-local" :buffer buffer :noquery t
-               :connection-type 'pipe :sentinel #'+compile-local--sentinel
-               :command (list (expand-file-name invocation-name
-                                                invocation-directory)
-                              "-Q" "--batch" "--eval"
-                              (prin1-to-string
-                               (+compile-local--form files)))))))))
+  (+compile-local-compile
+   (mapcan #'+compile-local-stale-files
+           (or directories
+               (list +lisp-dir
+                     (bound-and-true-p elpaca-builds-directory))))))
 
 (provide '+compile-local)
 ;;; +compile-local.el ends here
