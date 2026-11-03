@@ -260,6 +260,59 @@ keep it across plan updates, and record the answer by the option's kind."
         (should (string-match-p "✓ APPROVED  .*plan shell\\* · proposed plan"
                                 (buffer-string)))))))
 
+(ert-deftest +agent-shell-plans-test-claude-proposed-plan ()
+  "Record Claude Code's plan approval request as a proposal.
+Its shape is what claude-agent-acp sent a probe run in plan mode."
+  (+agent-shell-plans-test--with
+    (cl-letf (((symbol-function 'agent-shell--on-request) #'ignore)
+              ((symbol-function 'agent-shell--send-permission-response)
+               #'ignore))
+      (advice-add 'agent-shell--on-request :after
+                  #'+agent-shell-plans--note-request)
+      (advice-add 'agent-shell--send-permission-response :after
+                  #'+agent-shell-plans--note-response)
+      (let ((request
+             (lambda (id)
+               (agent-shell--on-request
+                :state (list (cons :buffer shell))
+                :acp-request
+                `((method . "session/request_permission")
+                  (params
+                   . ((toolCall
+                       . ((toolCallId . ,id) (kind . "switch_mode")
+                          (title . "Approve Plan")
+                          (rawInput
+                           . ((plan . "# Plan: README\n\n## Steps\n1. Create \
+`README.md`.\n")
+                              (planFilePath . "/home/u/.claude/plans/p.md")))))
+                      (options
+                       . [((optionId . "exit-plan-default")
+                           (kind . "allow_once"))
+                          ((optionId . "exit-plan-clear-auto")
+                           (kind . "allow_always"))
+                          ((optionId . "exit-plan-auto")
+                           (kind . "allow_always"))
+                          ((optionId . "exit-plan-bypass")
+                           (kind . "allow_always"))
+                          ((optionId . "reject") (kind . "reject_once"))])))))))
+            (answer (lambda (id option)
+                      (agent-shell--send-permission-response
+                       :state (list (cons :buffer shell))
+                       :tool-call-id id :option-id option)))
+            (proposal (lambda ()
+                        (plist-get (gethash shell +agent-shell-plans--plans)
+                                   :proposal))))
+        (funcall request "toolu_1")
+        (should (equal "# Plan: README\n\n## Steps\n1. Create `README.md`."
+                       (plist-get (funcall proposal) :text)))
+        (funcall answer "toolu_1" "reject")
+        (should (eq 'revised (plist-get (funcall proposal) :answer)))
+        (funcall request "toolu_2")
+        (funcall answer "toolu_2" "exit-plan-default")
+        (should (equal "approved" (+agent-shell-plans--card-state
+                                   (gethash shell
+                                            +agent-shell-plans--plans))))))))
+
 (ert-deftest +agent-shell-plans-test-preserve-place-folds-and-return ()
   (+agent-shell-plans-test--with
     (let ((+agent-shell-plans--preview-entries 1))

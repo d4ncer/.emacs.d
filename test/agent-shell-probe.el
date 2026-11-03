@@ -4,9 +4,10 @@
 ;; Run one real agent through the configured adapter with an explicit
 ;; prompt, policy and environment, and record what reached Emacs: the
 ;; agent that ran, the prompt it got, each ACP session update kind, its
-;; latest plan, its tool calls and its final text.  Use it to check that a
-;; producer exists before building what consumes its data.  It is opt-in
-;; and not part of the gate.  From a running Emacs:
+;; latest plan, its tool calls, its requests such as permission prompts,
+;; the plan the plans view took from them, and its final text.  Use it to
+;; check that a producer exists before building what consumes its data.
+;; It is opt-in and not part of the gate.  From a running Emacs:
 ;;
 ;;   (load "~/.emacs.d/test/agent-shell-probe.el")
 ;;   (+agent-shell-probe-start 'codex "Make a two-step plan." :policy nil)
@@ -64,16 +65,48 @@
                     (append tools (list (list (map-elt update 'kind)
                                               (map-elt update 'title))))))))))
 
+(defun +agent-shell-probe--note-request (&rest args)
+  "Record the request in ARGS, such as a permission request, for its probe."
+  (when-let* ((shell (map-elt (plist-get args :state) :buffer))
+              (id (+agent-shell-probe--find shell)))
+    (let* ((request (plist-get args :acp-request))
+           (call (map-nested-elt request '(params toolCall)))
+           (input (map-elt call 'rawInput)))
+      (+agent-shell-probe--update
+       id :requests
+       (lambda (requests)
+         (append requests
+                 (list (list :method (map-elt request 'method)
+                             :title (map-elt call 'title)
+                             :raw-keys (and (listp input) (map-keys input))
+                             :plan (map-elt input 'plan)
+                             :options
+                             (mapcar (lambda (option)
+                                       (cons (map-elt option 'optionId)
+                                             (map-elt option 'kind)))
+                                     (map-nested-elt request
+                                                     '(params options)))))))))))
+
 (defun +agent-shell-probe--finish (id &optional text timeout)
-  "End probe ID with its final TEXT, or as timed out when TIMEOUT."
-  (let ((probe (gethash id +agent-shell-probe--probes)))
+  "End probe ID with its final TEXT, or as timed out when TIMEOUT.
+Keep the proposal the plans view stored for its shell, which goes with
+the shell."
+  (let* ((probe (gethash id +agent-shell-probe--probes))
+         (shell (plist-get probe :shell)))
     (unless (plist-get probe :done)
       (when-let* ((timer (plist-get probe :timer))) (cancel-timer timer))
       (+agent-shell-drive-unwatch '+agent-shell-probe id)
-      (puthash id (append (list :done t :text text :timeout timeout) probe)
+      (puthash id (append (list :done t :text text :timeout timeout
+                                :proposal
+                                (and (boundp '+agent-shell-plans--plans)
+                                     (plist-get (gethash
+                                                 shell
+                                                 +agent-shell-plans--plans)
+                                                :proposal)))
+                          probe)
                +agent-shell-probe--probes)
-      (when (buffer-live-p (plist-get probe :shell))
-        (+agent-shell-drive-kill (plist-get probe :shell) "probe done")))))
+      (when (buffer-live-p shell)
+        (+agent-shell-drive-kill shell "probe done")))))
 
 (defun +agent-shell-probe--send (id)
   "Send probe ID its next prompt once its shell is ready, retrying briefly.
@@ -95,6 +128,8 @@ ENVIRONMENT are as `+agent-shell-drive-start' takes them, and
 DIRECTORY defaults to a fresh temporary one.  The probe gives up after
 TIMEOUT seconds."
   (advice-add 'agent-shell--on-notification :after #'+agent-shell-probe--note)
+  (advice-add 'agent-shell--on-request :after
+              #'+agent-shell-probe--note-request)
   (let* ((id (format "probe-%d" (cl-incf +agent-shell-probe--serial)))
          (shell (+agent-shell-drive-start
                  :config agent :policy policy :environment environment
@@ -126,8 +161,10 @@ TIMEOUT seconds."
   "Return probe ID's record once it is done, or nil while it runs.
 The record names the agent that ran (:ran), the :prompt it got, its
 session update kinds with counts (:updates), its latest :plan, every
-:plan-updates payload, its :tools as (KIND TITLE) and its last turn's
-final :text, or :timeout."
+:plan-updates payload, its :tools as (KIND TITLE), its :requests with
+each one's :method, :title, :raw-keys, :plan and :options as (ID . KIND),
+the :proposal the plans view stored, and its last turn's final :text, or
+:timeout."
   (let ((probe (gethash id +agent-shell-probe--probes)))
     (when (plist-get probe :done)
       (cl-loop for (key value) on probe by #'cddr
