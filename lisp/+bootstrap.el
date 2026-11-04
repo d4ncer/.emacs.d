@@ -21,7 +21,6 @@
         +ligatures-dir (expand-file-name "ligatures/" +config-root)
         +templates-dir (expand-file-name "templates/" +config-root))
   (dolist (path (list +lisp-dir (expand-file-name "modules/" +config-root)
-                      (expand-file-name "agent-shell-projects/" +lisp-dir)
                       (expand-file-name "project-files/" +lisp-dir)
                       (expand-file-name "compat/" +lisp-dir)))
     (when (file-directory-p path) (add-to-list 'load-path path)))

@@ -163,7 +163,4 @@ report is `agent-shell-streaming-baseline/profile-mixed.txt`.
 - **Batch Emacs has no redisplay.** Fontification and redisplay of a visible
   shell are missing from every number here. The production cost can only be
   higher than this.
-- **Not exercised.** The agent-shell-projects 1 s inbox poll. The live
-  session has not loaded `+agent-shell-projects`, and no poll timer is in its
-  `timer-list`. The math renderer was not exercised either, for the reason
-  given above.
+- **Not exercised.** The math renderer, for the reason given above.

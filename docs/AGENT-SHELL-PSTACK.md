@@ -130,7 +130,7 @@ back that says why it was rejected.
 
 The request travels over ACP rather than through a file inbox. The lead needs
 no write permission, which plan modes often refuse, and its shell identifies
-it. The file inbox stays in `agent-shell-projects`, its only user.
+it.
 
 ### Keep members read-only
 
@@ -760,7 +760,7 @@ repository lock stays quarantined until someone looks.
 
 Roles map to agent configs rather than model slugs; record that fork with its
 reason. `lisp/+agent-shell-drive.el` holds the session start, delivery and
-event watching shared with `agent-shell-projects`.
+event watching.
 
 ## Layer 3: views
 
@@ -811,8 +811,8 @@ lists each member's role, agent and state, and `mouse-1` opens the panels
 view. No status names a panel id.
 
 Member shells stay out of `agent-shell-buffers`, so
-`agent-shell-switch-buffer`, project reuse through `SPC p a` and the agent
-projects author picker never offer them. Reach them from the panels view.
+`agent-shell-switch-buffer` and project reuse through `SPC p a` never offer
+them. Reach them from the panels view.
 
 ### Agent plans
 
@@ -858,4 +858,3 @@ ordinary message text, and declaring it would change every Codex shell.
 - Reimplementing playbooks in Elisp.
 - Routing every session into poteto-mode automatically. Upstream keeps it
   opt-in.
-- Reusing `C-c C-m` or `C-c C-o`, which agent projects owns.

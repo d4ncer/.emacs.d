@@ -109,8 +109,7 @@ so each package's own declarations apply too."
         (dolist (file (file-expand-wildcards
                        (expand-file-name "*/*-autoloads.el" builds)))
           (with-demoted-errors "Autoloads: %S" (load file nil t)))))
-    (dolist (directory '("test" "lisp/compat" "lisp/project-files"
-                         "lisp/agent-shell-projects" "lisp"))
+    (dolist (directory '("test" "lisp/compat" "lisp/project-files" "lisp"))
       (add-to-list 'load-path (expand-file-name directory +elisp-tools-root)))
     (require '+elisp)
     (advice-add #'calculate-lisp-indent :override

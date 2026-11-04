@@ -10,7 +10,7 @@ Org brain that never forgets. Just like me.
 - Apheleia formats, Magit commits. Magit is the Gus of Git. Reliable. Fancy.
 - Batppuccin, Doom Modeline, Pulsar: latte by day, mocha by night. It follows macOS.
 - Org, Vulpea, Vulpea Journal, Vulpea UI, Citar: notes and references. Case files.
-- gptel and agent-shell, with project authoring, annotated review and pstack panels.
+- gptel and agent-shell, with pstack panels.
 - Elpaca tracks latest upstream. Grammars too. Living on the edge, son.
 
 ## Setup
@@ -32,8 +32,6 @@ Org brain that never forgets. Just like me.
 - `SPC` leads in normal and motion state. `C-SPC` in insert state.
 - `,` is the local leader. Which-key reads your mind so I don't have to.
 - `SPC pf` project files. `SPC /` project search. `SPC gs` Magit.
-- `SPC aP` agent projects. Partner's handbook:
-  [agent project guide](docs/AGENT-SHELL-PROJECTS.md).
 
 ## Proving it
 

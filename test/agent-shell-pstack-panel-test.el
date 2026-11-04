@@ -14,7 +14,6 @@
 (require '+agent-shell-pstack-reload)
 (require 'agent-shell-sandbox-test)
 (require 'agent-shell-notify)
-(require '+agent-shell-projects)
 
 (defun +agent-shell-pstack-panel-test--login (agent)
   "Return a :login reader of a synthetic AGENT login lasting a day."
@@ -994,19 +993,7 @@ the switcher's result."
       (should (eq lead buffer)))
     (should (string-search expected
                            (buffer-local-value
-                            '+agent-shell-pstack-panel--mode-line lead)))
-    (cl-letf (((symbol-function '+agent-shell-projects-shell)
-               (lambda (_) lead))
-              ((symbol-function '+agent-shell-projects--project)
-               (lambda () '(:name "Fixture" :author "lead"
-                            :agents ((:id "lead" :role "author"))))))
-      (with-temp-buffer
-        (+agent-shell-projects--render-home)
-        (should (string-search expected (buffer-string))))
-      (with-temp-buffer
-        (+agent-shell-projects--activity
-         '(:author "lead" :agents ((:id "lead"))) nil nil)
-        (should (string-search expected (buffer-string)))))))
+                            '+agent-shell-pstack-panel--mode-line lead)))))
 
 (ert-deftest +agent-shell-pstack-panel-test-display-and-notify ()
   "Keep the lead in-panel through delivery and notify on its answer only."

@@ -87,35 +87,13 @@ revert edits. There is no separate wgrep transaction or wgrep dependency.
 
 ## Local library boundaries
 
-### Agent project package
+### Agent shell driving
 
-`lisp/agent-shell-projects/` contains:
-
-- `core`: records, immutable content, persistence and source tracking.
-- `lifecycle`: owned registrations, timers, setup and teardown.
-- `capture`, `jobs`, and `worker`: workspace enrolment and background services.
-- Main entry, annotations and menu: document and contextual UI.
-- Agent integration: inbox transport and request delivery. Starting, sending
-  to and watching shells goes through `lisp/+agent-shell-drive.el`, which
-  pstack panels (`lisp/+agent-shell-pstack-panel.el`) also use for their
-  read-only, sandboxed and full-access member shells. Its sandboxed shells take their sandbox-exec
-  profile, credentials and stop steps from `lisp/+agent-shell-sandbox.el`.
-- Code and review: captured diffs, explanations and connected navigation.
-
-Core state and workspace capture load without Magit, Org, agent-shell, or the
-review UI. Workers resolve their libraries relative to their own directory.
-
-Public entry points include `+agent-shell-projects`, `+agent-shell-projects-menu`,
-`+agent-shell-projects-open`, `+agent-shell-projects-enrol-code`, and
-`+agent-shell-projects-capture-code`.
-
-`+agent-shell-projects-setup` installs registered integrations idempotently.
-`+agent-shell-projects-mode` additionally runs subscriptions and inbox polling.
-`+agent-shell-projects-teardown` removes owned hooks and Embark registrations,
-restores previous contextual map entries, detaches subscriptions, stops workers,
-cleans temporary requests, and cancels owned timers. Persistent project content
-and source buffers are retained. Setup restores source tracking for enrolled
-buffers.
+Starting, sending to and watching shells goes through
+`lisp/+agent-shell-drive.el`, which pstack panels
+(`lisp/+agent-shell-pstack-panel.el`) use for their read-only, sandboxed and
+full-access member shells. Its sandboxed shells take their sandbox-exec
+profile, credentials and stop steps from `lisp/+agent-shell-sandbox.el`.
 
 ### Project file package
 

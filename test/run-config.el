@@ -62,7 +62,7 @@
    "-l" "config-modeline-test" "-l" "config-activation-test"
    "-l" "config-compat-test" "-l" "config-grep-test"
    "-l" "config-verify-packages-test" "-l" "config-denylist-test"
-   "-l" "agent-shell-projects-lifecycle-test" "-l" "project-files-lifecycle-test"
+   "-l" "project-files-lifecycle-test"
    "-l" "agent-shell-notify-test" "-l" "agent-shell-mermaid-test"
    "-l" "agent-shell-pstack-card-test"
    "-l" "agent-shell-pstack-test" "-l" "agent-shell-drive-test"
@@ -89,11 +89,8 @@
   (+config-check-process "Every module and the theme" "-l" "config-modules-test"
                          "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "First input and file activation" "-l" "config-startup-test")
-  (+config-check-process "Headless capture" "-l" "config-headless-test")
   (+config-check-process "File finder loading" "-l" "project-files-startup-test")
-  (+config-check-process "Agent projects loading" "-l" "agent-shell-projects-startup-test")
   (+config-check-process "File finder tests and compilation" "-l" "run-project-files")
-  (+config-check-process "Agent project tests and compilation" "-l" "run-agent-shell-projects")
   (+config-check-process "pstack panels over ACP" "-l" "run-agent-shell-pstack")
   (+config-check-process "Sandboxed shells over ACP"
                          "-l" "run-agent-shell-sandbox")

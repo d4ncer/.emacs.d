@@ -8,7 +8,7 @@ Guidance for changing this Emacs configuration.
   bootstraps Elpaca with `use-package`, and loads modules in order.
 - `modules/` contains feature configuration. Check `init.el` for the active
   modules and their load order. `lisp/` contains local helper libraries and the
-  `agent-shell-projects/`, `project-files/`, and `compat/` library directories.
+  `project-files/` and `compat/` library directories.
   `+bootstrap.el` owns their load paths and declaration conventions.
 - `modules/mod-keybindings.el` defines the main `SPC` leader (`C-SPC` in insert
   state). Feature-specific bindings may live in their module.
