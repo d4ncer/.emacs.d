@@ -6,7 +6,7 @@
 ;; uncommitted change requests an arena, a "host" clone of the same
 ;; origin at a newer commit takes the job, and a batch Emacs runner there
 ;; runs two sandboxed fixture candidates and a fixture judge.  Every agent
-;; is test/fixtures/agent-shell-projects-agent.py.  macOS only, since the
+;; is test/fixtures/fake-acp-agent.py.  macOS only, since the
 ;; local host still uses this machine's sandbox.
 
 ;;; Code:
@@ -20,7 +20,7 @@
 (require '+agent-shell-egress)
 
 (defvar +agent-shell-pstack-arena-remote-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-pstack-arena-remote-acp-test--capabilities ()

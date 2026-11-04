@@ -4,7 +4,7 @@
 ;; Delegate panels end to end: a pstack lead in a scratch git repository
 ;; requests a delegate, a fixture delegate commits a file in its full-access
 ;; shell, and the lead gets the follow-up.  Every agent is
-;; test/fixtures/agent-shell-projects-agent.py.
+;; test/fixtures/fake-acp-agent.py.
 
 ;;; Code:
 
@@ -15,7 +15,7 @@
 (require '+agent-shell-pstack-panel)
 
 (defvar +agent-shell-pstack-delegate-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-pstack-delegate-acp-test--config (identifier)

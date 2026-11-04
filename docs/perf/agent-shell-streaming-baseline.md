@@ -14,7 +14,7 @@ in `agent-shell-streaming-baseline/`.
 ## What the harness runs
 
 `test/bench-agent-shell-stream.el` starts real agent shells against
-`test/fixtures/agent-shell-projects-agent.py` over ACP. It loads the compiled
+`test/fixtures/fake-acp-agent.py` over ACP. It loads the compiled
 `elpaca/builds` packages (`BENCH_LOAD=elc`) and the `lisp/` sources, the
 same way production loads them. It turns on what `modules/mod-ai.el` turns
 on: `agent-shell-chat-mode` (on by default upstream), transcripts at the

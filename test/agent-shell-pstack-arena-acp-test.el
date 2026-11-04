@@ -4,7 +4,7 @@
 ;; An arena end to end: a pstack lead in a scratch git repository requests
 ;; an arena, two fixture candidates run sandboxed in their own worktrees, a
 ;; fixture judge scores them, and the lead gets the follow-up.  Every agent
-;; is test/fixtures/agent-shell-projects-agent.py.  macOS only.
+;; is test/fixtures/fake-acp-agent.py.  macOS only.
 
 ;;; Code:
 
@@ -16,7 +16,7 @@
 (require '+agent-shell-egress)
 
 (defvar +agent-shell-pstack-arena-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-pstack-arena-acp-test--config (identifier)

@@ -718,7 +718,7 @@
                                      (+agent-shell-projects-version proposal (plist-get proposal :current)))))))))))
 
 (defvar +agent-shell-projects-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-projects-test--wait-for (predicate)

@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 ;; A sandboxed agent shell talks ACP to
-;; test/fixtures/agent-shell-projects-agent.py under sandbox-exec, or
+;; test/fixtures/fake-acp-agent.py under sandbox-exec, or
 ;; bwrap on Linux, then stops with every process it started.
 
 ;;; Code:
@@ -14,7 +14,7 @@
 (require '+agent-shell-drive)
 
 (defvar +agent-shell-sandbox-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defconst +agent-shell-sandbox-acp-test--delay 3

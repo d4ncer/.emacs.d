@@ -13,7 +13,7 @@
 (require '+agent-shell-perf)
 
 (defvar +agent-shell-perf-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-perf-acp-test--wait-for (predicate &optional seconds)

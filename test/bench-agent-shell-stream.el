@@ -30,7 +30,7 @@
                                                  buffer-file-name)))))
 
 (defconst +bench-fixture
-  (expand-file-name "test/fixtures/agent-shell-projects-agent.py" +bench-root))
+  (expand-file-name "test/fixtures/fake-acp-agent.py" +bench-root))
 
 (defconst +bench-scenarios
   '((fresh :shells 1 :preload nil)

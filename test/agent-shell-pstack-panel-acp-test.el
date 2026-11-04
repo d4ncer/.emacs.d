@@ -2,7 +2,7 @@
 
 ;;; Commentary:
 ;; End-to-end panels: a pstack lead and its members are real agent shells
-;; talking ACP to test/fixtures/agent-shell-projects-agent.py.
+;; talking ACP to test/fixtures/fake-acp-agent.py.
 
 ;;; Code:
 
@@ -12,7 +12,7 @@
 (require '+agent-shell-pstack-panel)
 
 (defvar +agent-shell-pstack-panel-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +agent-shell-pstack-panel-acp-test--config (identifier &rest params)

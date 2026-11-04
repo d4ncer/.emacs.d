@@ -8,7 +8,7 @@
 ;; fixture delegate in a worktree of the host checkout.  The laptop's
 ;; repository has a git identity of its own, unlike the host's, and every
 ;; commit the delegate's branch brings back must carry it.  Every agent
-;; is test/fixtures/agent-shell-projects-agent.py.  macOS only, since the
+;; is test/fixtures/fake-acp-agent.py.  macOS only, since the
 ;; sandboxed cases use this machine's sandbox-exec.
 
 ;;; Code:
@@ -21,7 +21,7 @@
 (require '+agent-shell-arena-remote)
 
 (defvar +remote-delegate-acp-test--fixture
-  (expand-file-name "fixtures/agent-shell-projects-agent.py"
+  (expand-file-name "fixtures/fake-acp-agent.py"
                     (file-name-directory (or load-file-name buffer-file-name))))
 
 (defun +remote-delegate-acp-test--capabilities ()
