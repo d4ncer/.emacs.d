@@ -10,10 +10,18 @@
 (require 'map)
 (require 'seq)
 (require 'subr-x)
+(require '+bootstrap)
 
 (defgroup +agent-shell-plans nil
   "Live plans from agent shells."
   :group 'applications)
+
+(defcustom +agent-shell-plans-directories
+  (list (expand-file-name "plans/" +private-config-directory))
+  "Directories whose topic folders hold plan documents.
+A plan document is a .md or .org file in DIRECTORY/TOPIC/.  The plans
+view lists them; directories that do not exist are skipped."
+  :type '(repeat directory))
 
 (defconst +agent-shell-plans--refresh-delay 0.1
   "Seconds of quiet before redrawing the plans view.")

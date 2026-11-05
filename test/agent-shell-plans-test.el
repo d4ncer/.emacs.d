@@ -24,6 +24,8 @@
           (+agent-shell-plans-change-hook
            '(+agent-shell-plans--schedule-refresh))
           (+agent-shell-plans--refresh-delay 0.02)
+          (+agent-shell-plans-directories nil)
+          (+agent-shell-plans--document-cache (make-hash-table :test #'equal))
           (shell (generate-new-buffer " *plan shell*"))
           (other (generate-new-buffer " *other plan shell*")))
      (unwind-protect
@@ -365,6 +367,200 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
     (+config-test-view-keeps-other-buffers
      #'+agent-shell-plans #'+agent-shell-plans--shown
      #'+agent-shell-plans--render #'+agent-shell-plans--refresh)))
+
+(defun +agent-shell-plans-test--write (file text)
+  "Write TEXT to FILE, creating its folder."
+  (make-directory (file-name-directory file) t)
+  (with-temp-file file (insert text)))
+
+(defun +agent-shell-plans-test--git (repository &rest args)
+  "Run git with ARGS in REPOSITORY and return its trimmed output."
+  (let ((default-directory (file-name-as-directory repository))
+        (process-environment
+         (append '("GIT_CONFIG_GLOBAL=/dev/null" "GIT_CONFIG_NOSYSTEM=1"
+                   "GIT_AUTHOR_NAME=Test" "GIT_AUTHOR_EMAIL=test@example.com"
+                   "GIT_COMMITTER_NAME=Test"
+                   "GIT_COMMITTER_EMAIL=test@example.com")
+                 process-environment)))
+    (with-temp-buffer
+      (unless (zerop (apply #'call-process "git" nil t nil args))
+        (error "git %S failed: %s" args (buffer-string)))
+      (string-trim (buffer-string)))))
+
+(defun +agent-shell-plans-test--commit (repository date)
+  "Commit everything in REPOSITORY at DATE and return the short hash."
+  (let ((process-environment
+         (append (list (concat "GIT_AUTHOR_DATE=" date)
+                       (concat "GIT_COMMITTER_DATE=" date))
+                 process-environment)))
+    (+agent-shell-plans-test--git repository "add" "-A")
+    (+agent-shell-plans-test--git repository "commit" "-q" "-m" "Plans")
+    (+agent-shell-plans-test--git repository "rev-parse" "--short" "HEAD")))
+
+(defmacro +agent-shell-plans-test--with-documents (&rest body)
+  "Run BODY in the plans fixture with ROOT, a temporary folder."
+  (declare (indent 0))
+  `(+agent-shell-plans-test--with
+     (let ((root (file-name-as-directory (make-temp-file "plans-test" t))))
+       (unwind-protect (progn ,@body)
+         (dolist (buffer (buffer-list))
+           (when (and (buffer-file-name buffer)
+                      (string-prefix-p root (buffer-file-name buffer)))
+             (kill-buffer buffer)))
+         (delete-directory root t)))))
+
+(defun +agent-shell-plans-test--row (name)
+  "Move to and return the Documents row whose heading starts with NAME."
+  (goto-char (point-min))
+  (should (re-search-forward (concat "^  " (regexp-quote name) " ") nil t))
+  (beginning-of-line)
+  (buffer-substring-no-properties (point) (line-end-position)))
+
+(ert-deftest +agent-shell-plans-test-documents-per-repository ()
+  (+agent-shell-plans-test--with-documents
+    (let* ((first (expand-file-name "first/" root))
+           (second (expand-file-name "second/" root)))
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/alpha/plan.md" first) "# Alpha rollout\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/beta/design.org" second) "#+title: Beta design\n")
+      (+agent-shell-plans-test--git first "init" "-q")
+      (+agent-shell-plans-test--git second "init" "-q")
+      (let ((older (+agent-shell-plans-test--commit
+                    first "2026-01-01T00:00:00Z"))
+            (newer (+agent-shell-plans-test--commit
+                    second "2026-02-01T00:00:00Z"))
+            (+agent-shell-plans-directories
+             (list (expand-file-name "plans/" first)
+                   (expand-file-name "missing/" root)
+                   (expand-file-name "plans/" second))))
+        (+agent-shell-plans)
+        (should (string-match-p "^Documents$" (buffer-string)))
+        (should (string-match-p
+                 (concat "^  alpha/plan\\.md +Alpha rollout +0/0  "
+                         (regexp-quote older) " · [0-9]+d ago$")
+                 (+agent-shell-plans-test--row "alpha/plan.md")))
+        (should (string-match-p
+                 (concat "^  beta/design\\.org +Beta design +0/0  "
+                         (regexp-quote newer) " · [0-9]+d ago$")
+                 (+agent-shell-plans-test--row "beta/design.org")))
+        (should (< (progn (+agent-shell-plans-test--row "beta/design.org")
+                          (point))
+                   (progn (+agent-shell-plans-test--row "alpha/plan.md")
+                          (point))))
+        (should (< (progn (goto-char (point-min))
+                          (search-forward "Documents"))
+                   (progn (goto-char (point-min))
+                          (search-forward "No agent plans yet."))))))))
+
+(ert-deftest +agent-shell-plans-test-document-checkboxes-and-titles ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root)))
+      (+agent-shell-plans-test--write
+       (expand-file-name "tasks/plan.md" root)
+       "Intro\n\n## Ship the tasks\n\n- [x] One\n  - [X] Two\n- [ ] Three\n\
+* [x] Not a dash\n-[x] No space\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "tasks/notes.org" root)
+       "Intro\n* First headline\n- [ ] Open\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "tasks/titled.org" root)
+       "* Headline\n#+TITLE: Org title\n- [x] Done\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "tasks/bare.md" root) "No heading here\n")
+      (+agent-shell-plans)
+      (should (string-match-p "^  tasks/plan\\.md +Ship the tasks +2/3  untracked$"
+                              (+agent-shell-plans-test--row "tasks/plan.md")))
+      (should (string-match-p "^  tasks/notes\\.org +First headline +0/1  "
+                              (+agent-shell-plans-test--row "tasks/notes.org")))
+      (should (string-match-p "^  tasks/titled\\.org +Org title +1/1  "
+                              (+agent-shell-plans-test--row "tasks/titled.org")))
+      (should (string-match-p "^  tasks/bare\\.md +bare\\.md +0/0  "
+                              (+agent-shell-plans-test--row "tasks/bare.md"))))))
+
+(ert-deftest +agent-shell-plans-test-document-copies-and-untracked ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list (expand-file-name "plans/" root))))
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/gamma/plan.md" root) "# Gamma\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/gamma/plan.v2.md" root) "# Gamma again\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/delta/plan.md" root) "# Delta\n")
+      (+agent-shell-plans-test--git root "init" "-q")
+      (+agent-shell-plans-test--commit root "2026-01-01T00:00:00Z")
+      (+agent-shell-plans-test--write
+       (expand-file-name "plans/delta/draft.md" root) "# Draft\n")
+      (+agent-shell-plans)
+      (should-not (string-match-p "plan\\.v2\\.md +Gamma" (buffer-string)))
+      (should (string-match-p "  ⚠ COPIES$"
+                              (+agent-shell-plans-test--row "gamma/plan.md")))
+      (should-not (string-match-p "COPIES"
+                                  (+agent-shell-plans-test--row "delta/plan.md")))
+      (should (string-match-p "  untracked$"
+                              (+agent-shell-plans-test--row "delta/draft.md")))
+      (+agent-shell-plans-test--row "gamma/plan.md")
+      (magit-section-toggle (magit-current-section))
+      (forward-line 2)
+      (should (looking-at "    Copies  plan\\.v2\\.md$")))))
+
+(ert-deftest +agent-shell-plans-test-document-git-bound-and-refresh ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root))
+          (file (expand-file-name "epsilon/plan.md" root))
+          (gits 0))
+      (+agent-shell-plans-test--write file "# Epsilon\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "epsilon/notes.md" root) "# Notes\n")
+      (+agent-shell-plans-test--git root "init" "-q")
+      (+agent-shell-plans-test--commit root "2026-01-01T00:00:00Z")
+      (advice-add 'process-file :before
+                  (lambda (&rest _) (cl-incf gits))
+                  '((name . +agent-shell-plans-test--count)))
+      (unwind-protect
+          (progn
+            (+agent-shell-plans)
+            (should (= 2 gits))
+            (+agent-shell-plans--render)
+            (should (= 2 gits))
+            (+agent-shell-plans-test--write file "# Epsilon renamed\n- [x] A\n")
+            (set-file-times file (time-add nil 5))
+            (+agent-shell-plans--render)
+            (should (= 3 gits))
+            (should (string-match-p "Epsilon renamed +1/1"
+                                    (+agent-shell-plans-test--row
+                                     "epsilon/plan.md")))
+            (let ((hash (+agent-shell-plans-test--commit
+                         root "2026-03-01T00:00:00Z")))
+              (revert-buffer)
+              (should (= 5 gits))
+              (should (string-match-p (regexp-quote hash)
+                                      (+agent-shell-plans-test--row
+                                       "epsilon/plan.md")))))
+        (advice-remove 'process-file '+agent-shell-plans-test--count)))))
+
+(ert-deftest +agent-shell-plans-test-document-visit ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root))
+          (file (expand-file-name "zeta/plan.md" root)))
+      (+agent-shell-plans-test--write file "# Zeta\n")
+      (+agent-shell-plans)
+      (+agent-shell-plans-test--row "zeta/plan.md")
+      (let (visited)
+        (cl-letf (((symbol-function 'pop-to-buffer)
+                   (lambda (buffer &rest _) (setq visited buffer))))
+          (call-interactively (key-binding (kbd "RET"))))
+        (should (equal file (buffer-file-name visited))))
+      (should (equal (abbreviate-file-name file)
+                     (progn (magit-section-toggle (magit-current-section))
+                            (forward-line 1)
+                            (looking-at "    File    \\(.*\\)$")
+                            (match-string 1))))
+      (call-interactively #'+agent-shell-plans-keys)
+      (should (string-match-p "RET     Visit this document"
+                              (with-current-buffer "*agent plans keys*"
+                                (buffer-string))))
+      (kill-buffer "*agent plans keys*"))))
 
 (provide 'agent-shell-plans-test)
 ;;; agent-shell-plans-test.el ends here

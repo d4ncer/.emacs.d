@@ -1,15 +1,18 @@
 ;;; +agent-shell-plans-view.el --- Agent plans sections -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; One folded card per live shell with a plan, ordered by activity, with
-;; a bounded entry preview and an expandable remainder.  Follow the panels
-;; view's layout and retain section identity, folds and window positions.
+;; One row per plan document in `+agent-shell-plans-directories', newest
+;; commit first, then one folded card per live shell with a plan, ordered
+;; by activity, with a bounded entry preview and an expandable remainder.
+;; Follow the panels view's layout and retain section identity, folds and
+;; window positions.
 
 ;;; Code:
 
 (require '+agent-shell-plans)
 (require 'magit-section)
 (require 'subr-x)
+(require 'vc-git)
 
 (defconst +agent-shell-plans--preview-entries 5
   "Number of entries before the folded remainder of a plan.")
@@ -27,6 +30,16 @@
   "Face for rules and supporting detail." :group '+agent-shell-plans)
 (defface +agent-shell-plans-key '((t :inherit help-key-binding))
   "Face for keys in the Actions block." :group '+agent-shell-plans)
+
+(defface +agent-shell-plans-copies '((t :inherit warning))
+  "Face for a topic that also holds numbered plan copies."
+  :group '+agent-shell-plans)
+
+(defconst +agent-shell-plans--copy-regexp "\\`plan\\.v[0-9]+\\.md\\'"
+  "Names of numbered plan copies, which are not listed as documents.")
+
+(defvar +agent-shell-plans--document-cache (make-hash-table :test #'equal)
+  "Plan document files mapped to the times they were read at and details.")
 
 (defconst +agent-shell-plans--states
   '(("needs_you" "◆ NEEDS YOU" +agent-shell-plans-needs-you)
@@ -101,10 +114,12 @@ then how the proposal was answered."
   "?" #'+agent-shell-plans-keys)
 
 (define-derived-mode +agent-shell-plans-mode magit-section-mode "Agent plans"
-  "Browse live agent plans, folding their entries with TAB."
+  "Browse plan documents and live agent plans, folding them with TAB."
   (setq-local truncate-lines t)
   (setq-local revert-buffer-function
-              (lambda (&rest _) (+agent-shell-plans--render)))
+              (lambda (&rest _)
+                (clrhash +agent-shell-plans--document-cache)
+                (+agent-shell-plans--render)))
   (add-hook 'window-buffer-change-functions #'+agent-shell-plans--shown nil t))
 
 (defun +agent-shell-plans--shown (window)
@@ -114,7 +129,8 @@ then how the proposal was answered."
       (+agent-shell-plans--render))))
 
 (defconst +agent-shell-plans--actions
-  '(("Act" ("RET" "Visit" "the shell at point" +agent-shell-plans-visit))
+  '(("Act" ("RET" "Visit" "the document or shell at point"
+            +agent-shell-plans-visit))
     ("Navigate"
      ("n / p" "Next / previous" "item" magit-section-forward)
      ("TAB" "Fold / unfold" "the item at point" magit-section-toggle))
@@ -219,6 +235,168 @@ then how the proposal was answered."
                         'font-lock-face '+agent-shell-plans-dim))
           (mapc #'+agent-shell-plans--insert-entry rest))))))
 
+(defun +agent-shell-plans--document-files ()
+  "Return the plan documents in `+agent-shell-plans-directories'.
+Each is a plist: :file; :name, its topic and file name; and :copies,
+the numbered plan copies its topic folder also holds."
+  (let (documents)
+    (dolist (directory +agent-shell-plans-directories)
+      (when (file-directory-p directory)
+        (dolist (topic (directory-files directory t "\\`[^.]"))
+          (when (file-directory-p topic)
+            (let* ((names (directory-files
+                           topic nil "\\`[^.].*\\.\\(?:md\\|org\\)\\'"))
+                   (copies (seq-filter
+                            (lambda (name)
+                              (string-match-p +agent-shell-plans--copy-regexp
+                                              name))
+                            names)))
+              (dolist (name (seq-difference names copies))
+                (let ((file (expand-file-name name topic)))
+                  (when (file-regular-p file)
+                    (push (list :file file
+                                :name (concat (file-name-nondirectory topic)
+                                              "/" name)
+                                :copies copies)
+                          documents)))))))))
+    (nreverse documents)))
+
+(defun +agent-shell-plans--document-title (file)
+  "Return the title of FILE, whose text is in the current buffer.
+That is its first Markdown heading, or its Org title or first headline,
+else FILE's name."
+  (goto-char (point-min))
+  (let ((case-fold-search t))
+    (or (seq-some
+         (lambda (regexp)
+           (and (re-search-forward regexp nil t)
+                (let ((title (string-trim (match-string-no-properties 1))))
+                  (and (not (string-empty-p title)) title))))
+         (if (string-suffix-p ".org" file)
+             '("^#\\+title:[ \t]*\\(.*\\)" "^\\*+[ \t]+\\(.*\\)")
+           '("^#+[ \t]+\\(.*\\)")))
+        (file-name-nondirectory file))))
+
+(defun +agent-shell-plans--checkboxes ()
+  "Return the current buffer's checked and total task items as a plist."
+  (goto-char (point-min))
+  (let ((done 0) (total 0))
+    (while (re-search-forward "^[ \t]*- \\[\\([ xX]\\)\\]" nil t)
+      (cl-incf total)
+      (unless (equal (match-string 1) " ") (cl-incf done)))
+    (list :done done :total total)))
+
+(defun +agent-shell-plans--head-log (root)
+  "Return the HEAD reflog of the Git repository or worktree at ROOT."
+  (let ((dotgit (expand-file-name ".git" root)))
+    (if (file-directory-p dotgit)
+        (expand-file-name "logs/HEAD" dotgit)
+      (with-temp-buffer
+        (ignore-errors (insert-file-contents dotgit))
+        (when (looking-at "gitdir: *\\(.+\\)$")
+          (expand-file-name "logs/HEAD"
+                            (expand-file-name (match-string 1) root)))))))
+
+(defun +agent-shell-plans--last-commit (file root)
+  "Return FILE's last commit in the repository at ROOT as (HASH . TIME).
+Return nil when FILE has no commit."
+  (with-temp-buffer
+    (let ((default-directory (file-name-as-directory (expand-file-name root))))
+      (when (eq 0 (process-file "git" nil t nil "log" "-1" "--format=%h %ct"
+                                "--" (file-relative-name file)))
+        (goto-char (point-min))
+        (when (looking-at "\\([0-9a-f]+\\) \\([0-9]+\\)")
+          (cons (match-string 1) (string-to-number (match-string 2))))))))
+
+(defun +agent-shell-plans--document-details (file)
+  "Return FILE's :title, :done, :total, :commit and :modified as a plist.
+Reuse them while FILE and its repository's HEAD reflog are unchanged."
+  (let* ((root (vc-git-root file))
+         (log (and root (+agent-shell-plans--head-log root)))
+         (key (mapcar (lambda (path)
+                        (and path (file-attribute-modification-time
+                                   (file-attributes path))))
+                      (list file log)))
+         (cached (gethash file +agent-shell-plans--document-cache)))
+    (if (and cached (equal key (car cached)))
+        (cdr cached)
+      (let ((details
+             (with-temp-buffer
+               (insert-file-contents file)
+               (append (list :title (+agent-shell-plans--document-title file)
+                             :commit (and root (+agent-shell-plans--last-commit
+                                                file root))
+                             :modified (float-time (car key)))
+                       (+agent-shell-plans--checkboxes)))))
+        (puthash file (cons key details) +agent-shell-plans--document-cache)
+        details))))
+
+(defun +agent-shell-plans--documents ()
+  "Return plan documents with their details, newest commit first.
+An untracked document sorts by its modification time."
+  (sort (mapcar (lambda (document)
+                  (append document (+agent-shell-plans--document-details
+                                    (plist-get document :file))))
+                (+agent-shell-plans--document-files))
+        :key (lambda (document)
+               (or (cdr (plist-get document :commit))
+                   (plist-get document :modified)))
+        :reverse t))
+
+(defun +agent-shell-plans--age (time)
+  "Return how long ago TIME was, briefly."
+  (let ((seconds (max 0 (round (- (float-time) time)))))
+    (cond ((< seconds 60) (format "%ds ago" seconds))
+          ((< seconds 3600) (format "%dm ago" (/ seconds 60)))
+          ((< seconds 86400) (format "%dh ago" (/ seconds 3600)))
+          (t (format "%dd ago" (/ seconds 86400))))))
+
+(defun +agent-shell-plans--insert-document (document width)
+  "Insert DOCUMENT as a one-line row, its name padded to WIDTH.
+Its path and any numbered plan copies are folded beneath."
+  (let* ((done (plist-get document :done))
+         (total (plist-get document :total))
+         (commit (plist-get document :commit))
+         (copies (plist-get document :copies))
+         (dim '+agent-shell-plans-dim))
+    (magit-insert-section (agent-plan-document (plist-get document :file) t)
+      (magit-insert-heading
+        "  " (truncate-string-to-width (plist-get document :name)
+                                       width nil ?\s "…")
+        "  " (truncate-string-to-width (plist-get document :title)
+                                       40 nil ?\s "…")
+        "  " (propertize (format "%d/%d" done total) 'font-lock-face
+                         (cond ((zerop total) dim)
+                               ((= done total) '+agent-shell-plans-done)
+                               (t 'default)))
+        "  " (propertize (if commit
+                             (format "%s · %s" (car commit)
+                                     (+agent-shell-plans--age (cdr commit)))
+                           "untracked")
+                         'font-lock-face dim)
+        (if copies
+            (concat "  " (propertize "⚠ COPIES" 'font-lock-face
+                                     '+agent-shell-plans-copies))
+          ""))
+      (insert "    " (propertize "File    " 'font-lock-face dim)
+              (abbreviate-file-name (plist-get document :file)) "\n")
+      (when copies
+        (insert "    " (propertize "Copies  " 'font-lock-face dim)
+                (string-join copies ", ") "\n")))))
+
+(defun +agent-shell-plans--insert-documents (documents)
+  "Insert the Documents section with one row per plan in DOCUMENTS."
+  (when documents
+    (let ((width (min 40 (seq-max
+                          (mapcar (lambda (document)
+                                    (string-width (plist-get document :name)))
+                                  documents)))))
+      (magit-insert-section (agent-plan-documents)
+        (magit-insert-heading "Documents")
+        (dolist (document documents)
+          (+agent-shell-plans--insert-document document width))
+        (insert "\n")))))
+
 (defun +agent-shell-plans--position (position)
   "Return POSITION as a section and its relative line and column."
   (when magit-root-section
@@ -247,13 +425,15 @@ then how the proposal was answered."
         (shells (+agent-shell-plans--sorted)))
     (unless (derived-mode-p '+agent-shell-plans-mode)
       (error "Not in the plans view: %s" (buffer-name)))
-    (erase-buffer)
-    (magit-insert-section (agent-plans)
-      (insert (+agent-shell-plans--summary shells) "\n\n")
-      (+agent-shell-plans--insert-actions)
-      (insert "\n")
-      (unless shells (insert "No agent plans yet.\n"))
-      (mapc #'+agent-shell-plans--insert-card shells))
+    (let ((documents (+agent-shell-plans--documents)))
+      (erase-buffer)
+      (magit-insert-section (agent-plans)
+        (insert (+agent-shell-plans--summary shells) "\n\n")
+        (+agent-shell-plans--insert-actions)
+        (insert "\n")
+        (+agent-shell-plans--insert-documents documents)
+        (unless shells (insert "No agent plans yet.\n"))
+        (mapc #'+agent-shell-plans--insert-card shells)))
     (pcase-dolist (`(,window ,point ,start) windows)
       (when (window-live-p window)
         (let ((point (save-excursion (+agent-shell-plans--go point)))
@@ -281,32 +461,40 @@ then how the proposal was answered."
     (goto-char (oref card start))
     (magit-section-show card)))
 
-(defun +agent-shell-plans--shell ()
-  "Return the shell of the card at point, including its folded entries."
+(defun +agent-shell-plans--enclosing (type)
+  "Return the value of the TYPE section at or around point."
   (let ((section (magit-current-section)))
-    (while (and section (not (eq (oref section type) 'agent-plan)))
+    (while (and section (not (eq (oref section type) type)))
       (setq section (oref section parent)))
     (and section (oref section value))))
 
+(defun +agent-shell-plans--shell ()
+  "Return the shell of the card at point, including its folded entries."
+  (+agent-shell-plans--enclosing 'agent-plan))
+
 (defun +agent-shell-plans-visit ()
-  "Visit the shell at point, or run the Actions row at point."
+  "Visit the document or shell at point, or run the Actions row at point."
   (interactive)
   (if-let* ((action (get-text-property (point) '+agent-shell-plans-action))
             ((not (eq action #'+agent-shell-plans-visit))))
       (call-interactively action)
-    (let ((shell (or (+agent-shell-plans--shell)
-                     (and action
-                          (car (+agent-shell-plans--sorted))))))
-      (unless (buffer-live-p shell) (user-error "No live shell here"))
-      (pop-to-buffer shell))))
+    (if-let* ((file (+agent-shell-plans--enclosing 'agent-plan-document)))
+        (pop-to-buffer (find-file-noselect file))
+      (let ((shell (or (+agent-shell-plans--shell)
+                       (and action
+                            (car (+agent-shell-plans--sorted))))))
+        (unless (buffer-live-p shell) (user-error "No live shell here"))
+        (pop-to-buffer shell)))))
 
 (defun +agent-shell-plans-keys ()
   "List keys acting on the item at point and across the view."
   (interactive)
-  (let ((shell (+agent-shell-plans--shell))
+  (let ((document (+agent-shell-plans--enclosing 'agent-plan-document))
+        (shell (+agent-shell-plans--shell))
         (action (get-text-property (point) '+agent-shell-plans-action)))
     (with-help-window "*agent plans keys*"
-      (princ (cond (shell "RET     Visit this shell\n")
+      (princ (cond (document "RET     Visit this document\n")
+                   (shell "RET     Visit this shell\n")
                    (action "RET     Run this action\n") (t "")))
       (princ "TAB     Fold or unfold this item\nn / p   Next or previous item\n")
       (princ "C-n C-p Next or previous item\nM-n M-p Next or previous sibling\n")

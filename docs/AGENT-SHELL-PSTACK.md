@@ -828,9 +828,24 @@ and the current step. Cards start folded. `TAB` reveals the first five
 entries and a folded `… N more` section for the remainder. Each entry shows
 its state and text, including Codex's `step` entries.
 
-`RET` visits the shell, `n` and `p` move between sections, `g` refreshes,
-`q` quits, and `?` lists the keys at point. Redraws keep point, window
-positions, and folds. ACP plan updates replace the shell's stored plan and
+Above the cards, a Documents section lists plan documents: each `.md` or
+`.org` file in a topic folder one level below a directory in
+`+agent-shell-plans-directories`, by default `plans/` under
+`+private-config-directory`. A missing directory is skipped. Each row
+shows the topic and file name, the title (the first Markdown `#` heading,
+else the Org `#+title` or first headline, else the file name), checked of
+total `- [ ]` and `- [x]` task items, and the file's last commit hash and
+age in its own repository, or `untracked`. Rows are newest commit first;
+an untracked document sorts by its modification time. Numbered copies
+such as `plan.v2.md` are not listed; their topic's rows read `⚠ COPIES`
+and name them in the folded detail beneath the path. Every render runs at
+most one `git log` per document, and reuses a document's details while
+its modification time and its repository's HEAD reflog are unchanged; `g`
+rereads every document. There are no file watchers.
+
+`RET` visits the shell or document, `n` and `p` move between sections, `g`
+refreshes, `q` quits, and `?` lists the keys at point. Redraws keep point,
+window positions, and folds. ACP plan updates replace the shell's stored plan and
 debounce redraws. Killing a shell forgets its plan. Over ACP neither agent has
 a plan tool by default, so neither sends plans. `modules/mod-ai.el` turns
 them on: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in
