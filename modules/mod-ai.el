@@ -300,8 +300,8 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
            "D" '(+agent-shell-pstack-panels-clear-delivered :wk "clear delivered")
            "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
            "?" '(+agent-shell-pstack-panels-keys :wk "keys here")
-           "TAB" #'magit-section-toggle
-           "<tab>" #'magit-section-toggle
+           "TAB" #'magit-section-cycle
+           "<tab>" #'magit-section-cycle
            "n" #'magit-section-forward
            "p" #'magit-section-backward
            "M-n" #'magit-section-forward-sibling

@@ -781,7 +781,8 @@ and a remote one's host; and the follow-up, folded to its first two lines.
 Below the panels it lists each branch-mode delegate an earlier Emacs left
 unreturned.
 
-`TAB` folds a section, `n` and `p` move between sections and `M-n` and `M-p`
+`TAB` cycles a section as Magit does (folded, children folded, everything
+open), `n` and `p` move between sections and `M-n` and `M-p`
 between those at the same level. `?` lists the keys acting at point. `RET`
 visits the lead from a panel, the live shell, transcript or report from a
 member, the folder from a workspace and the whole follow-up from its

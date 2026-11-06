@@ -2971,7 +2971,7 @@ working_directory: \"/repo/\"\nsession_id: \"%s\"\n---" agent session)))
   c        cancel the panel
 
 Anywhere:
-  TAB      fold or unfold the section
+  TAB      cycle the section: folded, children, everything
 " (buffer-string)))
         (should (string-search "D        clear delivered panels"
                                (buffer-string))))
@@ -2986,7 +2986,7 @@ Anywhere:
                     (key-binding "D")))
         (should (eq #'magit-section-forward (key-binding "n")))
         (should (eq #'magit-section-forward-sibling (key-binding (kbd "M-n"))))
-        (should (eq #'magit-section-toggle (key-binding (kbd "TAB")))))
+        (should (eq #'magit-section-cycle (key-binding (kbd "TAB")))))
       (kill-buffer "*pstack panels keys*"))))
 
 (ert-deftest +agent-shell-pstack-panel-test-clear-delivered ()

@@ -230,6 +230,7 @@ and an unread one delivered a follow-up you have not read.")
   "c" #'+agent-shell-pstack-panels-cancel
   "D" #'+agent-shell-pstack-panels-clear-delivered
   "l" #'+agent-shell-pstack-panel-log
+  "TAB" #'magit-section-cycle
   "g" #'revert-buffer
   "?" #'+agent-shell-pstack-panels-keys)
 
@@ -373,7 +374,7 @@ workspace's list them, unless ALL."
        (list (cons "g" "refresh") (cons "D" "clear delivered panels"))))))
 
 (defconst +agent-shell-pstack-panels--general-keys
-  '(("TAB" . "fold or unfold the section")
+  '(("TAB" . "cycle the section: folded, children, everything")
     ("n p" . "next or previous section")
     ("M-n M-p" . "next or previous section at the same level")
     ("^" . "parent section")
@@ -393,7 +394,7 @@ workspace's list them, unless ALL."
      ("l" "Request log" "the lead of the item at point"))
     ("Navigate"
      ("n / p" "Next / previous" "item")
-     ("TAB" "Fold / unfold" "the item at point"))
+     ("TAB" "Cycle" "folded, children, everything"))
     ("Manage"
      ("g" "Refresh" "the whole view")
      ("D" "Clear delivered" "every delivered panel"

@@ -48,7 +48,8 @@ only, in Evil normal state, scanning first and opening detail on demand.
 
 10. **Move between logical items.** `C-n`/`C-p` (and `n`/`p` where the screen
     is read-only) move between items, including long or expanded ones.
-    `TAB` folds the item at point.
+    `TAB` cycles the item at point as Magit does: folded, open with its
+    children folded, then everything open.
 11. **Place survives redraws.** A refresh keeps point on the same item and
     column, and keeps what was folded. Leaving and returning restores the
     place.
@@ -82,7 +83,7 @@ Act
   l      Request log      the lead of the item at point
 Navigate
   n / p  Next / previous  item
-  TAB    Fold / unfold    the item at point
+  TAB    Cycle            folded, children, everything
 Manage
   g      Refresh          the whole view
   D      Clear delivered  every delivered panel
