@@ -486,7 +486,7 @@ folded excerpt; its documents follow, each folded."
             (insert (propertize (make-string (min 60 width) ?─)
                                 'font-lock-face dim)
                     "\n")
-            (magit-insert-section (agent-plan-project (plist-get project :topic))
+            (magit-insert-section (agent-plan-project (plist-get project :topic) t)
               (magit-insert-heading
                 (propertize (+agent-shell-plans--project-name
                              (plist-get project :name))
@@ -504,21 +504,26 @@ folded excerpt; its documents follow, each folded."
                          " · " (+agent-shell-plans--age
                                 (plist-get project :time)))
                  'font-lock-face dim))
-              (when (or description copies)
-                (magit-insert-section (agent-plan-about
-                                       (plist-get project :topic) t)
-                  (magit-insert-heading
-                    "    " (propertize
-                            (truncate-string-to-width
-                             (or description "About") (- width 4) nil nil "…")
-                            'font-lock-face dim))
-                  (when description
-                    (insert (replace-regexp-in-string
-                             "^" "      " (string-fill description (- width 6)))
-                            "\n"))
-                  (when copies
-                    (insert "      " (propertize "Copies  " 'font-lock-face dim)
-                            (string-join copies ", ") "\n"))))
+              (if (and description (not copies)
+                       (<= (string-width description) (- width 4)))
+                  (insert "    " (propertize description
+                                             'font-lock-face dim)
+                          "\n")
+                (when (or description copies)
+                  (magit-insert-section (agent-plan-about
+                                         (plist-get project :topic) t)
+                    (magit-insert-heading
+                      "    " (propertize
+                              (truncate-string-to-width
+                               (or description "About") (- width 4) nil nil "…")
+                              'font-lock-face dim))
+                    (when description
+                      (insert (replace-regexp-in-string
+                               "^" "      " (string-fill description (- width 6)))
+                              "\n"))
+                    (when copies
+                      (insert "      " (propertize "Copies  " 'font-lock-face dim)
+                              (string-join copies ", ") "\n")))))
               (dolist (document documents)
                 (+agent-shell-plans--insert-document document width)))))
         (insert "\n")))))
