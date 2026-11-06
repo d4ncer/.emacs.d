@@ -108,13 +108,13 @@ then how the proposal was answered."
   "p" #'magit-section-backward
   "C-n" #'magit-section-forward
   "C-p" #'magit-section-backward
-  "TAB" #'magit-section-toggle
+  "TAB" #'magit-section-cycle
   "g" #'revert-buffer
   "q" #'quit-window
   "?" #'+agent-shell-plans-keys)
 
 (define-derived-mode +agent-shell-plans-mode magit-section-mode "Agent plans"
-  "Browse plan documents and live agent plans, folding them with TAB."
+  "Browse plan documents and live agent plans; TAB cycles their folds."
   (setq-local truncate-lines t)
   (setq-local revert-buffer-function
               (lambda (&rest _)
@@ -133,7 +133,8 @@ then how the proposal was answered."
             +agent-shell-plans-visit))
     ("Navigate"
      ("n / p" "Next / previous" "item" magit-section-forward)
-     ("TAB" "Fold / unfold" "the item at point" magit-section-toggle))
+     ("TAB" "Cycle" "folded, children, everything"
+      magit-section-cycle))
     ("Manage"
      ("g" "Refresh" "the whole view" revert-buffer))))
 
@@ -278,29 +279,42 @@ else FILE's name."
         (file-name-nondirectory file))))
 
 (defun +agent-shell-plans--document-description ()
-  "Return the first prose paragraph of the current buffer, or nil.
-Skip headings, Org keywords, tables, code, lists and metadata lines such
-as \"Status: draft\"."
-  (goto-char (point-min))
-  (let (paragraph)
-    (while (and (not paragraph) (not (eobp)))
-      (skip-chars-forward " \t\n")
-      (let ((start (point)))
-        (if (re-search-forward "\n[ \t]*\n" nil 'move)
-            (goto-char (match-beginning 0))
-          (goto-char (point-max)))
-        (let ((text (string-trim (buffer-substring-no-properties start (point)))))
-          (unless (or (string-empty-p text)
-                      (string-match-p
-                       (concat "\\`\\(?:#\\|\\*+ \\||\\|```\\|<\\|[-+] \\|[0-9]+\\. \\|:\\|"
-                               "\\(?:Status\\|Date\\|Author\\|Owner\\|Updated\\):\\)")
-                       text))
-            (setq paragraph
-                  (string-trim
-                   (replace-regexp-in-string
-                    "[ \t\n]+" " "
-                    (replace-regexp-in-string "\\*\\*" "" text))))))))
-    paragraph))
+  "Return the current buffer's summary, or else its first prose paragraph.
+A summary is a paragraph that starts \"Summary:\", or \"#+summary:\" in
+Org.  The fallback skips headings, Org keywords, tables, code, lists and
+metadata lines such as \"Status: draft\".  Return nil when there is none."
+  (let ((case-fold-search t)
+        (clean (lambda (text)
+                 (string-trim
+                  (replace-regexp-in-string
+                   "[ \t\n]+" " "
+                   (replace-regexp-in-string "\\*\\*" "" text))))))
+    (goto-char (point-min))
+    (if (re-search-forward "^\\(?:#\\+\\)?summary:[ \t]*" nil t)
+        (let ((start (point)))
+          (funcall clean
+                   (buffer-substring-no-properties
+                    start (if (re-search-forward "\n[ \t]*\n" nil t)
+                              (match-beginning 0)
+                            (point-max)))))
+      (let (paragraph)
+        (while (and (not paragraph) (not (eobp)))
+          (skip-chars-forward " \t\n")
+          (let ((start (point)))
+            (if (re-search-forward "\n[ \t]*\n" nil 'move)
+                (goto-char (match-beginning 0))
+              (goto-char (point-max)))
+            (let ((text (string-trim
+                         (buffer-substring-no-properties start (point))))
+                  (case-fold-search nil))
+              (unless (or (string-empty-p text)
+                          (string-match-p
+                           (concat "\\`\\(?:#\\|\\*+ \\||\\|```\\|<\\|[-+] \\|"
+                                   "[0-9]+\\. \\|:\\|\\(?:Status\\|Date\\|"
+                                   "Author\\|Owner\\|Updated\\):\\)")
+                           text))
+                (setq paragraph (funcall clean text))))))
+        paragraph))))
 
 (defun +agent-shell-plans--checkboxes ()
   "Return the current buffer's checked and total task items as a plist."
@@ -363,7 +377,8 @@ Reuse them while FILE and its repository's HEAD reflog are unchanged."
 A project is one topic folder: a plist of :topic, its folder; :name;
 :repository, its repository's folder name; :copies; :time, its newest
 document's commit or modification time; and :documents, its main
-document (README, then design, then plan) first, then newest first."
+document (README, then design, plan, rationale) first, then newest
+first."
   (let ((projects (make-hash-table :test #'equal)))
     (dolist (document (+agent-shell-plans--document-files))
       (let* ((file (plist-get document :file))
@@ -380,8 +395,9 @@ document (README, then design, then plan) first, then newest first."
                 (rank (lambda (document)
                         (let ((base (downcase (file-name-base
                                                (plist-get document :file)))))
-                          (or (seq-position '("readme" "design" "plan") base)
-                              3))))
+                          (or (seq-position '("readme" "design" "plan" "rationale")
+                                            base)
+                              4))))
                 (sorted (sort documents
                               (lambda (a b)
                                 (let ((ra (funcall rank a))
@@ -606,7 +622,7 @@ folded excerpt; its documents follow, each folded."
       (princ (cond (document "RET     Visit this document\n")
                    (shell "RET     Visit this shell\n")
                    (action "RET     Run this action\n") (t "")))
-      (princ "TAB     Fold or unfold this item\nn / p   Next or previous item\n")
+      (princ "TAB     Cycle folded, children shown, everything shown\nn / p   Next or previous item\n")
       (princ "C-n C-p Next or previous item\nM-n M-p Next or previous sibling\n")
       (princ "^       Parent section\ng       Refresh the whole view\n")
       (princ "q       Quit the view\n?       Keys here\n"))))

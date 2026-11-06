@@ -329,8 +329,8 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   (:states '(normal motion) :keymaps '+agent-shell-plans-mode-map
            "RET" #'+agent-shell-plans-visit
            "<return>" #'+agent-shell-plans-visit
-           "TAB" #'magit-section-toggle
-           "<tab>" #'magit-section-toggle
+           "TAB" #'magit-section-cycle
+           "<tab>" #'magit-section-cycle
            "n" #'magit-section-forward
            "p" #'magit-section-backward
            "C-n" #'magit-section-forward

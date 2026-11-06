@@ -534,6 +534,51 @@ spans lines.\n\n- a list\n")
       (forward-line 1)
       (should (looking-at "      File  ")))))
 
+(ert-deftest +agent-shell-plans-test-document-summary ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root)))
+      (+agent-shell-plans-test--write
+       (expand-file-name "iota/plan.md" root)
+       "# Iota plan\n\nDraft for review, 1 January.\n\nSummary: Move every \
+caller\nto the new parser.\n\nMore prose.\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "iota/notes.org" root)
+       "#+title: Iota notes\n#+summary: Notes on callers.\n\nProse.\n")
+      (+agent-shell-plans)
+      (+agent-shell-plans-test--project "Iota")
+      (forward-line 1)
+      (should (looking-at "    Move every caller to the new parser\\.$"))
+      (+agent-shell-plans-test--row "Iota notes")
+      (magit-section-toggle (magit-current-section))
+      (forward-line 1)
+      (should (looking-at "      Notes on callers\\.$")))))
+
+(ert-deftest +agent-shell-plans-test-tab-cycles-a-project ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root)))
+      (+agent-shell-plans-test--write
+       (expand-file-name "kappa/design.md" root)
+       "# Kappa design\n\nSummary: Kappa in short.\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "kappa/notes.md" root) "# Kappa notes\n\nNotes.\n")
+      (+agent-shell-plans)
+      (+agent-shell-plans-test--project "Kappa")
+      (let* ((project (magit-current-section))
+             (children (oref project children))
+             (tab (key-binding (kbd "TAB"))))
+        (should (eq tab #'magit-section-cycle))
+        (should-not (oref project hidden))
+        (should (seq-every-p (lambda (child) (oref child hidden)) children))
+        (call-interactively tab)
+        (should (seq-every-p (lambda (child) (not (oref child hidden)))
+                             children))
+        (call-interactively tab)
+        (should (oref project hidden))
+        (call-interactively tab)
+        (should-not (oref project hidden))
+        (should (seq-every-p (lambda (child) (oref child hidden))
+                             children))))))
+
 (ert-deftest +agent-shell-plans-test-document-git-bound-and-refresh ()
   (+agent-shell-plans-test--with-documents
     (let ((+agent-shell-plans-directories (list root))

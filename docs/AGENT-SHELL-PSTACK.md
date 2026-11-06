@@ -844,22 +844,24 @@ Move to the new parser  ⚠ 2 COPIES · 2 docs · private · 3d ago
 The heading names the project from its folder, warns about numbered copies
 such as `plan.v2.md` (which are not listed), counts documents, names the
 repository when more than one is shown, and gives the newest document's
-age. Beneath it, folded, is the main document's first paragraph (README,
-then design, then plan). Each document row shows its title (the first
+age. Beneath it, folded, is the main document's description (README, then
+design, plan, rationale). Each document row shows its title (the first
 Markdown `#` heading, else the Org `#+title` or first headline, else the
 file name), how many of its `- [ ]` and `- [x]` tasks are done when it has
 any, and the age of its last commit in its own repository, or `not
-committed`. A row folds its first paragraph and its file. The first
-paragraph skips headings, tables, lists, code and lines such as
+committed`. A row folds its description and its file. A description is
+the paragraph that starts `Summary:` (`#+summary:` in Org), else the first
+paragraph that is not a heading, table, list, code or a line such as
 `Status: draft`. Every render runs at most one `git log` per document, and
 reuses a document's details while its modification time and its
 repository's HEAD reflog are unchanged; `g` rereads every document. There
 are no file watchers.
 
-`RET` visits the shell or document, `n` and `p` move between sections, `g`
-refreshes, `q` quits, and `?` lists the keys at point. Redraws keep point,
-window positions, and folds. ACP plan updates replace the shell's stored plan and
-debounce redraws. Killing a shell forgets its plan. Over ACP neither agent has
+`RET` visits the shell or document. `TAB` cycles the section at point as
+Magit does: folded, then open with its children folded, then everything
+open. `n` and `p` move between sections, `g` refreshes, `q` quits, and `?`
+lists the keys at point. Redraws keep point, window positions, and folds.
+ACP plan updates replace the shell's stored plan and debounce redraws. Killing a shell forgets its plan. Over ACP neither agent has
 a plan tool by default, so neither sends plans. `modules/mod-ai.el` turns
 them on: `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` in
 `agent-shell-anthropic-claude-environment` gives Claude Code `TaskCreate`
