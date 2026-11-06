@@ -277,6 +277,31 @@ else FILE's name."
            '("^#+[ \t]+\\(.*\\)")))
         (file-name-nondirectory file))))
 
+(defun +agent-shell-plans--document-description ()
+  "Return the first prose paragraph of the current buffer, or nil.
+Skip headings, Org keywords, tables, code, lists and metadata lines such
+as \"Status: draft\"."
+  (goto-char (point-min))
+  (let (paragraph)
+    (while (and (not paragraph) (not (eobp)))
+      (skip-chars-forward " \t\n")
+      (let ((start (point)))
+        (if (re-search-forward "\n[ \t]*\n" nil 'move)
+            (goto-char (match-beginning 0))
+          (goto-char (point-max)))
+        (let ((text (string-trim (buffer-substring-no-properties start (point)))))
+          (unless (or (string-empty-p text)
+                      (string-match-p
+                       (concat "\\`\\(?:#\\|\\*+ \\||\\|```\\|<\\|[-+] \\|[0-9]+\\. \\|:\\|"
+                               "\\(?:Status\\|Date\\|Author\\|Owner\\|Updated\\):\\)")
+                       text))
+            (setq paragraph
+                  (string-trim
+                   (replace-regexp-in-string
+                    "[ \t\n]+" " "
+                    (replace-regexp-in-string "\\*\\*" "" text))))))))
+    paragraph))
+
 (defun +agent-shell-plans--checkboxes ()
   "Return the current buffer's checked and total task items as a plist."
   (goto-char (point-min))
@@ -309,7 +334,7 @@ Return nil when FILE has no commit."
           (cons (match-string 1) (string-to-number (match-string 2))))))))
 
 (defun +agent-shell-plans--document-details (file)
-  "Return FILE's :title, :done, :total, :commit and :modified as a plist.
+  "Return FILE's :title, :description, :done, :total, :commit, :modified.
 Reuse them while FILE and its repository's HEAD reflog are unchanged."
   (let* ((root (vc-git-root file))
          (log (and root (+agent-shell-plans--head-log root)))
@@ -324,6 +349,8 @@ Reuse them while FILE and its repository's HEAD reflog are unchanged."
              (with-temp-buffer
                (insert-file-contents file)
                (append (list :title (+agent-shell-plans--document-title file)
+                             :description
+                             (+agent-shell-plans--document-description)
                              :commit (and root (+agent-shell-plans--last-commit
                                                 file root))
                              :modified (float-time (car key)))
@@ -332,16 +359,49 @@ Reuse them while FILE and its repository's HEAD reflog are unchanged."
         details))))
 
 (defun +agent-shell-plans--documents ()
-  "Return plan documents with their details, newest commit first.
-An untracked document sorts by its modification time."
-  (sort (mapcar (lambda (document)
-                  (append document (+agent-shell-plans--document-details
-                                    (plist-get document :file))))
-                (+agent-shell-plans--document-files))
-        :key (lambda (document)
-               (or (cdr (plist-get document :commit))
-                   (plist-get document :modified)))
-        :reverse t))
+  "Return plan documents grouped into projects, newest project first.
+A project is one topic folder: a plist of :topic, its folder; :name;
+:repository, its repository's folder name; :copies; :time, its newest
+document's commit or modification time; and :documents, its main
+document (README, then design, then plan) first, then newest first."
+  (let ((projects (make-hash-table :test #'equal)))
+    (dolist (document (+agent-shell-plans--document-files))
+      (let* ((file (plist-get document :file))
+             (document (append document
+                               (+agent-shell-plans--document-details file)))
+             (topic (file-name-directory file)))
+        (push document (gethash topic projects))))
+    (let (result)
+      (maphash
+       (lambda (topic documents)
+         (let* ((time (lambda (document)
+                        (or (cdr (plist-get document :commit))
+                            (plist-get document :modified))))
+                (rank (lambda (document)
+                        (let ((base (downcase (file-name-base
+                                               (plist-get document :file)))))
+                          (or (seq-position '("readme" "design" "plan") base)
+                              3))))
+                (sorted (sort documents
+                              (lambda (a b)
+                                (let ((ra (funcall rank a))
+                                      (rb (funcall rank b)))
+                                  (if (= ra rb)
+                                      (> (funcall time a) (funcall time b))
+                                    (< ra rb))))))
+                (root (vc-git-root topic)))
+           (push (list :topic topic
+                       :name (file-name-nondirectory
+                              (directory-file-name topic))
+                       :repository (and root (file-name-nondirectory
+                                              (directory-file-name root)))
+                       :copies (plist-get (car documents) :copies)
+                       :time (seq-max (mapcar time documents))
+                       :documents sorted)
+                 result)))
+       projects)
+      (sort result :key (lambda (project) (plist-get project :time))
+            :reverse t))))
 
 (defun +agent-shell-plans--age (time)
   "Return how long ago TIME was, briefly."
@@ -352,49 +412,99 @@ An untracked document sorts by its modification time."
           (t (format "%dd ago" (/ seconds 86400))))))
 
 (defun +agent-shell-plans--insert-document (document width)
-  "Insert DOCUMENT as a one-line row, its name padded to WIDTH.
-Its path and any numbered plan copies are folded beneath."
+  "Insert DOCUMENT as a folded one-line row no wider than WIDTH.
+Its description and file are folded beneath."
   (let* ((done (plist-get document :done))
          (total (plist-get document :total))
          (commit (plist-get document :commit))
-         (copies (plist-get document :copies))
-         (dim '+agent-shell-plans-dim))
+         (description (plist-get document :description))
+         (dim '+agent-shell-plans-dim)
+         (facts (concat
+                 (when (> total 0)
+                   (concat (propertize " · " 'font-lock-face dim)
+                           (propertize (format "%d of %d done" done total)
+                                       'font-lock-face
+                                       (if (= done total)
+                                           '+agent-shell-plans-done
+                                         'default))))
+                 (propertize
+                  (concat " · " (if commit
+                                    (+agent-shell-plans--age (cdr commit))
+                                  "not committed"))
+                  'font-lock-face dim))))
     (magit-insert-section (agent-plan-document (plist-get document :file) t)
       (magit-insert-heading
-        "  " (truncate-string-to-width (plist-get document :name)
-                                       width nil ?\s "…")
-        "  " (truncate-string-to-width (plist-get document :title)
-                                       40 nil ?\s "…")
-        "  " (propertize (format "%d/%d" done total) 'font-lock-face
-                         (cond ((zerop total) dim)
-                               ((= done total) '+agent-shell-plans-done)
-                               (t 'default)))
-        "  " (propertize (if commit
-                             (format "%s · %s" (car commit)
-                                     (+agent-shell-plans--age (cdr commit)))
-                           "untracked")
-                         'font-lock-face dim)
-        (if copies
-            (concat "  " (propertize "⚠ COPIES" 'font-lock-face
-                                     '+agent-shell-plans-copies))
-          ""))
-      (insert "    " (propertize "File    " 'font-lock-face dim)
-              (abbreviate-file-name (plist-get document :file)) "\n")
-      (when copies
-        (insert "    " (propertize "Copies  " 'font-lock-face dim)
-                (string-join copies ", ") "\n")))))
+        "  " (truncate-string-to-width
+              (plist-get document :title)
+              (max 10 (- width 2 (string-width facts))) nil nil "…")
+        facts)
+      (when description
+        (insert (replace-regexp-in-string
+                 "^" "      " (string-fill description (- width 6)))
+                "\n"))
+      (insert "      " (propertize "File  " 'font-lock-face dim)
+              (abbreviate-file-name (plist-get document :file)) "\n"))))
 
-(defun +agent-shell-plans--insert-documents (documents)
-  "Insert the Documents section with one row per plan in DOCUMENTS."
-  (when documents
-    (let ((width (min 40 (seq-max
-                          (mapcar (lambda (document)
-                                    (string-width (plist-get document :name)))
-                                  documents)))))
+(defun +agent-shell-plans--project-name (name)
+  "Return topic folder NAME as a project name, such as \"Retire playroom\"."
+  (let ((words (replace-regexp-in-string "[-_]+" " " name)))
+    (concat (upcase (substring words 0 1)) (substring words 1))))
+
+(defun +agent-shell-plans--insert-documents (projects)
+  "Insert the Documents section with one card per project in PROJECTS.
+A card's heading names the project; its main document's description is a
+folded excerpt; its documents follow, each folded."
+  (when projects
+    (let* ((window (get-buffer-window (current-buffer)))
+           (width (min 100 (if window (window-body-width window) 80)))
+           (labels (seq-uniq (mapcar (lambda (project)
+                                       (plist-get project :repository))
+                                     projects)))
+           (dim '+agent-shell-plans-dim))
       (magit-insert-section (agent-plan-documents)
         (magit-insert-heading "Documents")
-        (dolist (document documents)
-          (+agent-shell-plans--insert-document document width))
+        (dolist (project projects)
+          (let* ((documents (plist-get project :documents))
+                 (copies (plist-get project :copies))
+                 (description (plist-get (car documents) :description)))
+            (insert (propertize (make-string (min 60 width) ?─)
+                                'font-lock-face dim)
+                    "\n")
+            (magit-insert-section (agent-plan-project (plist-get project :topic))
+              (magit-insert-heading
+                (propertize (+agent-shell-plans--project-name
+                             (plist-get project :name))
+                            'font-lock-face 'magit-section-heading)
+                (when copies
+                  (concat "  " (propertize
+                                (format "⚠ %d %s" (length copies)
+                                        (if (cdr copies) "COPIES" "COPY"))
+                                'font-lock-face '+agent-shell-plans-copies)))
+                (propertize
+                 (concat (format " · %d %s" (length documents)
+                                 (if (cdr documents) "docs" "doc"))
+                         (when (cdr labels)
+                           (concat " · " (plist-get project :repository)))
+                         " · " (+agent-shell-plans--age
+                                (plist-get project :time)))
+                 'font-lock-face dim))
+              (when (or description copies)
+                (magit-insert-section (agent-plan-about
+                                       (plist-get project :topic) t)
+                  (magit-insert-heading
+                    "    " (propertize
+                            (truncate-string-to-width
+                             (or description "About") (- width 4) nil nil "…")
+                            'font-lock-face dim))
+                  (when description
+                    (insert (replace-regexp-in-string
+                             "^" "      " (string-fill description (- width 6)))
+                            "\n"))
+                  (when copies
+                    (insert "      " (propertize "Copies  " 'font-lock-face dim)
+                            (string-join copies ", ") "\n"))))
+              (dolist (document documents)
+                (+agent-shell-plans--insert-document document width)))))
         (insert "\n")))))
 
 (defun +agent-shell-plans--position (position)

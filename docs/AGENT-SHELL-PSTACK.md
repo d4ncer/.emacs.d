@@ -831,17 +831,30 @@ its state and text, including Codex's `step` entries.
 Above the cards, a Documents section lists plan documents: each `.md` or
 `.org` file in a topic folder one level below a directory in
 `+agent-shell-plans-directories`, by default `plans/` under
-`+private-config-directory`. A missing directory is skipped. Each row
-shows the topic and file name, the title (the first Markdown `#` heading,
-else the Org `#+title` or first headline, else the file name), checked of
-total `- [ ]` and `- [x]` task items, and the file's last commit hash and
-age in its own repository, or `untracked`. Rows are newest commit first;
-an untracked document sorts by its modification time. Numbered copies
-such as `plan.v2.md` are not listed; their topic's rows read `⚠ COPIES`
-and name them in the folded detail beneath the path. Every render runs at
-most one `git log` per document, and reuses a document's details while
-its modification time and its repository's HEAD reflog are unchanged; `g`
-rereads every document. There are no file watchers.
+`+private-config-directory`. A missing directory is skipped. Documents are
+grouped by topic folder, one card per project, newest first:
+
+```text
+Move to the new parser  ⚠ 2 COPIES · 2 docs · private · 3d ago
+    Every caller moves to the new parser before the old one is deleted…
+  Parser migration plan · 3 of 40 done · 3d ago
+  Callers still on the old parser · 3d ago
+```
+
+The heading names the project from its folder, warns about numbered copies
+such as `plan.v2.md` (which are not listed), counts documents, names the
+repository when more than one is shown, and gives the newest document's
+age. Beneath it, folded, is the main document's first paragraph (README,
+then design, then plan). Each document row shows its title (the first
+Markdown `#` heading, else the Org `#+title` or first headline, else the
+file name), how many of its `- [ ]` and `- [x]` tasks are done when it has
+any, and the age of its last commit in its own repository, or `not
+committed`. A row folds its first paragraph and its file. The first
+paragraph skips headings, tables, lists, code and lines such as
+`Status: draft`. Every render runs at most one `git log` per document, and
+reuses a document's details while its modification time and its
+repository's HEAD reflog are unchanged; `g` rereads every document. There
+are no file watchers.
 
 `RET` visits the shell or document, `n` and `p` move between sections, `g`
 refreshes, `q` quits, and `?` lists the keys at point. Redraws keep point,

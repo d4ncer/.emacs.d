@@ -409,10 +409,17 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
              (kill-buffer buffer)))
          (delete-directory root t)))))
 
-(defun +agent-shell-plans-test--row (name)
-  "Move to and return the Documents row whose heading starts with NAME."
+(defun +agent-shell-plans-test--row (title)
+  "Move to and return the Documents row whose heading starts with TITLE."
   (goto-char (point-min))
-  (should (re-search-forward (concat "^  " (regexp-quote name) " ") nil t))
+  (should (re-search-forward (concat "^  " (regexp-quote title) " · ") nil t))
+  (beginning-of-line)
+  (buffer-substring-no-properties (point) (line-end-position)))
+
+(defun +agent-shell-plans-test--project (name)
+  "Move to and return the project heading that starts with NAME."
+  (goto-char (point-min))
+  (should (re-search-forward (concat "^" (regexp-quote name) "[ ·]") nil t))
   (beginning-of-line)
   (buffer-substring-no-properties (point) (line-end-position)))
 
@@ -426,28 +433,24 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
        (expand-file-name "plans/beta/design.org" second) "#+title: Beta design\n")
       (+agent-shell-plans-test--git first "init" "-q")
       (+agent-shell-plans-test--git second "init" "-q")
-      (let ((older (+agent-shell-plans-test--commit
-                    first "2026-01-01T00:00:00Z"))
-            (newer (+agent-shell-plans-test--commit
-                    second "2026-02-01T00:00:00Z"))
-            (+agent-shell-plans-directories
+      (+agent-shell-plans-test--commit first "2026-01-01T00:00:00Z")
+      (+agent-shell-plans-test--commit second "2026-02-01T00:00:00Z")
+      (let ((+agent-shell-plans-directories
              (list (expand-file-name "plans/" first)
                    (expand-file-name "missing/" root)
                    (expand-file-name "plans/" second))))
         (+agent-shell-plans)
         (should (string-match-p "^Documents$" (buffer-string)))
-        (should (string-match-p
-                 (concat "^  alpha/plan\\.md +Alpha rollout +0/0  "
-                         (regexp-quote older) " · [0-9]+d ago$")
-                 (+agent-shell-plans-test--row "alpha/plan.md")))
-        (should (string-match-p
-                 (concat "^  beta/design\\.org +Beta design +0/0  "
-                         (regexp-quote newer) " · [0-9]+d ago$")
-                 (+agent-shell-plans-test--row "beta/design.org")))
-        (should (< (progn (+agent-shell-plans-test--row "beta/design.org")
-                          (point))
-                   (progn (+agent-shell-plans-test--row "alpha/plan.md")
-                          (point))))
+        (should (string-match-p "^Alpha · 1 doc · first · [0-9]+d ago$"
+                                (+agent-shell-plans-test--project "Alpha")))
+        (should (string-match-p "^Beta · 1 doc · second · [0-9]+d ago$"
+                                (+agent-shell-plans-test--project "Beta")))
+        (should (string-match-p "^  Alpha rollout · [0-9]+d ago$"
+                                (+agent-shell-plans-test--row "Alpha rollout")))
+        (should (string-match-p "^  Beta design · [0-9]+d ago$"
+                                (+agent-shell-plans-test--row "Beta design")))
+        (should (< (progn (+agent-shell-plans-test--project "Beta") (point))
+                   (progn (+agent-shell-plans-test--project "Alpha") (point))))
         (should (< (progn (goto-char (point-min))
                           (search-forward "Documents"))
                    (progn (goto-char (point-min))
@@ -469,14 +472,18 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
       (+agent-shell-plans-test--write
        (expand-file-name "tasks/bare.md" root) "No heading here\n")
       (+agent-shell-plans)
-      (should (string-match-p "^  tasks/plan\\.md +Ship the tasks +2/3  untracked$"
-                              (+agent-shell-plans-test--row "tasks/plan.md")))
-      (should (string-match-p "^  tasks/notes\\.org +First headline +0/1  "
-                              (+agent-shell-plans-test--row "tasks/notes.org")))
-      (should (string-match-p "^  tasks/titled\\.org +Org title +1/1  "
-                              (+agent-shell-plans-test--row "tasks/titled.org")))
-      (should (string-match-p "^  tasks/bare\\.md +bare\\.md +0/0  "
-                              (+agent-shell-plans-test--row "tasks/bare.md"))))))
+      (should (string-match-p "^Tasks · 4 docs · [0-9]+[smhd] ago$"
+                              (+agent-shell-plans-test--project "Tasks")))
+      (should (equal "  Ship the tasks · 2 of 3 done · not committed"
+                     (+agent-shell-plans-test--row "Ship the tasks")))
+      (should (equal "  First headline · 0 of 1 done · not committed"
+                     (+agent-shell-plans-test--row "First headline")))
+      (should (equal "  Org title · 1 of 1 done · not committed"
+                     (+agent-shell-plans-test--row "Org title")))
+      (should (equal "  bare.md · not committed"
+                     (+agent-shell-plans-test--row "bare.md")))
+      (should (< (progn (+agent-shell-plans-test--row "Ship the tasks") (point))
+                 (progn (+agent-shell-plans-test--row "bare.md") (point)))))))
 
 (ert-deftest +agent-shell-plans-test-document-copies-and-untracked ()
   (+agent-shell-plans-test--with-documents
@@ -492,17 +499,40 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
       (+agent-shell-plans-test--write
        (expand-file-name "plans/delta/draft.md" root) "# Draft\n")
       (+agent-shell-plans)
-      (should-not (string-match-p "plan\\.v2\\.md +Gamma" (buffer-string)))
-      (should (string-match-p "  ⚠ COPIES$"
-                              (+agent-shell-plans-test--row "gamma/plan.md")))
-      (should-not (string-match-p "COPIES"
-                                  (+agent-shell-plans-test--row "delta/plan.md")))
-      (should (string-match-p "  untracked$"
-                              (+agent-shell-plans-test--row "delta/draft.md")))
-      (+agent-shell-plans-test--row "gamma/plan.md")
+      (should-not (string-match-p "Gamma again" (buffer-string)))
+      (should (string-match-p "^Gamma  ⚠ 1 COPY · 1 doc · [0-9]+d ago$"
+                              (+agent-shell-plans-test--project "Gamma")))
+      (should-not (string-match-p "COPY"
+                                  (+agent-shell-plans-test--project "Delta")))
+      (should (equal "  Draft · not committed"
+                     (+agent-shell-plans-test--row "Draft")))
+      (+agent-shell-plans-test--project "Gamma")
+      (forward-line 1)
+      (should (looking-at "    About$"))
       (magit-section-toggle (magit-current-section))
-      (forward-line 2)
-      (should (looking-at "    Copies  plan\\.v2\\.md$")))))
+      (forward-line 1)
+      (should (looking-at "      Copies  plan\\.v2\\.md$")))))
+
+(ert-deftest +agent-shell-plans-test-document-descriptions ()
+  (+agent-shell-plans-test--with-documents
+    (let ((+agent-shell-plans-directories (list root)))
+      (+agent-shell-plans-test--write
+       (expand-file-name "theta/design.md" root)
+       "# Theta design\n\nStatus: draft\n\nThe real **summary** here\n\
+spans lines.\n\n- a list\n")
+      (+agent-shell-plans-test--write
+       (expand-file-name "theta/notes.md" root)
+       "# Theta notes\n\n| a | table |\n\nNotes prose.\n")
+      (+agent-shell-plans)
+      (+agent-shell-plans-test--project "Theta")
+      (forward-line 1)
+      (should (looking-at "    The real summary here spans lines\\.$"))
+      (+agent-shell-plans-test--row "Theta notes")
+      (magit-section-toggle (magit-current-section))
+      (forward-line 1)
+      (should (looking-at "      Notes prose\\.$"))
+      (forward-line 1)
+      (should (looking-at "      File  ")))))
 
 (ert-deftest +agent-shell-plans-test-document-git-bound-and-refresh ()
   (+agent-shell-plans-test--with-documents
@@ -527,16 +557,13 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
             (set-file-times file (time-add nil 5))
             (+agent-shell-plans--render)
             (should (= 3 gits))
-            (should (string-match-p "Epsilon renamed +1/1"
-                                    (+agent-shell-plans-test--row
-                                     "epsilon/plan.md")))
-            (let ((hash (+agent-shell-plans-test--commit
-                         root "2026-03-01T00:00:00Z")))
+            (let ((before (+agent-shell-plans-test--row "Epsilon renamed")))
+              (should (string-match-p "· 1 of 1 done · " before))
+              (+agent-shell-plans-test--commit root "2099-01-01T00:00:00Z")
               (revert-buffer)
               (should (= 5 gits))
-              (should (string-match-p (regexp-quote hash)
-                                      (+agent-shell-plans-test--row
-                                       "epsilon/plan.md")))))
+              (should-not (equal before (+agent-shell-plans-test--row
+                                         "Epsilon renamed")))))
         (advice-remove 'process-file '+agent-shell-plans-test--count)))))
 
 (ert-deftest +agent-shell-plans-test-document-visit ()
@@ -545,7 +572,7 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
           (file (expand-file-name "zeta/plan.md" root)))
       (+agent-shell-plans-test--write file "# Zeta\n")
       (+agent-shell-plans)
-      (+agent-shell-plans-test--row "zeta/plan.md")
+      (+agent-shell-plans-test--row "Zeta")
       (let (visited)
         (cl-letf (((symbol-function 'pop-to-buffer)
                    (lambda (buffer &rest _) (setq visited buffer))))
@@ -554,7 +581,7 @@ Its shape is what claude-agent-acp sent a probe run in plan mode."
       (should (equal (abbreviate-file-name file)
                      (progn (magit-section-toggle (magit-current-section))
                             (forward-line 1)
-                            (looking-at "    File    \\(.*\\)$")
+                            (looking-at "      File  \\(.*\\)$")
                             (match-string 1))))
       (call-interactively #'+agent-shell-plans-keys)
       (should (string-match-p "RET     Visit this document"
