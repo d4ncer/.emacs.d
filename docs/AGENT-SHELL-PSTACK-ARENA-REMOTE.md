@@ -29,62 +29,40 @@ sends the job and receives the outcomes.
 
 ## Why
 
-On the laptop, a candidate in a large monorepo, with hundreds of thousands
-of files, costs 2 to 3 minutes and about 10 GB for its worktree, plus
-Bazel's load on the machine. A remote workspace is built for that work and
-can keep running while the laptop sleeps. Other repositories keep running
-locally.
+On the laptop, a candidate in a very large repository costs minutes and
+many gigabytes for its worktree, plus the build tool's load on the
+machine. A remote workspace is built for that work and can keep running
+while the laptop sleeps. Other repositories keep running locally.
 
-## Ground truth
+## What a host needs
 
-Measured on a large Linux Coder workspace on 2026-10-26. The host's own
+The design rests on probes of a Linux remote workspace. The host's own
 details and the records of its live runs stay in the user's private notes.
 
-- **Machine.** Ubuntu 22.04, kernel 6.8, 16 CPUs, about 120 GB of RAM and
-  a 1 TB home volume.
-- **Repository.** A full checkout of a large monorepo, with a `.git` of
-  tens of gigabytes. Bazel, bazelisk, Nix and tmux are installed.
-- **Agents.** Claude Code and codex-cli are installed, and the user logged
-  both in once. Claude Code keeps its credentials in
-  `~/.claude/.credentials.json`, and Codex in `~/.codex/auth.json`. Codex's
-  browser login needed the forward `ssh -L 1455:localhost:1455`, because
-  its callback server runs on the host.
-- **ACP adapters** are not installed, but they are on npm:
-  `@agentclientprotocol/claude-agent-acp` 0.95.0 and
-  `@zed-industries/codex-acp` 0.16.0.
-- **Emacs** is not installed. apt offers 27.1, which is too old for these
-  libraries (`sort` with `:key` needs Emacs 30). Nix offers 31.1, and
-  agent-shell needs 29.1.
-- **Sandboxing.** `bwrap` is installed and works. It ran with a read-only
-  root bind and a private tmpfs `/tmp`, and a write to `/etc` failed with
-  "Read-only file system". Landlock is in the LSM list,
-  `kernel.apparmor_restrict_unprivileged_userns` is 0, and user namespaces
-  are available.
-- **Moving the base.** A direct `git push` of a laptop commit to the
-  host ran for more than 10 minutes and was killed. The laptop lacked
-  the host's newer refs, so it could not know which objects the host
-  already had. A bundle of only the commits after the merge base with
-  `origin/master` was a few kilobytes, built in under a second, and moved
-  and fetched in about 6 s, including fetching the merge base from GitHub.
-  The host got the exact same commit id.
-- **Lifetime.** The workspace stops itself some hours after it starts,
-  extended with activity. It is not yet known whether a running process
-  counts as activity. The host's own `coder` CLI has
-  `coder schedule extend`, and `systemd-run --user --wait true` works there.
-- **What the host exposes.** Probed after the panel:
-  - Unix sockets: container runtime sockets, the user's session bus,
-    agent sockets such as gpg-agent's, the Nix daemon socket and the
-    editor server's, plus abstract sockets, which have no path to hide.
-    The container runtime gives root on the box, and the session bus can
-    start unsandboxed commands through `systemd-run --user`.
-  - The environment: the Coder agent's token, which can control the
-    workspace, the forwarded SSH agent and a git credential helper.
-  - Home: SSH keys, cloud credentials, container registry logins and the
-    folders of internal developer tools.
-- **Network isolation.** `bwrap --unshare-net` works but leaves only
-  loopback, so DNS fails. `slirp4netns` 1.0.1 is installable from apt and
-  would give the namespace outbound access without the host's sockets.
-  `pasta` is not available.
+- **Machine.** A large Linux host with plenty of CPU, memory and disk.
+- **Repository.** A full checkout of a large repository, with its build
+  tools installed.
+- **Agents.** Claude Code and Codex are installed and logged in on the
+  host. Codex's browser login needs its callback port forwarded over SSH,
+  because its callback server runs on the host.
+- **ACP adapters** come from npm, and Emacs 30 or later from Nix, since a
+  distribution's Emacs may be too old for these libraries (`sort` with
+  `:key` needs Emacs 30).
+- **Sandboxing.** `bwrap` and unprivileged user namespaces must be
+  available.
+- **Moving the base.** A direct `git push` of a laptop commit to a host
+  with newer refs can take very long, because the laptop cannot know which
+  objects the host already has. A bundle of only the commits since a
+  negotiated merge base is small and fast, and gives the host the exact
+  same commit id.
+- **Lifetime.** A remote workspace may stop itself on a schedule, so the
+  transport extends it while an arena runs.
+- **What a host exposes.** A developer host typically exposes container
+  and session-bus sockets, tokens in the environment and credentials in
+  the home folder, so the sandbox must allowlist, not denylist.
+- **Network isolation.** `bwrap --unshare-net` leaves only loopback, so
+  DNS fails. `slirp4netns` gives the namespace outbound access without
+  the host's sockets.
 
 ## Shape: the host runs the whole arena
 
@@ -160,8 +138,8 @@ under `bwrap` with:
   when the socket does not exist.
 - **Environment.** `--clearenv`, then an explicit allowlist (`PATH`,
   `HOME`, `LANG`, `TERM`, the temp variables, the profile's `:env` and the
-  agent's own login entries). `CODER_AGENT_TOKEN`, `SSH_AUTH_SOCK` and the
-  rest never reach a candidate.
+  agent's own login entries). The host's agent tokens, `SSH_AUTH_SOCK` and
+  the rest never reach a candidate.
 - **ACP file requests.** agent-shell serves the agents' file requests in
   the runner, outside the namespace. On Linux the gate in
   `+agent-shell-drive--file-allowed-p` allows only paths the candidate can
@@ -198,23 +176,19 @@ The copy-back rule is gone everywhere. It could not survive two sandboxes
 refreshing at once, and it promoted sandbox-written data into the host's
 real login.
 
-**Measured on the remote host, 2026-10-27.** With `expiresAt` set a
-minute in the past, a fixture remote arena with one Claude Code candidate
-and a Claude Code judge started under the shipped runner. Its status
-recorded `claude-code` as refreshed with about 8 hours left. The host's
-refresh token had changed, and the candidate and judge both finished.
-Codex's token lasted more than 9 days, and `codex exec` did not refresh
-it when only `last_refresh` was old. Whether it refreshes a token near its `exp` is untested.
+**Tested** with a stored login marked expired: the check refreshed it,
+and the candidate and judge both finished. Codex's access token outlasts
+an arena by days, and `codex exec` did not refresh it when only
+`last_refresh` was old. Whether it refreshes a token near its `exp` is
+untested.
 
-**Measured on the remote host, 2026-10-27.** With 52 minutes left on
-Claude Code's token and an arena needing 59, `claude -p` exited 0 and
-left the login untouched: same expiry, same refresh token, file not
-rewritten. Claude Code 2.1.304 renews a login only close to expiry and
-has no command that forces it. The check therefore cannot extend a login
-early, and its refusal says so and suggests logging in again or shorter
-timeouts. Forcing a refresh by marking the stored login expired was
-considered and rejected: it rewrites the user's real login, and a
-concurrent refresh by another session could be overwritten.
+With less time left on Claude Code's token than an arena needed,
+`claude -p` left the login untouched. Claude Code renews a login only
+close to expiry and has no command that forces it. The check therefore
+cannot extend a login early, and its refusal says so and suggests logging
+in again or shorter timeouts. Forcing a refresh by marking the stored
+login expired was considered and rejected: it rewrites the user's real
+login, and a concurrent refresh by another session could be overwritten.
 
 ### Setting up the host and versions
 
@@ -237,8 +211,8 @@ on the laptop and sent as plain data in the job.
 
 A profile gains `:host`, naming a remote host: `(coder . "example-ws")`
 for a Coder workspace reached as `ssh coder.<name>`, or a plain SSH host.
-The monorepo's private profile sets it. Other repositories leave `:host`
-unset and run locally.
+A private profile sets it. Other repositories leave `:host` unset and run
+locally.
 
 A remote arena gets its own phases on the laptop: preparing, submitting,
 remote, fetching and finished. Its members mirror the runner's states read
@@ -347,7 +321,7 @@ job without `egress_tshark` still runs, with its egress records
 unavailable. A file from that earlier setup:
 
 ```json
-{"version":1,"written_at":"2026-10-26T10:29:45.684Z",
+{"version":1,"written_at":"2026-01-01T00:00:00.000Z",
  "emacs":{"path":"/nix/store/...-emacs-nox-31.1/bin/emacs","version":"31.1"},
  "adapters_bin":"/home/user/.local/share/pstack-arena/adapters/node_modules/.bin",
  "codex_acp":{"path":".../codex-acp/dist/index.js","version":"2.2.2"}}
@@ -699,7 +673,7 @@ it owns no timer, process or connection.
   stale. A stale host's tip is in the laptop's history, so rung 1
   already covers it.
 - **The laptop extends the workspace, and the runner does not check the
-  time left.** The experiments found the host's `coder` logged out, so
+  time left.** The runner's host may lack a logged-in workspace CLI, so
   the runner cannot read or move its stop time.
 - **Profiles cross through placeholders.** Functions in a profile are
   called on the laptop with a stand-in sandbox whose root, temp and
@@ -737,13 +711,11 @@ it owns no timer, process or connection.
 - **Results stay on the host until cleaned.** This is as designed, but it
   keeps every candidate's worktree there; see the open questions.
 
-## Experiment results, 2026-10-26
-
-Run on the remote host after revision 2.
+## Network namespace and credentials
 
 **The network namespace.** `bwrap --unshare-net` with `slirp4netns`
 attached failed with `setns(CLONE_NEWNET): Operation not permitted`, even
-with `--userns-path`. This order worked:
+with `--userns-path`. This order works:
 
 1. `unshare --user --map-root-user --net` creates the user and network
    namespaces.
@@ -753,62 +725,46 @@ with `--userns-path`. This order worked:
    cleared environment, with `--unshare-user` and the user's own `--uid`
    and `--gid`, so the agent is not root inside.
 
-`/etc/resolv.conf` is a symlink into `/run/systemd/resolve`, so the
-sandbox gets a `nameserver 10.0.2.3` file at
-`/run/systemd/resolve/stub-resolv.conf` under a private `/run`.
+When `/etc/resolv.conf` is a symlink into `/run`, the sandbox gets its
+own resolver file under a private `/run`.
 
-| Check inside the sandbox | Result |
-|---|---|
-| Interface | `tap0` up at 10.0.2.100 |
-| HTTPS to api.anthropic.com and github.com | reached (404 and 200) |
-| Host loopback through 10.0.2.2 | refused |
-| Abstract unix sockets | none visible |
-| The container runtime's socket | absent |
-| `~/.ssh` | absent |
-| Environment | 5 variables |
+Inside the sandbox, the agent reaches the model providers over HTTPS, the
+host's loopback through slirp4netns's gateway is refused, and no abstract
+socket, container runtime socket or `~/.ssh` is visible. With `--ro-bind /
+/` instead of the allowlist, a container runtime's socket stays reachable
+even in its own network namespace, because path sockets are files. The
+allowlist is necessary.
 
-With `--ro-bind / /` instead of the allowlist, the container runtime's
-socket was reachable even in its own network namespace, because path
-sockets are files. The allowlist is necessary.
+**Credentials without refresh tokens.**
 
-**Credentials without refresh tokens.** The host's Claude Code access
-token had a few hours left. The host's Codex access token is a JWT that
-lasts about 10 days.
-
-- **Claude Code** ran `claude -p` in bypass mode inside the full sandbox,
+- **Claude Code** runs `claude -p` in bypass mode inside the full sandbox,
   with only `CLAUDE_CODE_OAUTH_TOKEN` set to the host's access token and a
-  private `CLAUDE_CONFIG_DIR`. It wrote a file in its worktree and found
-  `~/.ssh` absent. As root inside the namespace, it refused
+  private `CLAUDE_CONFIG_DIR`. As root inside the namespace it refuses
   `--dangerously-skip-permissions`, which the uid mapping above fixes.
 - **Codex**:
-  - It refused `codex login --with-access-token`: "agent identity JWT
+  - It refuses `codex login --with-access-token`: "agent identity JWT
     payload is not valid JSON". That flag takes another kind of token.
   - A private `auth.json` with `auth_mode` `chatgpt` and the access token,
-    ID token and account id worked. Its `refresh_token` has to be present,
+    ID token and account id works. Its `refresh_token` has to be present,
     so it is the empty string.
-  - `codex exec` with approvals and its own sandbox bypassed then wrote a
-    file and found `~/.ssh` absent.
-- **The host's login files** kept their modification times through every
+- **The host's login files** keep their modification times through every
   run.
 
 So candidates get only an access token. The arena checks that the token
 outlives its deadline and refreshes the host's own login first if it does
 not.
 
-**Autostop.** The host's `coder` CLI is not logged in. The laptop's is,
-and `coder schedule extend NAME 6h` moved the stop time to six hours from
-the command. The laptop extends the workspace at submission to cover the
-arena's deadline, so the host needs no Coder token.
+**Autostop.** The laptop's workspace CLI extends the workspace at
+submission, with `coder schedule extend NAME DURATION`, to cover the
+arena's deadline, so the host needs no workspace token.
 
-## The Linux backend as built, 2026-10-26
+## The Linux backend as built
 
 **Host setup.** The user's private setup playbook, run on every boot,
-installs slirp4netns from apt, `emacs-nox` 31.1 from a pinned nixpkgs
-revision as a GC-rooted link at `~/.local/share/pstack-arena/emacs`, and
-the adapters with `npm ci` into `~/.local/share/pstack-arena/adapters`.
-It removes `ready.json` first and `ready.sh` writes it back once every
-tool runs. With everything installed the setup takes a few seconds,
-mostly the adapters' smoke check.
+installs slirp4netns, `emacs-nox` 31.1 from a pinned nixpkgs revision as a
+GC-rooted link at `~/.local/share/pstack-arena/emacs`, and the adapters
+with `npm ci` into `~/.local/share/pstack-arena/adapters`. It removes
+`ready.json` first and `ready.sh` writes it back once every tool runs.
 
 **Adapters.** `@zed-industries/codex-acp` stopped at 0.16.0. That build
 defaults to `gpt-5.5`, which a ChatGPT login rejects, and newer models
@@ -838,26 +794,21 @@ covered by an empty tmpfs, since a socket on a read-only mount still
 accepts connections. The adapter's npm `node_modules` is bound read-only
 so the adapter can run.
 
-**Smoke run.** Each real adapter started in this sandbox through
-`+agent-shell-drive-start`, wrote a file in its root, found `~/.ssh`
-absent, answered, and stopped with no survivors, each in about 12 s. The
-host's login files kept their modification times.
+**Smoke run.** Each real adapter starts in this sandbox through
+`+agent-shell-drive-start`, writes a file in its root, finds `~/.ssh`
+absent, answers, and stops with no survivors. The host's login files keep
+their modification times.
 
-## Faults found in live use, 2026-10-27
+## Faults found in live use
 
-The first remote arena on the monorepo, with a Claude Code and a Codex
-candidate, hit five faults.
-
-- **A stopped workspace.** The workspace had stopped itself, so the
-  submission's SSH probe timed out during the banner exchange and the
-  arena was rejected. That probe woke the workspace, which ran about a
-  minute and a half later. Submission now starts and waits for it, as
-  above.
-- **A refusal without a reason.** The host's Claude Code access token had
-  expired hours earlier, so the Linux backend refused that candidate.
-  The status carried no member errors, so it showed only `state error`,
-  and a restarted runner lost the reason. A status member now carries its
-  error, the laptop's panel mirrors it, and recovery restores it.
+- **A stopped workspace.** A workspace that had stopped itself made the
+  submission's SSH probe time out, and the arena was rejected. Submission
+  now starts the workspace and waits for it.
+- **A refusal without a reason.** An expired host login made the Linux
+  backend refuse a candidate, but the status carried no member errors, so
+  it showed only `state error`, and a restarted runner lost the reason. A
+  status member now carries its error, the laptop's panel mirrors it, and
+  recovery restores it.
 - **A sweep with macOS tools.** A candidate whose adapter was already gone
   was swept with `/usr/sbin/lsof`, which Linux lacks. The halt signalled
   from its timer, the candidate stayed `stopping`, and the arena stalled
@@ -865,39 +816,22 @@ candidate, hit five faults.
   agent's processes end with its PID namespace. A stop that signals fails
   the candidate's capture with the error, so the others go on.
 - **Runner memory.** See below.
-- **Sleep-inhibit lines.** The runner's journal had hundreds of lines of
-  `Sleep inhibit unavailable`, one per busy turn, since the host's D-Bus
-  refuses a runner. The runner no longer asks.
+- **Sleep-inhibit lines.** A host's D-Bus may refuse a runner's sleep
+  inhibit, which logged one line per busy turn. The runner no longer asks.
 
 ### Runner memory
 
-The first runner's unit reached nearly 40 GB while its candidates ran,
-and a restarted one grew by about 15 GB in under a minute. Measured under
-a capped scope, the runner's Emacs stayed under 80 MB throughout. The
-rest was the unit's children and the kernel memory charged to it:
-
-- Provisioning two candidates peaked near 30 GB, almost all page cache
-  and inode slab for two new worktrees of hundreds of thousands of files,
-  with git's own memory under 3 GB. Under an 8 GB cap it took the same
-  time, about two and a half minutes, since the kernel reclaims that
-  cache.
-- The restarted runner's recovery made the judge checkout of the changed
-  candidate, a full `git worktree add`: nearly a minute and 14 GB alone,
-  most of it page cache. With the sparse judge checkout, the whole
-  recovery took about 16 s and peaked under 1 GB, against about 90 s and
-  the full 8 GB cap before.
-- About 10 GB of the first runner was most likely the Codex candidate's
-  Bazel server. The monorepo's Bazel configuration lets the JVM take half
-  the memory it sees, and inside the sandbox, which has no
-  `/sys/fs/cgroup`, it sees the whole host. This share is inferred, not
-  measured.
+Provisioning worktrees of a very large repository charges page cache and
+inode slab to the runner's unit, far more than Emacs itself uses, and a
+build tool inside the sandbox may size its heap from the whole host,
+since the sandbox has no `/sys/fs/cgroup`. A sparse judge checkout cuts
+recovery's cost substantially.
 
 `MemoryMax=50%` on the runner's unit is defence in depth. At that limit
-the kernel reclaims page cache first. The limit still leaves half the
-host to the user's own work, whose Bazel server also takes up to half.
-Past it the kernel kills the largest process, a build rather than the
-runner, and `OOMPolicy=continue` keeps systemd from stopping the runner
-with it.
+the kernel reclaims page cache first, and the limit leaves half the host
+to the user's own work. Past it the kernel kills the largest process, a
+build rather than the runner, and `OOMPolicy=continue` keeps systemd from
+stopping the runner with it.
 
 ## Open questions to settle by testing
 
@@ -906,16 +840,17 @@ with it.
 2. **Bazel inside the sandbox sizes its heap from the whole host.** The
    sandbox has no `/sys/fs/cgroup`, so the JVM cannot see the runner's
    memory limit. A read-only bind of the runner's cgroup would let it.
-3. **What the monorepo's build needs from the host.** Bazel, its private home
-   cache and toolchain paths, and whether it needs the Nix daemon socket or
-   Docker. The trace command, ported to Linux, answers this.
+3. **What a large repository's build needs from the host.** Its caches,
+   toolchain paths and any daemon sockets. The trace command, ported to
+   Linux, answers this.
 4. **Bazel on the host.** How cold a candidate's first build is, and
    whether candidates can share a repository cache.
 5. **Settled: refreshing the host's Claude Code login** without a person.
    A plain `claude -p` refreshes an expired token; see Credentials. Whether
    `codex exec` refreshes a Codex token near its expiry is still open.
-6. **Cleaning host worktrees after the fetch.** A monorepo worktree is about 10 GB,
-   and nothing on the host needs it once the laptop holds the results.
+6. **Cleaning host worktrees after the fetch.** A large repository's worktree
+   is many gigabytes, and nothing on the host needs it once the laptop
+   holds the results.
 7. **The SSH and systemd paths on a real host.** The tests cover the
    remote command's quoting through a local shell, not `ssh`,
    `systemd-run` or `coder schedule extend` themselves.
@@ -987,16 +922,16 @@ Still planned:
   re-attaching after a laptop restart, a frozen heartbeat, cancel before
   the runner starts, a prerequisite the host cannot fetch, and two arenas
   submitted at once.
-- **A live check on the remote host** with two real candidates on the
-  monorepo Bazel test target used for the laptop profile.
+- **A live check on a remote host** with two real candidates on a large
+  repository's test target.
 
 ## Triage of interrogate panel 6799a86a4a5d
 
 | Finding | Severity | Members | Outcome |
 |---|---|---|---|
-| Hiding socket folders leaves sockets reachable | high | isolation | Fixed. Own network namespace through slirp4netns, sockets only by `:connect`. The probe found Docker, the user D-Bus and 10 abstract sockets. |
+| Hiding socket folders leaves sockets reachable | high | isolation | Fixed. Own network namespace through slirp4netns, sockets only by `:connect`. The probe found container, session-bus and abstract sockets. |
 | ACP file requests bypass the namespace | high | isolation | Fixed. On Linux the gate allows only paths visible inside the namespace. |
-| Other candidates' private folders and host secrets readable | high | isolation | Fixed. Allowlist mounts, private home, cleared environment. The probe found the Coder agent's token, SSH keys and cloud credentials. |
+| Other candidates' private folders and host secrets readable | high | isolation | Fixed. Allowlist mounts, private home, cleared environment. The probe found tokens and credentials on the host. |
 | Concurrent refresh rotation breaks copy-back | high | isolation | Fixed. Sandboxes get no refresh tokens, only the host login's access token. |
 | Copy-back promotes candidate data into the real login | medium | isolation | Fixed. Copy-back is deleted. |
 | SysV IPC shared | medium | isolation | Fixed. `--unshare-ipc`. |

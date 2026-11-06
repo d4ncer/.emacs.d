@@ -437,7 +437,7 @@ literal folder below the root.  `+agent-shell-sandbox-regexp-quote'
 quotes a path for one.
 
 ALLOW-CONNECTS lists unix socket paths the agent may connect to, such as
-a build tool's tunnel to its remote cache.  Every other unix socket is
+a local daemon's socket.  Every other unix socket is
 refused but mDNSResponder's.  None may be the Emacs server's socket
 folder, `server-socket-dir', or under it.
 

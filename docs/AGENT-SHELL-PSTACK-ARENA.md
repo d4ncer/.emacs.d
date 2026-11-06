@@ -785,12 +785,10 @@ None. Every probe above was run on this machine.
   in the manifest, so `+agent-shell-arena-git-clean` removes it like a
   candidate worktree.
 - **Checkouts hold the changed files.** A judge checkout is a sparse
-  worktree whose non-cone patterns name each path the result changed. On
-  a checkout of hundreds of thousands of files one took about 3 s and
-  300 MB, where a full checkout took nearly a minute and charged about
-  14 GB of page cache, inode slab and git's own memory to its cgroup.
-  Non-cone patterns cost time in proportion to their number times the
-  repository's files: 5,000 of them took about a minute there. A result that changes more than
+  worktree whose non-cone patterns name each path the result changed, so
+  it avoids materialising unchanged files. Non-cone patterns cost time in
+  proportion to their number times the repository's files. A result that
+  changes more than
   `+agent-shell-arena-git-checkout-limit` paths, 1,000, gets a full
   checkout. Making the sparse checkout turns on `extensions.worktreeConfig`
   in the lead's repository, as any sparse linked worktree does.

@@ -95,10 +95,10 @@ matches applies.  PROFILE is a plist with any of these keys:
 :write    Extra paths the candidate may write.
 :read     Extra paths inside a read-denied folder the candidate may read.
 :connect  Unix socket paths the candidate may connect to, such as a
-          build tool's tunnel to its remote cache at
-          /private/tmp/NAME-tunnel.sock.  Every other unix socket but
-          mDNSResponder's is refused, and none may be in the Emacs
-          server's socket folder, `server-socket-dir'.
+          local daemon's socket at /private/tmp/TOOL.sock.  Every
+          other unix socket but mDNSResponder's is refused, and none
+          may be in the Emacs server's socket folder,
+          `server-socket-dir'.
 :env      Extra NAME=VALUE environment entries, or a function of the
           sandbox returning them.  They win over the sandbox defaults.
 :host     A host that runs the whole arena in place of this Emacs:

@@ -354,9 +354,8 @@ keys:
   `+agent-shell-sandbox-regexp-quote` quotes a path a function computes.
 - `:connect` lists unix socket paths a candidate may connect to, or
   functions of the sandbox returning them. Every other unix socket is
-  refused but mDNSResponder's, so a build tool that reaches its remote
-  cache through a local tunnel, such as `/private/tmp/<name>-tunnel.sock`,
-  needs its socket here. Each path is absolute, and its true name goes
+  refused but mDNSResponder's, so a tool that talks to a local daemon over
+  a unix socket, such as `/private/tmp/<tool>.sock`, needs its socket here. Each path is absolute, and its true name goes
   into the profile, so `/tmp/x.sock` and `/private/tmp/x.sock` both work.
   Emacs refuses any path in the Emacs server's socket folder,
   `server-socket-dir`, however a symlink reaches it, so no candidate can
