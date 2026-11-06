@@ -172,7 +172,9 @@ Emacs writes each report once to
 settles with its partial text. A member whose shell ends early settles with
 the reason. When every member has settled, Emacs prompts the lead with each
 member's agent, state, report path and report text, then the shape's triage
-line. The lead still triages and judges.
+line. The lead still triages and judges. A delegate's or arena candidate's
+report also gets `<role>.result.json`, naming its result commit; see
+[Walkthroughs and code links](#walkthroughs-and-code-links).
 
 Delivery uses `+agent-shell-drive-send`, which never interrupts a busy lead or
 an unsent draft. Emacs retries on the lead's next `turn-complete` or
@@ -310,6 +312,11 @@ lead's mode-line help:
    --3way)`, then the judge's report and arena's Pick, Graft and Verify
    instructions.
 
+Each candidate's rationale ends with a `## Walkthrough` section, and Emacs
+records each candidate with a result commit beside its report, so the
+report's `path:line` citations open in that commit; see
+[Walkthroughs and code links](#walkthroughs-and-code-links).
+
 With no candidate that changed the base, the arena finishes without a
 judge. Killing the lead captures what the candidates made and finishes
 without a judge.
@@ -322,6 +329,8 @@ refs and the arena's folder through `+agent-shell-arena-git-clean`, which
 trusts only the arena's manifest. Read-only trees, such as Go's module
 cache in a private clone, are made writable before they are deleted. A
 step that fails is reported, and the rest of the cleanup still runs.
+Cleaning also removes the panel's review worktrees and
+`refs/pstack/review/<panel-id>/` refs first.
 
 #### Repository profiles
 
@@ -662,7 +671,10 @@ The delegate's line in `C-c P` shows its shell, and `RET` opens it, live,
 while it runs; a remote delegate's opens its transcript instead. `c` cancels it. A worktree delegate's line shows its
 workspace, and once it has finished, `x` removes the worktree. A
 branch-mode delegate's line shows the checkout's state, and `x` switches
-the checkout back if Emacs could not, then forgets the record.
+the checkout back if Emacs could not, then forgets the record. Once it has
+finished, `RET` on the delegate opens its report, whose walkthrough
+citations are links into the result commit; see
+[Walkthroughs and code links](#walkthroughs-and-code-links).
 
 Cleaning then deletes the delegate's branch, but only when the branch your
 checkout is on has every commit the delegate's branch has since its base,
@@ -734,6 +746,53 @@ made, deletes the branch under the same rules, and the rejection says
 so. A branch with commits of its own, or one moved since the start, always
 stays.
 
+#### Walkthroughs and code links
+
+Every code-writing contract, the delegate's, the sandboxed delegate's and
+the arena candidate's, asks the member to end its report with a
+`## Walkthrough` section: what changed and why, in the order to read it,
+each claim with a `path:line` (or `path:line-line`) whose path is from the
+repository root and whose line is in the result commit, marked
+`(recorded)` when the brief or user asked for it and `(inferred)`
+otherwise. A sandboxed delegate puts it before its `pstack-commit` block.
+
+When a delegate or arena panel finishes, Emacs writes
+`var/pstack-panels/<panel-id>/<role>.result.json` beside each report
+whose member has a result commit: the repository's common git directory
+and top level, the base, the result commit (a delegate's branch tip, a
+candidate's captured commit), the role's worktree or checkout when it had
+one, and for a result from a host the absolute path of the laptop's
+results bundle and the ref inside it. A member without a commit, such as
+a judge or a delegate that committed nothing, gets none.
+
+Visiting such a report, with `RET` in the panels view or any `find-file`,
+turns on `+agent-shell-pstack-walkthrough-mode`. It makes each
+`path:line` whose path is in the result commit's tree a button with the
+`+agent-shell-pstack-walkthrough-link` face, which inherits `link`. The
+tree comes from `git ls-tree -r --name-only` once per commit. `RET` or a
+click opens the file at that line, in another window, with `find-file`, so
+it gets its usual major mode and eglot:
+
+| Where the commit is | Where the file opens |
+| --- | --- |
+| The role's worktree or checkout exists, holds the file, and its `HEAD` is the commit | there |
+| The lead's checkout's `HEAD` is the commit | the lead's checkout |
+| Otherwise | a detached review worktree, `var/pstack-panels/<panel-id>/review/<role>/`, added at the commit |
+| The repository lacks the commit but its results bundle remains | the review worktree, after fetching the commit into `refs/pstack/review/<panel-id>/<role>` |
+| Neither | a user error naming the panel and role |
+
+So a branch-mode delegate whose checkout went back to its branch, or an
+arena whose checkout holds only the changed files, still opens the
+result's content, never the lead's. Each followed link appends
+`(TIME PANEL ROLE PATH)` to `var/pstack-walkthrough-opens.eld`,
+`+agent-shell-pstack-walkthrough-opens-file`, so opens can be counted.
+
+`x` and `D` remove a panel's review worktrees and review refs along with
+its workspace; a panel with no workspace left, such as a branch-mode
+delegate whose checkout came back, offers `x` to remove its review
+worktrees alone. A review worktree with changes stays, and the message
+names it.
+
 #### Recovery
 
 Every delegate keeps a manifest under `+agent-shell-pstack-arena-directory`.
@@ -785,8 +844,13 @@ open), `n` and `p` move between sections and `M-n` and `M-p`
 between those at the same level. `?` lists the keys acting at point. `RET`
 visits the lead from a panel, the live shell, transcript or report from a
 member, the folder from a workspace and the whole follow-up from its
-section; a line naming a report, checkout, shell or plan visits that. `c` cancels
-an unfinished panel and `x` cleans up a finished arena or delegate. `D`
+section; a line naming a report, checkout, shell or plan visits that. A
+delegate's or candidate's report opens with its walkthrough's `path:line`
+citations as links into the result commit, opened in a review worktree
+under `var/pstack-panels/<panel-id>/review/` when no checkout is at it; see
+[Walkthroughs and code links](#walkthroughs-and-code-links). `c` cancels
+an unfinished panel and `x` cleans up a finished arena or delegate, with
+its review worktrees. `D`
 forgets every finished panel whose follow-up was delivered; panels still
 holding a workspace, checkout or branch record are listed in one question,
 then cleaned as `x` would and forgotten, or kept. Reports stay on disk. `g`

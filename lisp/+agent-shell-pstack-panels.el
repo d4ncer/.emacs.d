@@ -16,6 +16,7 @@
 
 (require 'magit-section)
 (require '+agent-shell-pstack-panel)
+(require '+agent-shell-pstack-walkthrough)
 
 (declare-function +agent-shell-plans "+agent-shell-plans")
 (declare-function +agent-shell-plans-progress "+agent-shell-plans")
@@ -342,6 +343,14 @@ TARGET is as `+agent-shell-pstack-panels--visit-target' takes it."
               (directory (+agent-shell-arena-git-manifest-directory manifest)))
     (file-exists-p directory)))
 
+(defun +agent-shell-pstack-panels--reviews-only-p (panel)
+  "Return whether finished PANEL holds review worktrees but no workspace."
+  (and panel
+       (eq (+agent-shell-pstack-panel-phase panel) 'finished)
+       (not (+agent-shell-pstack-panels--cleanable-p panel))
+       (+agent-shell-pstack-walkthrough-reviews-p
+        (+agent-shell-pstack-panel-id panel))))
+
 (defun +agent-shell-pstack-panels--actions (section &optional all)
   "Return the keys that act on SECTION, each (KEY . WHAT), most useful first.
 A panel's keys act anywhere in it, but only its own section and its
@@ -357,8 +366,10 @@ workspace's list them, unless ALL."
         (unless (or (+agent-shell-pstack-panels--finished-p panel)
                     (eq type 'pstack-workspace))
           (list (cons "c" "cancel the panel")))
-        (when (+agent-shell-pstack-panels--cleanable-p panel)
-          (list (cons "x" "clean up its workspace")))))
+        (cond ((+agent-shell-pstack-panels--cleanable-p panel)
+               (list (cons "x" "clean up its workspace")))
+              ((+agent-shell-pstack-panels--reviews-only-p panel)
+               (list (cons "x" "remove its review worktrees"))))))
      (when (eq type 'pstack-record)
        (list (cons "x" (if (memq (+agent-shell-arena-git-delegate-restore
                                   (+agent-shell-arena-git-manifest-delegate
@@ -779,9 +790,13 @@ message with a pstack-panel block.\n"))
     buffer))
 
 (defun +agent-shell-pstack-panels--visit-target (target)
-  "Visit TARGET: a file or folder, a buffer, or a tagged panel or record."
+  "Visit TARGET: a file or folder, a buffer, or a tagged panel or record.
+A result report gets its walkthrough links; see
+`+agent-shell-pstack-walkthrough-mode'."
   (pcase target
-    ((pred stringp) (find-file-other-window target))
+    ((pred stringp)
+     (find-file-other-window target)
+     (+agent-shell-pstack-walkthrough-maybe-enable))
     (`(pstack-plan . ,shell) (+agent-shell-plans shell))
     (`(pstack-transcript . ,remote)
      (pop-to-buffer (+agent-shell-arena-remote-transcript-buffer remote)))
@@ -841,12 +856,17 @@ An arena captures what its candidates made and skips its judge."
 
 (defun +agent-shell-pstack-panels-clean ()
   "Clean up the finished arena or delegate at point, or the record there.
+A finished panel with no workspace left loses its review worktrees.
 Ask for confirmation first."
   (interactive)
   (let ((panel (+agent-shell-pstack-panels--panel))
         (manifest (+agent-shell-pstack-panels--record)))
     (cond
      (manifest (+agent-shell-pstack-arena--clean manifest))
+     ((+agent-shell-pstack-panels--reviews-only-p panel)
+      (when (yes-or-no-p (format "Remove panel %s's review worktrees? "
+                                 (+agent-shell-pstack-panel-id panel)))
+        (+agent-shell-pstack-panels--clean-reviews panel)))
      ((not (and panel (+agent-shell-pstack-panel-arena panel)))
       (user-error "No arena here"))
      ((not (eq (+agent-shell-pstack-panel-phase panel) 'finished))
@@ -857,6 +877,17 @@ Ask for confirmation first."
                   (+agent-shell-pstack-panel-id panel)))
      (t (+agent-shell-pstack-arena--clean
          (+agent-shell-pstack-panel-arena panel))))))
+
+(defun +agent-shell-pstack-panels--clean-reviews (panel)
+  "Remove PANEL's review worktrees and refs, and say what stayed."
+  (let ((id (+agent-shell-pstack-panel-id panel)))
+    (+agent-shell-pstack-walkthrough-clean
+     id (lambda (kept)
+          (message "Panel %s: %s" id
+                   (if kept (format "kept review worktrees with changes: %s"
+                                    (string-join kept "; "))
+                     "removed its review worktrees"))
+          (+agent-shell-pstack-panels--refresh)))))
 
 (defun +agent-shell-pstack-panels--holding (manifest)
   "Describe briefly what MANIFEST's arena still holds."
@@ -884,7 +915,8 @@ Ask for confirmation first."
 
 (defun +agent-shell-pstack-panels-clear-delivered ()
   "Forget every finished panel whose follow-up was delivered.
-Those holding nothing to clean go at once.  Those that still hold a
+Those holding nothing to clean go at once, with their review worktrees.
+Those that still hold a
 workspace, checkout or branch record are listed in one question, and
 are cleaned up as x would and then forgotten, or else kept."
   (interactive)
@@ -899,7 +931,11 @@ are cleaned up as x would and then forgotten, or else kept."
                 (mapconcat #'+agent-shell-pstack-panel-id panels ", "))))
     (unless delivered
       (user-error "No delivered panels to clear"))
-    (mapc #'+agent-shell-pstack-panels--forget free)
+    (dolist (panel free)
+      (when (+agent-shell-pstack-walkthrough-reviews-p
+             (+agent-shell-pstack-panel-id panel))
+        (+agent-shell-pstack-panels--clean-reviews panel))
+      (+agent-shell-pstack-panels--forget panel))
     (+agent-shell-pstack-panels--refresh)
     (cond
      ((null held)

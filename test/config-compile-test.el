@@ -27,6 +27,7 @@
                       "lisp/+agent-shell-plans.el"
                       "lisp/+agent-shell-plans-view.el"
                       "lisp/+agent-shell-pstack-card.el"
+                      "lisp/+agent-shell-pstack-walkthrough.el"
                       "lisp/+agent-shell-pstack-arena-trace.el"
                       "lisp/+agent-shell-arena-git.el"
                       "lisp/+agent-shell-arena-remote.el"

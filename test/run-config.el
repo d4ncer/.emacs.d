@@ -71,6 +71,7 @@
    "-l" "agent-shell-pstack-panel-test" "-l" "agent-shell-pstack-reload-test"
    "-l" "agent-shell-plans-test"
    "-l" "agent-shell-pstack-delegate-test"
+   "-l" "agent-shell-pstack-walkthrough-test"
    "-l" "agent-shell-arena-git-test"
    "-l" "agent-shell-arena-remote-test"
    "-l" "agent-shell-arena-remote-protocol-test"

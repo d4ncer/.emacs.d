@@ -158,7 +158,11 @@ Emacs captures them when your turn ends.  Do not run git commands that \
 write, such as git add, commit, stash or checkout: the worktree's index \
 lives outside the sandbox, so they fail.  End your turn with a rationale as \
 your final message: what you built, the alternatives you considered, and \
-what you rejected and why.  Nobody will answer questions during the turn."
+what you rejected and why.  End it with a `## Walkthrough` section that \
+explains what changed and why, in the order to read it.  Give each claim a \
+path:line, the path from the repository root and the line in the tree you \
+leave, marked (recorded) when the brief or user asked for it, or (inferred) \
+otherwise.  Nobody will answer questions during the turn."
      :judge "Read every candidate's checkout, not only its rationale.  Score \
 each candidate on each rubric criterion from 1 to 5 with a one-line reason.  \
 Then recommend one candidate as the base, with reasons, and name parts of \
@@ -182,7 +186,11 @@ your work with git on the branch you are on, in small commits with clear \
 messages.  Do not switch branches, rewrite history or push.  Do not end \
 your turn while a command you started is still running.  End your turn \
 with a report as your final message: what you built, how you tested it, and \
-what a reviewer should know.  Nobody answers questions during the turn."
+what a reviewer should know.  End it with a `## Walkthrough` section that \
+explains what changed and why, in the order to read it.  Give each claim a \
+path:line, the path from the repository root and the line in your last \
+commit, marked (recorded) when the brief or user asked for it, or \
+(inferred) otherwise.  Nobody answers questions during the turn."
      :sandbox-contract "You work alone in a sandbox that confines writes to \
 your workspace, in your agent's full-access mode, so nobody is asked for \
 permission; a permission request ends your turn.  Git cannot write its \
@@ -190,7 +198,11 @@ metadata there, so do not commit, stash, switch branches or write refs.  \
 Implement and verify the task.  Leave your changes uncommitted.  Do not \
 end your turn while a command you started is still running.  End your \
 final message with a report: what you built, how you tested it, and what a \
-reviewer should know.  Then end it with exactly one block of this form, \
+reviewer should know.  End the report with a `## Walkthrough` section that \
+explains what changed and why, in the order to read it.  Give each claim a \
+path:line, the path from the repository root and the line in the tree you \
+leave, marked (recorded) when the brief or user asked for it, or (inferred) \
+otherwise.  Then end the message with exactly one block of this form, \
 using this repository's commit style.  Give the subject and body for the \
 single commit Emacs will make.  Do not include attribution trailers or any \
 text after the block.
@@ -353,6 +365,8 @@ That is its limit, which no member runs past, plus the capture grace."
 (declare-function +agent-shell-arena-remote-clean "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-recorded-p
                   "+agent-shell-arena-remote")
+(declare-function +agent-shell-pstack-walkthrough-clean
+                  "+agent-shell-pstack-walkthrough")
 
 (cl-defstruct (+agent-shell-pstack-panel-member
                (:constructor nil)
@@ -1683,6 +1697,7 @@ for it to end; see `+agent-shell-pstack-panel--launch'."
 A panel with a sink hands itself to the sink instead.  A measured arena
 first waits for its members' egress records; see
 `+agent-shell-pstack-panel--close-egress'."
+  (+agent-shell-pstack-panel--write-results panel)
   (+agent-shell-pstack-panel--close-egress
    panel
    (lambda ()
@@ -1852,6 +1867,56 @@ produced exactly it; otherwise nil."
                           (secure-hash 'sha256 (encode-coding-string
                                                 text 'utf-8-unix))))
           text)))))
+
+(defun +agent-shell-pstack-panel--result-record (panel member)
+  "Return MEMBER of PANEL's result record, or nil without a result commit.
+It names the repository, the base, the result commit, a worktree that
+may hold it, and for a result from a host its results bundle and ref."
+  (when-let* ((manifest (+agent-shell-pstack-panel-arena panel))
+              ((memq (+agent-shell-pstack-panel-member-kind member)
+                     '(candidate delegate))))
+    (let* ((result (+agent-shell-pstack-panel-member-result member))
+           (delegate (+agent-shell-arena-git-manifest-delegate manifest))
+           (commit (if delegate
+                       (or (plist-get result :tip)
+                           (caar (last (+agent-shell-arena-git-delegate-commits
+                                        delegate))))
+                     (plist-get result :commit)))
+           (worktree
+            (cond ((+agent-shell-pstack-panel-remote panel) nil)
+                  ((null delegate) (plist-get result :checkout))
+                  ((eq 'worktree (+agent-shell-arena-git-delegate-isolation
+                                  delegate))
+                   (when-let* ((role (car (+agent-shell-arena-git-manifest-roles
+                                           manifest))))
+                     (+agent-shell-arena-git-role-worktree role))))))
+      (when commit
+        `((version . 1)
+          (panel . ,(+agent-shell-pstack-panel-id panel))
+          (role . ,(+agent-shell-pstack-panel-member-role member))
+          (git_dir . ,(or (ignore-errors
+                            (+agent-shell-arena-git-common-dir manifest))
+                          (+agent-shell-arena-git-manifest-git-dir manifest)))
+          (toplevel . ,(+agent-shell-arena-git-manifest-toplevel manifest))
+          (base . ,(+agent-shell-arena-git-manifest-base manifest))
+          (commit . ,commit)
+          (worktree . ,(or worktree :null))
+          (bundle . ,(or (plist-get result :bundle) :null))
+          (bundle_ref . ,(or (plist-get result :bundle-ref) :null)))))))
+
+(defun +agent-shell-pstack-panel--write-results (panel)
+  "Write ROLE.result.json beside the report of each of PANEL's results.
+Members without a result commit get none; see
+`+agent-shell-pstack-panel--result-record'."
+  (with-demoted-errors "pstack panel: result records failed: %S"
+    (dolist (member (+agent-shell-pstack-panel-members panel))
+      (let ((file (+agent-shell-pstack-panel--report-file panel member
+                                                          ".result.json"))
+            (record (+agent-shell-pstack-panel--result-record panel member)))
+        (ignore-errors (delete-file file))
+        (when record
+          (+agent-shell-pstack-panel--write-atomically
+           file (concat (json-serialize record) "\n")))))))
 
 (defun +agent-shell-pstack-panel--settle (panel member state text
                                                 &optional error stop-reason)
@@ -3668,12 +3733,21 @@ See `+agent-shell-pstack-arena--cleanup'."
   (when (yes-or-no-p (+agent-shell-pstack-arena--clean-prompt manifest))
     (+agent-shell-pstack-arena--cleanup manifest)))
 
+(defun +agent-shell-pstack-arena--panel-id (manifest)
+  "Return the id of the panel MANIFEST's arena was made for."
+  (let ((id (+agent-shell-arena-git-manifest-id manifest)))
+    (if (string-match "-[0-9a-f]\\{8\\}\\'" id)
+        (substring id 0 (match-beginning 0))
+      id)))
+
 (defun +agent-shell-pstack-arena--cleanup (manifest &optional done)
   "Clean MANIFEST's arena now, forgetting it in its panel.
-An arena that ran on a host is cleaned there too.  A delegate's branch
-then goes when the lead's branch has all its work; see
-`+agent-shell-arena-git-prune-branch'.  DONE, when given, is called with
-the cleanup's error, or nil, once it has ended."
+Its panel's review worktrees and refs go first; see
+`+agent-shell-pstack-walkthrough-clean'.  An arena that ran on a host is
+cleaned there too.  A delegate's branch then goes when the lead's branch
+has all its work; see `+agent-shell-arena-git-prune-branch'.  DONE, when
+given, is called with the cleanup's error, or nil, once it has ended."
+  (require '+agent-shell-pstack-walkthrough)
   (let ((id (+agent-shell-arena-git-manifest-id manifest))
         (remote (+agent-shell-pstack-arena--remote-p manifest))
         (done (or done #'ignore)))
@@ -3681,35 +3755,41 @@ the cleanup's error, or nil, once it has ended."
       (when-let* ((held (+agent-shell-pstack-panel-arena panel))
                   ((equal id (+agent-shell-arena-git-manifest-id held))))
         (setf (+agent-shell-pstack-panel-arena panel) nil)))
-    (funcall
-     (if remote #'+agent-shell-arena-remote-clean
-       #'+agent-shell-arena-git-clean)
-     manifest
-     (lambda (left error)
-       (let ((cleaned (if left (format "cleaned, but left %s"
-                                       (string-join left "; "))
-                        "cleaned")))
-         (cond
-          (error (message "Arena %s: cleanup failed: %s" id error)
-                 (funcall done error))
-          ((+agent-shell-arena-git-manifest-delegate manifest)
-           (+agent-shell-arena-git-prune-branch
-            manifest
-            (lambda (deleted reason)
-              (let ((branch (+agent-shell-arena-git-delegate-branch
-                             manifest)))
-                (message "Arena %s: %s%s" id cleaned
-                         (cond (deleted
-                                (format "; deleted branch %s, since your \
+    (+agent-shell-pstack-walkthrough-clean
+     (+agent-shell-pstack-arena--panel-id manifest)
+     (lambda (kept)
+       (when kept
+         (message "Arena %s: kept review worktrees with changes: %s" id
+                  (string-join kept "; ")))
+       (funcall
+        (if remote #'+agent-shell-arena-remote-clean
+          #'+agent-shell-arena-git-clean)
+        manifest
+        (lambda (left error)
+          (let ((cleaned (if left (format "cleaned, but left %s"
+                                          (string-join left "; "))
+                           "cleaned")))
+            (cond
+             (error (message "Arena %s: cleanup failed: %s" id error)
+                    (funcall done error))
+             ((+agent-shell-arena-git-manifest-delegate manifest)
+              (+agent-shell-arena-git-prune-branch
+               manifest
+               (lambda (deleted reason)
+                 (let ((branch (+agent-shell-arena-git-delegate-branch
+                                manifest)))
+                   (message "Arena %s: %s%s" id cleaned
+                            (cond (deleted
+                                   (format "; deleted branch %s, since your \
 branch has all its commits" branch))
-                               (reason (format "; kept branch %s: %s"
-                                               branch reason))
-                               (t ""))))
-              (funcall done nil)
-              (+agent-shell-pstack-panels--refresh))))
-          (t (message "Arena %s: %s" id cleaned)
-             (funcall done nil))))
-       (+agent-shell-pstack-panels--refresh)))
+                                  (reason (format "; kept branch %s: %s"
+                                                  branch reason))
+                                  (t ""))))
+                 (funcall done nil)
+                 (+agent-shell-pstack-panels--refresh))))
+             (t (message "Arena %s: %s" id cleaned)
+                (funcall done nil))))
+          (+agent-shell-pstack-panels--refresh)))))
     (+agent-shell-pstack-panels--refresh)))
 
 ;;;###autoload

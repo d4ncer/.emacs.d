@@ -376,6 +376,13 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
   :config
   (+agent-shell-pstack-card-mode 1))
 
+(use-package +agent-shell-pstack-walkthrough
+  :ensure nil
+  :after +agent-shell-pstack-panel
+  :demand t
+  :config
+  (+agent-shell-pstack-walkthrough-links-mode 1))
+
 (use-package +agent-shell-mermaid
   :ensure nil
   :after agent-shell

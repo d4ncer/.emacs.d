@@ -19,7 +19,8 @@
   '(+agent-shell-sandbox +agent-shell-drive +agent-shell-arena-git
     +agent-shell-egress +agent-shell-egress-summary
     +agent-shell-pstack +agent-shell-pstack-panel
-    +agent-shell-pstack-panels +agent-shell-pstack-card +agent-shell-arena-remote
+    +agent-shell-pstack-walkthrough +agent-shell-pstack-panels
+    +agent-shell-pstack-card +agent-shell-arena-remote
     +agent-shell-pstack-arena-trace)
   "Pstack libraries in dependency order.")
 

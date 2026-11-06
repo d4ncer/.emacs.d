@@ -2618,7 +2618,12 @@ reported %s" role landed commit))
                                                  (list :commit commit
                                                        :ref
                                                        (+agent-shell-arena-git-ref
-                                                        manifest role))
+                                                        manifest role)
+                                                       :bundle bundle
+                                                       :bundle-ref
+                                                       (format
+                                                        "refs/pstack-arena/%s/%s"
+                                                        arena role))
                                                  diff))
                                           found)))))))))))))
       (if (and captured (not arena))
@@ -2657,7 +2662,11 @@ a message for a failure worth retrying."
     (cl-labels
         ((result (&rest plist)
            (funcall callback
-                    (list (cons role (append (list :outcome outcome) plist)))
+                    (list (cons role (append (list :outcome outcome)
+                                             (when tip
+                                               (list :bundle bundle
+                                                     :bundle-ref branch))
+                                             plist)))
                     nil))
          (listed (published)
            (+agent-shell-arena-git-delegate-log

@@ -10,6 +10,7 @@
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-pstack-panel)
+(require '+agent-shell-pstack-walkthrough)
 
 (defmacro +agent-shell-pstack-delegate-test--with (&rest body)
   "Run BODY with a pstack lead in a scratch repository and stubbed drive.
@@ -298,6 +299,94 @@ To merge: git merge --ff-only %s, or push it" base branch branch)
         (wait-for (lambda () (not (file-exists-p directory))))
         (should (equal "Add two.txt" (git "log" "-1" "--format=%s" branch)))
         (should (= 1 (length (split-string (git "worktree" "list") "\n"))))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-walkthrough ()
+  "Record a worktree delegate's result, link its report and clean reviews."
+  (+agent-shell-pstack-delegate-test--with
+    (let ((+agent-shell-pstack-walkthrough-opens-file
+           (expand-file-name "opens.eld" scratch))
+          (+agent-shell-pstack-walkthrough--trees
+           (make-hash-table :test #'equal))
+          (find-file-hook nil))
+      (+agent-shell-pstack-walkthrough-links-mode 1)
+      (unwind-protect
+          (+agent-shell-pstack-delegate-test--started
+            (let ((base (git "rev-parse" "HEAD"))
+                  (id (+agent-shell-pstack-panel-id panel)))
+              (member-event "builder" :kind 'init-finished)
+              (should (string-search "## Walkthrough" (cdr (assq shell sent))))
+              (+agent-shell-pstack-delegate-test--commit directory "one.txt")
+              (member-event "builder" :kind 'turn-complete
+                            :text "Built it.\n\n## Walkthrough\n\n1. one.txt:1 \
+adds it (recorded).\n2. README:1 stays (inferred).\n3. gone.txt:2 is not \
+there.\n")
+              (followup)
+              (let* ((tip (git "rev-parse" branch))
+                     (result (+agent-shell-pstack-walkthrough--read
+                              (expand-file-name
+                               (concat id "/builder.result.json")
+                               +agent-shell-pstack-panel-directory)))
+                     (review (+agent-shell-pstack-walkthrough--review-directory
+                              id "builder"))
+                     (shown nil))
+                (should (equal tip (plist-get result :commit)))
+                (should (equal base (plist-get result :base)))
+                (should (equal repo (plist-get result :toplevel)))
+                (should (equal (file-truename (file-name-as-directory directory))
+                               (file-truename (plist-get result :worktree))))
+                (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                                      "builder")
+                  (+agent-shell-pstack-panels-visit))
+                (with-current-buffer (window-buffer (selected-window))
+                  (should +agent-shell-pstack-walkthrough-mode)
+                  (should (equal '("one.txt:1" "README:1")
+                                 (mapcar (lambda (overlay)
+                                           (buffer-substring-no-properties
+                                            (overlay-start overlay)
+                                            (overlay-end overlay)))
+                                         (sort (seq-filter
+                                                (lambda (overlay)
+                                                  (overlay-get
+                                                   overlay
+                                                   '+agent-shell-pstack-walkthrough))
+                                                (overlays-in (point-min)
+                                                             (point-max)))
+                                               (lambda (a b)
+                                                 (< (overlay-start a)
+                                                    (overlay-start b)))))))
+                  (goto-char (point-min))
+                  (search-forward "one.txt:1")
+                  (push-button (match-beginning 0)))
+                (should (equal (file-truename (expand-file-name "one.txt"
+                                                                directory))
+                               (file-truename
+                                (buffer-file-name
+                                 (window-buffer (selected-window))))))
+                (+agent-shell-pstack-walkthrough-follow
+                 (plist-put (copy-sequence result) :worktree nil) "one.txt" 1
+                 (lambda (buffer) (setq shown buffer)))
+                (wait-for (lambda () shown))
+                (should (equal (expand-file-name "one.txt" review)
+                               (buffer-file-name shown)))
+                (git "update-ref" (format "refs/pstack/review/%s/builder" id)
+                     tip)
+                (should (= 2 (length (split-string
+                                      (with-temp-buffer
+                                        (insert-file-contents
+                                         +agent-shell-pstack-walkthrough-opens-file)
+                                        (buffer-string))
+                                      "\n" t))))
+                (kill-buffer shown)
+                (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+                  (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                                        "    Workspace  ")
+                    (+agent-shell-pstack-panels-clean)))
+                (wait-for (lambda () (not (file-exists-p directory))))
+                (wait-for (lambda () (not (file-exists-p review))))
+                (should (equal "" (git "for-each-ref" "refs/pstack/review/")))
+                (should (= 1 (length (split-string (git "worktree" "list")
+                                                   "\n")))))))
+        (+agent-shell-pstack-walkthrough-links-mode -1)))))
 
 (defun +agent-shell-pstack-delegate-test--deps (repo ignore)
   "Give REPO an ignored deps folder, ignored by the .gitignore line IGNORE."
@@ -640,6 +729,58 @@ while it ran.  Your checkout was clean, so Emacs switched it back to main.\n"
         (should-not (assoc "x" (+agent-shell-pstack-panels--actions
                                 (magit-current-section))))
         (should-error (+agent-shell-pstack-panels-clean) :type 'user-error)))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-walkthrough-branch ()
+  "Open a branch-mode delegate's result once the lead's checkout moved back."
+  (+agent-shell-pstack-delegate-test--with
+    (setq +agent-shell-pstack-arena-profiles
+          `((,repo :delegate (:isolation branch))))
+    (let ((+agent-shell-pstack-walkthrough-opens-file
+           (expand-file-name "opens.eld" scratch))
+          (+agent-shell-pstack-walkthrough--trees
+           (make-hash-table :test #'equal))
+          (find-file-hook nil))
+      (+agent-shell-pstack-delegate-test--started
+        (let ((id (+agent-shell-pstack-panel-id panel))
+              (shown nil))
+          (member-event "builder" :kind 'init-finished)
+          (with-temp-file (expand-file-name "README" repo)
+            (insert "From the delegate\n"))
+          (git "commit" "-q" "-am" "Change README")
+          (member-event "builder" :kind 'turn-complete
+                        :text "## Walkthrough\n\n1. README:1 (recorded)\n")
+          (followup)
+          (should (equal "main" (git "branch" "--show-current")))
+          (let ((result (+agent-shell-pstack-walkthrough--read
+                         (expand-file-name (concat id "/builder.result.json")
+                                           +agent-shell-pstack-panel-directory)))
+                (review (+agent-shell-pstack-walkthrough--review-directory
+                         id "builder")))
+            (should (equal (git "rev-parse" branch) (plist-get result :commit)))
+            (should-not (plist-get result :worktree))
+            (+agent-shell-pstack-walkthrough-follow
+             result "README" 1 (lambda (buffer) (setq shown buffer)))
+            (wait-for (lambda () shown))
+            (should (equal (expand-file-name "README" review)
+                           (buffer-file-name shown)))
+            (should (equal "From the delegate\n"
+                           (with-current-buffer shown (buffer-string))))
+            (should (equal "Scratch\n"
+                           (with-temp-buffer
+                             (insert-file-contents
+                              (expand-file-name "README" repo))
+                             (buffer-string))))
+            (kill-buffer shown)
+            (with-current-buffer (+agent-shell-pstack-delegate-test--line
+                                  "    Workspace  ")
+              (should (equal "remove its review worktrees"
+                             (cdr (assoc "x" (+agent-shell-pstack-panels--actions
+                                              (magit-current-section))))))
+              (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+                (+agent-shell-pstack-panels-clean)))
+            (wait-for (lambda () (not (file-exists-p review))))
+            (should (equal "From the delegate"
+                           (git "show" (concat branch ":README"))))))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-no-commits-drops-branch ()
   "Remove the empty branch of a delegate that made no commits."
