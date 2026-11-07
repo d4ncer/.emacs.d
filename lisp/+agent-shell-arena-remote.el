@@ -105,6 +105,12 @@ A local host's is ready.json in its state folder."
   "The Coder CLI, which extends a workspace's stop time from the laptop."
   :type 'string)
 
+(defcustom +agent-shell-arena-remote-boot-id-file
+  "/proc/sys/kernel/random/boot_id"
+  "The file holding a host's boot id, which changes whenever it boots.
+A pod whose boot id changed under its runner had its container replaced."
+  :type 'file)
+
 (defcustom +agent-shell-arena-remote-libraries
   '(+agent-shell-arena-remote +agent-shell-pstack-panel +agent-shell-pstack
     +agent-shell-drive +agent-shell-sandbox +agent-shell-arena-git
@@ -152,6 +158,17 @@ A local host's is ready.json in its state folder."
   "Seconds between polls of a delegate whose transcript is shown."
   :type 'number)
 
+(defcustom +agent-shell-arena-remote-sign-in-environment nil
+  "Entries a host's runner gives agents that sign in through their provider.
+An alist of agent identifiers to NAME=VALUE entries, set in the host's
+runner-init.el; the job's own entries for the agent come first.  They
+must hold no credential.  See `+agent-shell-sandbox-sign-in'."
+  :type '(alist :key-type symbol :value-type (repeat string)))
+
+(defvar +agent-shell-arena-remote-login-directory nil
+  "Folder a runner writes forwarded logins under, or nil for $XDG_RUNTIME_DIR.
+It must be a tmpfs only this user can read.")
+
 ;;;; Records on the wire
 
 (cl-defstruct (+agent-shell-arena-remote-request-member
@@ -164,7 +181,8 @@ these.  A status or report member is an observation instead."
   role agent kind focus)
 
 (defconst +agent-shell-arena-remote-wire-version 2
-  "Version of the records this code writes.
+  "Version of the records this code writes, unless
+`+agent-shell-arena-remote--top-kinds' gives a kind its own.
 It reads every version from 1 up to this one, so a laptop that updated
 mid-arena still reads an older runner's status and report.")
 
@@ -185,10 +203,37 @@ the repository profile as plain data.  CODE names the runner's code by
 content hash.  DEADLINE is how many seconds the runner may take once it
 starts.  READY is the host's readiness file as the laptop saw it, and
 READY-FILE where the host keeps it.  MEASURE-EGRESS is the laptop panel's
-`+agent-shell-pstack-arena-measure-egress', which the host's panel takes."
+`+agent-shell-pstack-arena-measure-egress', which the host's panel takes.
+BASE-SOURCE is `origin' when the host fetches BASE from its origin
+instead of a bundle, and BASE-REF then names the laptop's ref on origin
+that held it, for provenance only.  SIGN-INS lists how members' agents
+sign in where that is not the host's own login, each a
+`+agent-shell-arena-remote-sign-in'."
   id panel brief rubric timeout judge-timeout prefix base
   prerequisite sparse profile repository code deadline ready-file ready
-  measure-egress (shape 'arena) members delegate)
+  measure-egress (shape 'arena) members delegate base-source base-ref
+  sign-ins)
+
+(cl-defstruct (+agent-shell-arena-remote-sign-in
+               (:constructor +agent-shell-arena-remote--make-sign-in)
+               (:copier nil))
+  "How AGENT signs in on the host: MODE, as `+agent-shell-sandbox-sign-in'
+gives it, and for `provider' the ENVIRONMENT entries the job brings."
+  agent mode environment)
+
+(cl-defstruct (+agent-shell-arena-remote-pod
+               (:constructor +agent-shell-arena-remote--make-pod)
+               (:copier nil))
+  "A host the laptop creates for one job and deletes after it.
+NAME is derived from JOB, the job's id, and ATTEMPT.  KIND is its host
+kind.  STATE is `planned' before it is created, `created', `kept' while
+the lead may still export what its member left, for REASON, `deleting'
+until a delete succeeds, `deleted', or `lost' once it was found gone.
+BOOT is the boot id its runner last reported.  TEMPLATE, PRESET and
+PARAMETERS, NAME=VALUE strings, create it, and STOP-AFTER is how many
+seconds it lives unless extended."
+  name job (attempt 1) kind (state 'planned) reason boot template preset
+  parameters (stop-after 0))
 
 (cl-defstruct (+agent-shell-arena-remote-delegate-job
                (:constructor +agent-shell-arena-remote--make-delegate-job)
@@ -310,9 +355,9 @@ phase.  RESULTS says the results are written.  HEARTBEAT is when the
 runner last wrote it, and DEADLINE when it gives up.  LOGINS says how
 each agent's host login stood before any member started.  SHAPE is
 the job's, and a delegate's TRANSCRIPT says what of its transcript the
-host keeps."
+host keeps.  BOOT is the host's boot id when the runner started."
   id phase pid heartbeat deadline arena members results error logins
-  shape transcript)
+  shape transcript boot)
 
 (cl-defstruct (+agent-shell-arena-remote-member
                (:constructor +agent-shell-arena-remote--make-member)
@@ -331,8 +376,10 @@ FAILURE."
   "A runner's results.  ARENA is the host's arena id, whose refs the
 results bundle holds; REJECTION says why the arena never ran.  READY is
 the host's readiness file as the runner read it, naming what ran.  A
-delegate's DELEGATE is its `+agent-shell-arena-remote-outcome'."
-  id arena base rejection members ready shape delegate)
+delegate's DELEGATE is its `+agent-shell-arena-remote-outcome'.
+QUARANTINE says why the runner could not show the delegate's writers
+stopped."
+  id arena base rejection members ready shape delegate quarantine)
 
 (cl-defstruct (+agent-shell-arena-remote-tool
                (:constructor +agent-shell-arena-remote--make-tool)
@@ -374,13 +421,15 @@ is the host's arena id and EMACS the host's Emacs.
 
 SHAPE is the job's.  CURSOR is where a delegate's transcript continues,
 a `+agent-shell-arena-remote-cursor', advanced once the page before it
-is in the laptop's cache.
+is in the laptop's cache.  POD is the `+agent-shell-arena-remote-pod'
+created for this job, or nil on a host that outlives it; CREATING says
+its create runs now.
 
-The slots from DIRECTORY to LOGINS are not saved."
+The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
   id panel session host phase (cancel-state 'none) submitted fetched delivered
   deadline extended heartbeat seen (restarts 0) arena emacs error
   directory timer (failures 0) runner-phase ready logins (shape 'arena) cursor
-  polled)
+  polled pod creating)
 
 (defconst +agent-shell-arena-remote--agent-regexp
   "\\`[a-z0-9][a-z0-9-]*\\'"
@@ -401,7 +450,14 @@ The slots from DIRECTORY to LOGINS are not saved."
      (code "code" sha) (deadline "deadline" natnum)
      (ready-file "ready_file" (opt text))
      (ready "ready" (opt (record ready)))
-     (measure-egress "measure_egress" (opt boolean)))
+     (measure-egress "measure_egress" (opt boolean))
+     (base-source "base_source" (opt (enum bundle origin)))
+     (base-ref "base_ref" (opt text))
+     (sign-ins "sign_in" (list sign-in)))
+    (sign-in +agent-shell-arena-remote-sign-in
+             +agent-shell-arena-remote--make-sign-in
+             (agent "agent" agent) (mode "mode" (enum host provider forward))
+             (environment "environment" (strings)))
     (request-member +agent-shell-arena-remote-request-member
                     +agent-shell-arena-remote--make-request-member
                     (role "role" id) (agent "agent" agent)
@@ -428,7 +484,8 @@ The slots from DIRECTORY to LOGINS are not saved."
             (results "results" boolean) (error "error" (opt text))
             (logins "logins" (list login))
             (shape "shape" (opt (enum arena delegate)))
-            (transcript "transcript" (opt (record transcript))))
+            (transcript "transcript" (opt (record transcript)))
+            (boot "boot" (opt text)))
     (transcript +agent-shell-arena-remote-transcript
                 +agent-shell-arena-remote--make-transcript
                 (epoch "epoch" id) (first "first" natnum)
@@ -458,7 +515,8 @@ The slots from DIRECTORY to LOGINS are not saved."
             (members "members" (list member-report))
             (ready "ready" (opt (record ready)))
             (shape "shape" (opt (enum arena delegate)))
-            (delegate "delegate" (opt (record outcome))))
+            (delegate "delegate" (opt (record outcome)))
+            (quarantine "quarantine" (opt text)))
     (outcome +agent-shell-arena-remote-outcome
              +agent-shell-arena-remote--make-outcome
              (branch "branch" text) (tip "tip" (opt sha))
@@ -515,7 +573,16 @@ The slots from DIRECTORY to LOGINS are not saved."
             (arena "arena" (opt id)) (emacs "emacs" (opt text))
             (error "error" (opt text))
             (shape "shape" (opt (enum arena delegate)))
-            (cursor "cursor" (opt (record cursor)))))
+            (cursor "cursor" (opt (record cursor)))
+            (pod "pod" (opt (record pod))))
+    (pod +agent-shell-arena-remote-pod +agent-shell-arena-remote--make-pod
+         (name "name" id) (job "job" id) (attempt "attempt" natnum)
+         (kind "kind" host-kind)
+         (state "state" (enum planned created kept deleting deleted lost))
+         (reason "reason" (opt text)) (boot "boot" (opt text))
+         (template "template" text) (preset "preset" (opt text))
+         (parameters "parameters" (strings))
+         (stop-after "stop_after" natnum)))
   "Each record kind: its struct, constructor and fields.
 A field is (SLOT KEY TYPE).  TYPE is `text', any string; `id', a name
 safe in a path and a ref; `sha', a full commit id; `agent', an agent
@@ -528,11 +595,14 @@ SYMBOL...); (strings); (list KIND) or (record KIND) of another kind;
 absent or null.")
 
 (defconst +agent-shell-arena-remote--top-kinds
-  '((job t) (status t) (report t) (record t) (ready nil 1))
+  '((job t 3) (status t 3) (report t) (record t 3) (pod t 1) (ready nil 1))
   "Kinds stored as a file of their own, each (KIND LABELLED VERSION).
 Every such file has a version, up to VERSION or else
 `+agent-shell-arena-remote-wire-version'; a LABELLED one also names its
-kind.  The host's setup writes ready.json in a format of its own.")
+kind.  The host's setup writes ready.json in a format of its own.  A pod
+is also its laptop's ledger file, so a record holds it in the same form.
+Version 3 of a job may fetch its base from origin and names its
+sign-ins, of a status names the host's boot, and of a record its pod.")
 
 (defun +agent-shell-arena-remote--kind (kind)
   "Return the registry entry of record KIND."
@@ -948,17 +1018,23 @@ A value holding a placeholder becomes a function of the sandbox."
 
 ;;;; Hosts
 
-(defun +agent-shell-arena-remote-parse-host (value)
-  "Return the host a profile's :host VALUE names, or signal `user-error'."
+(defun +agent-shell-arena-remote-parse-host (value &optional id)
+  "Return the host a profile's :host VALUE names, or signal `user-error'.
+A kind whose hosts are made per job names the one for job ID's first
+attempt."
   (unless (+agent-shell-arena-git-host-p value)
     (user-error "Arena host must be %s, not %S"
                 (+agent-shell-arena-git-host-description) value))
-  (+agent-shell-arena-remote--make-host
-   :kind (car value)
-   :name (if (plist-get (alist-get (car value)
-                                   +agent-shell-arena-remote-host-kinds) :local)
-             (file-name-as-directory (expand-file-name (cdr value)))
-           (cdr value))))
+  (let ((options (alist-get (car value) +agent-shell-arena-remote-host-kinds)))
+    (+agent-shell-arena-remote--make-host
+     :kind (car value)
+     :name (cond ((plist-get options :create)
+                  (+agent-shell-arena-remote--pod-name
+                   (cdr value) (or id (error "A pod host needs its job's id"))
+                   1))
+                 ((plist-get options :local)
+                  (file-name-as-directory (expand-file-name (cdr value))))
+                 (t (cdr value))))))
 
 (defun +agent-shell-arena-remote--host-key (host)
   "Return the key that groups calls to HOST."
@@ -982,6 +1058,10 @@ A value holding a placeholder becomes a function of the sandbox."
 (defun +agent-shell-arena-remote--local-label (name)
   "Return the message label for local state directory NAME."
   (format "local host %s" (abbreviate-file-name (directory-file-name name))))
+
+(defun +agent-shell-arena-remote--pod-label (name)
+  "Return the message label for pod NAME."
+  (format "pod %s" name))
 
 (defun +agent-shell-arena-remote--host-label (host)
   "Return HOST as a reader would name it."
@@ -1181,6 +1261,40 @@ Call CALLBACK with its output and nil, or nil and a message."
    (list "schedule" "extend" name (format "%dm" (ceiling seconds 60)))
    60 (lambda (_output error) (funcall callback error))))
 
+(defun +agent-shell-arena-remote--pod-create (name spec seconds callback)
+  "Create Coder workspace NAME from SPEC, stopping after SECONDS.
+SPEC is a pod spec; see `+agent-shell-arena-git-pod-spec-error'.  Call
+CALLBACK with nil, or a message saying why it failed."
+  (+agent-shell-arena-remote--coder
+   (append (list "create" name "--template" (plist-get spec :template))
+           (when-let* ((preset (plist-get spec :preset)))
+             (list "--preset" preset))
+           (mapcan (pcase-lambda (`(,parameter . ,value))
+                     (list "--parameter" (concat parameter "=" value)))
+                   (plist-get spec :parameters))
+           (list "--stop-after" (format "%dm" (ceiling seconds 60)) "--yes"))
+   900 (lambda (_output error) (funcall callback error))))
+
+(defun +agent-shell-arena-remote--pod-delete (name callback)
+  "Delete Coder workspace NAME; call CALLBACK with nil or why it failed."
+  (+agent-shell-arena-remote--coder
+   (list "delete" name "--yes") 600
+   (lambda (_output error) (funcall callback error))))
+
+(defun +agent-shell-arena-remote--pod-lookup (name callback)
+  "Call CALLBACK with whether Coder workspace NAME exists, and an error.
+CALLBACK gets t or nil and nil, or nil and a message when coder list
+could not say."
+  (+agent-shell-arena-remote--coder
+   '("list" "-o" "json") 60
+   (lambda (output error)
+     (if error (funcall callback nil error)
+       (condition-case nil
+           (funcall callback
+                    (and (+agent-shell-arena-remote--workspace output name) t)
+                    nil)
+         (json-error (funcall callback nil "coder list is not JSON")))))))
+
 (defun +agent-shell-arena-remote--extend (host seconds callback)
   "Move HOST's stop time to at least SECONDS from now, then call CALLBACK.
 CALLBACK gets nil, or a message saying why the extension failed."
@@ -1263,7 +1377,7 @@ the runner, which goes on to report that candidate as failed.")
 
 (defconst +agent-shell-arena-remote--submit-script
   (concat
-   "id=$1; emacs=$3; launcher=$4; shift
+   "id=$1; emacs=$3; launcher=$4; source=${5:-bundle}; base=${6:-}; shift
 "
    +agent-shell-arena-remote--repo
    "job=jobs/$id
@@ -1279,22 +1393,34 @@ if [ ! -d \"code/$hash\" ]; then
 fi
 rm -f \"$job/code.tar\"
 g() { git -C \"$repo\" -c core.hooksPath=/dev/null \"$@\"; }
-prereq=$(cat \"$job/prerequisite\" 2>/dev/null)
-bundle=$PWD/$job/base.bundle
-if ! g bundle verify -q \"$bundle\" >/dev/null 2>&1; then
-  [ -n \"$prereq\" ] && g fetch -q origin \"$prereq\" >/dev/null 2>&1
-  if ! g bundle verify -q \"$bundle\" >/dev/null 2>\"$job/verify.log\"; then
-    echo \"pstack-arena-submit missing $prereq\"; exit 0
+if [ \"$source\" = origin ]; then
+  case $base in ''|*[!0-9a-f]*) echo \"pstack-arena-submit failed the base is not a commit id\"; exit 0;; esac
+  g fetch -q --no-tags --no-write-fetch-head origin \"$base\" 2>\"$job/fetch.log\" ||
+    { echo \"pstack-arena-submit failed the base $base could not be fetched from origin: $(tail -n 1 \"$job/fetch.log\")\"; exit 0; }
+  g -c advice.detachedHead=false checkout -q --detach \"$base\" 2>\"$job/checkout.log\" ||
+    { echo \"pstack-arena-submit failed the checkout could not move to the base $base: $(tail -n 1 \"$job/checkout.log\")\"; exit 0; }
+  g update-ref \"refs/pstack-arena/$id/base\" \"$base\" ||
+    { echo \"pstack-arena-submit failed the base ref could not be written\"; exit 0; }
+else
+  prereq=$(cat \"$job/prerequisite\" 2>/dev/null)
+  bundle=$PWD/$job/base.bundle
+  if ! g bundle verify -q \"$bundle\" >/dev/null 2>&1; then
+    [ -n \"$prereq\" ] && g fetch -q origin \"$prereq\" >/dev/null 2>&1
+    if ! g bundle verify -q \"$bundle\" >/dev/null 2>\"$job/verify.log\"; then
+      echo \"pstack-arena-submit missing $prereq\"; exit 0
+    fi
   fi
-fi
-g fetch -q --no-tags --no-write-fetch-head \"$bundle\" \
+  g fetch -q --no-tags --no-write-fetch-head \"$bundle\" \
 \"+refs/pstack-arena/$id/base:refs/pstack-arena/$id/base\" 2>\"$job/fetch.log\" ||
-  { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/fetch.log\")\"; exit 0; }
+    { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/fetch.log\")\"; exit 0; }
+fi
 "
    +agent-shell-arena-remote--launch)
   "Unpack the upload on standard input as job $1 for checkout $2, fetch its
-base, and start the runner with Emacs $3 by launcher $4.  A job already
-started answers as started, so a resent submission is harmless.")
+base, and start the runner with Emacs $3 by launcher $4.  With $5
+origin, the checkout fetches commit $6 from its origin and checks it out
+instead of taking the base from a bundle.  A job already started answers
+as started, so a resent submission is harmless.")
 
 (defconst +agent-shell-arena-remote--resume-script
   (concat
@@ -1310,6 +1436,7 @@ pid=$(cat \"$job/pid\" 2>/dev/null) && [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/de
   "job=jobs/$1
 [ -f \"$job/started\" ] || { echo \"pstack-arena-poll none\"; exit 0; }
 [ \"$2\" = cancel ] && printf '%s\\n' \"$3\" >\"$job/cancel\"
+[ -n \"$6\" ] && printf 'pstack-arena-boot %s\\n' \"$(tr -cd '0-9a-f-' 2>/dev/null <\"$6\")\"
 hash=$(cat \"$job/code-hash\" 2>/dev/null)
 if [ \"${4:--}\" != - ] && [ -n \"$5\" ] && [ -n \"$hash\" ] && [ -d \"code/$hash\" ] &&
   out=$(\"$5\" -Q --batch -L \"code/$hash\" -l \"code/$hash/+agent-shell-arena-remote.el\" \
@@ -1323,8 +1450,9 @@ cat \"$job/status.json\" 2>/dev/null || true
 "
   "Leave a cancel marker holding reason $3 when $2 is cancel, then report
 whether job $1's runner lives, whether it has a marker, and its status.
-With a transcript cursor $4 other than -, a short batch Emacs $5 from the
-job's code answers instead with the version-2 envelope, which adds the
+With a boot id file $6, the host's boot id comes first.  With a
+transcript cursor $4 other than -, a short batch Emacs $5 from the job's
+code answers instead with the version-2 envelope, which adds the
 transcript's next page; when it cannot, the plain answer follows.")
 
 (defconst +agent-shell-arena-remote--fetch-script
@@ -1443,6 +1571,224 @@ With DETAIL, add its host's phase, last heartbeat and last error."
   "Return whether MANIFEST's arena ran on a host."
   (file-exists-p (+agent-shell-arena-remote--record-file
                   (+agent-shell-arena-git-manifest-directory manifest))))
+
+;;;; Pods
+
+(defconst +agent-shell-arena-remote-pod-cap 1
+  "Most pods that may exist at once, across every lead.")
+
+(defun +agent-shell-arena-remote--pod-file (pod)
+  "Return POD's file in the laptop's pod ledger.
+The ledger outlives a job's record, so a pod whose job was rejected or
+cleaned up is still deleted, and still counts against the cap."
+  (expand-file-name (concat "pods/" (+agent-shell-arena-remote-pod-name pod)
+                            ".json")
+                    +agent-shell-pstack-arena-directory))
+
+(defun +agent-shell-arena-remote--pod-alive-p (pod)
+  "Return whether POD may still exist, which counts against the cap."
+  (memq (+agent-shell-arena-remote-pod-state pod)
+        '(planned created kept deleting)))
+
+(defun +agent-shell-arena-remote--pod-write (pod)
+  "Save POD to the ledger, and to its job's record while that is live.
+A pod that is gone leaves the ledger."
+  (let ((file (+agent-shell-arena-remote--pod-file pod)))
+    (if (+agent-shell-arena-remote--pod-alive-p pod)
+        (progn (make-directory (file-name-directory file) t)
+               (+agent-shell-arena-remote--write-json file 'pod pod))
+      (when (file-exists-p file) (delete-file file))))
+  (when-let* ((remote (gethash (+agent-shell-arena-remote-pod-job pod)
+                               +agent-shell-arena-remote--arenas))
+              ((eq pod (+agent-shell-arena-remote-pod remote))))
+    (+agent-shell-arena-remote--save remote)))
+
+(defun +agent-shell-arena-remote--pods ()
+  "Return every pod in the laptop's ledger.
+A live job's own pod stands in for its file, which it may be ahead of."
+  (let ((live (let (pods)
+                (maphash (lambda (_ remote)
+                           (when-let* ((pod (+agent-shell-arena-remote-pod
+                                             remote)))
+                             (push pod pods)))
+                         +agent-shell-arena-remote--arenas)
+                pods))
+        (folder (expand-file-name "pods/" +agent-shell-pstack-arena-directory)))
+    (append
+     live
+     (seq-keep
+      (lambda (file)
+        (when-let* ((pod (condition-case err
+                             (+agent-shell-arena-remote--read-json file 'pod)
+                           (error (message "pstack pod ledger %s: %s" file
+                                           (error-message-string err))
+                                  nil)))
+                    ((not (seq-find
+                           (lambda (other)
+                             (equal (+agent-shell-arena-remote-pod-name other)
+                                    (+agent-shell-arena-remote-pod-name pod)))
+                           live))))
+          pod))
+      (and (file-directory-p folder)
+           (directory-files folder t "\\`[^.].*\\.json\\'"))))))
+
+(defun +agent-shell-arena-remote--pod-name (spec id attempt)
+  "Return the name of the pod for ATTEMPT at job ID, under SPEC's prefix.
+Coder names are short, so the id is hashed."
+  (format "%s%s-%d" (or (plist-get spec :name-prefix) "pstack-")
+          (substring (sha1 id) 0 10) attempt))
+
+(defun +agent-shell-arena-remote--max-runtime (job)
+  "Return the most seconds JOB's runner may take once it starts.
+A member's running command may move its deadline up to
+`+agent-shell-pstack-panel-max-runtime', and the capture grace follows."
+  (+ (max (+agent-shell-arena-remote-job-deadline job)
+          +agent-shell-pstack-panel-max-runtime)
+     +agent-shell-pstack-panel-arena-grace))
+
+(defun +agent-shell-arena-remote--pod-spec (pod)
+  "Return the spec POD is created from, as a profile gives one."
+  (list :template (+agent-shell-arena-remote-pod-template pod)
+        :preset (+agent-shell-arena-remote-pod-preset pod)
+        :parameters
+        (mapcar (lambda (entry)
+                  (let ((split (string-search "=" entry)))
+                    (cons (substring entry 0 split)
+                          (substring entry (1+ split)))))
+                (+agent-shell-arena-remote-pod-parameters pod))))
+
+(defun +agent-shell-arena-remote--pod-call (pod property &rest args)
+  "Call POD's host kind's PROPERTY function with POD's name and ARGS."
+  (apply (plist-get (alist-get (+agent-shell-arena-remote-pod-kind pod)
+                               +agent-shell-arena-remote-host-kinds)
+                    property)
+         (+agent-shell-arena-remote-pod-name pod) args))
+
+(defvar +agent-shell-arena-remote--releasing (make-hash-table :test #'equal)
+  "Pod names whose delete runs now.")
+
+(defun +agent-shell-arena-remote--pod-release (pod &optional callback failures)
+  "Delete POD unless it is gone, then call CALLBACK with nil or an error.
+A pod never known to be created is looked up first.  A failed delete
+leaves POD `deleting', still counted against the cap, and is retried
+with backoff, also after a restart; CALLBACK hears of the first failure
+and the retries go on.  FAILURES counts the failed attempts so far."
+  (let* ((failures (or failures 0))
+         (name (+agent-shell-arena-remote-pod-name pod))
+         (finish (lambda (error)
+                   (remhash name +agent-shell-arena-remote--releasing)
+                   (when callback
+                     (funcall (prog1 callback (setq callback nil)) error)))))
+    (cl-labels
+        ((gone ()
+           (setf (+agent-shell-arena-remote-pod-state pod) 'deleted)
+           (+agent-shell-arena-remote--pod-write pod)
+           (funcall finish nil))
+         (retry (error)
+           (message "pstack pod %s: deleting it failed, so Emacs tries \
+again: %s" name error)
+           (funcall finish error)
+           (run-at-time (+agent-shell-arena-remote--delay failures) nil
+                        #'+agent-shell-arena-remote--pod-release pod nil
+                        (1+ failures)))
+         (look (then)
+           (+agent-shell-arena-remote--pod-call
+            pod :lookup
+            (lambda (found error)
+              (cond (error (retry error))
+                    (found (funcall then))
+                    (t (gone))))))
+         (delete ()
+           (setf (+agent-shell-arena-remote-pod-state pod) 'deleting)
+           (+agent-shell-arena-remote--pod-write pod)
+           (+agent-shell-arena-remote--pod-call
+            pod :delete
+            (lambda (error)
+              (if (not error) (gone)
+                ;; It may have gone already.
+                (look (lambda () (retry error))))))))
+      (cond
+       ((not (+agent-shell-arena-remote--pod-alive-p pod)) (funcall finish nil))
+       ((gethash name +agent-shell-arena-remote--releasing)
+        (when callback
+          (funcall callback (format "pod %s is being deleted already" name))))
+       (t (puthash name t +agent-shell-arena-remote--releasing)
+          (if (eq (+agent-shell-arena-remote-pod-state pod) 'planned)
+              (look #'delete)
+            (delete)))))))
+
+(defun +agent-shell-arena-remote--pod-keep-reason (report results)
+  "Return why the pod that ran REPORT stays for the lead, or nil.
+It stays while its delegate timed out, left uncommitted work or
+processes not shown to have stopped, or its report was refused; RESULTS
+are the landed results by role."
+  (let* ((member (seq-find (lambda (member)
+                             (eq 'delegate (+agent-shell-arena-remote-member-kind
+                                            member)))
+                           (+agent-shell-arena-remote-report-members report)))
+         (result (and member (alist-get (+agent-shell-arena-remote-member-role
+                                         member)
+                                        results nil nil #'equal)))
+         (outcome (+agent-shell-arena-remote-report-delegate report))
+         (dirty (if outcome (+agent-shell-arena-remote-outcome-dirty-count
+                             outcome)
+                  0)))
+    (cond
+     ((plist-get result :refused)
+      (format "Emacs refused its report: %s" (plist-get result :error)))
+     ((+agent-shell-arena-remote-report-quarantine report)
+      (format "its runner could not show the delegate's processes stopped: %s"
+              (+agent-shell-arena-remote-report-quarantine report)))
+     ((and member (eq 'timeout (+agent-shell-arena-remote-member-state member)))
+      "its delegate timed out")
+     ((> dirty 0)
+      (format "its worktree there has %d uncommitted path%s" dirty
+              (if (= dirty 1) "" "s"))))))
+
+(defun +agent-shell-arena-remote--pod-lost (remote)
+  "End REMOTE, whose pod no longer exists, with each member lost.
+Nothing is fetched, and no member runs again under this attempt."
+  (let* ((pod (+agent-shell-arena-remote-pod remote))
+         (panel (+agent-shell-arena-remote--panel remote))
+         (manifest (and panel (+agent-shell-pstack-panel-arena panel)))
+         (reason (format "The pod %s no longer exists, so what this member \
+did there is lost; Emacs did not run it again."
+                         (+agent-shell-arena-remote-pod-name pod))))
+    (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
+      (cancel-timer timer))
+    (setf (+agent-shell-arena-remote-pod-state pod) 'lost
+          (+agent-shell-arena-remote-pod-reason pod) reason)
+    (+agent-shell-arena-remote--pod-write pod)
+    (when manifest
+      (+agent-shell-arena-remote--finish
+       remote
+       (+agent-shell-arena-remote--make-report
+        :id (+agent-shell-arena-remote-id remote)
+        :shape (+agent-shell-arena-remote-shape remote)
+        :base (+agent-shell-arena-git-manifest-base manifest)
+        :members (mapcar (lambda (member)
+                           (+agent-shell-arena-remote--make-member
+                            :role (+agent-shell-pstack-panel-member-role member)
+                            :agent (+agent-shell-pstack-panel-member-agent member)
+                            :kind (+agent-shell-pstack-panel-member-kind member)
+                            :state 'error :error reason :failure reason))
+                         (+agent-shell-pstack-panel-members panel)))
+       nil))))
+
+(defun +agent-shell-arena-remote-pod-note (remote)
+  "Return what the follow-up of REMOTE says of its pod, or nil without one."
+  (when-let* ((pod (+agent-shell-arena-remote-pod remote)))
+    (let ((name (+agent-shell-arena-remote-pod-name pod)))
+      (pcase (+agent-shell-arena-remote-pod-state pod)
+        ('kept
+         (format "The pod %s stays, since %s.  Export what you need from it \
+over ssh coder.%s, then discard it with M-x +agent-shell-pstack-pod-discard \
+or by pressing x on its line in the pstack panels view.  Until then Emacs \
+starts no other pod.\n"
+                 name (+agent-shell-arena-remote-pod-reason pod) name))
+        ('lost (format "The pod %s no longer exists.\n" name))
+        (_ (format "Emacs deletes the pod %s now that its branch, report and \
+transcript are here.\n" name))))))
 
 ;;;; Base and code
 
@@ -1660,18 +2006,44 @@ user's identity, and its deadline is its timeout."
   "Return the laptop's copy of REMOTE's job."
   (expand-file-name "job.json" (+agent-shell-arena-remote-directory remote)))
 
+(defun +agent-shell-arena-remote--sign-ins (job kind spec)
+  "Return how JOB's agents sign in on a host of KIND made from SPEC.
+Only agents that do not use the host's own login are listed; a provider
+sign-in brings the entries SPEC's :environment gives its agent."
+  (seq-keep
+   (lambda (agent)
+     (let ((mode (+agent-shell-sandbox-sign-in agent kind)))
+       (unless (eq mode 'host)
+         (+agent-shell-arena-remote--make-sign-in
+          :agent agent :mode mode
+          :environment (and (eq mode 'provider)
+                            (alist-get agent (plist-get spec :environment)))))))
+   (seq-uniq (mapcar #'+agent-shell-arena-remote-request-member-agent
+                     (+agent-shell-arena-remote-job-members job)))))
+
+(defconst +agent-shell-arena-remote--forwarders
+  '((codex :encode +agent-shell-sandbox--codex-auth
+     :decode +agent-shell-sandbox-codex-login-text
+     :file "auth.json"
+     :environment ("CODEX_HOME=%s" "OPENAI_API_KEY=" "CODEX_API_KEY=")))
+  "How each agent's laptop login travels with a job, by agent.
+:encode turns a projected login into the file a job carries, without a
+refresh token, and :decode turns that file's text back into a projected
+login.  On the host the runner writes it as :file in a folder of the
+member's own, and the member gets :environment, whose %s is that folder.")
+
 (defun +agent-shell-arena-remote-launch (panel base profile)
   "Run arena or delegate PANEL over BASE on the host that PROFILE names.
 PANEL is preparing.  A delegate's host is its frozen policy's, and its
 laptop manifest holds a delegate record without a workspace.  Keep the
-base alive under a ref, write the laptop's records, and submit the job."
+base alive under a ref, write the laptop's records, and submit the job.
+A kind whose hosts are made per job gives the job a pod of its own; see
+`+agent-shell-arena-remote--pod-launch'."
   (let* ((delegate (+agent-shell-pstack-panel--delegate-p panel))
-         (host (+agent-shell-arena-remote-parse-host
-                (if delegate
-                    (plist-get (+agent-shell-pstack-panel-delegate-options
-                                panel)
+         (value (if delegate
+                    (plist-get (+agent-shell-pstack-panel-delegate-options panel)
                                :host)
-                  (plist-get profile :host))))
+                  (plist-get profile :host)))
          (manifest (+agent-shell-arena-git-create
                     base (+agent-shell-pstack-panel-id panel)
                     (when delegate
@@ -1681,6 +2053,12 @@ base alive under a ref, write the laptop's records, and submit the job."
                                  (+agent-shell-pstack-panel-delegate-options
                                   panel)
                                  :sandbox)))))
+         (spec (and (plist-get (alist-get (car-safe value)
+                                          +agent-shell-arena-remote-host-kinds)
+                               :create)
+                    (cdr value)))
+         (host (+agent-shell-arena-remote-parse-host
+                value (+agent-shell-arena-git-manifest-id manifest)))
          (remote (+agent-shell-arena-remote--make
                   :id (+agent-shell-arena-git-manifest-id manifest)
                   :panel (+agent-shell-pstack-panel-id panel)
@@ -1692,7 +2070,9 @@ base alive under a ref, write the laptop's records, and submit the job."
                               manifest))))
     (setf (+agent-shell-pstack-panel-arena panel) manifest)
     (let ((job (+agent-shell-arena-remote--job panel base profile manifest)))
-      (setf (+agent-shell-pstack-panel-remote panel) remote)
+      (setf (+agent-shell-arena-remote-job-sign-ins job)
+            (+agent-shell-arena-remote--sign-ins job (car value) spec)
+            (+agent-shell-pstack-panel-remote panel) remote)
       (puthash (+agent-shell-arena-remote-id remote) remote
                +agent-shell-arena-remote--arenas)
       (+agent-shell-arena-remote--write-json
@@ -1702,23 +2082,118 @@ base alive under a ref, write the laptop's records, and submit the job."
        manifest (list "update-ref" (+agent-shell-arena-remote--base-ref manifest)
                       (+agent-shell-arena-git-manifest-base manifest))
        (lambda (_ error)
-         (if error (+agent-shell-arena-remote--reject remote error)
+         (cond
+          (error (+agent-shell-arena-remote--reject remote error))
+          (t
            (+agent-shell-arena-git-record
             manifest "base" (+agent-shell-arena-git-manifest-base manifest)
             "base")
-           (when (eq (+agent-shell-arena-remote-phase remote) 'preparing)
+           (cond
+            (spec (+agent-shell-arena-remote--pod-launch remote job spec
+                                                         manifest))
+            ((eq (+agent-shell-arena-remote-phase remote) 'preparing)
              (+agent-shell-arena-remote--move remote 'submitting)
-             (+agent-shell-arena-remote--submit remote job))))))))
+             (+agent-shell-arena-remote--submit remote job))))))))))
+
+(defun +agent-shell-arena-remote--pod-launch (remote job spec manifest)
+  "Give REMOTE's JOB, over MANIFEST, a pod of its own from SPEC, then submit.
+An arena, a sandboxed delegate, an agent whose login cannot be
+forwarded, a base no origin ref on the laptop holds, and a pod beyond
+`+agent-shell-arena-remote-pod-cap' are refused.  The pod's name, job
+and attempt reach the record before the pod is created.  The host
+fetches the base from origin, and the ref that held it is kept as
+provenance."
+  (let* ((host (+agent-shell-arena-remote-host remote))
+         (name (+agent-shell-arena-remote-host-name host))
+         (base (+agent-shell-arena-remote-job-base job))
+         (delegate (+agent-shell-arena-remote-job-delegate job))
+         (others (seq-filter
+                  (lambda (pod)
+                    (and (+agent-shell-arena-remote--pod-alive-p pod)
+                         (not (equal name (+agent-shell-arena-remote-pod-name
+                                           pod)))))
+                  (+agent-shell-arena-remote--pods)))
+         (unforwarded
+          (seq-find (lambda (sign-in)
+                      (and (eq 'forward (+agent-shell-arena-remote-sign-in-mode
+                                         sign-in))
+                           (not (assq (+agent-shell-arena-remote-sign-in-agent
+                                       sign-in)
+                                      +agent-shell-arena-remote--forwarders))))
+                    (+agent-shell-arena-remote-job-sign-ins job)))
+         (reject (lambda (reason) (+agent-shell-arena-remote--reject remote
+                                                                     reason))))
+    (cond
+     ((not delegate)
+      (funcall reject "arenas do not run on pods yet; run this one on \
+another host"))
+     ((+agent-shell-arena-remote-delegate-job-sandbox delegate)
+      (funcall reject "members on pods run unsandboxed, so a pod refuses a \
+sandboxed delegate; drop :sandbox from the profile's :delegate, or keep \
+the delegate here with :delegate (:host local)"))
+     (unforwarded
+      (funcall reject (format "%s signs in on pods with the laptop's login, \
+which Emacs cannot forward for it"
+                              (+agent-shell-arena-remote-sign-in-agent
+                               unforwarded))))
+     ((>= (length others) +agent-shell-arena-remote-pod-cap)
+      (let ((other (car others)))
+        (funcall reject (format "pod %s, for pstack job %s, is %s, and Emacs \
+runs at most %d pod at a time; discard it with M-x \
++agent-shell-pstack-pod-discard, or let its job end"
+                                (+agent-shell-arena-remote-pod-name other)
+                                (+agent-shell-arena-remote-pod-job other)
+                                (+agent-shell-arena-remote-pod-state other)
+                                +agent-shell-arena-remote-pod-cap))))
+     (t
+      (+agent-shell-arena-remote--git
+       manifest (list "for-each-ref" "--contains" base "--format=%(refname)"
+                      "refs/remotes/origin/")
+       (lambda (refs error)
+         (cond
+          (error (funcall reject error))
+          ((not (eq (+agent-shell-arena-remote-phase remote) 'preparing)))
+          ((string-empty-p refs)
+           (funcall reject (format "a pod fetches its base from origin, and \
+no ref this laptop has seen on origin holds %s; commit and push the work \
+first" base)))
+          (t
+           (setf (+agent-shell-arena-remote-job-base-source job) 'origin
+                 (+agent-shell-arena-remote-job-base-ref job)
+                 (car (split-string refs "\n" t))
+                 (+agent-shell-arena-remote-pod remote)
+                 (+agent-shell-arena-remote--make-pod
+                  :name name :job (+agent-shell-arena-remote-id remote)
+                  :attempt 1 :kind (+agent-shell-arena-remote-host-kind host)
+                  :state 'planned
+                  :template (plist-get spec :template)
+                  :preset (plist-get spec :preset)
+                  :parameters (mapcar (pcase-lambda (`(,parameter . ,value))
+                                        (concat parameter "=" value))
+                                      (plist-get spec :parameters))
+                  :stop-after (+ (+agent-shell-arena-remote--max-runtime job)
+                                 +agent-shell-arena-remote-wake-timeout
+                                 +agent-shell-arena-remote-slack)))
+           (+agent-shell-arena-remote--write-json
+            (+agent-shell-arena-remote--job-file remote) 'job job)
+           (+agent-shell-arena-remote--pod-write
+            (+agent-shell-arena-remote-pod remote))
+           (+agent-shell-arena-remote--move remote 'submitting)
+           (+agent-shell-arena-remote--submit remote job)))))))))
 
 (defun +agent-shell-arena-remote--reject (remote reason)
   "End REMOTE's arena, which never ran on its host, because of REASON.
-Its panel gets the rejection follow-up and its laptop arena is removed."
+Its panel gets the rejection follow-up and its laptop arena is removed.
+Its pod is deleted, once a create that runs has finished."
   (cl-incf (+agent-shell-arena-remote-failures remote))
   (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
     (cancel-timer timer))
   (remhash (+agent-shell-arena-remote-id remote)
            +agent-shell-arena-remote--arenas)
   (setf (+agent-shell-arena-remote-phase remote) 'finished)
+  (when-let* ((pod (+agent-shell-arena-remote-pod remote))
+              ((not (+agent-shell-arena-remote-creating remote))))
+    (+agent-shell-arena-remote--pod-release pod))
   (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
     (unless (eq (+agent-shell-pstack-panel-phase panel) 'finished)
       (+agent-shell-pstack-panel--fail-preparation
@@ -1832,10 +2307,12 @@ left\"."
 
 (defun +agent-shell-arena-remote--linux-sandbox-p (host)
   "Return whether HOST's runner confines members with the Linux sandbox.
-A local host's runner is this Emacs's system; any other runs on Linux."
-  (if (+agent-shell-arena-remote--host-option host :local)
-      (eq +agent-shell-sandbox-backend 'bwrap)
-    t))
+A local host's runner is this Emacs's system, a kind with :unsandboxed
+confines nothing, and any other runs on Linux."
+  (cond ((+agent-shell-arena-remote--host-option host :unsandboxed) nil)
+        ((+agent-shell-arena-remote--host-option host :local)
+         (eq +agent-shell-sandbox-backend 'bwrap))
+        (t t)))
 
 (defun +agent-shell-arena-remote--needs (host job)
   "Return the capabilities JOB needs on HOST, as registry names.
@@ -2068,24 +2545,103 @@ was last wrong.  A cancel stops the wait."
 
 (defun +agent-shell-arena-remote--submit (remote job)
   "Submit JOB, REMOTE's arena, to its host.
-Wait until the host is ready, then try each prerequisite in turn until
-the host takes a bundle against one."
-  (+agent-shell-arena-remote--await
-   remote job
-   (lambda (probe)
-     (setf (+agent-shell-arena-remote-emacs remote)
-           (+agent-shell-arena-remote-tool-path
-            (+agent-shell-arena-remote-ready-emacs (plist-get probe :ready)))
-           (+agent-shell-arena-remote-job-ready-file job)
-           (plist-get probe :ready-file)
-           (+agent-shell-arena-remote-job-ready job) (plist-get probe :ready))
-     (+agent-shell-arena-remote--save remote)
-     (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
-       (+agent-shell-arena-remote-prerequisites
-        (+agent-shell-pstack-panel-arena panel) (plist-get probe :tip)
-        (lambda (ladder)
-          (+agent-shell-arena-remote--offer remote job ladder nil
-                                            (plist-get probe :code))))))))
+A job's pod is adopted or created first.  Wait until the host is ready,
+then send the job: one whose host fetches its base from origin as it
+is, any other trying each prerequisite in turn until the host takes a
+bundle against one."
+  (let ((ready
+         (lambda ()
+           (+agent-shell-arena-remote--await
+            remote job
+            (lambda (probe)
+              (setf (+agent-shell-arena-remote-emacs remote)
+                    (+agent-shell-arena-remote-tool-path
+                     (+agent-shell-arena-remote-ready-emacs
+                      (plist-get probe :ready)))
+                    (+agent-shell-arena-remote-job-ready-file job)
+                    (plist-get probe :ready-file)
+                    (+agent-shell-arena-remote-job-ready job)
+                    (plist-get probe :ready))
+              (+agent-shell-arena-remote--save remote)
+              (if (eq (+agent-shell-arena-remote-job-base-source job) 'origin)
+                  (+agent-shell-arena-remote--offer-origin
+                   remote job (plist-get probe :code))
+                (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
+                  (+agent-shell-arena-remote-prerequisites
+                   (+agent-shell-pstack-panel-arena panel) (plist-get probe :tip)
+                   (lambda (ladder)
+                     (+agent-shell-arena-remote--offer
+                      remote job ladder nil (plist-get probe :code)))))))))))
+    (if (+agent-shell-arena-remote-pod remote)
+        (+agent-shell-arena-remote--pod-ensure remote ready)
+      (funcall ready))))
+
+(defun +agent-shell-arena-remote--pod-ensure (remote then &optional failures)
+  "Call THEN once REMOTE's pod exists, adopting it or creating it, never both.
+A pod not yet known to exist is looked up by name first, as after a
+restart, and created only when absent; a create that failed is looked
+up again, since it may have made the pod anyway.  A cancel that comes
+while the pod is created waits for the create, then the pod is
+deleted.  FAILURES counts lookups that could not say."
+  (let* ((pod (+agent-shell-arena-remote-pod remote))
+         (name (+agent-shell-arena-remote-pod-name pod))
+         (failures (or failures 0))
+         (submitting (lambda () (eq (+agent-shell-arena-remote-phase remote)
+                                    'submitting)))
+         (reject (lambda (reason) (+agent-shell-arena-remote--reject remote
+                                                                     reason)))
+         (go (lambda ()
+               (cond
+                ((not (funcall submitting))
+                 (+agent-shell-arena-remote--pod-release pod))
+                ((not (eq (+agent-shell-arena-remote-cancel-state remote) 'none))
+                 (funcall reject (+agent-shell-arena-remote--cancel-reason
+                                  remote)))
+                (t (funcall then)))))
+         (exists (lambda (how)
+                   (setf (+agent-shell-arena-remote-pod-state pod) 'created)
+                   (+agent-shell-arena-remote--pod-write pod)
+                   (message "pstack %s: %s pod %s"
+                            (+agent-shell-arena-remote-id remote) how name)
+                   (funcall go))))
+    (cond
+     ((not (funcall submitting)))
+     ((eq (+agent-shell-arena-remote-pod-state pod) 'created) (funcall go))
+     (t
+      (+agent-shell-arena-remote--pod-call
+       pod :lookup
+       (lambda (found error)
+         (cond
+          ((not (funcall submitting)))
+          (error
+           (if (< failures 3)
+               (run-at-time (+agent-shell-arena-remote--delay failures) nil
+                            #'+agent-shell-arena-remote--pod-ensure remote then
+                            (1+ failures))
+             (funcall reject (format "coder could not say whether it exists: \
+%s" error))))
+          (found (funcall exists "adopted"))
+          ((not (eq (+agent-shell-arena-remote-cancel-state remote) 'none))
+           (funcall reject (+agent-shell-arena-remote--cancel-reason remote)))
+          (t
+           (setf (+agent-shell-arena-remote-creating remote) t)
+           (+agent-shell-arena-remote--pod-call
+            pod :create (+agent-shell-arena-remote--pod-spec pod)
+            (+agent-shell-arena-remote-pod-stop-after pod)
+            (lambda (error)
+              (if (not error)
+                  (progn (setf (+agent-shell-arena-remote-creating remote) nil)
+                         (funcall exists "created"))
+                (+agent-shell-arena-remote--pod-call
+                 pod :lookup
+                 (lambda (found _)
+                   (setf (+agent-shell-arena-remote-creating remote) nil)
+                   (cond
+                    (found (funcall exists "adopted"))
+                    ((funcall submitting)
+                     (funcall reject (format "coder could not create it: %s"
+                                             error)))
+                    (t (+agent-shell-arena-remote--pod-release pod))))))))))))))))
 
 (defun +agent-shell-arena-remote--offer (remote job ladder tried has-code
                                                 &optional attempts)
@@ -2158,10 +2714,105 @@ build on (%s) and could not fetch them from origin" label
                                   (funcall fail error)))
                                (_ (funcall fail error)))))))))))))))))))))
 
-(defun +agent-shell-arena-remote--upload (remote job bundle tarball callback)
+(defun +agent-shell-arena-remote--admit-forwarded (job callback)
+  "Admit the laptop logins JOB forwards, then call CALLBACK with them.
+Each must outlast the job's maximum runtime plus
+`+agent-shell-sandbox-login-margin', as `+agent-shell-sandbox-check-logins'
+decides.  CALLBACK gets an alist of agent to the file the job carries
+and nil, or nil and why a login was refused.  Never log the files."
+  (let ((agents (seq-keep (lambda (sign-in)
+                            (when (eq 'forward
+                                      (+agent-shell-arena-remote-sign-in-mode
+                                       sign-in))
+                              (+agent-shell-arena-remote-sign-in-agent sign-in)))
+                          (+agent-shell-arena-remote-job-sign-ins job)))
+        (deadline (+ (float-time) (+agent-shell-arena-remote--max-runtime job))))
+    (if (null agents) (run-at-time 0 nil callback nil nil)
+      (+agent-shell-sandbox-check-logins
+       agents deadline
+       (lambda (results)
+         (if-let* ((refusal (seq-some #'+agent-shell-sandbox-login-result-error
+                                      results)))
+             (funcall callback nil refusal)
+           (condition-case err
+               (funcall
+                callback
+                (mapcar (lambda (agent)
+                          (let ((login (+agent-shell-sandbox--read-login agent)))
+                            (+agent-shell-sandbox--outlast
+                             login (+ deadline +agent-shell-sandbox-login-margin))
+                            (cons agent
+                                  (funcall (plist-get
+                                            (alist-get
+                                             agent
+                                             +agent-shell-arena-remote--forwarders)
+                                            :encode)
+                                           login))))
+                        agents)
+                nil)
+             (user-error (funcall callback nil (error-message-string err))))))))))
+
+(defun +agent-shell-arena-remote--offer-origin (remote job has-code
+                                                       &optional attempts)
+  "Send JOB, whose host fetches its base from origin, to REMOTE's host.
+The logins it forwards are admitted first.  HAS-CODE and ATTEMPTS are as
+`+agent-shell-arena-remote--offer' takes them.  The upload, which may
+hold a login, is deleted once sent."
+  (let ((fail (lambda (reason) (+agent-shell-arena-remote--reject remote reason)))
+        (host (+agent-shell-arena-remote-host remote)))
+    (when (eq (+agent-shell-arena-remote-phase remote) 'submitting)
+      (+agent-shell-arena-remote--admit-forwarded
+       job
+       (lambda (logins error)
+         (if error (funcall fail error)
+           (+agent-shell-arena-remote-code
+            (lambda (code error)
+              (if error (funcall fail error)
+                (setf (+agent-shell-arena-remote-job-code job) (car code))
+                (+agent-shell-arena-remote--upload
+                 remote job nil (unless has-code (cdr code))
+                 (lambda (upload error)
+                   (if error (funcall fail error)
+                     (+agent-shell-arena-remote--extend
+                      host (+ (+agent-shell-arena-remote-job-deadline job)
+                              +agent-shell-arena-remote-slack)
+                      (lambda (error)
+                        (if error
+                            (progn (delete-file upload) (funcall fail error))
+                          (setf (+agent-shell-arena-remote-extended remote)
+                                (+ (float-time)
+                                   (+agent-shell-arena-remote-job-deadline job)
+                                   +agent-shell-arena-remote-slack))
+                          (+agent-shell-arena-remote--send
+                           remote job upload
+                           (lambda (answer error)
+                             (delete-file upload)
+                             (pcase answer
+                               ('started
+                                (+agent-shell-arena-remote--submitted remote))
+                               ('code
+                                (+agent-shell-arena-remote--offer-origin
+                                 remote job nil attempts))
+                               ('lost
+                                (if (< (or attempts 0) 3)
+                                    (run-at-time
+                                     (+agent-shell-arena-remote--delay
+                                      (or attempts 0))
+                                     nil
+                                     #'+agent-shell-arena-remote--offer-origin
+                                     remote job has-code (1+ (or attempts 0)))
+                                  (funcall fail error)))
+                               (_ (funcall fail error))))))))))
+                 logins))))))))))
+
+(defun +agent-shell-arena-remote--upload (remote job bundle tarball callback
+                                                 &optional logins)
   "Pack JOB, BUNDLE and, when non-nil, the code TARBALL for REMOTE's host.
-A cancel asked for already goes in as the marker.  Call CALLBACK with
-the upload's file and nil, or nil and a message."
+A job whose host fetches its base from origin has no BUNDLE.  LOGINS
+lists (AGENT . TEXT), each forwarded as login/AGENT.json; the staging
+folder and the upload are then readable by this user alone.  A cancel
+asked for already goes in as the marker.  Call CALLBACK with the
+upload's file and nil, or nil and a message."
   (condition-case err
       (let* ((directory (+agent-shell-arena-remote-directory remote))
              (staging (expand-file-name "upload/" directory))
@@ -2171,20 +2822,27 @@ the upload's file and nil, or nil and a message."
                         (write-region text nil (expand-file-name name staging)
                                       nil 'silent)))))
         (when (file-directory-p staging) (delete-directory staging t))
-        (make-directory staging t)
+        (with-file-modes #o700 (make-directory staging t))
         (+agent-shell-arena-remote--write-json
          (+agent-shell-arena-remote--job-file remote) 'job job)
         (copy-file (+agent-shell-arena-remote--job-file remote)
                    (expand-file-name "job.json" staging))
-        (copy-file bundle (expand-file-name "base.bundle" staging))
-        (funcall write "prerequisite"
-                 (or (+agent-shell-arena-remote-job-prerequisite job) ""))
+        (when bundle
+          (copy-file bundle (expand-file-name "base.bundle" staging))
+          (funcall write "prerequisite"
+                   (or (+agent-shell-arena-remote-job-prerequisite job) "")))
         (funcall write "code-hash" (+agent-shell-arena-remote-job-code job))
         (when tarball (copy-file tarball (expand-file-name "code.tar" staging)))
+        (when logins
+          (with-file-modes #o700
+            (make-directory (expand-file-name "login/" staging)))
+          (with-file-modes #o600
+            (pcase-dolist (`(,agent . ,text) logins)
+              (funcall write (format "login/%s.json" agent) text))))
         (unless (eq (+agent-shell-arena-remote-cancel-state remote) 'none)
           (funcall write "cancel" "The arena was cancelled before it started.\n"))
         (+agent-shell-arena-remote--local
-         staging (list "tar" "-cf" upload ".")
+         staging (list "/bin/sh" "-c" "umask 077 && exec tar -cf \"$0\" ." upload)
          (lambda (_ error)
            (delete-directory staging t)
            (funcall callback (unless error upload) error))))
@@ -2192,17 +2850,20 @@ the upload's file and nil, or nil and a message."
 
 (defun +agent-shell-arena-remote--send (remote job upload callback)
   "Send UPLOAD, JOB's files, to REMOTE's host and start its runner.
+A job whose base source is origin has the host fetch its base from there.
 Call CALLBACK with `started', `missing' when the host lacks the
 prerequisite, `code' when it lacks the code, `lost' when the call failed,
 or nil; and a message."
   (+agent-shell-arena-remote--call
    (+agent-shell-arena-remote-host remote)
    +agent-shell-arena-remote--submit-script
-   (list (+agent-shell-arena-remote-id remote)
-         (+agent-shell-arena-remote-job-repository job)
-         (+agent-shell-arena-remote-emacs remote)
-         (+agent-shell-arena-remote--launcher
-          (+agent-shell-arena-remote-host remote)))
+   (append (list (+agent-shell-arena-remote-id remote)
+                 (+agent-shell-arena-remote-job-repository job)
+                 (+agent-shell-arena-remote-emacs remote)
+                 (+agent-shell-arena-remote--launcher
+                  (+agent-shell-arena-remote-host remote)))
+           (when (eq (+agent-shell-arena-remote-job-base-source job) 'origin)
+             (list "origin" (+agent-shell-arena-remote-job-base job))))
    :input upload :timeout 900
    :callback
    (lambda (output error)
@@ -2236,7 +2897,8 @@ or nil; and a message."
                      (+agent-shell-arena-remote-id remote))))
 
 (defun +agent-shell-arena-remote--poll (id)
-  "Read the status of the remote arena with ID, sending a pending cancel."
+  "Read the status of the remote arena with ID, sending a pending cancel.
+A pod's poll also reads its boot id."
   (when-let* ((remote (gethash id +agent-shell-arena-remote--arenas))
               ((eq (+agent-shell-arena-remote-phase remote) 'remote)))
     (setf (+agent-shell-arena-remote-timer remote) nil)
@@ -2247,7 +2909,10 @@ or nil; and a message."
                   "cancel" "-")
            (or (+agent-shell-arena-remote--cancel-reason remote) "")
            (+agent-shell-arena-remote--cursor-argument remote)
-           (or (+agent-shell-arena-remote-emacs remote) ""))
+           (or (+agent-shell-arena-remote-emacs remote) "")
+           (if (+agent-shell-arena-remote-pod remote)
+               +agent-shell-arena-remote-boot-id-file
+             ""))
      :timeout 120
      :callback (lambda (output error)
                  (+agent-shell-arena-remote--polled remote output error)))))
@@ -2261,34 +2926,43 @@ or nil; and a message."
            +agent-shell-arena-remote--cancel-reasons))
 
 (defun +agent-shell-arena-remote-parse-poll (output)
-  "Return (:alive BOOL :cancel BOOL :status STATUS :tail TAIL) from OUTPUT.
+  "Return (:alive BOOL :cancel BOOL :status STATUS :tail TAIL :boot BOOT).
 Return `none' when the host has no such job; signal when OUTPUT is
 malformed.  STATUS is nil before the runner first writes one.  A
 version-2 answer is one JSON envelope, whose TAIL is a delegate's
-transcript page as parsed JSON, or nil."
-  (if-let* ((start (and output (string-match "^pstack-arena-poll 2\n" output))))
-      (let ((envelope (condition-case err
-                          (json-parse-string (substring output (match-end 0))
-                                             :object-type 'alist
-                                             :array-type 'list
-                                             :null-object :null
-                                             :false-object :false)
-                        (json-error
-                         (signal '+agent-shell-arena-remote-wire
-                                 (list (format "poll envelope is not JSON: %s"
-                                               (error-message-string err))))))))
-        (unless (and (listp envelope) (consp (car-safe envelope)))
-          (signal '+agent-shell-arena-remote-wire
-                  (list "poll envelope is not an object")))
-        (list :alive (eq t (alist-get 'alive envelope))
-              :cancel (eq t (alist-get 'cancel envelope))
-              :status (let ((status (alist-get 'status envelope)))
-                        (unless (+agent-shell-arena-remote--absent-p status)
-                          (+agent-shell-arena-remote--decode 'status status)))
-              :tail (let ((tail (alist-get 'tail envelope)))
-                      (unless (+agent-shell-arena-remote--absent-p tail)
-                        tail))))
-    (+agent-shell-arena-remote--parse-poll-1 output)))
+transcript page as parsed JSON, or nil.  BOOT is the host's boot id, or
+nil when the answer does not give one."
+  (let ((boot (and output
+                   (string-match "^pstack-arena-boot \\([0-9a-f-]+\\)$" output)
+                   (match-string 1 output)))
+        (poll
+         (if-let* ((start (and output
+                               (string-match "^pstack-arena-poll 2\n" output))))
+             (let ((envelope
+                    (condition-case err
+                        (json-parse-string (substring output (match-end 0))
+                                           :object-type 'alist
+                                           :array-type 'list
+                                           :null-object :null
+                                           :false-object :false)
+                      (json-error
+                       (signal '+agent-shell-arena-remote-wire
+                               (list (format "poll envelope is not JSON: %s"
+                                             (error-message-string err))))))))
+               (unless (and (listp envelope) (consp (car-safe envelope)))
+                 (signal '+agent-shell-arena-remote-wire
+                         (list "poll envelope is not an object")))
+               (list :alive (eq t (alist-get 'alive envelope))
+                     :cancel (eq t (alist-get 'cancel envelope))
+                     :status (let ((status (alist-get 'status envelope)))
+                               (unless (+agent-shell-arena-remote--absent-p status)
+                                 (+agent-shell-arena-remote--decode 'status
+                                                                    status)))
+                     :tail (let ((tail (alist-get 'tail envelope)))
+                             (unless (+agent-shell-arena-remote--absent-p tail)
+                               tail))))
+           (+agent-shell-arena-remote--parse-poll-1 output))))
+    (if (eq poll 'none) poll (append poll (list :boot boot)))))
 
 (defun +agent-shell-arena-remote--parse-poll-1 (output)
   "Parse a version-1 poll's OUTPUT as `+agent-shell-arena-remote-parse-poll'."
@@ -2346,12 +3020,30 @@ transcript page as parsed JSON, or nil."
                   (+agent-shell-arena-remote-status-deadline status))
             (+agent-shell-arena-remote--mirror remote status)
             (+agent-shell-arena-remote--keep-awake remote status))
+          (when-let* ((pod (+agent-shell-arena-remote-pod remote))
+                      (boot (plist-get poll :boot)))
+            (setf (+agent-shell-arena-remote-pod-boot pod) boot))
           (+agent-shell-arena-remote--save remote)
           (cond
            ((and status
                  (eq (+agent-shell-arena-remote-status-phase status) 'finished))
             (+agent-shell-arena-remote--move remote 'fetching)
             (+agent-shell-arena-remote--fetch remote))
+           ;; A pod that booted under its runner had its container replaced.
+           ((and (+agent-shell-arena-remote-pod remote) status
+                 (not (plist-get poll :alive))
+                 (plist-get poll :boot)
+                 (+agent-shell-arena-remote-status-boot status)
+                 (not (equal (plist-get poll :boot)
+                             (+agent-shell-arena-remote-status-boot status)))
+                 (< (+agent-shell-arena-remote-restarts remote)
+                    +agent-shell-arena-remote-restarts))
+            (message "pstack %s: %s booted again under its runner, so Emacs \
+restarts the runner to capture what it left"
+                     (+agent-shell-arena-remote-id remote)
+                     (+agent-shell-arena-remote--host-label
+                      (+agent-shell-arena-remote-host remote)))
+            (+agent-shell-arena-remote--resume remote))
            ((and (not (plist-get poll :alive))
                  (> (- now (or (+agent-shell-arena-remote-seen remote) now))
                     +agent-shell-arena-remote-stale-after)
@@ -2381,6 +3073,24 @@ the host's queue allows; a shown transcript polls every
      +agent-shell-arena-remote-unreachable-after))
 
 (defun +agent-shell-arena-remote--trouble (remote error)
+  "Note that a call about REMOTE failed with ERROR, then poll again later.
+A pod is looked up first, and one that no longer exists ends the job
+as lost.  Once its host has been silent too long, tell the lead."
+  (if-let* ((pod (+agent-shell-arena-remote-pod remote))
+            ((eq (+agent-shell-arena-remote-pod-state pod) 'created))
+            ((memq (+agent-shell-arena-remote-phase remote) '(remote fetching))))
+      (+agent-shell-arena-remote--pod-call
+       pod :lookup
+       (lambda (found lookup-error)
+         (cond
+          ((not (memq (+agent-shell-arena-remote-phase remote)
+                      '(remote fetching))))
+          ((or found lookup-error)
+           (+agent-shell-arena-remote--trouble-later remote error))
+          (t (+agent-shell-arena-remote--pod-lost remote)))))
+    (+agent-shell-arena-remote--trouble-later remote error)))
+
+(defun +agent-shell-arena-remote--trouble-later (remote error)
   "Note that a call about REMOTE failed with ERROR, then poll again later.
 Once its host has been silent too long, tell the lead."
   (cl-incf (+agent-shell-arena-remote-failures remote))
@@ -2637,9 +3347,11 @@ is checked against the report, the panel and the base, then becomes
 refs/heads/pstack/delegate/PANEL by compare-and-swap.  A branch already
 there is accepted only when it holds the same commit; otherwise it is
 left alone, the fetched ref stays for recovery and the result says so.
-Its commits are listed here, from the verified tip.  Call CALLBACK with
-an alist of the delegate's role to its result plist and nil, or nil and
-a message for a failure worth retrying."
+Its commits are listed here, from the verified tip.  A report naming
+another branch, or a tip that does not descend from the base, is
+refused: nothing lands, and the result has :refused and :error.  Call
+CALLBACK with an alist of the delegate's role to its result plist and
+nil, or nil and a message for a failure worth retrying."
   (let* ((panel (+agent-shell-arena-remote--panel remote))
          (manifest (+agent-shell-pstack-panel-arena panel))
          (outcome (+agent-shell-arena-remote-report-delegate report))
@@ -2703,10 +3415,11 @@ commit, so Emacs left it alone.  The delegate's branch is at %s, which \
         (funcall callback nil "the delegate's report names no delegate"))
        ((null tip) (result))
        ((not (equal (+agent-shell-arena-remote-outcome-branch outcome) branch))
-        (funcall callback nil (format "the report names branch %s, not %s"
-                                      (+agent-shell-arena-remote-outcome-branch
-                                       outcome)
-                                      branch)))
+        (result :refused t
+                :error (format "the report names branch %s, not %s"
+                               (+agent-shell-arena-remote-outcome-branch
+                                outcome)
+                               branch)))
        (t
         (funcall
          git (list "bundle" "verify" "-q" bundle)
@@ -2725,15 +3438,27 @@ as %s, not the reported %s" landed tip))
                    (+agent-shell-arena-remote--git
                     manifest (list "merge-base" "--is-ancestor" base tip)
                     (lambda (_ error)
-                      (if error
-                          (funcall callback nil (format "the delegate's branch \
-tip %s does not descend from its base %s" tip base))
-                        (publish))))))))))))))))
+                      (if (not error) (publish)
+                        (funcall
+                         git (list "update-ref" "-d" temporary tip)
+                         (lambda (_)
+                           (result :refused t
+                                   :error (format "the delegate's branch tip \
+%s does not descend from its base %s" tip base)))))))))))))))))))
 
 (defun +agent-shell-arena-remote--finish (remote report results)
   "Give REMOTE's panel REPORT's members and RESULTS, then finish it.
-The follow-up is composed as a local arena's is."
+The follow-up is composed as a local arena's is.  With the report
+checked, the results landed and the transcript saved, REMOTE's pod is
+deleted, unless `+agent-shell-arena-remote--pod-keep-reason' keeps it."
   (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
+    (when-let* ((pod (+agent-shell-arena-remote-pod remote))
+                ((eq (+agent-shell-arena-remote-pod-state pod) 'created))
+                (reason (+agent-shell-arena-remote--pod-keep-reason
+                         report results)))
+      (setf (+agent-shell-arena-remote-pod-state pod) 'kept
+            (+agent-shell-arena-remote-pod-reason pod) reason)
+      (+agent-shell-arena-remote--pod-write pod))
     (setf (+agent-shell-pstack-panel-rejection panel)
           (+agent-shell-arena-remote-report-rejection report))
     (dolist (reported (+agent-shell-arena-remote-report-members report))
@@ -2761,7 +3486,10 @@ The follow-up is composed as a local arena's is."
     (unless (eq (+agent-shell-arena-remote-phase remote) 'finished)
       (+agent-shell-arena-remote--move remote 'finished))
     (+agent-shell-pstack-panel--finish panel)
-    (+agent-shell-arena-remote--sync)))
+    (+agent-shell-arena-remote--sync)
+    (when-let* ((pod (+agent-shell-arena-remote-pod remote))
+                ((eq (+agent-shell-arena-remote-pod-state pod) 'created)))
+      (+agent-shell-arena-remote--pod-release pod))))
 
 ;;;; Delegate transcripts
 
@@ -3501,7 +4229,8 @@ Its routing keys are cleared, so the panel can never submit itself."
 
 ;;;###autoload
 (defun +agent-shell-arena-remote-reattach-all ()
-  "Resume every remote arena on disk that has not delivered its results."
+  "Resume every remote arena on disk that has not delivered its results.
+Then go on with the pods in the ledger."
   (interactive)
   (let ((root +agent-shell-pstack-arena-directory))
     (when (file-directory-p root)
@@ -3512,8 +4241,47 @@ Its routing keys are cleared, so the panel can never submit itself."
             (error (message "pstack arena %s: could not re-attach: %s"
                             (file-name-nondirectory directory)
                             (error-message-string err))))))))
+  (+agent-shell-arena-remote--restore-pods)
   (+agent-shell-arena-remote--attach-leads)
   (+agent-shell-pstack-panels--refresh))
+
+(defun +agent-shell-arena-remote--restore-pods ()
+  "Go on with what the ledger's pods were doing when Emacs last stopped.
+A live job's pod is its job's to handle, and a kept one waits for its
+lead.  Any other is deleted: a pod is kept only by a decision written
+before its job finished, so one still planned or created belongs to a
+job that never ran or needs it no more."
+  (dolist (pod (+agent-shell-arena-remote--pods))
+    (unless (or (gethash (+agent-shell-arena-remote-pod-job pod)
+                         +agent-shell-arena-remote--arenas)
+                (eq (+agent-shell-arena-remote-pod-state pod) 'kept))
+      (+agent-shell-arena-remote--pod-release pod))))
+
+;;;###autoload
+(defun +agent-shell-pstack-pod-discard (name)
+  "Delete pod NAME, which Emacs kept for its lead, losing what it holds.
+A pod whose delete failed is tried again."
+  (interactive
+   (list (completing-read
+          "Discard pod: "
+          (seq-keep (lambda (pod)
+                      (when (memq (+agent-shell-arena-remote-pod-state pod)
+                                  '(kept deleting))
+                        (+agent-shell-arena-remote-pod-name pod)))
+                    (+agent-shell-arena-remote--pods))
+          nil t)))
+  (let ((pod (or (seq-find (lambda (pod)
+                             (equal name (+agent-shell-arena-remote-pod-name pod)))
+                           (+agent-shell-arena-remote--pods))
+                 (user-error "The pod ledger has no pod %s" name))))
+    (unless (memq (+agent-shell-arena-remote-pod-state pod) '(kept deleting))
+      (user-error "Pod %s is %s; Emacs deletes it itself once its job ends"
+                  name (+agent-shell-arena-remote-pod-state pod)))
+    (+agent-shell-arena-remote--pod-release
+     pod (lambda (error)
+           (if error
+               (message "Pod %s: %s; Emacs keeps trying to delete it" name error)
+             (message "Discarded pod %s" name))))))
 
 ;;;###autoload
 (defun +agent-shell-pstack-arena-reattach (id)
@@ -3578,7 +4346,8 @@ Deliver its follow-up there once the shell is ready."
 (defun +agent-shell-arena-remote-clean (manifest callback)
   "Clean MANIFEST's remote arena on its host, then on the laptop.
 Call CALLBACK as `+agent-shell-arena-git-clean' does.  An arena whose
-runner still runs is left alone."
+runner still runs is left alone.  A job's pod is deleted instead, with
+everything on it, which also discards one Emacs kept."
   (let* ((directory (+agent-shell-arena-git-manifest-directory manifest))
          (remote (or (gethash (+agent-shell-arena-git-manifest-id manifest)
                               +agent-shell-arena-remote--arenas)
@@ -3593,8 +4362,12 @@ runner still runs is left alone."
                   (remhash (+agent-shell-arena-remote-id remote)
                            +agent-shell-arena-remote--arenas)
                   (+agent-shell-arena-git-clean manifest callback))))
-    (if (not (+agent-shell-arena-remote-submitted remote))
-        (funcall local)
+    (cond
+     ((+agent-shell-arena-remote-pod remote)
+      (+agent-shell-arena-remote--clean-pod remote local callback))
+     ((not (+agent-shell-arena-remote-submitted remote))
+      (funcall local))
+     (t
       (+agent-shell-arena-remote--call
        (+agent-shell-arena-remote-host remote)
        +agent-shell-arena-remote--clean-script
@@ -3614,7 +4387,29 @@ runner still runs is left alone."
              (funcall callback nil (format "It still runs on %s; cancel it \
 first" label)))
             (t (funcall callback nil (format "%s: %s" label
-                                             (or answer output)))))))))))
+                                             (or answer output))))))))))))
+
+(defun +agent-shell-arena-remote--clean-pod (remote local callback)
+  "Delete REMOTE's pod, then call LOCAL, which cleans the laptop's side.
+The ledger says what became of the pod since REMOTE was saved.  A job
+still running is left alone, and CALLBACK hears why, as it does when
+the delete fails."
+  (let* ((pod (+agent-shell-arena-remote-pod remote))
+         (name (+agent-shell-arena-remote-pod-name pod))
+         (current (or (seq-find (lambda (other)
+                                  (equal name (+agent-shell-arena-remote-pod-name
+                                               other)))
+                                (+agent-shell-arena-remote--pods))
+                      (progn (setf (+agent-shell-arena-remote-pod-state pod)
+                                   'deleted)
+                             pod))))
+    (if (not (memq (+agent-shell-arena-remote-phase remote) '(finished)))
+        (funcall callback nil (format "It still runs on %s; cancel it first"
+                                      (+agent-shell-arena-remote--host-label
+                                       (+agent-shell-arena-remote-host remote))))
+      (+agent-shell-arena-remote--pod-release
+       current (lambda (error)
+                 (if error (funcall callback nil error) (funcall local)))))))
 
 ;;;###autoload
 (define-minor-mode +agent-shell-arena-remote-mode
@@ -3652,9 +4447,13 @@ deadline cancelled the panel; the panel's limit is the latest its
 deadline may move to while a member runs a command.  TRANSCRIPT is a delegate's transcript
 writer, a `+agent-shell-arena-remote--recorder'.  QUARANTINE says why
 its delegate's writers could not be shown to have stopped, which keeps
-the repository's lock held."
+the repository's lock held.  BOOT is the host's boot id.  FORWARDED
+maps an agent to the login file its job forwarded, held only in memory,
+and HOMES a member's role to the folder that login was written to for
+it, deleted once it settles."
   job directory root panel (phase 'queued) lock previous done
-  cancelled expired (written "") (beat 0) error ready transcript quarantine)
+  cancelled expired (written "") (beat 0) error ready transcript quarantine
+  boot forwarded homes)
 
 (defvar +agent-shell-arena-remote--runner nil
   "The runner this batch Emacs runs, or nil.")
@@ -3726,7 +4525,8 @@ RESULTS says the results are written, which finishes the status."
                   :members (+agent-shell-arena-remote--runner-members runner)
                   :results (and results t)
                   :error (+agent-shell-arena-remote--runner-error runner)
-                  :logins (and panel (+agent-shell-pstack-panel-logins panel))))
+                  :logins (and panel (+agent-shell-pstack-panel-logins panel))
+                  :boot (+agent-shell-arena-remote--runner-boot runner)))
          (text (+agent-shell-arena-remote-to-json 'status status))
          (now (float-time)))
     (when (or results
@@ -3818,6 +4618,10 @@ whose delegate's writers were never shown to stop, never is; see
                          :lease
                          (lambda (member)
                            (+agent-shell-arena-remote--runner-lease
+                            runner member))
+                         :environment
+                         (lambda (member)
+                           (+agent-shell-arena-remote--runner-sign-in
                             runner member))))
                  :sink (lambda (panel)
                          (+agent-shell-arena-remote--runner-finish
@@ -3861,37 +4665,190 @@ local host's runner records the adapter's pid and start time instead."
                            (concat (getenv "HOME") (substring repository 1))
                          repository)))))
 
+(defun +agent-shell-arena-remote--boot-id ()
+  "Return this host's boot id, or nil where it has none."
+  (when (file-readable-p +agent-shell-arena-remote-boot-id-file)
+    (let ((id (string-trim (with-temp-buffer
+                             (insert-file-contents
+                              +agent-shell-arena-remote-boot-id-file)
+                             (buffer-string)))))
+      (and (string-match-p "\\`[0-9a-f-]+\\'" id) id))))
+
+(defun +agent-shell-arena-remote--job-sign-in (job agent)
+  "Return JOB's sign-in for AGENT, or nil when it uses the host's login."
+  (seq-find (lambda (sign-in)
+              (eq agent (+agent-shell-arena-remote-sign-in-agent sign-in)))
+            (+agent-shell-arena-remote-job-sign-ins job)))
+
+(defun +agent-shell-arena-remote--runner-take-logins (runner)
+  "Read the logins RUNNER's job forwarded into memory and delete their files.
+Each forwarded agent's registry entry then reads its login from memory,
+and cannot be refreshed on this host."
+  (let ((folder (+agent-shell-arena-remote--runner-file runner "login/")))
+    (dolist (sign-in (+agent-shell-arena-remote-job-sign-ins
+                      (+agent-shell-arena-remote--runner-job runner)))
+      (let* ((agent (+agent-shell-arena-remote-sign-in-agent sign-in))
+             (file (expand-file-name (format "%s.json" agent) folder)))
+        (when (and (eq 'forward (+agent-shell-arena-remote-sign-in-mode sign-in))
+                   (file-readable-p file))
+          (push (cons agent (with-temp-buffer
+                              (let ((coding-system-for-read 'utf-8-unix))
+                                (insert-file-contents file))
+                              (buffer-string)))
+                (+agent-shell-arena-remote--runner-forwarded runner)))))
+    (when (file-directory-p folder) (delete-directory folder t))
+    (pcase-dolist (`(,agent . ,text)
+                   (+agent-shell-arena-remote--runner-forwarded runner))
+      (let ((decode (plist-get (alist-get agent
+                                          +agent-shell-arena-remote--forwarders)
+                               :decode)))
+        (setf (alist-get agent +agent-shell-sandbox-agents)
+              (append (list :login (lambda ()
+                                     (funcall decode text
+                                              "the login the laptop forwarded"))
+                            :refresh nil
+                            :relogin (format "Log %s in again on the laptop, \
+then request the delegate again." agent))
+                      (alist-get agent +agent-shell-sandbox-agents)))))))
+
+(defun +agent-shell-arena-remote--runner-sign-in-refusal (runner)
+  "Return why RUNNER's members cannot sign in on this host, or nil.
+A provider sign-in needs environment from its job or runner-init.el,
+and a forwarded one the login its job brought."
+  (let ((job (+agent-shell-arena-remote--runner-job runner)))
+    (seq-some
+     (lambda (sign-in)
+       (let ((agent (+agent-shell-arena-remote-sign-in-agent sign-in)))
+         (pcase (+agent-shell-arena-remote-sign-in-mode sign-in)
+           ('provider
+            (unless (or (+agent-shell-arena-remote-sign-in-environment sign-in)
+                        (alist-get agent
+                                   +agent-shell-arena-remote-sign-in-environment))
+              (format "%s signs in through its provider on this host, but \
+neither the pod's :environment nor runner-init.el gives it any environment"
+                      agent)))
+           ('forward
+            (unless (alist-get agent (+agent-shell-arena-remote--runner-forwarded
+                                      runner))
+              (format "the laptop's login for %s did not reach this runner"
+                      agent))))))
+     (+agent-shell-arena-remote-job-sign-ins job))))
+
+(defun +agent-shell-arena-remote--runner-sign-in (runner member)
+  "Return the environment MEMBER of RUNNER's job signs in with.
+A provider sign-in gets its job's and runner-init.el's entries.  A
+forwarded login is written, mode 0600, into a folder of MEMBER's own
+under the login directory, a tmpfs, which the environment names.  The
+host's own login needs nothing."
+  (let* ((job (+agent-shell-arena-remote--runner-job runner))
+         (agent (+agent-shell-pstack-panel-member-agent member))
+         (role (+agent-shell-pstack-panel-member-role member))
+         (sign-in (+agent-shell-arena-remote--job-sign-in job agent)))
+    (pcase (and sign-in (+agent-shell-arena-remote-sign-in-mode sign-in))
+      ('provider
+       (append (+agent-shell-arena-remote-sign-in-environment sign-in)
+               (alist-get agent +agent-shell-arena-remote-sign-in-environment)))
+      ('forward
+       (let* ((forwarder (alist-get agent +agent-shell-arena-remote--forwarders))
+              (text (or (alist-get agent
+                                   (+agent-shell-arena-remote--runner-forwarded
+                                    runner))
+                        (error "The laptop's login for %s did not reach this \
+runner" agent)))
+              (root (or +agent-shell-arena-remote-login-directory
+                        (getenv "XDG_RUNTIME_DIR")))
+              (home (and root (file-name-as-directory
+                               (expand-file-name
+                                (format "pstack-arena/%s/%s"
+                                        (+agent-shell-arena-remote-job-id job)
+                                        role)
+                                root)))))
+         (unless (and root (file-directory-p root))
+           (error "A forwarded login needs XDG_RUNTIME_DIR, a tmpfs folder of \
+this user's, and this runner has none"))
+         (when (file-exists-p home) (delete-directory home t))
+         (with-file-modes #o700 (make-directory home t))
+         (push (cons role home) (+agent-shell-arena-remote--runner-homes runner))
+         (with-file-modes #o600
+           (let ((coding-system-for-write 'utf-8-unix))
+             (write-region text nil
+                           (expand-file-name (plist-get forwarder :file) home)
+                           nil 'silent)))
+         (mapcar (lambda (entry) (format entry (directory-file-name home)))
+                 (plist-get forwarder :environment)))))))
+
+(defun +agent-shell-arena-remote--runner-drop-homes (runner &optional all)
+  "Delete the login folders of RUNNER's members that settled, or ALL of them."
+  (let ((panel (+agent-shell-arena-remote--runner-panel runner)))
+    (setf (+agent-shell-arena-remote--runner-homes runner)
+          (seq-remove
+           (pcase-lambda (`(,role . ,home))
+             (let ((member (and panel (+agent-shell-pstack-panel--member
+                                       panel role))))
+               (when (or all (null member)
+                         (+agent-shell-pstack-panel--settled-p member))
+                 (ignore-errors (delete-directory home t))
+                 t)))
+           (+agent-shell-arena-remote--runner-homes runner)))))
+
 (defun +agent-shell-arena-remote--runner-start (runner)
   "Start RUNNER's arena now that it holds the repository's lock.
 Its deadline is fixed now.  The panel checks every agent's host login
-before any member starts, as a local arena's does."
-  (let ((job (+agent-shell-arena-remote--runner-job runner))
-        (panel (+agent-shell-arena-remote--runner-panel-for runner))
-        (previous (+agent-shell-arena-remote--runner-previous runner)))
+before any member starts, as a local arena's does.  A login the job
+forwarded is checked again first, through
+`+agent-shell-sandbox-check-logins', to outlast the panel's horizon."
+  (let* ((job (+agent-shell-arena-remote--runner-job runner))
+         (panel (+agent-shell-arena-remote--runner-panel-for runner))
+         (previous (+agent-shell-arena-remote--runner-previous runner))
+         (forwarded (mapcar #'car (+agent-shell-arena-remote--runner-forwarded
+                                   runner)))
+         (start
+          (lambda ()
+            (let* ((sparse (+agent-shell-arena-remote-job-sparse job))
+                   (base (+agent-shell-arena-git-base-at
+                          (+agent-shell-arena-remote--repository job)
+                          (+agent-shell-arena-remote-job-base job)
+                          (+agent-shell-arena-remote-job-prefix job)
+                          (when sparse
+                            (list :cone (+agent-shell-arena-remote-sparse-cone
+                                         sparse)
+                                  :patterns
+                                  (+agent-shell-arena-remote-sparse-patterns
+                                   sparse))))))
+              (if (+agent-shell-pstack-panel--delegate-p panel)
+                  (progn
+                    (when-let* ((refusal
+                                 (+agent-shell-arena-remote--delegate-refusal
+                                  runner)))
+                      (user-error "%s" refusal))
+                    (+agent-shell-pstack-panel--provision-delegate panel base))
+                (+agent-shell-pstack-panel--provision panel base))))))
     (setf (+agent-shell-arena-remote--runner-phase runner) 'preparing)
     (+agent-shell-pstack-panel--fix-deadline
      panel (+agent-shell-arena-remote-job-deadline job))
     (condition-case err
-        (if previous
-            (+agent-shell-arena-remote--recover panel previous)
-          (let* ((sparse (+agent-shell-arena-remote-job-sparse job))
-                 (base (+agent-shell-arena-git-base-at
-                        (+agent-shell-arena-remote--repository job)
-                        (+agent-shell-arena-remote-job-base job)
-                        (+agent-shell-arena-remote-job-prefix job)
-                        (when sparse
-                          (list :cone (+agent-shell-arena-remote-sparse-cone
-                                       sparse)
-                                :patterns
-                                (+agent-shell-arena-remote-sparse-patterns
-                                 sparse))))))
-            (if (+agent-shell-pstack-panel--delegate-p panel)
-                (progn
-                  (when-let* ((refusal (+agent-shell-arena-remote--delegate-refusal
-                                        runner)))
-                    (user-error "%s" refusal))
-                  (+agent-shell-pstack-panel--provision-delegate panel base))
-              (+agent-shell-pstack-panel--provision panel base))))
+        (cond
+         (previous (+agent-shell-arena-remote--recover panel previous))
+         ((when-let* ((refusal (+agent-shell-arena-remote--runner-sign-in-refusal
+                                runner)))
+            (+agent-shell-pstack-panel--fail-preparation panel refusal)
+            t))
+         (forwarded
+          (setf (+agent-shell-pstack-panel-login-check panel)
+                (+agent-shell-sandbox-check-logins
+                 forwarded (+agent-shell-pstack-panel--horizon panel)
+                 (lambda (results)
+                   (let ((ended (eq (+agent-shell-pstack-panel-phase panel)
+                                    'finished)))
+                     (setf (+agent-shell-pstack-panel-login-check panel) nil
+                           (+agent-shell-pstack-panel-logins panel) results)
+                     (+agent-shell-pstack-panel--preparing
+                      panel (seq-some #'+agent-shell-sandbox-login-result-error
+                                      results)
+                      start)
+                     (when ended (+agent-shell-pstack-panel--finalize panel))
+                     (+agent-shell-arena-remote--runner-status runner))))))
+         (t (funcall start)))
       (error (+agent-shell-pstack-panel--fail-preparation
               panel (error-message-string err))))
     (+agent-shell-arena-remote--runner-status runner)))
@@ -4117,6 +5074,7 @@ is nil."
      :rejection (or (and panel (+agent-shell-pstack-panel-rejection panel))
                     (+agent-shell-arena-remote--runner-error runner))
      :ready (+agent-shell-arena-remote--runner-ready runner)
+     :quarantine (+agent-shell-arena-remote--runner-quarantine runner)
      :members
      (if panel
          (mapcar
@@ -4381,6 +5339,7 @@ unfinished."
                         (expand-file-name "status.json" directory) 'status)))
            (runner (+agent-shell-arena-remote--make-runner
                     :job job :directory directory :root root :ready ready
+                    :boot (+agent-shell-arena-remote--boot-id)
                     :lock (+agent-shell-arena-remote--lock-file
                            root (+agent-shell-arena-remote--repository job))
                     :previous (and previous
@@ -4394,8 +5353,11 @@ unfinished."
                           (+agent-shell-arena-remote-host-profile profile)))))
            (timer nil))
       (setq +agent-shell-arena-remote--runner runner)
+      (+agent-shell-arena-remote--runner-take-logins runner)
       (add-hook '+agent-shell-pstack-panel-change-hook
-                (lambda () (+agent-shell-arena-remote--runner-status runner)))
+                (lambda ()
+                  (+agent-shell-arena-remote--runner-drop-homes runner)
+                  (+agent-shell-arena-remote--runner-status runner)))
       (if (and previous
                (eq (+agent-shell-arena-remote-status-phase previous) 'finished))
           0
@@ -4420,6 +5382,7 @@ unfinished."
                   (accept-process-output nil 0.1)))
               0)
           (when timer (cancel-timer timer))
+          (+agent-shell-arena-remote--runner-drop-homes runner t)
           (unless (+agent-shell-arena-remote--runner-quarantine runner)
             (+agent-shell-arena-remote--release
              (+agent-shell-arena-remote--runner-lock runner))))))))

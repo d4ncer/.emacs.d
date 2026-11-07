@@ -205,7 +205,7 @@
     (funcall refuse (lambda (json) (setf (alist-get 'heartbeat json) "soon") json)
              "status\\.heartbeat must be a number")
     (funcall refuse (lambda (json) (setf (alist-get 'version json) 99) json)
-             "version 99, but this Emacs reads up to 2")
+             "version 99, but this Emacs reads up to 3")
     (funcall refuse (lambda (json) (setf (alist-get 'kind json) "report") json)
              "status\\.kind must be \"status\"")
     (funcall refuse (lambda (json) (assq-delete-all 'heartbeat json))

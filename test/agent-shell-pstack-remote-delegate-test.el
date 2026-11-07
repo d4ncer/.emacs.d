@@ -371,7 +371,7 @@ Snapshot uncommitted work for pstack delegate abc123def456"
                                     member)))
                            (+agent-shell-arena-remote-job-members job))))
     (let ((written (+agent-shell-arena-remote-to-json 'job job)))
-      (should (string-match-p "\"version\":2" written))
+      (should (string-match-p "\"version\":3" written))
       (should (string-match-p "\"members\":" written))
       (should-not (string-match-p "\"candidates\"\\|\"judge\":" written)))
     (should (equal '("opus" "codex" "judge")

@@ -74,6 +74,7 @@
    "-l" "agent-shell-pstack-walkthrough-test"
    "-l" "agent-shell-arena-git-test"
    "-l" "agent-shell-arena-remote-test"
+   "-l" "agent-shell-arena-remote-pod-test"
    "-l" "agent-shell-arena-remote-protocol-test"
    "-l" "agent-shell-pstack-remote-delegate-test"
    "-l" "agent-shell-pstack-arena-sandbox-test"

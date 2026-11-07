@@ -78,7 +78,8 @@ The sandbox-exec backend reads the host login Keychain instead."
      :login +agent-shell-sandbox--claude-login
      :refresh ("claude" "-p" "Reply with the single word OK.")
      :relogin "Log Claude Code in again on the host: run claude \
-there and use /login.")
+there and use /login."
+     :sign-in ((pod . provider)))
     (codex :mode "agent-full-access"
            :prepare +agent-shell-sandbox-prepare-codex
            :name "Codex"
@@ -86,6 +87,7 @@ there and use /login.")
            :refresh ("codex" "exec" "--skip-git-repo-check"
                      "Reply with the single word OK.")
            :relogin "Log Codex in again on the host with codex login."
+           :sign-in ((pod . forward))
            :failure-patterns
            ((overloaded . "Selected model is at capacity\\. Please try a \
 different model\\."))))
@@ -96,11 +98,24 @@ and returns environment entries, using a fresh projected host login.
 user error; it is the only reader of this provider's host credential
 and expiry on either backend.  :name names the provider, :refresh is
 its host CLI command, and :relogin gives host login instructions.
+:sign-in maps a remote host kind to how the agent signs in there; see
+`+agent-shell-sandbox-sign-in'.
 :failure-patterns lists (KIND . REGEXP) for provider error lines the
 agent writes as a whole final message; see `+agent-shell-drive-failure'.
 Every arena member, including its judge, must have a :login reader.
 No sandbox may refresh a host login or copy credentials back."
   :type '(alist :key-type symbol :value-type plist))
+
+(defun +agent-shell-sandbox-sign-in (agent kind)
+  "Return how AGENT signs in on a remote host of KIND.
+`host', the default, uses the host's own login, read by :login there.
+`provider' signs in through environment its host supplies, such as a
+cloud provider's, so no credential travels and no :login is read.
+`forward' sends the laptop's login, without a refresh token, with the
+job.  See :sign-in in `+agent-shell-sandbox-agents'."
+  (or (alist-get kind (plist-get (alist-get agent +agent-shell-sandbox-agents)
+                                 :sign-in))
+      'host))
 
 (defvar +agent-shell-sandbox--security "/usr/bin/security"
   "macOS's Keychain tool, by absolute path so no other one on PATH runs.")
@@ -1344,15 +1359,19 @@ expiry; %s" relogin))
 
 (defun +agent-shell-sandbox--codex-login ()
   "Return the host's Codex ChatGPT login from its auth.json, projected."
-  (let* ((file (expand-file-name "auth.json" +agent-shell-sandbox-codex-home))
-         (login (if (file-readable-p file)
-                    (+agent-shell-sandbox--parse-login
-                     (with-temp-buffer
-                       (insert-file-contents file)
-                       (buffer-string))
-                     "Codex")
-                  (user-error "No Codex login at %s; run codex login on this \
-host" file)))
+  (let ((file (expand-file-name "auth.json" +agent-shell-sandbox-codex-home)))
+    (if (file-readable-p file)
+        (+agent-shell-sandbox-codex-login-text
+         (with-temp-buffer
+           (insert-file-contents file)
+           (buffer-string))
+         file)
+      (user-error "No Codex login at %s; run codex login on this host" file))))
+
+(defun +agent-shell-sandbox-codex-login-text (text where)
+  "Return the Codex ChatGPT login auth.json TEXT holds, projected.
+WHERE names its source in errors, which never quote it."
+  (let* ((login (+agent-shell-sandbox--parse-login text "Codex"))
          (tokens (+agent-shell-sandbox--json-get login 'tokens))
          (fields (mapcar (lambda (key)
                            (let ((value (+agent-shell-sandbox--json-get
@@ -1365,7 +1384,7 @@ host" file)))
          (refreshed (+agent-shell-sandbox--json-get login 'last_refresh)))
     (unless (and (seq-every-p #'identity fields) expires)
       (user-error "No ChatGPT login with a known expiry for Codex at %s; run \
-codex login on this host" file))
+codex login on this host" where))
     (+agent-shell-sandbox--make-login
      :agent 'codex :access (nth 0 fields) :expires expires
      :id-token (nth 1 fields) :account-id (nth 2 fields)

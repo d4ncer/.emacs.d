@@ -35,7 +35,15 @@
          :wake nil :extend nil :label +agent-shell-arena-remote--ssh-label)
     (local :exec +agent-shell-arena-remote--local-exec
            :wake nil :extend nil :label +agent-shell-arena-remote--local-label
-           :local t))
+           :local t)
+    (pod :exec +agent-shell-arena-remote--coder-exec
+         :wake +agent-shell-arena-remote--coder-wake
+         :extend +agent-shell-arena-remote--coder-extend
+         :label +agent-shell-arena-remote--pod-label
+         :create +agent-shell-arena-remote--pod-create
+         :delete +agent-shell-arena-remote--pod-delete
+         :lookup +agent-shell-arena-remote--pod-lookup
+         :unsandboxed t))
   "Host kinds accepted by arena profiles and remote records.
 Each entry is (KIND . PLIST).  :exec is a function of NAME and a command
 argument list, returning the local command that runs it on the host in
@@ -52,13 +60,27 @@ remote host documentation for the event meanings.
 
 :local, when non-nil, makes NAME an absolute local state directory,
 uses its ready.json and starts the runner with nohup instead of systemd.
+
+:create, :delete and :lookup make a kind's hosts per job: a profile
+names it as (KIND . SPEC), a plist checked by
+`+agent-shell-arena-git-pod-spec-error', and the laptop names, creates
+and deletes one host for each job.  :create is a function of NAME, SPEC,
+SECONDS and CALLBACK, creating host NAME that stops by itself after
+SECONDS; :delete one of NAME and CALLBACK; both call CALLBACK with nil
+or an error message.  :lookup is a function of NAME and CALLBACK, called
+with whether the host exists and nil, or nil and an error message.
+
+:unsandboxed, when non-nil, runs every member unconfined, so the kind
+needs no sandbox capability and refuses a sandboxed delegate.
+
 The remote library implements the default callbacks; defining this
 option here lets profile validation run without loading that library.
 
-A kind supplies transport only.  Starting the runner, containing a
-remote delegate and the sandbox still assume a Linux host with a systemd
-user manager, so a backend without one needs more than an entry here;
-see \"Adding a backend\" in docs/PSTACK-REMOTE-PROTOCOL.md."
+A kind supplies transport and, with :create, its hosts' lifetime.
+Starting the runner and containing a remote delegate still assume a
+Linux host with a systemd user manager, so a backend without one needs
+more than an entry here; see \"Adding a backend\" in
+docs/PSTACK-REMOTE-PROTOCOL.md."
   :group '+agent-shell-pstack-arena
   :type '(alist :key-type symbol :value-type plist))
 
@@ -68,7 +90,13 @@ see \"Adding a backend\" in docs/PSTACK-REMOTE-PROTOCOL.md."
 
 (defun +agent-shell-arena-git-host-description ()
   "Return the registered host forms for validation messages."
-  (mapconcat (lambda (kind) (format "(%s . NAME)" kind))
+  (mapconcat (lambda (kind)
+               (format (if (plist-get (alist-get kind
+                                                 +agent-shell-arena-remote-host-kinds)
+                                      :create)
+                           "(%s . SPEC)"
+                         "(%s . NAME)")
+                       kind))
              (+agent-shell-arena-git-host-kinds) ", "))
 
 (defcustom +agent-shell-pstack-arena-directory
@@ -105,7 +133,10 @@ matches applies.  PROFILE is a plist with any of these keys:
           (coder . NAME) for the Coder workspace NAME, reached as
           ssh coder.NAME; (ssh . HOST) for a plain SSH host; or
           (local . DIRECTORY), which runs the host's side as local
-          processes with DIRECTORY as its state folder.  Kinds come from
+          processes with DIRECTORY as its state folder; or (pod . SPEC),
+          which creates a Coder workspace for each delegate from SPEC
+          and deletes it once its results are here; see
+          `+agent-shell-arena-git-pod-spec-error'.  Kinds come from
           `+agent-shell-arena-remote-host-kinds'.  See
           docs/AGENT-SHELL-PSTACK-ARENA-REMOTE.md.
 :host-directory  The repository's checkout on the host, such as
@@ -736,11 +767,69 @@ function, not %S" matcher))))
   "Return whether VALUE names a host as a profile's :host does."
   (and (consp value)
        (assq (car value) +agent-shell-arena-remote-host-kinds)
-       (stringp (cdr value))
-       (if (plist-get (alist-get (car value)
-                                 +agent-shell-arena-remote-host-kinds) :local)
-           (file-name-absolute-p (cdr value))
-         (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'" (cdr value)))))
+       (let ((options (alist-get (car value)
+                                 +agent-shell-arena-remote-host-kinds)))
+         (cond
+          ((plist-get options :create)
+           (not (+agent-shell-arena-git-pod-spec-error (cdr value))))
+          ((not (stringp (cdr value))) nil)
+          ((plist-get options :local) (file-name-absolute-p (cdr value)))
+          (t (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'"
+                             (cdr value)))))))
+
+(defun +agent-shell-arena-git-pod-spec-error (spec)
+  "Return why SPEC cannot describe the hosts of a per-job kind, or nil.
+SPEC is a plist: :template, the Coder template, is required; :preset
+names one of its presets; :parameters is an alist of template parameter
+names to values, all strings; :name-prefix starts each host's name, a
+lowercase letter then up to 11 lowercase letters, digits or hyphens;
+:environment is an alist of agent identifiers to NAME=VALUE entries
+their adapters get on the host, which must hold no credential."
+  (let ((case-fold-search nil)
+        (text-p (lambda (value) (and (stringp value)
+                                     (not (string-empty-p value))
+                                     (not (string-match-p "[\n\0]" value))))))
+    (cond
+     ((not (and (proper-list-p spec) (cl-evenp (length spec))))
+      "a plist")
+     ((seq-find (lambda (key)
+                  (not (memq key '(:template :preset :parameters :name-prefix
+                                   :environment))))
+                (cl-loop for (key) on spec by #'cddr collect key))
+      "a plist of :template, :preset, :parameters, :name-prefix and \
+:environment")
+     ((not (funcall text-p (plist-get spec :template)))
+      "a plist whose :template names a template")
+     ((and (plist-get spec :preset) (not (funcall text-p (plist-get spec :preset))))
+      "a plist whose :preset is a name")
+     ((not (and (proper-list-p (plist-get spec :parameters))
+                (seq-every-p (lambda (entry)
+                               (and (consp entry) (funcall text-p (car entry))
+                                    (not (string-search "=" (car entry)))
+                                    (stringp (cdr entry))
+                                    (not (string-match-p "[\n\0]" (cdr entry)))))
+                             (plist-get spec :parameters))))
+      "a plist whose :parameters is an alist of names to strings")
+     ((and (plist-get spec :name-prefix)
+           (not (and (stringp (plist-get spec :name-prefix))
+                     (string-match-p "\\`[a-z][a-z0-9-]\\{0,11\\}\\'"
+                                     (plist-get spec :name-prefix)))))
+      "a plist whose :name-prefix is a lowercase letter and up to 11 \
+lowercase letters, digits or hyphens")
+     ((not (and (proper-list-p (plist-get spec :environment))
+                (seq-every-p (lambda (entry)
+                               (and (consp entry) (symbolp (car entry))
+                                    (proper-list-p (cdr entry))
+                                    (seq-every-p
+                                     (lambda (item)
+                                       (and (stringp item)
+                                            (string-match-p
+                                             "\\`[A-Za-z_][A-Za-z0-9_]*=[^\n\0]*\\'"
+                                             item)))
+                                     (cdr entry))))
+                             (plist-get spec :environment))))
+      "a plist whose :environment is an alist of agents to NAME=VALUE \
+strings"))))
 
 (defun +agent-shell-arena-git--check-profile (toplevel profile)
   "Return PROFILE, the arena profile for TOPLEVEL, with :env as a list.

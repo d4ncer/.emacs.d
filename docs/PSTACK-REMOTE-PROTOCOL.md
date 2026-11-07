@@ -30,9 +30,11 @@ emacs -Q --batch -l scripts/protocol-schemas.el -f +protocol-schemas-batch
   status and the results. It never prompts and never talks to the
   laptop: the laptop only reads its files.
 - **The host kind** is the laptop's transport backend for one family of
-  hosts, such as `coder`, `ssh` or `local`. It turns a command into a
-  local process that runs it in the host's state folder, and may wake
-  the host or extend its lifetime. See [Host kinds](#host-kinds).
+  hosts, such as `coder`, `ssh`, `local` or `pod`. It turns a command
+  into a local process that runs it in the host's state folder, and may
+  wake the host or extend its lifetime. A per-job kind, such as `pod`,
+  also creates, looks up and deletes one host for each job. See
+  [Host kinds](#host-kinds) and [Pods](#pods).
 - **The host's setup** is outside this repository. It installs the
   host's tools, proves its capabilities, and writes `ready.json`. See
   [The host contract](#the-host-contract).
@@ -47,8 +49,8 @@ answers with its standard output; a nonzero exit or a timeout is a
 transport error. Scripts answer with a prefixed last line, such as
 `pstack-arena-submit started`, so stray output before it is harmless.
 
-The state folder is `~/.local/state/pstack-arena-remote/` on an SSH or
-Coder host and the named folder on a local one. It holds:
+The state folder is `~/.local/state/pstack-arena-remote/` on an SSH,
+Coder or pod host and the named folder on a local one. It holds:
 
 | Path | Written by | Holds |
 |---|---|---|
@@ -83,7 +85,11 @@ the job's id, `REPO` the profile's `:host-directory`.
    job's [capabilities](#capabilities): a job whose needs the file does
    not prove is refused at once, naming each missing capability and how
    to set it up, before anything below is shipped.
-4. **Prerequisite.** The laptop picks the commit the base bundle is cut
+   On a pod the laptop first adopts or creates the job's pod; see
+   [Pods](#pods).
+4. **Prerequisite.** A job whose `base_source` is `origin`, every pod
+   job, skips this step and the bundle in the next. Otherwise the laptop
+   picks the commit the base bundle is cut
    against, in order: its merge base with the host's `tip` when the
    laptop has that commit; the merge base with its own upstream, which
    the host fetches from `origin` if it lacks it; then none, a bundle of
@@ -105,7 +111,13 @@ the job's id, `REPO` the profile's `:host-directory`.
    and starts the runner. It answers `started`, `code` (send the code
    tarball), `missing COMMIT` (try the next prerequisite) or
    `failed REASON`. A job already started answers `started`, so a resent
-   submission is harmless. The runner is
+   submission is harmless. For a job whose `base_source` is `origin`
+   the laptop passes `origin` and the base as two more arguments, and
+   the tar holds no `base.bundle` or `prerequisite`: the host must
+   fetch exactly that commit from `REPO`'s `origin`, check it out
+   detached in `REPO`, and write `refs/pstack-arena/ID/base`, and must
+   answer `failed` naming the commit when the fetch fails. The tar may
+   hold `login/AGENT.json`, a forwarded login; see [Pods](#pods). The runner is
    `EMACS -Q --batch -L code/HASH -l code/HASH/+agent-shell-arena-remote.el
    -f +agent-shell-arena-remote-runner-batch jobs/ID`, started by
    `systemd-run --user` on a remote host, in a transient service with
@@ -127,7 +139,9 @@ the job's id, `REPO` the profile's `:host-directory`.
    answers `pstack-arena-poll 2` and one JSON envelope: `version` 2,
    `alive`, `cancel`, `status` (the record or null) and `tail`, a
    transcript page or null. When that batch fails the plain answer
-   follows.
+   follows. A pod's poll passes the boot id file as a sixth argument,
+   and the host must answer `pstack-arena-boot ID`, its boot id, before
+   either answer.
 9. **Transcript pages.** A delegate's runner appends records to
    `jobs/ID/transcript/NNNNNNNN.jsonl`, one JSON object per line with
    `seq` (whole number), `time` (number), `kind` (`assistant`, `tool` or
@@ -205,6 +219,9 @@ versioned like one, since a restarted laptop re-attaches from it.
 - A reader checks every field's type at the boundary and refuses the
   record naming the field, such as `status.members[0].agent`. A
   required field that is absent or null is refused.
+- Version 3 of a job adds `base_source`, `base_ref` and `sign_in`; of a
+  status, `boot`; of a record, `pod`. A reader still reads versions 1
+  and 2, which have none of them.
 - A job of version 1 lists `candidates` and a `judge`; the reader turns
   them into an arena's `members`. Version 2 writers write only
   `members`. A job whose members or fields do not fit its `shape` is
@@ -221,10 +238,12 @@ A host must provide:
 - A checkout of the repository at each profile's `:host-directory`,
   with an `origin` remote the laptop's upstream commits can be fetched
   from, since the base bundle is cut against them.
-- The agents' own logins on the host, set up once by the user. The
-  runner checks each agent's login before any member starts, refreshes
-  a short one once, and refuses the job if it still falls short. No
-  credential travels with a job.
+- For an agent whose sign-in on the kind is `host`, the default, the
+  agent's own login on the host, set up once by the user. The runner
+  checks each agent's login before any member starts, refreshes a
+  short one once, and refuses the job if it still falls short. The only
+  credential that travels with a job is a forwarded login; see
+  [Pods](#pods).
 - `runner-init.el` in the state folder, configuring the agents the
   laptop's jobs name.
 - The capabilities each job needs, proved by setup and declared in
@@ -279,7 +298,8 @@ At submission a job needs:
 - `delegate` for a delegate job.
 - `linux_namespaces`, `bwrap` and `slirp4netns` when a member runs
   sandboxed on the Linux backend: every arena member, and a delegate
-  whose policy sandboxes it, on any host but a local one on macOS.
+  whose policy sandboxes it, on any host but a local one on macOS or one
+  of a kind with `:unsandboxed`.
 
 `egress_tshark` is never needed. A measured job on a Linux host without
 it runs, and its members' egress records are unavailable.
@@ -296,7 +316,8 @@ readiness file it reads, a sandbox backend for a sandboxed delegate, and
 ## Host kinds
 
 A profile's `:host` is `(KIND . NAME)`, where `KIND` is a key of
-`+agent-shell-arena-remote-host-kinds`. Profile validation reads that
+`+agent-shell-arena-remote-host-kinds`, or `(KIND . SPEC)` for a kind
+with `:create`. Profile validation reads that
 registry without loading the remote library. Each entry is
 `(KIND . PLIST)`:
 
@@ -306,6 +327,10 @@ registry without loading the remote library. Each entry is
 | `:label` | Function of `NAME` returning the host's name in messages. |
 | `:wake` | nil, or a function of `NAME` and `CALLBACK`, which it calls with `(EVENT DETAIL NEXT)`; see below. |
 | `:extend` | nil, or a function of `NAME`, seconds and `CALLBACK`, which it calls with nil or an error message once the host will live that long. |
+| `:create` | nil, or a function of `NAME`, `SPEC`, seconds and `CALLBACK`, which creates host `NAME` from `SPEC`, stopping by itself after that many seconds, and calls `CALLBACK` with nil or an error message. A kind with it is per job. |
+| `:delete` | With `:create`, a function of `NAME` and `CALLBACK` that deletes host `NAME`, calling `CALLBACK` with nil or an error message. |
+| `:lookup` | With `:create`, a function of `NAME` and `CALLBACK`, which it calls with whether host `NAME` exists and nil, or nil and an error message. |
+| `:unsandboxed` | Non-nil runs every member unconfined: the kind needs no sandbox capability and refuses a sandboxed delegate. |
 | `:local` | Non-nil makes `NAME` an absolute local state folder: calls run there as local processes, `ready.json` is read from it, and the runner starts with `nohup`. Otherwise the runner starts with `systemd-run --user` and `ready.json` is `+agent-shell-arena-remote-ready-file`. |
 
 Wake events: `ready` probes now; `wait` records `DETAIL` and calls `NEXT`
@@ -318,8 +343,9 @@ when read, so a kind must stay registered while records name it.
 
 ### Adding a backend
 
-A host kind supplies transport only. Three things are fixed today and a
-new backend cannot change them through the registry:
+A host kind supplies transport and, with `:create`, its hosts'
+lifetime. Three things are fixed today and a new backend cannot change
+them through the registry:
 
 1. **Launching the runner.** `+agent-shell-arena-remote--launcher` picks
    `nohup` for a `:local` kind and `systemd-run --user` for every other,
@@ -327,8 +353,11 @@ new backend cannot change them through the registry:
 2. **Containing a delegate.** A remote delegate's adapter runs in its own
    `systemd-run --user --scope` unit, and stopping it means stopping that
    unit. There is no other way to contain one.
-3. **The sandbox.** Every non-`:local` kind is assumed to be Linux with the
-   bwrap sandbox.
+3. **The sandbox.** Every non-`:local` kind without `:unsandboxed` is
+   assumed to be Linux with the bwrap sandbox. A kind with
+   `:unsandboxed` runs members unconfined and must refuse a job that
+   asks for a sandbox; it still launches under `systemd-run --user` and
+   contains each delegate in its scope.
 
 A backend without a systemd user manager is therefore refused before
 anything is shipped, with `systemd_user` named as missing, rather than
@@ -337,6 +366,78 @@ host kind, each a function with systemd as the default, give the
 capability check a property saying which capabilities the kind's own
 launch and containment need, and extend this section and the capability
 table to match.
+
+## Pods
+
+A pod is a Coder workspace the laptop creates for one job and deletes
+after it. A profile names the kind as `(pod . SPEC)`, where `SPEC` is a
+plist: `:template` (required), `:preset`, `:parameters` (an alist of
+template parameter names to values), `:name-prefix`, and
+`:environment` (an alist of agents to `NAME=VALUE` entries, which must
+hold no credential). A pod is reached as a Coder workspace is.
+
+- **Shape.** A pod runs one delegate, unsandboxed. The laptop refuses
+  an arena and a sandboxed delegate on a pod.
+- **Base.** The base must be a commit that a ref under
+  `refs/remotes/origin/` on the laptop holds; otherwise the job is
+  refused before a pod is created. The job's `base_source` is `origin`
+  and `base_ref` names that ref, as provenance only.
+- **Name.** A pod's name is derived from the job's id and an attempt
+  number, 1 in this revision. No member runs twice under one attempt.
+- **Ledger.** Before it creates a pod the laptop writes the pod's name,
+  job and attempt, state `planned`, into the job's record and into
+  `pods/NAME.json`, a [`pod`](#pod) record, in its arena folder. The
+  ledger outlives the job's record and is removed once the pod is gone.
+- **Cap.** At most one pod that may exist (`planned`, `created`,
+  `kept` or `deleting`) is allowed at a time across every lead; a job
+  beyond it is refused, naming the pod in the way.
+- **Create or adopt.** The laptop looks the name up first and creates
+  the pod only when absent, never both, also after a restart. A create
+  that fails is looked up again before the job is refused. Each pod is
+  created with a stop time past the job's maximum runtime, the wake
+  timeout and the slack.
+- **Cancel.** A cancel during a create waits for the create to finish,
+  then deletes the pod.
+- **Boot.** Every status names the host's boot id when the runner
+  started. A poll whose boot id differs from the status's while the
+  runner is not alive means the container was replaced: the laptop
+  restarts the runner at once, which captures what its member left and
+  never reruns it.
+- **Lost.** When a call fails and the lookup finds no pod, the job ends
+  with every member in error, saying the pod is lost.
+- **Delete.** The laptop deletes a pod only once it has checked the
+  report, landed the bundle in refs it names and saved the transcript;
+  a job the laptop rejects deletes its pod at once. A pod whose member
+  timed out, left uncommitted paths, was quarantined, or whose report
+  was refused is `kept` until the lead discards it with
+  `+agent-shell-pstack-pod-discard` or cleans the job. A failed delete
+  stays `deleting`, counts against the cap, and is retried, also after
+  a restart.
+- **Results.** Results are `results.bundle` and `report.json` as for
+  any delegate. The laptop names every ref itself, takes only a
+  well-formed commit id from the report, refuses a tip that does not
+  descend from the base, and treats report text as untrusted.
+
+Sign-in on a pod follows `:sign-in` in `+agent-shell-sandbox-agents`;
+the job lists each agent that does not use the host's login in
+`sign_in`:
+
+- `provider`: the agent signs in through environment the host
+  provides, from `SPEC`'s `:environment` and the host's
+  `+agent-shell-arena-remote-sign-in-environment`, such as
+  `CLAUDE_CODE_USE_BEDROCK=1`. No credential travels and no login is
+  read. The runner refuses the job when neither gives any entry.
+- `forward`: the laptop admits its own login through
+  `+agent-shell-sandbox-check-logins` against the job's maximum runtime
+  plus `+agent-shell-sandbox-login-margin`, then sends it, without a
+  refresh token, as `login/AGENT.json`, mode 0600, in the job tar, and
+  deletes its upload once sent. The runner reads it into memory and
+  deletes the file at once, checks it again when the job leaves the
+  queue, cannot refresh it, writes it mode 0600 into a folder of the
+  member's own under `$XDG_RUNTIME_DIR`, a tmpfs, and deletes that
+  folder when the member settles and when the runner exits. A token
+  never appears in a command line, a status, a report, a record, a
+  transcript or a log.
 
 ## Record schemas
 
@@ -353,7 +454,7 @@ absent is empty.
 | id | A string matching the Emacs regexp `` \`[[:alnum:]][[:alnum:]_-]*\' ``, safe in a path and a ref. |
 | sha | A full commit id: 40 or 64 lowercase hex digits. |
 | agent | An agent identifier matching `` \`[a-z0-9][a-z0-9-]*\' ``. |
-| host kind | A kind registered in `+agent-shell-arena-remote-host-kinds`, by default one of `coder`, `ssh` and `local`. |
+| host kind | A kind registered in `+agent-shell-arena-remote-host-kinds`, by default one of `coder`, `ssh`, `local` and `pod`. |
 | failure kind | A provider failure kind, one of `rate_limited`, `quota_exhausted`, `overloaded`, `transport_lost`, `auth_required`, `context_exhausted`, `budget_exhausted`, `policy_denied`, `internal_error`, `provider_error`; a reader takes an unknown one as `provider_error`. |
 | whole number | A JSON integer of 0 or more. |
 | number | Any JSON number. |
@@ -365,7 +466,7 @@ absent is empty.
 <!-- BEGIN GENERATED record job -->
 #### `job`
 
-A file of its own: `"version"` from 1 to 2 and `"kind": "job"`.
+A file of its own: `"version"` from 1 to 3 and `"kind": "job"`.
 
 | Key | Type | Presence |
 |---|---|---|
@@ -389,8 +490,22 @@ A file of its own: `"version"` from 1 to 2 and `"kind": "job"`.
 | `ready_file` | string | optional, absent or null |
 | `ready` | [`ready`](#ready) | optional, absent or null |
 | `measure_egress` | boolean | optional, absent or null |
+| `base_source` | one of `"bundle"`, `"origin"` | optional, absent or null |
+| `base_ref` | string | optional, absent or null |
+| `sign_in` | list of [`sign-in`](#sign-in) | absent is empty |
 
 <!-- END GENERATED record job -->
+
+<!-- BEGIN GENERATED record sign-in -->
+#### `sign-in`
+
+| Key | Type | Presence |
+|---|---|---|
+| `agent` | agent | required |
+| `mode` | one of `"host"`, `"provider"`, `"forward"` | required |
+| `environment` | list of strings | absent is empty |
+
+<!-- END GENERATED record sign-in -->
 
 <!-- BEGIN GENERATED record request-member -->
 #### `request-member`
@@ -437,7 +552,7 @@ A file of its own: `"version"` from 1 to 2 and `"kind": "job"`.
 <!-- BEGIN GENERATED record status -->
 #### `status`
 
-A file of its own: `"version"` from 1 to 2 and `"kind": "status"`.
+A file of its own: `"version"` from 1 to 3 and `"kind": "status"`.
 
 | Key | Type | Presence |
 |---|---|---|
@@ -453,6 +568,7 @@ A file of its own: `"version"` from 1 to 2 and `"kind": "status"`.
 | `logins` | list of [`login`](#login) | absent is empty |
 | `shape` | one of `"arena"`, `"delegate"` | optional, absent or null |
 | `transcript` | [`transcript`](#transcript) | optional, absent or null |
+| `boot` | string | optional, absent or null |
 
 <!-- END GENERATED record status -->
 
@@ -522,6 +638,7 @@ A file of its own: `"version"` from 1 to 2 and `"kind": "report"`.
 | `ready` | [`ready`](#ready) | optional, absent or null |
 | `shape` | one of `"arena"`, `"delegate"` | optional, absent or null |
 | `delegate` | [`outcome`](#outcome) | optional, absent or null |
+| `quarantine` | string | optional, absent or null |
 
 <!-- END GENERATED record report -->
 
@@ -631,7 +748,7 @@ A file of its own: `"version"` from 1 to 1, and no `"kind"`.
 <!-- BEGIN GENERATED record record -->
 #### `record`
 
-A file of its own: `"version"` from 1 to 2 and `"kind": "record"`.
+A file of its own: `"version"` from 1 to 3 and `"kind": "record"`.
 
 | Key | Type | Presence |
 |---|---|---|
@@ -654,5 +771,27 @@ A file of its own: `"version"` from 1 to 2 and `"kind": "record"`.
 | `error` | string | optional, absent or null |
 | `shape` | one of `"arena"`, `"delegate"` | optional, absent or null |
 | `cursor` | [`cursor`](#cursor) | optional, absent or null |
+| `pod` | [`pod`](#pod) | optional, absent or null |
 
 <!-- END GENERATED record record -->
+
+<!-- BEGIN GENERATED record pod -->
+#### `pod`
+
+A file of its own: `"version"` from 1 to 1 and `"kind": "pod"`.
+
+| Key | Type | Presence |
+|---|---|---|
+| `name` | id | required |
+| `job` | id | required |
+| `attempt` | whole number | required |
+| `kind` | host kind | required |
+| `state` | one of `"planned"`, `"created"`, `"kept"`, `"deleting"`, `"deleted"`, `"lost"` | required |
+| `reason` | string | optional, absent or null |
+| `boot` | string | optional, absent or null |
+| `template` | string | required |
+| `preset` | string | optional, absent or null |
+| `parameters` | list of strings | absent is empty |
+| `stop_after` | whole number | required |
+
+<!-- END GENERATED record pod -->

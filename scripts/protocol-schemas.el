@@ -47,7 +47,7 @@ in a path and a ref."
                             +agent-shell-arena-remote--agent-regexp))
     (host-kind "host kind" "A kind registered in \
 `+agent-shell-arena-remote-host-kinds`, by default one of \
-`coder`, `ssh` and `local`.")
+`coder`, `ssh`, `local` and `pod`.")
     (failure-kind "failure kind"
                   ,(format "A provider failure kind, one of %s; a reader \
 takes an unknown one as `provider_error`."

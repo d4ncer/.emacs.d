@@ -20,7 +20,8 @@ Guidance for changing this Emacs configuration.
 - `docs/PSTACK-REMOTE-PROTOCOL.md` is the normative protocol for running
   pstack arenas and delegates on a remote host. Read its "Adding a
   backend" section before adding a host kind: kinds supply transport
-  only, and launching and containment still assume systemd.
+  and, for per-job hosts such as pods, their lifetime; launching and
+  containment still assume systemd.
 
 ## Making changes
 

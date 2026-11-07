@@ -303,7 +303,8 @@ A delegate's DELEGATE-OPTIONS is its policy, frozen once by
 `+agent-shell-arena-git-delegate-options', and IDENTITY the laptop
 user's `+agent-shell-arena-git-user' when it needs one.  A panel a host's
 runner made has RUNNER, a plist of :observer, called with each member
-and event of its, and :lease, returning a member's process lease.
+and event of its, :lease, returning a member's process lease, and
+:environment, returning the entries a member's agent signs in with.
 EXPIRES is the time its current phase's timer expires it.  CANCELLED is
 the reason it was cancelled before it finished, DELIVERED-AT when its
 follow-up reached its lead, FOLLOWUP-STARTED whether the lead began it,
@@ -1379,9 +1380,10 @@ the host, apart from the branch; cleaning the workspace up loses them.\n"
              (+agent-shell-pstack-panel--rationale member))
      (when (and published commits)
        (+agent-shell-pstack-panel--review-text manifest))
-     "The host workspace stays until you clean it up: press x on its line in \
-the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  \
-Cleaning deletes the branch only once your branch has all its commits.\n"
+     (or (+agent-shell-arena-remote-pod-note remote)
+         "The host workspace stays until you clean it up: press x on its \
+line in the pstack panels view, or run M-x +agent-shell-pstack-arena-clean.  \
+Cleaning deletes the branch only once your branch has all its commits.\n")
      "\n" (+agent-shell-pstack-panel--shape panel :triage))))
 
 (defun +agent-shell-pstack-panel--delegate-text (panel)
@@ -2511,10 +2513,18 @@ extended to %d seconds while its commands ran." timeout (round ran))
                                     (delegate 'full-access)
                                     (t 'read-only))
                       (append
-                       (when-let* (((and delegate (not sandbox)))
-                                   (environment
-                                    (+agent-shell-pstack-panel--identity-environment
-                                     panel)))
+                       (when-let* ((environment
+                                    (append
+                                     (when-let* (((eq 'delegate kind))
+                                                 (sign-in
+                                                  (plist-get
+                                                   (+agent-shell-pstack-panel-runner
+                                                    panel)
+                                                   :environment)))
+                                       (funcall sign-in member))
+                                     (when (and delegate (not sandbox))
+                                       (+agent-shell-pstack-panel--identity-environment
+                                        panel)))))
                          (list :environment environment))
                        (when-let* (((eq 'delegate kind))
                                    (lease (plist-get
@@ -3474,6 +3484,8 @@ exited mid-run."
                   "+agent-shell-arena-remote")
 (declare-function +agent-shell-arena-remote-outcome-retained-reason
                   "+agent-shell-arena-remote")
+
+(declare-function +agent-shell-arena-remote-pod-note "+agent-shell-arena-remote")
 
 (defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
   "Name of the panels buffer.")
