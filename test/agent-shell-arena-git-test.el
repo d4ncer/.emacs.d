@@ -18,7 +18,8 @@
 (defmacro +arena-git-test--with-scratch (&rest body)
   "Run BODY with a scratch directory, private git config and arena root."
   (declare (indent 0))
-  `(let* ((+arena-git-test--scratch
+  `(let* ((async (+config-test-async-state))
+          (+arena-git-test--scratch
            (file-name-as-directory
             (file-truename (make-temp-file "arena-git-test-" t))))
           (config (expand-file-name "gitconfig" +arena-git-test--scratch))
@@ -33,6 +34,7 @@
        (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
                "[init]\n\tdefaultBranch = main\n"))
      (unwind-protect (progn ,@body)
+       (+config-test-stop-async async)
        (+agent-shell-sandbox-test-unlock +arena-git-test--scratch)
        (delete-directory +arena-git-test--scratch t))))
 
