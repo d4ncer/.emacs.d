@@ -1665,16 +1665,19 @@ A member's running command may move its deadline up to
          (+agent-shell-arena-remote-pod-name pod) args))
 
 (defvar +agent-shell-arena-remote--releasing (make-hash-table :test #'equal)
-  "Pod names whose delete runs now.")
+  "Map a pod name to t while its delete runs, or to the timer of its
+next try after a failed one.")
 
 (defun +agent-shell-arena-remote--pod-release (pod &optional callback failures)
   "Delete POD unless it is gone, then call CALLBACK with nil or an error.
 A pod never known to be created is looked up first.  A failed delete
 leaves POD `deleting', still counted against the cap, and is retried
 with backoff, also after a restart; CALLBACK hears of the first failure
-and the retries go on.  FAILURES counts the failed attempts so far."
+and the retries go on.  A release while a retry waits replaces it.
+FAILURES counts the failed attempts so far."
   (let* ((failures (or failures 0))
          (name (+agent-shell-arena-remote-pod-name pod))
+         (pending (gethash name +agent-shell-arena-remote--releasing))
          (finish (lambda (error)
                    (remhash name +agent-shell-arena-remote--releasing)
                    (when callback
@@ -1688,9 +1691,11 @@ and the retries go on.  FAILURES counts the failed attempts so far."
            (message "pstack pod %s: deleting it failed, so Emacs tries \
 again: %s" name error)
            (funcall finish error)
-           (run-at-time (+agent-shell-arena-remote--delay failures) nil
-                        #'+agent-shell-arena-remote--pod-release pod nil
-                        (1+ failures)))
+           (puthash name
+                    (run-at-time (+agent-shell-arena-remote--delay failures) nil
+                                 #'+agent-shell-arena-remote--pod-retry pod
+                                 (1+ failures))
+                    +agent-shell-arena-remote--releasing))
          (look (then)
            (+agent-shell-arena-remote--pod-call
             pod :lookup
@@ -1707,15 +1712,25 @@ again: %s" name error)
               (if (not error) (gone)
                 ;; It may have gone already.
                 (look (lambda () (retry error))))))))
+      (when (timerp pending)
+        (cancel-timer pending)
+        (remhash name +agent-shell-arena-remote--releasing)
+        (setq pending nil))
       (cond
        ((not (+agent-shell-arena-remote--pod-alive-p pod)) (funcall finish nil))
-       ((gethash name +agent-shell-arena-remote--releasing)
+       (pending
         (when callback
           (funcall callback (format "pod %s is being deleted already" name))))
        (t (puthash name t +agent-shell-arena-remote--releasing)
           (if (eq (+agent-shell-arena-remote-pod-state pod) 'planned)
               (look #'delete)
             (delete)))))))
+
+(defun +agent-shell-arena-remote--pod-retry (pod failures)
+  "Try again to delete POD after FAILURES failed attempts."
+  (remhash (+agent-shell-arena-remote-pod-name pod)
+           +agent-shell-arena-remote--releasing)
+  (+agent-shell-arena-remote--pod-release pod nil failures))
 
 (defun +agent-shell-arena-remote--pod-keep-reason (report results)
   "Return why the pod that ran REPORT stays for the lead, or nil.

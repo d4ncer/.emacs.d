@@ -673,6 +673,32 @@ against the cap until then."
       (should (= 3 (seq-count (lambda (line) (string-prefix-p "delete " line))
                               (funcall log)))))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-release-replaces-retry ()
+  "A release while a failed delete waits to be retried replaces the retry."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((+agent-shell-arena-remote-poll-interval 3600)
+           (+agent-shell-arena-remote-max-interval 3600)
+           (pod (+agent-shell-arena-remote--make-pod
+                 :name "test-pod-1" :job "abc-1" :attempt 1 :kind 'pod
+                 :state 'created))
+           (outcome nil))
+      (make-directory (expand-file-name "test-pod-1" root))
+      (with-temp-file (expand-file-name ".delete-fails" root) (insert "1\n"))
+      (+agent-shell-arena-remote--pod-release pod)
+      (+pod-test--wait-for
+       (lambda () (timerp (gethash "test-pod-1"
+                                   +agent-shell-arena-remote--releasing))))
+      (+agent-shell-arena-remote--pod-release
+       pod (lambda (error) (setq outcome (list error))))
+      (+pod-test--wait-for (lambda () outcome))
+      (should (equal '(nil) outcome))
+      (should (eq 'deleted (+agent-shell-arena-remote-pod-state pod)))
+      (should-not (gethash "test-pod-1" +agent-shell-arena-remote--releasing))
+      (should (+config-test-async-quiet-p async))
+      (should (= 2 (seq-count (lambda (line) (string-prefix-p "delete " line))
+                              (funcall log)))))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-boot-change-restarts ()
   "A pod whose boot id changed under its runner gets its runner restarted
 at once, to capture what it left, without waiting for its heartbeat."
