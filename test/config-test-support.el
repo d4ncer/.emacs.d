@@ -169,6 +169,49 @@ A capability that is broken rather than forbidden fails the test."
                                (nth 1 (assq capability
                                             +config-test--capabilities)))))))))
 
+(defun +config-test-async-state ()
+  "Return the live processes and pending timers, for a test's teardown."
+  (list (process-list) (append timer-list timer-idle-list nil)))
+
+(defun +config-test--async-new (state)
+  "Return the processes and timers started since STATE, as (PROCESSES TIMERS)."
+  (list (seq-remove (lambda (process) (memq process (car state)))
+                    (process-list))
+        (seq-remove (lambda (timer)
+                      (or (memq timer (cadr state))
+                          (eq (timer--function timer)
+                              'undo-auto--boundary-timer)))
+                    (append timer-list timer-idle-list nil))))
+
+(defun +config-test-async-quiet-p (state)
+  "Return whether no process or timer started since STATE is pending."
+  (pcase-let ((`(,processes ,timers) (+config-test--async-new state)))
+    (not (or (seq-some #'process-live-p processes) timers))))
+
+(defun +config-test-stop-async (state)
+  "Cancel each timer and kill each process started since STATE.
+No sentinel runs, so nothing a test started acts after it; wait up to
+ten seconds for the killed processes to exit."
+  (pcase-let* ((`(,processes ,timers) (+config-test--async-new state))
+               (pids (delq nil (mapcar #'process-id processes)))
+               (deadline (+ (float-time) 10)))
+    (mapc #'cancel-timer timers)
+    (dolist (process processes)
+      (set-process-sentinel process #'ignore)
+      (set-process-filter process #'ignore)
+      (delete-process process)
+      (when (buffer-live-p (process-buffer process))
+        (kill-buffer (process-buffer process))))
+    (cl-flet ((running ()
+                (seq-filter (lambda (pid)
+                              (when-let* ((attributes (process-attributes pid)))
+                                (not (equal "Z" (alist-get 'state attributes)))))
+                            pids)))
+      (while (and (running) (< (float-time) deadline))
+        (accept-process-output nil 0.02))
+      (when-let* ((left (running)))
+        (error "Processes %S outlived their test" left)))))
+
 (defvar +agent-shell-sandbox-tmp-parent)
 
 (with-eval-after-load '+agent-shell-sandbox

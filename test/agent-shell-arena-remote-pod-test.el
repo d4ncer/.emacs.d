@@ -90,12 +90,14 @@ esac
 
 (defmacro +pod-test--with (&rest body)
   "Run BODY with a laptop clone, an origin and a fake coder for pods.
-BODY sees `scratch', `root' (the workspaces' folder), `lead-repo',
+BODY sees `async', the processes and timers before it, `scratch',
+`root' (the workspaces' folder), `lead-repo',
 `lead-git', `spec', `launch', which starts a delegate whose member is
 Codex and returns its panel, `job-folder', `runner-writes', which writes
 what a runner leaves on finishing, and `log', the coder calls so far."
   (declare (indent 0))
-  `(let* ((scratch (file-name-as-directory
+  `(let* ((async (+config-test-async-state))
+          (scratch (file-name-as-directory
                     (file-truename (make-temp-file "arena-pod-test-" t))))
           (root (expand-file-name "pods/" scratch))
           (bin (expand-file-name "bin/" scratch))
@@ -229,16 +231,7 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
      (funcall lead-git "commit" "-q" "-am" "second")
      (funcall lead-git "push" "-q" "origin" "main")
      (unwind-protect (progn ,@body)
-       (maphash (lambda (_ remote)
-                  (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
-                    (cancel-timer timer)))
-                +agent-shell-arena-remote--arenas)
-       (dolist (timer timer-list)
-         (when (memq (timer--function timer)
-                     '(+agent-shell-arena-remote--pod-release
-                       +agent-shell-arena-remote--pod-ensure
-                       +agent-shell-arena-remote--poll))
-           (cancel-timer timer)))
+       (+config-test-stop-async async)
        (call-process "chmod" nil nil nil "-R" "u+rwX" scratch)
        (delete-directory scratch t))))
 
@@ -334,6 +327,16 @@ id."
   (+pod-test--wait-for
    (lambda () (eq 'remote (+agent-shell-arena-remote-phase
                            (+pod-test--remote panel))))))
+
+(defun +pod-test--polls (remote count)
+  "Wait until Emacs has acted on COUNT more polls of REMOTE."
+  (let* ((seen 0)
+         (note (lambda (polled &rest _)
+                 (when (eq polled remote) (cl-incf seen)))))
+    (advice-add '+agent-shell-arena-remote--polled :after note
+                '((name . pod-test-polls)))
+    (unwind-protect (+pod-test--wait-for (lambda () (>= seen count)))
+      (advice-remove '+agent-shell-arena-remote--polled 'pod-test-polls))))
 
 (defun +pod-test--creates (log)
   "Return the create calls in LOG."
@@ -457,347 +460,347 @@ the branch, the report and the transcript.  The forwarded login travels
 in the job tar alone, and never in a record or a command line."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (with-temp-file (expand-file-name ".create-gate" root))
-   (let* ((panel (funcall launch))
-          (remote (+pod-test--remote panel))
-          (released nil))
-     (+pod-test--wait-for
-      (lambda () (file-exists-p (expand-file-name ".create-waiting" root))))
-     (let ((saved (+agent-shell-arena-remote--read-json
-                   (+agent-shell-arena-remote--record-file
-                    (+agent-shell-arena-remote-directory remote))
-                   'record)))
-       (should (eq 'planned (+agent-shell-arena-remote-pod-state
-                             (+agent-shell-arena-remote-pod saved))))
-       (should (equal (+agent-shell-arena-remote-id remote)
-                      (+agent-shell-arena-remote-pod-job
-                       (+agent-shell-arena-remote-pod saved))))
-       (should (= 1 (+agent-shell-arena-remote-pod-attempt
-                     (+agent-shell-arena-remote-pod saved)))))
-     (should (file-exists-p (+pod-test--ledger panel)))
-     (with-temp-file (expand-file-name ".create-open" root))
-     (+pod-test--submitted panel)
-     (let ((create (car (+pod-test--creates (funcall log)))))
-       (should (string-match-p "--template example-template --preset small \
+    (with-temp-file (expand-file-name ".create-gate" root))
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel))
+           (released nil))
+      (+pod-test--wait-for
+       (lambda () (file-exists-p (expand-file-name ".create-waiting" root))))
+      (let ((saved (+agent-shell-arena-remote--read-json
+                    (+agent-shell-arena-remote--record-file
+                     (+agent-shell-arena-remote-directory remote))
+                    'record)))
+        (should (eq 'planned (+agent-shell-arena-remote-pod-state
+                              (+agent-shell-arena-remote-pod saved))))
+        (should (equal (+agent-shell-arena-remote-id remote)
+                       (+agent-shell-arena-remote-pod-job
+                        (+agent-shell-arena-remote-pod saved))))
+        (should (= 1 (+agent-shell-arena-remote-pod-attempt
+                      (+agent-shell-arena-remote-pod saved)))))
+      (should (file-exists-p (+pod-test--ledger panel)))
+      (with-temp-file (expand-file-name ".create-open" root))
+      (+pod-test--submitted panel)
+      (let ((create (car (+pod-test--creates (funcall log)))))
+        (should (string-match-p "--template example-template --preset small \
 --parameter size=large --stop-after [0-9]+m --yes" create))
-       (should (>= (string-to-number
-                    (cadr (split-string create "--stop-after ")))
-                   (/ (+agent-shell-arena-remote--max-runtime
-                       (+agent-shell-arena-remote--read-json
-                        (+agent-shell-arena-remote--job-file remote) 'job))
-                      60))))
-     (let* ((folder (funcall job-folder panel))
-            (login (expand-file-name "login/codex.json" folder))
-            (job (+agent-shell-arena-remote--read-json
-                  (expand-file-name "job.json" folder) 'job)))
-       (should (eq 'origin (+agent-shell-arena-remote-job-base-source job)))
-       (should (equal "refs/remotes/origin/main"
-                      (+agent-shell-arena-remote-job-base-ref job)))
-       (should (file-exists-p login))
-       (should (= #o600 (logand #o777 (file-modes login))))
-       (should (string-search "\"refresh_token\":\"\""
-                              (+pod-test--read login)))
-       (dolist (file (list (expand-file-name "job.json" folder)
-                           (+agent-shell-arena-remote--record-file
-                            (+agent-shell-arena-remote-directory remote))
-                           (expand-file-name ".log" root)
-                           (expand-file-name ".systemd" root)))
-         (should-not (string-search "fixture-id" (+pod-test--read file))))
-       (should-not (file-exists-p (expand-file-name
-                                   "upload.tar"
-                                   (+agent-shell-arena-remote-directory
-                                    remote))))
-       (should (equal (+agent-shell-arena-git-manifest-base
-                       (+agent-shell-pstack-panel-arena panel))
-                      (+pod-test--git
-                       (expand-file-name
-                        (concat (+agent-shell-arena-remote-pod-name
-                                 (+pod-test--pod panel))
-                                "/repo")
-                        root)
-                       "rev-parse" "HEAD"))))
-     (accept-process-output nil 0.5)
-     (should (+pod-test--exists-p root panel))
-     (advice-add '+agent-shell-arena-remote--pod-release :before
-                 (lambda (&rest _)
-                   (unless released
-                     (setq released
-                           (list (ignore-errors
-                                   (funcall lead-git "rev-parse"
-                                            "refs/heads/pstack/delegate/pod-panel"))
-                                 (file-exists-p
-                                  (expand-file-name
-                                   "results/report.json"
-                                   (+agent-shell-arena-remote-directory
-                                    remote)))
-                                 (+agent-shell-pstack-panel-followup panel)))))
-                 '((name . pod-test)))
-     (unwind-protect
-         (let ((tip (funcall runner-writes panel)))
-           (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
-           (should (equal tip (car released)))
-           (should (nth 1 released))
-           (should (string-search "Emacs deletes the pod" (nth 2 released)))
-           (should-not (file-exists-p (+pod-test--ledger panel)))
-           (should (eq 'deleted (+agent-shell-arena-remote-pod-state
-                                 (+pod-test--pod panel))))
-           (should (= 1 (length (+pod-test--creates (funcall log))))))
-       (advice-remove '+agent-shell-arena-remote--pod-release 'pod-test)))))
+        (should (>= (string-to-number
+                     (cadr (split-string create "--stop-after ")))
+                    (/ (+agent-shell-arena-remote--max-runtime
+                        (+agent-shell-arena-remote--read-json
+                         (+agent-shell-arena-remote--job-file remote) 'job))
+                       60))))
+      (let* ((folder (funcall job-folder panel))
+             (login (expand-file-name "login/codex.json" folder))
+             (job (+agent-shell-arena-remote--read-json
+                   (expand-file-name "job.json" folder) 'job)))
+        (should (eq 'origin (+agent-shell-arena-remote-job-base-source job)))
+        (should (equal "refs/remotes/origin/main"
+                       (+agent-shell-arena-remote-job-base-ref job)))
+        (should (file-exists-p login))
+        (should (= #o600 (logand #o777 (file-modes login))))
+        (should (string-search "\"refresh_token\":\"\""
+                               (+pod-test--read login)))
+        (dolist (file (list (expand-file-name "job.json" folder)
+                            (+agent-shell-arena-remote--record-file
+                             (+agent-shell-arena-remote-directory remote))
+                            (expand-file-name ".log" root)
+                            (expand-file-name ".systemd" root)))
+          (should-not (string-search "fixture-id" (+pod-test--read file))))
+        (should-not (file-exists-p (expand-file-name
+                                    "upload.tar"
+                                    (+agent-shell-arena-remote-directory
+                                     remote))))
+        (should (equal (+agent-shell-arena-git-manifest-base
+                        (+agent-shell-pstack-panel-arena panel))
+                       (+pod-test--git
+                        (expand-file-name
+                         (concat (+agent-shell-arena-remote-pod-name
+                                  (+pod-test--pod panel))
+                                 "/repo")
+                         root)
+                        "rev-parse" "HEAD"))))
+      (+pod-test--polls remote 2)
+      (should (+pod-test--exists-p root panel))
+      (advice-add '+agent-shell-arena-remote--pod-release :before
+                  (lambda (&rest _)
+                    (unless released
+                      (setq released
+                            (list (ignore-errors
+                                    (funcall lead-git "rev-parse"
+                                             "refs/heads/pstack/delegate/pod-panel"))
+                                  (file-exists-p
+                                   (expand-file-name
+                                    "results/report.json"
+                                    (+agent-shell-arena-remote-directory
+                                     remote)))
+                                  (+agent-shell-pstack-panel-followup panel)))))
+                  '((name . pod-test)))
+      (unwind-protect
+          (let ((tip (funcall runner-writes panel)))
+            (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+            (should (equal tip (car released)))
+            (should (nth 1 released))
+            (should (string-search "Emacs deletes the pod" (nth 2 released)))
+            (should-not (file-exists-p (+pod-test--ledger panel)))
+            (should (eq 'deleted (+agent-shell-arena-remote-pod-state
+                                  (+pod-test--pod panel))))
+            (should (= 1 (length (+pod-test--creates (funcall log))))))
+        (advice-remove '+agent-shell-arena-remote--pod-release 'pod-test)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-adopt-after-restart ()
   "A laptop that restarts after the pod was created but before it said
 so adopts the pod by name and never creates a second."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (let* ((panel (funcall launch))
-          (remote (+pod-test--remote panel))
-          (directory (+agent-shell-arena-remote-directory remote)))
-     (+pod-test--submitted panel)
-     (maphash (lambda (_ remote)
-                (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
-                  (cancel-timer timer)))
-              +agent-shell-arena-remote--arenas)
-     (setf (+agent-shell-arena-remote-phase remote) 'submitting
-           (+agent-shell-arena-remote-submitted remote) nil
-           (+agent-shell-arena-remote-pod-state (+agent-shell-arena-remote-pod
-                                                 remote))
-           'planned)
-     (+agent-shell-arena-remote--save remote)
-     (clrhash +agent-shell-arena-remote--arenas)
-     (clrhash +agent-shell-pstack-panel--panels)
-     (+agent-shell-arena-remote-reattach-all)
-     (let ((restored (gethash (+agent-shell-arena-remote-id remote)
-                              +agent-shell-arena-remote--arenas)))
-       (should restored)
-       (should-not (eq restored remote))
-       (should (equal (file-name-as-directory directory)
-                      (+agent-shell-arena-remote-directory restored)))
-       (+pod-test--wait-for
-        (lambda () (eq 'remote (+agent-shell-arena-remote-phase restored))))
-       (should (eq 'created (+agent-shell-arena-remote-pod-state
-                             (+agent-shell-arena-remote-pod restored)))))
-     (should (= 1 (length (+pod-test--creates (funcall log))))))))
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel))
+           (directory (+agent-shell-arena-remote-directory remote)))
+      (+pod-test--submitted panel)
+      (maphash (lambda (_ remote)
+                 (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
+                   (cancel-timer timer)))
+               +agent-shell-arena-remote--arenas)
+      (setf (+agent-shell-arena-remote-phase remote) 'submitting
+            (+agent-shell-arena-remote-submitted remote) nil
+            (+agent-shell-arena-remote-pod-state (+agent-shell-arena-remote-pod
+                                                  remote))
+            'planned)
+      (+agent-shell-arena-remote--save remote)
+      (clrhash +agent-shell-arena-remote--arenas)
+      (clrhash +agent-shell-pstack-panel--panels)
+      (+agent-shell-arena-remote-reattach-all)
+      (let ((restored (gethash (+agent-shell-arena-remote-id remote)
+                               +agent-shell-arena-remote--arenas)))
+        (should restored)
+        (should-not (eq restored remote))
+        (should (equal (file-name-as-directory directory)
+                       (+agent-shell-arena-remote-directory restored)))
+        (+pod-test--wait-for
+         (lambda () (eq 'remote (+agent-shell-arena-remote-phase restored))))
+        (should (eq 'created (+agent-shell-arena-remote-pod-state
+                              (+agent-shell-arena-remote-pod restored)))))
+      (should (= 1 (length (+pod-test--creates (funcall log))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-cancel-during-create ()
   "A cancel while the pod is created lets the create finish, then deletes it."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (with-temp-file (expand-file-name ".create-gate" root))
-   (let* ((panel (funcall launch))
-          (remote (+pod-test--remote panel)))
-     (+pod-test--wait-for
-      (lambda () (file-exists-p (expand-file-name ".create-waiting" root))))
-     (+agent-shell-arena-remote-cancel panel "The lead changed its mind.")
-     (should (eq 'pending (+agent-shell-arena-remote-cancel-state remote)))
-     (accept-process-output nil 0.3)
-     (should-not (member "delete" (mapcar (lambda (line)
-                                            (car (split-string line)))
-                                          (funcall log))))
-     (with-temp-file (expand-file-name ".create-open" root))
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (+pod-test--wait-for
-      (lambda () (eq 'deleted (+agent-shell-arena-remote-pod-state
-                               (+pod-test--pod panel)))))
-     (should-not (+pod-test--exists-p root panel))
-     (should (string-search "The lead changed its mind."
-                            (+agent-shell-pstack-panel-rejection panel)))
-     (should (equal '("create" "delete")
-                    (seq-filter (lambda (word)
-                                  (member word '("create" "delete")))
-                                (mapcar (lambda (line) (car (split-string line)))
-                                        (funcall log)))))
-     (should-not (file-exists-p (+pod-test--ledger panel))))))
+    (with-temp-file (expand-file-name ".create-gate" root))
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--wait-for
+       (lambda () (file-exists-p (expand-file-name ".create-waiting" root))))
+      (+agent-shell-arena-remote-cancel panel "The lead changed its mind.")
+      (should (eq 'pending (+agent-shell-arena-remote-cancel-state remote)))
+      (accept-process-output nil 0.3)
+      (should-not (member "delete" (mapcar (lambda (line)
+                                             (car (split-string line)))
+                                           (funcall log))))
+      (with-temp-file (expand-file-name ".create-open" root))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (+pod-test--wait-for
+       (lambda () (eq 'deleted (+agent-shell-arena-remote-pod-state
+                                (+pod-test--pod panel)))))
+      (should-not (+pod-test--exists-p root panel))
+      (should (string-search "The lead changed its mind."
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (should (equal '("create" "delete")
+                     (seq-filter (lambda (word)
+                                   (member word '("create" "delete")))
+                                 (mapcar (lambda (line) (car (split-string line)))
+                                         (funcall log)))))
+      (should-not (file-exists-p (+pod-test--ledger panel))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-dirty-member-keeps-pod ()
   "A delegate that left uncommitted work keeps its pod until the lead
 discards it, and it counts against the cap meanwhile."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (let* ((panel (funcall launch)))
-     (+pod-test--submitted panel)
-     (funcall runner-writes panel :dirty 2)
-     (+pod-test--wait-for
-      (lambda () (eq 'kept (+agent-shell-arena-remote-pod-state
-                            (+pod-test--pod panel)))))
-     (accept-process-output nil 0.5)
-     (should (+pod-test--exists-p root panel))
-     (should (file-exists-p (+pod-test--ledger panel)))
-     (let ((followup (+agent-shell-pstack-panel-followup panel)))
-       (should (string-search "uncommitted paths" followup))
-       (should (string-search "+agent-shell-pstack-pod-discard" followup)))
-     (should (equal (funcall lead-git "rev-parse"
-                             "refs/heads/pstack/delegate/pod-panel")
-                    (+agent-shell-arena-remote-outcome-tip
-                     (plist-get (+agent-shell-pstack-panel-member-result
-                                 (car (+agent-shell-pstack-panel-members panel)))
-                                :outcome))))
-     (clrhash +agent-shell-arena-remote--arenas)
-     (with-temp-file (expand-file-name "README" lead-repo) (insert "Again\n"))
-     (let ((second (funcall launch)))
-       (+pod-test--wait-for
-        (lambda () (eq 'finished (+agent-shell-pstack-panel-phase second))))
-       (should (string-search "at most 1 pod"
-                              (+agent-shell-pstack-panel-rejection second))))
-     (+agent-shell-pstack-pod-discard
-      (+agent-shell-arena-remote-pod-name (+pod-test--pod panel)))
-     (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
-     (+pod-test--wait-for
-      (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
+    (let* ((panel (funcall launch)))
+      (+pod-test--submitted panel)
+      (funcall runner-writes panel :dirty 2)
+      (+pod-test--wait-for
+       (lambda () (eq 'kept (+agent-shell-arena-remote-pod-state
+                             (+pod-test--pod panel)))))
+      (+pod-test--wait-for (lambda () (+config-test-async-quiet-p async)))
+      (should (+pod-test--exists-p root panel))
+      (should (file-exists-p (+pod-test--ledger panel)))
+      (let ((followup (+agent-shell-pstack-panel-followup panel)))
+        (should (string-search "uncommitted paths" followup))
+        (should (string-search "+agent-shell-pstack-pod-discard" followup)))
+      (should (equal (funcall lead-git "rev-parse"
+                              "refs/heads/pstack/delegate/pod-panel")
+                     (+agent-shell-arena-remote-outcome-tip
+                      (plist-get (+agent-shell-pstack-panel-member-result
+                                  (car (+agent-shell-pstack-panel-members panel)))
+                                 :outcome))))
+      (clrhash +agent-shell-arena-remote--arenas)
+      (with-temp-file (expand-file-name "README" lead-repo) (insert "Again\n"))
+      (let ((second (funcall launch)))
+        (+pod-test--wait-for
+         (lambda () (eq 'finished (+agent-shell-pstack-panel-phase second))))
+        (should (string-search "at most 1 pod"
+                               (+agent-shell-pstack-panel-rejection second))))
+      (+agent-shell-pstack-pod-discard
+       (+agent-shell-arena-remote-pod-name (+pod-test--pod panel)))
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+      (+pod-test--wait-for
+       (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-delete-retried ()
   "A failed delete is retried until it succeeds, and the pod counts
 against the cap until then."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (with-temp-file (expand-file-name ".delete-fails" root) (insert "2\n"))
-   (let* ((panel (funcall launch)))
-     (+pod-test--submitted panel)
-     (funcall runner-writes panel)
-     (+pod-test--wait-for
-      (lambda () (eq 'deleting (+agent-shell-arena-remote-pod-state
+    (with-temp-file (expand-file-name ".delete-fails" root) (insert "2\n"))
+    (let* ((panel (funcall launch)))
+      (+pod-test--submitted panel)
+      (funcall runner-writes panel)
+      (+pod-test--wait-for
+       (lambda () (eq 'deleting (+agent-shell-arena-remote-pod-state
+                                 (+pod-test--pod panel)))))
+      (should (file-exists-p (+pod-test--ledger panel)))
+      (should (seq-find #'+agent-shell-arena-remote--pod-alive-p
+                        (let ((+agent-shell-arena-remote--arenas
+                               (make-hash-table :test #'equal)))
+                          (+agent-shell-arena-remote--pods))))
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+      (+pod-test--wait-for
+       (lambda () (eq 'deleted (+agent-shell-arena-remote-pod-state
                                 (+pod-test--pod panel)))))
-     (should (file-exists-p (+pod-test--ledger panel)))
-     (should (seq-find #'+agent-shell-arena-remote--pod-alive-p
-                       (let ((+agent-shell-arena-remote--arenas
-                              (make-hash-table :test #'equal)))
-                         (+agent-shell-arena-remote--pods))))
-     (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
-     (+pod-test--wait-for
-      (lambda () (eq 'deleted (+agent-shell-arena-remote-pod-state
-                               (+pod-test--pod panel)))))
-     (should-not (file-exists-p (+pod-test--ledger panel)))
-     (should (= 3 (seq-count (lambda (line) (string-prefix-p "delete " line))
-                             (funcall log)))))))
+      (should-not (file-exists-p (+pod-test--ledger panel)))
+      (should (= 3 (seq-count (lambda (line) (string-prefix-p "delete " line))
+                              (funcall log)))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-boot-change-restarts ()
   "A pod whose boot id changed under its runner gets its runner restarted
 at once, to capture what it left, without waiting for its heartbeat."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (let* ((+agent-shell-arena-remote-stale-after 3600)
-          (panel (funcall launch))
-          (remote (+pod-test--remote panel)))
-     (+pod-test--submitted panel)
-     (+agent-shell-arena-remote--write-json
-      (expand-file-name "status.json" (funcall job-folder panel)) 'status
-      (+agent-shell-arena-remote--make-status
-       :id (+agent-shell-arena-remote-id remote) :phase 'delegating
-       :heartbeat (float-time) :shape 'delegate :boot "0aaa-1111"))
-     (accept-process-output nil 1)
-     (should (= 0 (+agent-shell-arena-remote-restarts remote)))
-     (with-temp-file +agent-shell-arena-remote-boot-id-file (insert "0bbb-2222\n"))
-     (+pod-test--wait-for
-      (lambda () (= 1 (+agent-shell-arena-remote-restarts remote))))
-     (should (equal "0bbb-2222" (+agent-shell-arena-remote-pod-boot
-                                 (+pod-test--pod panel))))
-     (+pod-test--wait-for
-      (lambda ()
-        (= 2 (length (split-string
-                      (+pod-test--read (expand-file-name ".systemd" root))
-                      "\n" t))))))))
+    (let* ((+agent-shell-arena-remote-stale-after 3600)
+           (panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (+agent-shell-arena-remote--write-json
+       (expand-file-name "status.json" (funcall job-folder panel)) 'status
+       (+agent-shell-arena-remote--make-status
+        :id (+agent-shell-arena-remote-id remote) :phase 'delegating
+        :heartbeat (float-time) :shape 'delegate :boot "0aaa-1111"))
+      (+pod-test--polls remote 2)
+      (should (= 0 (+agent-shell-arena-remote-restarts remote)))
+      (with-temp-file +agent-shell-arena-remote-boot-id-file (insert "0bbb-2222\n"))
+      (+pod-test--wait-for
+       (lambda () (= 1 (+agent-shell-arena-remote-restarts remote))))
+      (should (equal "0bbb-2222" (+agent-shell-arena-remote-pod-boot
+                                  (+pod-test--pod panel))))
+      (+pod-test--wait-for
+       (lambda ()
+         (= 2 (length (split-string
+                       (+pod-test--read (expand-file-name ".systemd" root))
+                       "\n" t))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-lost-pod ()
   "A pod that no longer exists ends its job with each member lost."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (let* ((panel (funcall launch))
-          (remote (+pod-test--remote panel)))
-     (+pod-test--submitted panel)
-     (+pod-test--wait-for
-      (lambda ()
-        (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
-          (cancel-timer timer)
-          (setf (+agent-shell-arena-remote-timer remote) nil))
-        (not (car (gethash (+agent-shell-arena-remote--host-key
-                            (+agent-shell-arena-remote-host remote))
-                           +agent-shell-arena-remote--lines)))))
-     (delete-directory (expand-file-name
-                        (+agent-shell-arena-remote-pod-name (+pod-test--pod panel))
-                        root)
-                       t)
-     (+agent-shell-arena-remote--poll (+agent-shell-arena-remote-id remote))
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (let ((member (car (+agent-shell-pstack-panel-members panel))))
-       (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
-       (should (string-search "no longer exists"
-                              (+agent-shell-pstack-panel-member-error member))))
-     (should (eq 'lost (+agent-shell-arena-remote-pod-state
-                        (+pod-test--pod panel))))
-     (should-not (file-exists-p (+pod-test--ledger panel)))
-     (should (string-search "no longer exists"
-                            (+agent-shell-pstack-panel-followup panel))))))
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (+pod-test--wait-for
+       (lambda ()
+         (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
+           (cancel-timer timer)
+           (setf (+agent-shell-arena-remote-timer remote) nil))
+         (not (car (gethash (+agent-shell-arena-remote--host-key
+                             (+agent-shell-arena-remote-host remote))
+                            +agent-shell-arena-remote--lines)))))
+      (delete-directory (expand-file-name
+                         (+agent-shell-arena-remote-pod-name (+pod-test--pod panel))
+                         root)
+                        t)
+      (+agent-shell-arena-remote--poll (+agent-shell-arena-remote-id remote))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (let ((member (car (+agent-shell-pstack-panel-members panel))))
+        (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+        (should (string-search "no longer exists"
+                               (+agent-shell-pstack-panel-member-error member))))
+      (should (eq 'lost (+agent-shell-arena-remote-pod-state
+                         (+pod-test--pod panel))))
+      (should-not (file-exists-p (+pod-test--ledger panel)))
+      (should (string-search "no longer exists"
+                             (+agent-shell-pstack-panel-followup panel))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-base-not-fetchable ()
   "A base the pod cannot fetch from origin fails the job with the reason,
 and the pod goes; a base no origin ref holds is refused before any pod."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (with-temp-file (expand-file-name "local.txt" lead-repo) (insert "Local\n"))
-   (funcall lead-git "add" "-A")
-   (funcall lead-git "commit" "-q" "-m" "local only")
-   (let ((panel (funcall launch)))
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (should (string-search "no ref this laptop has seen on origin"
-                            (+agent-shell-pstack-panel-rejection panel)))
-     (should-not (+pod-test--creates (funcall log))))
-   (funcall lead-git "update-ref" "refs/remotes/origin/unpushed" "HEAD")
-   (clrhash +agent-shell-pstack-panel--panels)
-   (let ((panel (funcall launch)))
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (should (string-match-p "could not be fetched from origin"
+    (with-temp-file (expand-file-name "local.txt" lead-repo) (insert "Local\n"))
+    (funcall lead-git "add" "-A")
+    (funcall lead-git "commit" "-q" "-m" "local only")
+    (let ((panel (funcall launch)))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-search "no ref this laptop has seen on origin"
                              (+agent-shell-pstack-panel-rejection panel)))
-     (+pod-test--wait-for
-      (lambda () (not (+pod-test--exists-p root panel))))
-     (should-not (file-exists-p (+pod-test--ledger panel))))))
+      (should-not (+pod-test--creates (funcall log))))
+    (funcall lead-git "update-ref" "refs/remotes/origin/unpushed" "HEAD")
+    (clrhash +agent-shell-pstack-panel--panels)
+    (let ((panel (funcall launch)))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-match-p "could not be fetched from origin"
+                              (+agent-shell-pstack-panel-rejection panel)))
+      (+pod-test--wait-for
+       (lambda () (not (+pod-test--exists-p root panel))))
+      (should-not (file-exists-p (+pod-test--ledger panel))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-short-login-refused ()
   "A forwarded login that does not outlast the job's maximum runtime and
 the margin is refused before the job is sent, and the pod goes."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (setf (alist-get 'codex +agent-shell-sandbox-agents)
-         (list :mode "agent-full-access" :name "Codex"
-               :login (+pod-test--codex-login (+ (float-time) 3600))
-               :sign-in '((pod . forward))))
-   (let ((panel (funcall launch)))
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (should (string-search "Codex's login"
-                            (+agent-shell-pstack-panel-rejection panel)))
-     (should-not (file-exists-p (expand-file-name
-                                 "state/jobs"
-                                 (expand-file-name
-                                  (+agent-shell-arena-remote-pod-name
-                                   (+pod-test--pod panel))
-                                  root))))
-     (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
+    (setf (alist-get 'codex +agent-shell-sandbox-agents)
+          (list :mode "agent-full-access" :name "Codex"
+                :login (+pod-test--codex-login (+ (float-time) 3600))
+                :sign-in '((pod . forward))))
+    (let ((panel (funcall launch)))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-search "Codex's login"
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (should-not (file-exists-p (expand-file-name
+                                  "state/jobs"
+                                  (expand-file-name
+                                   (+agent-shell-arena-remote-pod-name
+                                    (+pod-test--pod panel))
+                                   root))))
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-report-not-descending-refused ()
   "A report whose tip does not descend from the pinned base is refused:
 no branch lands, and the pod stays for the lead."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-   (let* ((panel (funcall launch)))
-     (+pod-test--submitted panel)
-     (funcall runner-writes panel :tip 'orphan)
-     (+pod-test--wait-for
-      (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
-     (should-not (ignore-errors
-                   (funcall lead-git "rev-parse" "--verify" "-q"
-                            "refs/heads/pstack/delegate/pod-panel")))
-     (should-not (ignore-errors
-                   (funcall lead-git "rev-parse" "--verify" "-q"
-                            (format "refs/pstack-arena/%s/delegate"
-                                    (+agent-shell-arena-remote-id
-                                     (+pod-test--remote panel))))))
-     (should (eq 'kept (+agent-shell-arena-remote-pod-state
-                        (+pod-test--pod panel))))
-     (should (string-search "does not descend from its base"
-                            (+agent-shell-pstack-panel-followup panel))))))
+    (let* ((panel (funcall launch)))
+      (+pod-test--submitted panel)
+      (funcall runner-writes panel :tip 'orphan)
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should-not (ignore-errors
+                    (funcall lead-git "rev-parse" "--verify" "-q"
+                             "refs/heads/pstack/delegate/pod-panel")))
+      (should-not (ignore-errors
+                    (funcall lead-git "rev-parse" "--verify" "-q"
+                             (format "refs/pstack-arena/%s/delegate"
+                                     (+agent-shell-arena-remote-id
+                                      (+pod-test--remote panel))))))
+      (should (eq 'kept (+agent-shell-arena-remote-pod-state
+                         (+pod-test--pod panel))))
+      (should (string-search "does not descend from its base"
+                             (+agent-shell-pstack-panel-followup panel))))))
 
 ;;;; The runner's sign-ins
 
