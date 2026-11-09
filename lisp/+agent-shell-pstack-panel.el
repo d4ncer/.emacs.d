@@ -3742,7 +3742,7 @@ See `+agent-shell-pstack-arena--cleanup'."
 
 (defun +agent-shell-pstack-arena--cleanup (manifest &optional done)
   "Clean MANIFEST's arena now, forgetting it in its panel.
-Its panel's review worktrees and refs go first; see
+Its panel's review refs go first; see
 `+agent-shell-pstack-walkthrough-clean'.  An arena that ran on a host is
 cleaned there too.  A delegate's branch then goes when the lead's branch
 has all its work; see `+agent-shell-arena-git-prune-branch'.  DONE, when
@@ -3756,40 +3756,36 @@ given, is called with the cleanup's error, or nil, once it has ended."
                   ((equal id (+agent-shell-arena-git-manifest-id held))))
         (setf (+agent-shell-pstack-panel-arena panel) nil)))
     (+agent-shell-pstack-walkthrough-clean
-     (+agent-shell-pstack-arena--panel-id manifest)
-     (lambda (kept)
-       (when kept
-         (message "Arena %s: kept review worktrees with changes: %s" id
-                  (string-join kept "; ")))
-       (funcall
-        (if remote #'+agent-shell-arena-remote-clean
-          #'+agent-shell-arena-git-clean)
-        manifest
-        (lambda (left error)
-          (let ((cleaned (if left (format "cleaned, but left %s"
-                                          (string-join left "; "))
-                           "cleaned")))
-            (cond
-             (error (message "Arena %s: cleanup failed: %s" id error)
-                    (funcall done error))
-             ((+agent-shell-arena-git-manifest-delegate manifest)
-              (+agent-shell-arena-git-prune-branch
-               manifest
-               (lambda (deleted reason)
-                 (let ((branch (+agent-shell-arena-git-delegate-branch
-                                manifest)))
-                   (message "Arena %s: %s%s" id cleaned
-                            (cond (deleted
-                                   (format "; deleted branch %s, since your \
+     (+agent-shell-pstack-arena--panel-id manifest))
+    (funcall
+     (if remote #'+agent-shell-arena-remote-clean
+       #'+agent-shell-arena-git-clean)
+     manifest
+     (lambda (left error)
+       (let ((cleaned (if left (format "cleaned, but left %s"
+                                       (string-join left "; "))
+                        "cleaned")))
+         (cond
+          (error (message "Arena %s: cleanup failed: %s" id error)
+                 (funcall done error))
+          ((+agent-shell-arena-git-manifest-delegate manifest)
+           (+agent-shell-arena-git-prune-branch
+            manifest
+            (lambda (deleted reason)
+              (let ((branch (+agent-shell-arena-git-delegate-branch
+                             manifest)))
+                (message "Arena %s: %s%s" id cleaned
+                         (cond (deleted
+                                (format "; deleted branch %s, since your \
 branch has all its commits" branch))
-                                  (reason (format "; kept branch %s: %s"
-                                                  branch reason))
-                                  (t ""))))
-                 (funcall done nil)
-                 (+agent-shell-pstack-panels--refresh))))
-             (t (message "Arena %s: %s" id cleaned)
-                (funcall done nil))))
-          (+agent-shell-pstack-panels--refresh)))))
+                               (reason (format "; kept branch %s: %s"
+                                               branch reason))
+                               (t ""))))
+              (funcall done nil)
+              (+agent-shell-pstack-panels--refresh))))
+          (t (message "Arena %s: %s" id cleaned)
+             (funcall done nil))))
+       (+agent-shell-pstack-panels--refresh)))
     (+agent-shell-pstack-panels--refresh)))
 
 ;;;###autoload

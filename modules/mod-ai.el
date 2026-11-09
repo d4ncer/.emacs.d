@@ -298,6 +298,7 @@ With prefix ARG, preserve `agent-shell' prefix behavior."
            "x" #'+agent-shell-pstack-panels-clean
            "c" #'+agent-shell-pstack-panels-cancel
            "D" '(+agent-shell-pstack-panels-clear-delivered :wk "clear delivered")
+           "R" '(+agent-shell-pstack-panels-return :wk "return checkout")
            "l" '(+agent-shell-pstack-panel-log :wk "lead request log")
            "?" '(+agent-shell-pstack-panels-keys :wk "keys here")
            "TAB" #'magit-section-cycle

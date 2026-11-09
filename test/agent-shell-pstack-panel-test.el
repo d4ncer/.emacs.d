@@ -46,6 +46,8 @@ lists the roles whose result equals the base."
                    (file-truename (make-temp-file "pstack-arenas-" t))))
           (+agent-shell-pstack-panel-directory directory)
           (+agent-shell-pstack-arena-directory arenas)
+          (+agent-shell-pstack-walkthrough-review-file
+           (expand-file-name "review.eld" directory))
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-pstack-panel--logs (make-hash-table :test #'eq))
           (+agent-shell-pstack-panel--request-digests

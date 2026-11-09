@@ -88,6 +88,8 @@ Manage
   g      Refresh          the whole view
   D      Clear delivered  every delivered panel
                           Asks before removing a workspace, checkout or branch it still holds.
+  R      Return checkout  the checkout switched to a result
+                          Switches it back to where it was before the first switch.
 ? keys here · q quit
 
 ────────────────────────────────────────────────────────────

@@ -329,7 +329,7 @@ refs and the arena's folder through `+agent-shell-arena-git-clean`, which
 trusts only the arena's manifest. Read-only trees, such as Go's module
 cache in a private clone, are made writable before they are deleted. A
 step that fails is reported, and the rest of the cleanup still runs.
-Cleaning also removes the panel's review worktrees and
+Cleaning also removes the panel's
 `refs/pstack/review/<panel-id>/` refs first.
 
 #### Repository profiles
@@ -771,27 +771,81 @@ turns on `+agent-shell-pstack-walkthrough-mode`. It makes each
 `+agent-shell-pstack-walkthrough-link` face, which inherits `link`. The
 tree comes from `git ls-tree -r --name-only` once per commit. `RET` or a
 click opens the file at that line, in another window, with `find-file`, so
-it gets its usual major mode and eglot:
+it gets its usual major mode and eglot. A commit the repository lacks is
+first fetched from the results bundle into
+`refs/pstack/review/<panel-id>/<role>`; when no bundle holds it either,
+the link fails with a user error naming the panel and role. Then the
+first case that applies decides where the file opens:
 
-| Where the commit is | Where the file opens |
+| Case | Where the file opens |
 | --- | --- |
-| The role's worktree or checkout exists, holds the file, and its `HEAD` is the commit | there |
-| The lead's checkout's `HEAD` is the commit | the lead's checkout |
-| Otherwise | a detached review worktree, `var/pstack-panels/<panel-id>/review/<role>/`, added at the commit |
-| The repository lacks the commit but its results bundle remains | the review worktree, after fetching the commit into `refs/pstack/review/<panel-id>/<role>` |
-| Neither | a user error naming the panel and role |
+| The lead's checkout has the file, identical to the commit's in the index and the work tree (`git diff --quiet COMMIT -- PATH`, with and without `--cached`) | the lead's checkout, with no switch: a merged result, or a file nobody changed |
+| The role's worktree still exists, holds the file, and its `HEAD` is the commit | the role's worktree |
+| Otherwise | the lead's checkout, after you agree to switch it to the result |
 
-So a branch-mode delegate whose checkout went back to its branch, or an
-arena whose checkout holds only the changed files, still opens the
-result's content, never the lead's. Each followed link appends
-`(TIME PANEL ROLE PATH)` to `var/pstack-walkthrough-opens.eld`,
+Switching asks first, naming the checkout, the result and what the
+checkout is on now:
+
+```text
+Switch ~/src/big-repo from main to panel 1a2b3c4d5e6f's builder result 9f8e7d6 (branch pstack/delegate/1a2b3c4d5e6f)? (yes or no)
+```
+
+It switches to a local branch whose tip is exactly the commit and that no
+worktree has checked out, preferring `pstack/delegate/<panel-id>`, and
+otherwise detaches at the commit, with `git switch` under
+`core.hooksPath=/dev/null` as the arena code runs git. Unmodified buffers
+whose files changed are reverted, and the message says how to return:
+`~/src/big-repo now shows panel …'s builder result 9f8e7d6; M-x
++agent-shell-pstack-walkthrough-return returns it to main`. Answering no
+changes nothing. A checkout already at the commit opens the file without
+asking.
+
+Before asking, it refuses with a user error when the checkout cannot
+switch safely:
+
+| Refusal | Message |
+| --- | --- |
+| Tracked files have uncommitted changes (untracked files do not count) | `~/src/big-repo has uncommitted changes to tracked files: lisp/a.el; commit or stash them first` |
+| A rebase, am, merge, cherry-pick or revert is in progress (`rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD` or `sequencer` under `git rev-parse --git-path`) | `~/src/big-repo has a merge in progress; finish or abort it first` |
+| No repository or bundle holds the commit | `Panel <id>, role <role>: result <commit> is gone: …` |
+
+One result is reviewed at a time per checkout. Before switching, Emacs
+records where the checkout was, its branch or, when detached, its commit,
+in `var/pstack-walkthrough-review.eld`
+(`+agent-shell-pstack-walkthrough-review-file`), keyed by the checkout's
+true name. Switching a checkout under review to another result keeps that
+first place, so returning always goes back to where you started.
+
+`M-x +agent-shell-pstack-walkthrough-return` switches the checkout back to
+the recorded place and forgets the record, with the same refusals for
+uncommitted tracked changes and operations in progress. Called from a
+buffer in a checkout under review, it returns that checkout; otherwise it
+asks which one, and says `No checkout is switched to a walkthrough result`
+when there is none. A checkout already back on its place, or gone, just
+loses its record. While a checkout is under review, the panels view shows
+one line below its summary, and `R` returns it:
+
+```text
+pstack panels · 1 done
+◆ REVIEWING  ~/src/big-repo shows panel 1a2b3c4d5e6f's builder result 9f8e7d6 · R returns it to main
+```
+
+When the checkout has since moved, the line says what it is on instead.
+
+Switching `~/.emacs.d` itself changes this configuration's files on disk
+under the running Emacs until you return: the running Emacs keeps the
+code it loaded, but anything loaded later, such as a deferred package's
+configuration or a restart, reads the result's files. Return before
+restarting Emacs unless you mean to try the result.
+
+Each followed link appends `(TIME PANEL ROLE PATH)` to
+`var/pstack-walkthrough-opens.eld`,
 `+agent-shell-pstack-walkthrough-opens-file`, so opens can be counted.
 
-`x` and `D` remove a panel's review worktrees and review refs along with
-its workspace; a panel with no workspace left, such as a branch-mode
-delegate whose checkout came back, offers `x` to remove its review
-worktrees alone. A review worktree with changes stays, and the message
-names it.
+`x` and `D` remove a panel's `refs/pstack/review/<panel-id>/` refs along
+with its workspace; a panel with no workspace left, such as a branch-mode
+delegate whose checkout came back, offers `x` to remove its review refs
+alone. No review creates a worktree.
 
 #### Recovery
 
@@ -825,7 +879,8 @@ event watching.
 `C-c P` in an agent shell runs `+agent-shell-pstack-panels`, from
 `lisp/+agent-shell-pstack-panels.el`, which loads magit-section when the view
 first opens, and follows `docs/UI-GUIDELINES.md`, whose reference sketch it
-is. Its first line counts the panels by status, and the one Actions block
+is. Its first line counts the panels by status, a line per checkout
+switched to a result for review follows, and the one Actions block
 below it names the view's keys. Every panel since Emacs started is a card
 after a rule, the most urgent first: unread (its follow-up reached the lead
 and you have not looked since), failed with its kind, on host, judging,
@@ -846,11 +901,13 @@ visits the lead from a panel, the live shell, transcript or report from a
 member, the folder from a workspace and the whole follow-up from its
 section; a line naming a report, checkout, shell or plan visits that. A
 delegate's or candidate's report opens with its walkthrough's `path:line`
-citations as links into the result commit, opened in a review worktree
-under `var/pstack-panels/<panel-id>/review/` when no checkout is at it; see
-[Walkthroughs and code links](#walkthroughs-and-code-links). `c` cancels
+citations as links into the result commit, opened in the lead's checkout
+after offering to switch it to the result when no checkout shows the
+file as the result has it; see
+[Walkthroughs and code links](#walkthroughs-and-code-links). `R` switches
+a checkout under review back. `c` cancels
 an unfinished panel and `x` cleans up a finished arena or delegate, with
-its review worktrees. `D`
+its review refs. `D`
 forgets every finished panel whose follow-up was delivered; panels still
 holding a workspace, checkout or branch record are listed in one question,
 then cleaned as `x` would and forgotten, or kept. Reports stay on disk. `g`

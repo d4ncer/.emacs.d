@@ -1,14 +1,15 @@
 ;;; agent-shell-pstack-walkthrough-test.el --- Tests for walkthrough links -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Result records, walkthrough links and review worktrees against
-;; synthetic repositories.
+;; Result records, walkthrough links and reviews in the lead's checkout
+;; against synthetic repositories.
 
 ;;; Code:
 
 (require 'ert)
 (require 'cl-lib)
 (require '+agent-shell-pstack-walkthrough)
+(require '+agent-shell-pstack-panels)
 
 (defmacro +agent-shell-pstack-walkthrough-test--with (&rest body)
   "Run BODY in a scratch repository with a fresh panel directory."
@@ -28,6 +29,8 @@
           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
           (+agent-shell-pstack-walkthrough-opens-file
            (expand-file-name "opens.eld" scratch))
+          (+agent-shell-pstack-walkthrough-review-file
+           (expand-file-name "review.eld" scratch))
           (+agent-shell-pstack-walkthrough--trees
            (make-hash-table :test #'equal))
           (find-file-hook nil)
@@ -113,6 +116,36 @@
   (with-temp-buffer
     (insert-file-contents +agent-shell-pstack-walkthrough-opens-file)
     (mapcar #'read (split-string (buffer-string) "\n" t))))
+
+(defun +agent-shell-pstack-walkthrough-test--wait (predicate)
+  "Wait until PREDICATE returns non-nil, and return its value."
+  (let ((deadline (+ (float-time) 30))
+        value)
+    (while (and (not (setq value (funcall predicate)))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.02))
+    (should value)
+    value))
+
+(defun +agent-shell-pstack-walkthrough-test--branch-result (repo panel text)
+  "Commit lisp/a.el holding TEXT on PANEL's delegate branch in REPO.
+Leave REPO on main and return the result record."
+  (+agent-shell-pstack-walkthrough-test--git
+   repo "switch" "-q" "-c" (concat "pstack/delegate/" panel))
+  (let ((commit (+agent-shell-pstack-walkthrough-test--commit
+                 repo "lisp/a.el" text)))
+    (+agent-shell-pstack-walkthrough-test--git repo "switch" "-q" "main")
+    (+agent-shell-pstack-walkthrough-test--record
+     panel "builder" :git_dir (expand-file-name ".git" repo)
+     :toplevel repo :commit commit)))
+
+(defun +agent-shell-pstack-walkthrough-test--head (repo)
+  "Return REPO's branch, or its commit when detached."
+  (let ((branch (+agent-shell-pstack-walkthrough-test--git
+                 repo "branch" "--show-current")))
+    (if (string-empty-p branch)
+        (+agent-shell-pstack-walkthrough-test--git repo "rev-parse" "HEAD")
+      branch)))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-contracts ()
   "Every code-writing contract asks for a walkthrough with path:line claims."
@@ -226,7 +259,7 @@ http://example.com:80 and /abs/lisp/a.el:2 are not links.\n")))
           (should-not +agent-shell-pstack-walkthrough-mode))))))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-existing-checkouts ()
-  "Open the file in the role's worktree, or the lead's checkout at the commit."
+  "Open an unchanged file in the lead's checkout, else the role's worktree."
   (+agent-shell-pstack-walkthrough-test--with
     (let* ((commit (+agent-shell-pstack-walkthrough-test--commit
                     repo "lisp/a.el" "one\ntwo\nthree\n"))
@@ -234,72 +267,296 @@ http://example.com:80 and /abs/lisp/a.el:2 are not links.\n")))
       (+agent-shell-pstack-walkthrough-test--git
        repo "worktree" "add" "-q" "--detach" (directory-file-name worktree)
        commit)
-      (let* ((result (+agent-shell-pstack-walkthrough-test--record
-                      "p2" "builder" :git_dir (expand-file-name ".git" repo)
-                      :toplevel repo :commit commit :worktree worktree))
-             (report (+agent-shell-pstack-walkthrough-test--report
-                      "p2" "builder" "Read lisp/a.el:2 first.\n")))
-        (switch-to-buffer report)
-        (goto-char (point-min))
-        (search-forward "lisp/a.el")
-        (push-button (match-beginning 0))
-        (should (equal (expand-file-name "lisp/a.el" worktree)
-                       (buffer-file-name (window-buffer (selected-window)))))
-        (with-current-buffer (window-buffer (selected-window))
-          (should (= 2 (line-number-at-pos)))
-          (should (looking-at "two")))
-        (should-not (file-exists-p
-                     (+agent-shell-pstack-walkthrough--review-directory
-                      "p2" "builder")))
+      (+agent-shell-pstack-walkthrough-test--commit repo "lisp/b.el" "lead\n")
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (error "Asked %s" prompt))))
+        (let* ((result (+agent-shell-pstack-walkthrough-test--record
+                        "p2" "builder" :git_dir (expand-file-name ".git" repo)
+                        :toplevel repo :commit commit :worktree worktree))
+               (report (+agent-shell-pstack-walkthrough-test--report
+                        "p2" "builder" "Read lisp/a.el:2 first.\n")))
+          (switch-to-buffer report)
+          (goto-char (point-min))
+          (search-forward "lisp/a.el")
+          (push-button (match-beginning 0))
+          (should (equal (expand-file-name "lisp/a.el" repo)
+                         (buffer-file-name (window-buffer (selected-window)))))
+          (with-current-buffer (window-buffer (selected-window))
+            (should (= 2 (line-number-at-pos)))
+            (should (looking-at "two")))
+          (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                                 repo)))
+          (with-temp-file (expand-file-name "lisp/a.el" repo)
+            (insert "edited\n"))
+          (let ((buffer (+agent-shell-pstack-walkthrough-test--follow
+                         result "lisp/a.el" 3)))
+            (should (equal (expand-file-name "lisp/a.el" worktree)
+                           (buffer-file-name buffer)))
+            (with-current-buffer buffer (should (looking-at "three"))))
+          (+agent-shell-pstack-walkthrough-test--git repo "checkout" "lisp/a.el")
+          (+agent-shell-pstack-walkthrough-test--git
+           repo "update-index" "--cacheinfo"
+           (concat "100644,"
+                   (+agent-shell-pstack-walkthrough-test--git
+                    repo "hash-object" "-w" "lisp/b.el")
+                   ",lisp/a.el"))
+          (let ((buffer (+agent-shell-pstack-walkthrough-test--follow
+                         result "lisp/a.el" 1)))
+            (should (equal (expand-file-name "lisp/a.el" worktree)
+                           (buffer-file-name buffer))))
+          (should (equal '(("p2" "builder" "lisp/a.el")
+                           ("p2" "builder" "lisp/a.el")
+                           ("p2" "builder" "lisp/a.el"))
+                         (mapcar #'cdr
+                                 (+agent-shell-pstack-walkthrough-test--opens))))
+          (should (string-match-p
+                   "\\`[0-9-]+T[0-9:]+[+-][0-9]+\\'"
+                   (car (car (+agent-shell-pstack-walkthrough-test--opens)))))
+          (should-not (file-exists-p
+                       +agent-shell-pstack-walkthrough-review-file)))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-switch-branch ()
+  "Ask before switching the checkout to the delegate branch at the result."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let* ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p3" "result\nline\n"))
+           (short (substring (plist-get result :commit) 0 7))
+           prompts)
+      (with-temp-file (expand-file-name "notes.txt" repo) (insert "untracked\n"))
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (push prompt prompts) t)))
         (let ((buffer (+agent-shell-pstack-walkthrough-test--follow
-                       (plist-put (copy-sequence result) :worktree nil)
-                       "lisp/a.el" 3)))
+                       result "lisp/a.el" 2)))
+          (should (equal (list (format "Switch %s from main to panel p3's \
+builder result %s (branch pstack/delegate/p3)? "
+                                       (abbreviate-file-name repo) short))
+                         prompts))
           (should (equal (expand-file-name "lisp/a.el" repo)
                          (buffer-file-name buffer)))
-          (with-current-buffer buffer (should (looking-at "three"))))
-        (should (equal '(("p2" "builder" "lisp/a.el")
-                         ("p2" "builder" "lisp/a.el"))
-                       (mapcar #'cdr
-                               (+agent-shell-pstack-walkthrough-test--opens))))
-        (should (string-match-p
-                 "\\`[0-9-]+T[0-9:]+[+-][0-9]+\\'"
-                 (car (car (+agent-shell-pstack-walkthrough-test--opens)))))))))
+          (with-current-buffer buffer
+            (should (equal "result\nline\n" (buffer-string)))
+            (should (= 2 (line-number-at-pos))))))
+      (should (equal "pstack/delegate/p3"
+                     (+agent-shell-pstack-walkthrough-test--head repo)))
+      (should (equal (list (list :checkout repo :origin '(branch . "main")
+                                 :panel "p3" :role "builder"
+                                 :commit (plist-get result :commit)))
+                     (+agent-shell-pstack-walkthrough--reviews)))
+      (should (= 1 (length (split-string
+                            (+agent-shell-pstack-walkthrough-test--git
+                             repo "worktree" "list")
+                            "\n")))))))
 
-(ert-deftest +agent-shell-pstack-walkthrough-test-review-worktree ()
-  "Open a review worktree at the commit once the role's worktree is gone."
+(ert-deftest +agent-shell-pstack-walkthrough-test-switch-detached ()
+  "Detach at the result when no free local branch points at it."
   (+agent-shell-pstack-walkthrough-test--with
-    (let* ((commit (+agent-shell-pstack-walkthrough-test--commit
-                    repo "lisp/a.el" "result\nline\n"))
-           (worktree (expand-file-name "wt/" scratch)))
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let* ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p3" "result\n"))
+           (commit (plist-get result :commit))
+           prompts)
       (+agent-shell-pstack-walkthrough-test--git
-       repo "worktree" "add" "-q" "--detach" (directory-file-name worktree)
-       commit)
+       repo "worktree" "add" "-q"
+       (directory-file-name (expand-file-name "wt/" scratch))
+       "pstack/delegate/p3")
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (push prompt prompts) t)))
+        (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1))
+      (should (string-suffix-p (format "builder result %s (detached)? "
+                                       (substring commit 0 7))
+                               (car prompts)))
+      (should (equal commit (+agent-shell-pstack-walkthrough-test--head repo)))
+      (should (equal '(branch . "main")
+                     (plist-get (car (+agent-shell-pstack-walkthrough--reviews))
+                                :origin))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-declined ()
+  "Change nothing when the switch is declined."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n"))
+          (shown nil))
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) nil)))
+        (+agent-shell-pstack-walkthrough-follow
+         result "lisp/a.el" 1 (lambda (buffer) (setq shown buffer))))
+      (accept-process-output nil 0.2)
+      (should-not shown)
+      (should (equal "main" (+agent-shell-pstack-walkthrough-test--head repo)))
+      (should-not (file-exists-p +agent-shell-pstack-walkthrough-review-file))
+      (should-not (file-exists-p +agent-shell-pstack-walkthrough-opens-file)))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-refusals ()
+  "Refuse to switch a checkout with tracked changes or an operation underway."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n")))
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (error "Asked %s" prompt))))
+        (with-temp-file (expand-file-name "lisp/a.el" repo) (insert "dirty\n"))
+        (let ((err (should-error (+agent-shell-pstack-walkthrough-follow
+                                  result "lisp/a.el" 1)
+                                 :type 'user-error)))
+          (should (equal (format "%s has uncommitted changes to tracked \
+files: lisp/a.el; commit or stash them first" (abbreviate-file-name repo))
+                         (cadr err))))
+        (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "main\n")
+        (with-temp-buffer
+          (let ((default-directory repo))
+            (should-not (eql 0 (process-file "git" nil t nil "cherry-pick"
+                                             (plist-get result :commit))))))
+        (let ((err (should-error (+agent-shell-pstack-walkthrough-follow
+                                  result "lisp/a.el" 1)
+                                 :type 'user-error)))
+          (should (equal (format "%s has a cherry-pick in progress; finish \
+or abort it first" (abbreviate-file-name repo))
+                         (cadr err))))
+        (+agent-shell-pstack-walkthrough-test--git repo "cherry-pick" "--abort")
+        (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                               repo)))
+        (should-not (file-exists-p
+                     +agent-shell-pstack-walkthrough-review-file))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-return ()
+  "Return a checkout to its branch or detached commit, refusing when dirty."
+  (+agent-shell-pstack-walkthrough-test--with
+    (let* ((base (+agent-shell-pstack-walkthrough-test--commit
+                  repo "lisp/a.el" "base\n"))
+           (result (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p3" "result\n"))
+           (key (+agent-shell-pstack-walkthrough--key repo))
+           (back (lambda ()
+                   (+agent-shell-pstack-walkthrough-return key)
+                   (+agent-shell-pstack-walkthrough-test--wait
+                    (lambda ()
+                      (not (file-exists-p
+                            +agent-shell-pstack-walkthrough-review-file)))))))
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (let ((buffer (+agent-shell-pstack-walkthrough-test--follow
+                       result "lisp/a.el" 1)))
+          (with-temp-file (expand-file-name "lisp/a.el" repo)
+            (insert "dirty\n"))
+          (should (string-search
+                   "uncommitted changes to tracked files: lisp/a.el"
+                   (cadr (should-error
+                          (+agent-shell-pstack-walkthrough-return key)
+                          :type 'user-error))))
+          (should (equal "pstack/delegate/p3"
+                         (+agent-shell-pstack-walkthrough-test--head repo)))
+          (should (+agent-shell-pstack-walkthrough--review key))
+          (+agent-shell-pstack-walkthrough-test--git
+           repo "checkout" "lisp/a.el")
+          (with-current-buffer buffer
+            (should (equal "result\n" (buffer-string))))
+          (funcall back)
+          (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                                 repo)))
+          (with-current-buffer buffer
+            (should (equal "base\n" (buffer-string))))))
       (+agent-shell-pstack-walkthrough-test--git
-       repo "worktree" "remove" (directory-file-name worktree))
-      (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el"
-                                                    "lead\nmoved\n")
-      (let* ((result (+agent-shell-pstack-walkthrough-test--record
-                      "p3" "builder" :git_dir (expand-file-name ".git" repo)
-                      :toplevel repo :commit commit :worktree worktree))
-             (review (+agent-shell-pstack-walkthrough--review-directory
-                      "p3" "builder"))
-             (buffer (+agent-shell-pstack-walkthrough-test--follow
-                      result "lisp/a.el" 2)))
-        (should (equal (expand-file-name "lisp/a.el" review)
-                       (buffer-file-name buffer)))
-        (should (equal commit (+agent-shell-pstack-walkthrough-test--git
-                               review "rev-parse" "HEAD")))
-        (with-current-buffer buffer
-          (should (equal "result\nline\n" (buffer-string)))
-          (should (= 2 (line-number-at-pos))))
-        (should (equal "lead\nmoved\n"
-                       (with-temp-buffer
-                         (insert-file-contents
-                          (expand-file-name "lisp/a.el" repo))
-                         (buffer-string))))
-        (should (eq buffer (+agent-shell-pstack-walkthrough-test--follow
-                            result "lisp/a.el" 1)))
-        (should (= 2 (length (+agent-shell-pstack-walkthrough-test--opens))))))))
+       repo "switch" "-q" "--detach" base)
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1))
+      (should (equal (cons 'detached base)
+                     (plist-get (+agent-shell-pstack-walkthrough--review key)
+                                :origin)))
+      (with-current-buffer (find-file-noselect
+                            (expand-file-name "lisp/a.el" repo))
+        (cl-letf (((symbol-function 'completing-read)
+                   (lambda (&rest _) (error "Asked"))))
+          (call-interactively #'+agent-shell-pstack-walkthrough-return)))
+      (+agent-shell-pstack-walkthrough-test--wait
+       (lambda ()
+         (not (file-exists-p +agent-shell-pstack-walkthrough-review-file))))
+      (should (equal base (+agent-shell-pstack-walkthrough-test--head repo)))
+      (let ((messages nil))
+        (cl-letf (((symbol-function 'message)
+                   (lambda (&rest args)
+                     (push (apply #'format-message args) messages))))
+          (call-interactively #'+agent-shell-pstack-walkthrough-return))
+        (should (equal '("No checkout is switched to a walkthrough result")
+                       messages))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-second-switch ()
+  "Keep the original place when switching from one result to another."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let* ((first (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "first\n"))
+           (second (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p4" "second\n"))
+           (key (+agent-shell-pstack-walkthrough--key repo))
+           prompts)
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (push prompt prompts) t)))
+        (+agent-shell-pstack-walkthrough-test--follow first "lisp/a.el" 1)
+        (let ((buffer (+agent-shell-pstack-walkthrough-test--follow
+                       second "lisp/a.el" 1)))
+          (with-current-buffer buffer
+            (should (equal "second\n" (buffer-string))))))
+      (should (string-prefix-p (format "Switch %s from pstack/delegate/p3 to \
+panel p4's builder result" (abbreviate-file-name repo))
+                               (car prompts)))
+      (should (equal "pstack/delegate/p4"
+                     (+agent-shell-pstack-walkthrough-test--head repo)))
+      (should (equal (list (list :checkout key :origin '(branch . "main")
+                                 :panel "p4" :role "builder"
+                                 :commit (plist-get second :commit)))
+                     (+agent-shell-pstack-walkthrough--reviews)))
+      (+agent-shell-pstack-walkthrough-return key)
+      (+agent-shell-pstack-walkthrough-test--wait
+       (lambda ()
+         (not (file-exists-p +agent-shell-pstack-walkthrough-review-file))))
+      (should (equal "main" (+agent-shell-pstack-walkthrough-test--head repo))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-panels-view ()
+  "Show the review near the top of the panels view, with R to return."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let* ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p3" "result\n"))
+           (short (substring (plist-get result :commit) 0 7))
+           (line (format "◆ REVIEWING  %s shows panel p3's builder result %s \
+· R returns it to main" (abbreviate-file-name repo) short)))
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+        (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1))
+      (save-window-excursion
+        (+agent-shell-pstack-panels)
+        (with-current-buffer +agent-shell-pstack-panels--buffer
+          (goto-char (point-min))
+          (forward-line 1)
+          (should (equal line (buffer-substring-no-properties
+                               (point) (line-end-position))))
+          (should (eq '+agent-shell-pstack-panels-review
+                      (get-text-property (point) 'font-lock-face)))
+          (forward-line 1)
+          (should (looking-at-p "\n"))
+          (should (string-match-p "^  R +Return checkout +the checkout \
+switched to a result$" (buffer-string)))
+          (should (eq #'+agent-shell-pstack-panels-return (key-binding "R")))
+          (goto-char (point-min))
+          (search-forward "REVIEWING")
+          (should (equal (list (cons "RET" "visit checkout")
+                               (cons "R" "switch it back to main"))
+                         (+agent-shell-pstack-panels--actions
+                          (magit-current-section))))
+          (+agent-shell-pstack-panels-keys)
+          (with-current-buffer "*pstack panels keys*"
+            (should (string-search "R        return a checkout switched to \
+a result" (buffer-string))))
+          (+agent-shell-pstack-panels-return)
+          (+agent-shell-pstack-walkthrough-test--wait
+           (lambda ()
+             (not (file-exists-p
+                   +agent-shell-pstack-walkthrough-review-file))))
+          (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                                 repo)))
+          (should-not (string-search "REVIEWING" (buffer-string)))
+          (goto-char (point-min))
+          (forward-line 1)
+          (should (looking-at-p "\n")))))))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-bundle ()
   "Fetch a commit the repository lacks from its results bundle."
@@ -332,12 +589,16 @@ http://example.com:80 and /abs/lisp/a.el:2 are not links.\n")))
           (should (equal commit (+agent-shell-pstack-walkthrough-test--git
                                  repo "rev-parse"
                                  "refs/pstack/review/p4/codex")))
-          (let ((buffer (with-current-buffer report
-                          (+agent-shell-pstack-walkthrough-test--follow
-                           +agent-shell-pstack-walkthrough--result
-                           "lisp/b.el" 1))))
+          (let ((buffer (cl-letf (((symbol-function 'yes-or-no-p)
+                                   (lambda (_) t)))
+                          (with-current-buffer report
+                            (+agent-shell-pstack-walkthrough-test--follow
+                             +agent-shell-pstack-walkthrough--result
+                             "lisp/b.el" 1)))))
             (with-current-buffer buffer
-              (should (equal "from the host\n" (buffer-string))))))))))
+              (should (equal "from the host\n" (buffer-string))))
+            (should (equal commit (+agent-shell-pstack-walkthrough-test--head
+                                   repo)))))))))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-vanished ()
   "Say which panel and role lost its commit when nothing holds it."
@@ -362,13 +623,12 @@ http://example.com:80 and /abs/lisp/a.el:2 are not links.\n")))
         (should (string-search "Panel p5, role builder: result" (cadr err)))
         (should (string-search "is gone" (cadr err)))
         (should-not (file-exists-p
-                     (+agent-shell-pstack-walkthrough--review-directory
-                      "p5" "builder")))
+                     +agent-shell-pstack-walkthrough-review-file))
         (should-not (file-exists-p
                      +agent-shell-pstack-walkthrough-opens-file))))))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-cleanup ()
-  "Cleaning a panel's arena removes its review worktrees and refs."
+  "Cleaning a panel's arena removes its review refs and adds no worktree."
   (+agent-shell-pstack-walkthrough-test--with
     (let* ((base (+agent-shell-pstack-walkthrough-test--commit
                   repo "lisp/a.el" "base\n"))
@@ -381,37 +641,33 @@ http://example.com:80 and /abs/lisp/a.el:2 are not links.\n")))
                       :git-dir (expand-file-name ".git" repo)
                       :toplevel repo :base base))
            (ended nil))
-      (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "moved\n")
       (make-directory directory t)
       (dolist (role '("opus" "codex"))
-        (+agent-shell-pstack-walkthrough-test--follow
-         (+agent-shell-pstack-walkthrough-test--record
-          "p6" role :git_dir (expand-file-name ".git" repo)
-          :toplevel repo :base base :commit commit)
-         "lisp/a.el" 1))
+        (+agent-shell-pstack-walkthrough-test--record
+         "p6" role :git_dir (expand-file-name ".git" repo)
+         :toplevel repo :base base :commit commit)
+        (+agent-shell-pstack-walkthrough-test--git
+         repo "update-ref" (concat "refs/pstack/review/p6/" role) commit))
       (+agent-shell-pstack-walkthrough-test--git
-       repo "update-ref" "refs/pstack/review/p6/codex" commit)
-      (with-temp-file (expand-file-name
-                       "lisp/a.el"
-                       (+agent-shell-pstack-walkthrough--review-directory
-                        "p6" "codex"))
-        (insert "edited\n"))
+       repo "update-ref" "refs/pstack/review/p7/opus" commit)
       (should (+agent-shell-pstack-walkthrough-reviews-p "p6"))
       (+agent-shell-pstack-arena--cleanup manifest
                                           (lambda (error) (setq ended
                                                                 (list error))))
-      (let ((deadline (+ (float-time) 30)))
-        (while (and (not ended) (< (float-time) deadline))
-          (accept-process-output nil 0.02)))
+      (+agent-shell-pstack-walkthrough-test--wait (lambda () ended))
       (should (equal '(nil) ended))
+      (should-not (+agent-shell-pstack-walkthrough-reviews-p "p6"))
+      (should (equal "refs/pstack/review/p7/opus"
+                     (+agent-shell-pstack-walkthrough-test--git
+                      repo "for-each-ref" "--format=%(refname)"
+                      "refs/pstack/review/")))
       (should-not (file-exists-p
-                   (+agent-shell-pstack-walkthrough--review-directory
-                    "p6" "opus")))
-      (should (file-exists-p
-               (+agent-shell-pstack-walkthrough--review-directory
-                "p6" "codex")))
-      (should (equal "" (+agent-shell-pstack-walkthrough-test--git
-                         repo "for-each-ref" "refs/pstack/review/")))
+                   (expand-file-name "p6/review"
+                                     +agent-shell-pstack-panel-directory)))
+      (should (= 1 (length (split-string
+                            (+agent-shell-pstack-walkthrough-test--git
+                             repo "worktree" "list")
+                            "\n"))))
       (should-not (file-exists-p directory)))))
 
 (provide 'agent-shell-pstack-walkthrough-test)
