@@ -37,42 +37,7 @@
         use-package-hook-name-suffix nil)
   (+use-package-setup))
 
-(declare-function elpaca-process-call "elpaca-process")
-
-(declare-function cl-remove-if "cl-seq")
-
-(defun +bootstrap--melpa-clone (path)
-  "Clone MELPA's recipes to PATH from its `main' branch.
-Overrides `elpaca-menu-melpa--clone', which still pulls `master' after
-MELPA renamed it (https://github.com/progfolio/elpaca/issues/585).
-Remove this once Elpaca clones `main'."
-  (let ((default-directory path))
-    (make-directory path t)
-    (make-directory (expand-file-name ".git/info/" path) t)
-    (message "Downloading MELPA recipes...")
-    (let* ((process-environment (append '("GIT_CONFIG_SYSTEM=/dev/null"
-                                          "GIT_CONFIG_GLOBAL=/dev/null")
-                                        process-environment))
-           (processes
-            (list
-             (elpaca-process-call "git" "init")
-             (elpaca-process-call "git" "config" "core.sparseCheckout" "true")
-             (with-temp-buffer
-               (insert "recipes")
-               (append-to-file (point-min) (point-max)
-                               (expand-file-name ".git/info/sparse-checkout" path)))
-             (elpaca-process-call "git" "remote" "add" "origin"
-                                  "https://github.com/melpa/melpa.git")
-             (elpaca-process-call "git" "pull" "--depth=1" "origin" "main")
-             (elpaca-process-call "git" "checkout" "main")
-             (elpaca-process-call "git" "branch" "--set-upstream-to"
-                                  "origin/main" "main")))
-           (err (car (cl-remove-if #'zerop (delq nil processes) :key #'car))))
-      (when err (error "Unable to clone MELPA: %S" err))
-      (message "Downloading MELPA recipes...100%%"))))
-
-(with-eval-after-load 'elpaca-menu-melpa
-  (advice-add 'elpaca-menu-melpa--clone :override #'+bootstrap--melpa-clone))
+(with-eval-after-load 'elpaca-menu-melpa (require '+elpaca-patch))
 
 (provide '+bootstrap)
 ;;; +bootstrap.el ends here

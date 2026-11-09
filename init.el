@@ -15,6 +15,9 @@
 ;; Bootstrap elpaca package manager
 (load-file (file-name-concat user-emacs-directory "elpaca-bootstrap.el"))
 
+;; Skip the menus: +bootstrap patches MELPA's with el-patch before it is cloned.
+(elpaca (el-patch :host github :repo "radian-software/el-patch" :inherit ignore))
+
 ;; Setup elpaca use-package integration
 (elpaca elpaca-use-package
   (elpaca-use-package-mode))

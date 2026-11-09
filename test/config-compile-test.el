@@ -12,7 +12,8 @@
        (byte-compile-dest-file-function
         (lambda (file) (expand-file-name (concat (file-name-base file) ".elc") temporary))))
   (unwind-protect
-      (dolist (file '("lisp/+bootstrap.el" "lisp/+corelib.el"
+      (dolist (file '("lisp/+bootstrap.el" "lisp/+elpaca-patch.el"
+                      "lisp/+corelib.el"
                       "lisp/+keybindings.el" "lisp/+use-package.el"
                       "lisp/+edit-cmds.el" "lisp/+profile.el"
                       "lisp/+modeline-data.el" "lisp/+grep-edit.el"
