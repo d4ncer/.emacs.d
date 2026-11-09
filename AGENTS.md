@@ -31,6 +31,9 @@ Guidance for changing this Emacs configuration.
 - Use Elpaca-integrated `use-package` for package configuration. Use
   `:after-call`, `:commands`, and hooks when they suit the loading behavior;
   follow the surrounding module's patterns.
+- Patch third-party library code only with el-patch, never a copied
+  definition or `:override` advice; run `el-patch-validate-all` after
+  updating a patched package.
 - Use General for leader and mode bindings, with `:wk` labels where they aid
   discovery. Inside a `use-package` form, bind keys with its `:general`
   keyword, never `define-key` in `:config`. Direct keymap edits are
