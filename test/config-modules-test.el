@@ -97,6 +97,16 @@
                               (or (fboundp command) (gethash command definitions)))
                             (+config-modules-test--leader-commands)))))
 
+(ert-deftest +config-modules-test-library-patches-are-valid ()
+  (+config-modules-test--ensure-loaded)
+  (require 'elpaca-menu-melpa)
+  (should (featurep '+elpaca-patch))
+  (let (warnings)
+    (cl-letf (((symbol-function 'display-warning)
+               (lambda (&rest args) (push args warnings))))
+      (el-patch-validate-all))
+    (should-not warnings)))
+
 (ert-deftest +config-modules-test-theme-follows-dark-system ()
   (require '+theme)
   (let ((+theme-light 'batppuccin-latte))
