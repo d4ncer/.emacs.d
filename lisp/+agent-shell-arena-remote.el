@@ -1760,12 +1760,27 @@ are the landed results by role."
       (format "its worktree there has %d uncommitted path%s" dirty
               (if (= dirty 1) "" "s"))))))
 
+(defun +agent-shell-arena-remote--failed-report (remote reason)
+  "Return a report of REMOTE's job with each member failed for REASON."
+  (let* ((panel (+agent-shell-arena-remote--panel remote))
+         (manifest (+agent-shell-pstack-panel-arena panel)))
+    (+agent-shell-arena-remote--make-report
+     :id (+agent-shell-arena-remote-id remote)
+     :shape (+agent-shell-arena-remote-shape remote)
+     :base (+agent-shell-arena-git-manifest-base manifest)
+     :members (mapcar (lambda (member)
+                        (+agent-shell-arena-remote--make-member
+                         :role (+agent-shell-pstack-panel-member-role member)
+                         :agent (+agent-shell-pstack-panel-member-agent member)
+                         :kind (+agent-shell-pstack-panel-member-kind member)
+                         :state 'error :error reason :failure reason))
+                      (+agent-shell-pstack-panel-members panel)))))
+
 (defun +agent-shell-arena-remote--pod-lost (remote)
   "End REMOTE, whose pod no longer exists, with each member lost.
 Nothing is fetched, and no member runs again under this attempt."
   (let* ((pod (+agent-shell-arena-remote-pod remote))
          (panel (+agent-shell-arena-remote--panel remote))
-         (manifest (and panel (+agent-shell-pstack-panel-arena panel)))
          (reason (format "The pod %s no longer exists, so what this member \
 did there is lost; Emacs did not run it again."
                          (+agent-shell-arena-remote-pod-name pod))))
@@ -1774,21 +1789,9 @@ did there is lost; Emacs did not run it again."
     (setf (+agent-shell-arena-remote-pod-state pod) 'lost
           (+agent-shell-arena-remote-pod-reason pod) reason)
     (+agent-shell-arena-remote--pod-write pod)
-    (when manifest
+    (when (and panel (+agent-shell-pstack-panel-arena panel))
       (+agent-shell-arena-remote--finish
-       remote
-       (+agent-shell-arena-remote--make-report
-        :id (+agent-shell-arena-remote-id remote)
-        :shape (+agent-shell-arena-remote-shape remote)
-        :base (+agent-shell-arena-git-manifest-base manifest)
-        :members (mapcar (lambda (member)
-                           (+agent-shell-arena-remote--make-member
-                            :role (+agent-shell-pstack-panel-member-role member)
-                            :agent (+agent-shell-pstack-panel-member-agent member)
-                            :kind (+agent-shell-pstack-panel-member-kind member)
-                            :state 'error :error reason :failure reason))
-                         (+agent-shell-pstack-panel-members panel)))
-       nil))))
+       remote (+agent-shell-arena-remote--failed-report remote reason) nil))))
 
 (defun +agent-shell-arena-remote-pod-note (remote)
   "Return what the follow-up of REMOTE says of its pod, or nil without one."
@@ -3229,10 +3232,48 @@ arrive.  Emacs stopped polling.  To re-attach later, run M-x \
                  (if error (+agent-shell-arena-remote--trouble remote error)
                    (+agent-shell-arena-remote--receive remote tarball))))))
 
+(defun +agent-shell-arena-remote--report-mismatch (remote report)
+  "Return how REPORT differs from REMOTE's saved job, or nil.
+Its shape, base and member roles must be the job's."
+  (let* ((job (+agent-shell-arena-remote--read-json
+               (+agent-shell-arena-remote--job-file remote) 'job))
+         (roles (lambda (members role)
+                  (sort (mapcar role members) #'string<)))
+         (shape (or (+agent-shell-arena-remote-report-shape report) 'arena)))
+    (cond
+     ((not (eq shape (+agent-shell-arena-remote-job-shape job)))
+      (format "its shape is %s, not the job's %s" shape
+              (+agent-shell-arena-remote-job-shape job)))
+     ((not (equal (+agent-shell-arena-remote-report-base report)
+                  (+agent-shell-arena-remote-job-base job)))
+      (format "it names base %s, not the job's %s"
+              (+agent-shell-arena-remote-report-base report)
+              (+agent-shell-arena-remote-job-base job)))
+     ((not (equal (funcall roles (+agent-shell-arena-remote-report-members
+                                  report)
+                           #'+agent-shell-arena-remote-member-role)
+                  (funcall roles (+agent-shell-arena-remote-job-members job)
+                           #'+agent-shell-arena-remote-request-member-role)))
+      "its members are not the job's"))))
+
+(defun +agent-shell-arena-remote--refuse-report (remote reason)
+  "Finish REMOTE with each member failed, as its report was refused for REASON.
+Nothing lands, and REMOTE's pod stays for the lead."
+  (let ((text (format "Emacs refused its report: %s" reason)))
+    (when-let* ((pod (+agent-shell-arena-remote-pod remote))
+                ((eq (+agent-shell-arena-remote-pod-state pod) 'created)))
+      (setf (+agent-shell-arena-remote-pod-state pod) 'kept
+            (+agent-shell-arena-remote-pod-reason pod) text)
+      (+agent-shell-arena-remote--pod-write pod))
+    (+agent-shell-arena-remote--finish
+     remote (+agent-shell-arena-remote--failed-report remote text) nil)))
+
 (defun +agent-shell-arena-remote--receive (remote tarball)
   "Unpack TARBALL, REMOTE's results, into the lead's repository and finish.
 Each result lands in refs/pstack-arena/ID/ROLE, checked against the
-report, and its diff is taken here as a local arena's is."
+report, and its diff is taken here as a local arena's is.  The landing
+follows the saved job's shape, and a report that is not of that job is
+refused."
   (let* ((directory (+agent-shell-arena-remote-directory remote))
          (results (expand-file-name "results/" directory))
          (fail (lambda (error)
@@ -3250,17 +3291,22 @@ report, and its diff is taken here as a local arena's is."
                               (+agent-shell-arena-remote-id remote))
                  (signal '+agent-shell-arena-remote-wire
                          (list "the report is for another arena")))
-               (+agent-shell-arena-remote--receive-egress remote results)
-               (when (eq (+agent-shell-arena-remote-shape remote) 'delegate)
-                 (+agent-shell-arena-remote--reconcile-transcript remote results))
-               (funcall
-                (if (eq (+agent-shell-arena-remote-report-shape report) 'delegate)
-                    #'+agent-shell-arena-remote--land-delegate
-                  #'+agent-shell-arena-remote--land)
-                remote report (expand-file-name "results.bundle" results)
-                (lambda (results error)
-                  (if error (funcall fail error)
-                    (+agent-shell-arena-remote--finish remote report results)))))
+               (if-let* ((mismatch (+agent-shell-arena-remote--report-mismatch
+                                    remote report)))
+                   (+agent-shell-arena-remote--refuse-report remote mismatch)
+                 (+agent-shell-arena-remote--receive-egress remote results)
+                 (when (eq (+agent-shell-arena-remote-shape remote) 'delegate)
+                   (+agent-shell-arena-remote--reconcile-transcript
+                    remote results))
+                 (funcall
+                  (if (eq (+agent-shell-arena-remote-shape remote) 'delegate)
+                      #'+agent-shell-arena-remote--land-delegate
+                    #'+agent-shell-arena-remote--land)
+                  remote report (expand-file-name "results.bundle" results)
+                  (lambda (results error)
+                    (if error (funcall fail error)
+                      (+agent-shell-arena-remote--finish
+                       remote report results))))))
            ((error +agent-shell-arena-remote-wire)
             (funcall fail (error-message-string err)))))))))
 

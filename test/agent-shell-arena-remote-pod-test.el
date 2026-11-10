@@ -248,7 +248,7 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
 The pod's checkout under ROOT gets the delegate's branch.  OPTIONS:
 :tip `orphan' makes its tip not descend from the base, :dirty a count of
 uncommitted paths, :state the member's state, :boot the status's boot
-id."
+id, :shape the report's shape."
   (let* ((remote (+agent-shell-pstack-panel-remote panel))
          (pod (+agent-shell-arena-remote-host-name
                (+agent-shell-arena-remote-host remote)))
@@ -279,7 +279,8 @@ id."
     (+agent-shell-arena-remote--write-json
      (expand-file-name "report.json" folder) 'report
      (+agent-shell-arena-remote--make-report
-      :id id :shape 'delegate :base base :arena "host-arena"
+      :id id :shape (or (plist-get options :shape) 'delegate) :base base
+      :arena "host-arena"
       :members (list (+agent-shell-arena-remote--make-member
                       :role "builder" :agent 'codex :kind 'delegate
                       :state (or (plist-get options :state) 'done)
@@ -826,6 +827,29 @@ no branch lands, and the pod stays for the lead."
       (should (eq 'kept (+agent-shell-arena-remote-pod-state
                          (+pod-test--pod panel))))
       (should (string-search "does not descend from its base"
+                             (+agent-shell-pstack-panel-followup panel))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-report-of-another-shape-refused ()
+  "A delegate's report that claims to be an arena's is refused: its members
+fail, no branch lands, and the pod stays for the lead."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((panel (funcall launch)))
+      (+pod-test--submitted panel)
+      (funcall runner-writes panel :shape 'arena)
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (let ((member (car (+agent-shell-pstack-panel-members panel))))
+        (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+        (should (string-search "its shape is arena, not the job's delegate"
+                               (+agent-shell-pstack-panel-member-error member))))
+      (should-not (ignore-errors
+                    (funcall lead-git "rev-parse" "--verify" "-q"
+                             "refs/heads/pstack/delegate/pod-panel")))
+      (should (eq 'kept (+agent-shell-arena-remote-pod-state
+                         (+pod-test--pod panel))))
+      (should (+pod-test--exists-p root panel))
+      (should (string-search "Emacs refused its report"
                              (+agent-shell-pstack-panel-followup panel))))))
 
 ;;;; The runner's sign-ins
