@@ -346,6 +346,17 @@ id, :shape the report's shape."
 
 ;;;; Profiles
 
+(defun +pod-test--restart (async)
+  "Stop what the test started since ASYNC and forget every live job and
+pod, as a restarted Emacs would; return the async state to tear down to."
+  (+config-test-stop-async async)
+  (dolist (table (list +agent-shell-arena-remote--arenas
+                       +agent-shell-pstack-panel--panels
+                       +agent-shell-arena-remote--lines
+                       +agent-shell-arena-remote--releasing))
+    (clrhash table))
+  (+config-test-async-state))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-spec ()
   "A pod is named by a spec in profiles, and a malformed spec is refused."
   (let ((good '(:template "example-template" :preset "small"
@@ -582,6 +593,27 @@ so adopts the pod by name and never creates a second."
         (should (eq 'created (+agent-shell-arena-remote-pod-state
                               (+agent-shell-arena-remote-pod restored)))))
       (should (= 1 (length (+pod-test--creates (funcall log))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-unrestorable-job-keeps-pod ()
+  "A pod whose job cannot be restored after a restart is kept with the
+error, never deleted, since nothing shows its results reached the laptop."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (setq async (+pod-test--restart async))
+      (with-temp-file (+agent-shell-arena-remote--job-file remote) (insert "{"))
+      (+agent-shell-arena-remote-reattach-all)
+      (+pod-test--wait-for (lambda () (+config-test-async-quiet-p async)))
+      (let ((pod (+agent-shell-arena-remote--read-json (+pod-test--ledger panel)
+                                                       'pod)))
+        (should (eq 'kept (+agent-shell-arena-remote-pod-state pod)))
+        (should (string-search "could not restore its job"
+                               (+agent-shell-arena-remote-pod-reason pod))))
+      (should (+pod-test--exists-p root panel))
+      (should-not (seq-find (lambda (line) (string-prefix-p "delete " line))
+                            (funcall log))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-cancel-during-create ()
   "A cancel while the pod is created lets the create finish, then deletes it."

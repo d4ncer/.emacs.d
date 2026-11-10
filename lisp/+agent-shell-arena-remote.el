@@ -4301,7 +4301,8 @@ Its routing keys are cleared, so the panel can never submit itself."
   "Resume every remote arena on disk that has not delivered its results.
 Then go on with the pods in the ledger."
   (interactive)
-  (let ((root +agent-shell-pstack-arena-directory))
+  (let ((root +agent-shell-pstack-arena-directory)
+        (failed nil))
     (when (file-directory-p root)
       (dolist (directory (directory-files root t "\\`[^.]"))
         (when (file-exists-p (+agent-shell-arena-remote--record-file directory))
@@ -4309,22 +4310,40 @@ Then go on with the pods in the ledger."
               (+agent-shell-arena-remote--restore directory)
             (error (message "pstack arena %s: could not re-attach: %s"
                             (file-name-nondirectory directory)
-                            (error-message-string err))))))))
-  (+agent-shell-arena-remote--restore-pods)
+                            (error-message-string err))
+                   (push (cons (file-name-nondirectory directory)
+                               (error-message-string err))
+                         failed))))))
+    (+agent-shell-arena-remote--restore-pods failed))
   (+agent-shell-arena-remote--attach-leads)
   (+agent-shell-pstack-panels--refresh))
 
-(defun +agent-shell-arena-remote--restore-pods ()
+(defun +agent-shell-arena-remote--restore-pods (&optional failed)
   "Go on with what the ledger's pods were doing when Emacs last stopped.
 A live job's pod is its job's to handle, and a kept one waits for its
-lead.  Any other is deleted: a pod is kept only by a decision written
-before its job finished, so one still planned or created belongs to a
-job that never ran or needs it no more."
+lead.  A pod whose job could not be restored, FAILED's alist of job id
+to error, or has no record left, is kept with the reason, since nothing
+shows its results reached the laptop.  Any other is deleted: its job
+delivered, or never ran."
   (dolist (pod (+agent-shell-arena-remote--pods))
-    (unless (or (gethash (+agent-shell-arena-remote-pod-job pod)
-                         +agent-shell-arena-remote--arenas)
-                (eq (+agent-shell-arena-remote-pod-state pod) 'kept))
-      (+agent-shell-arena-remote--pod-release pod))))
+    (let* ((job (+agent-shell-arena-remote-pod-job pod))
+           (failure (alist-get job failed nil nil #'equal))
+           (state (+agent-shell-arena-remote-pod-state pod)))
+      (cond
+       ((or (eq state 'kept)
+            (gethash job +agent-shell-arena-remote--arenas)
+            (gethash (+agent-shell-arena-remote-pod-name pod)
+                     +agent-shell-arena-remote--releasing)))
+       ((or failure
+            (not (file-exists-p
+                  (+agent-shell-arena-remote--record-file
+                   (expand-file-name job +agent-shell-pstack-arena-directory)))))
+        (setf (+agent-shell-arena-remote-pod-state pod) 'kept
+              (+agent-shell-arena-remote-pod-reason pod)
+              (if failure (format "Emacs could not restore its job: %s" failure)
+                "Emacs found no record of its job"))
+        (+agent-shell-arena-remote--pod-write pod))
+       (t (+agent-shell-arena-remote--pod-release pod))))))
 
 ;;;###autoload
 (defun +agent-shell-pstack-pod-discard (name)
