@@ -18,7 +18,7 @@
           (expand-file-name (concat (file-name-base file) ".elc") temporary))))
   (add-to-list 'load-path (expand-file-name "lisp/" root))
   (add-to-list 'load-path (expand-file-name "lisp/project-files/" root))
-  (dolist (package '("projectile" "compat" "consult" "orderless"))
+  (dolist (package '("el-patch" "projectile" "compat" "consult" "orderless"))
     (add-to-list 'load-path (expand-file-name
                              (concat "elpaca/builds/" package) root)))
   (unwind-protect
@@ -31,7 +31,8 @@
             (insert-file-contents (expand-file-name file root))
             (emacs-lisp-mode)
             (check-parens)))
-        (dolist (file '("lisp/project-files/+project-files.el" "lisp/project-files/+project-files-worker.el"))
+        (dolist (file '("lisp/project-files/+project-files.el" "lisp/project-files/+project-files-worker.el"
+                        "lisp/project-files/+projectile-patch.el"))
           (unless (byte-compile-file (expand-file-name file root))
             (error "Compilation failed: %s" file)))
         (load (expand-file-name "test/project-files-test.el" root) nil t)

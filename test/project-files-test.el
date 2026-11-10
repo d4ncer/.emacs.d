@@ -75,20 +75,28 @@
                   (ensure-list (get-text-property 18 'face candidate))))))
 
 (ert-deftest +project-files-test-watch-limit-bounds-the-work ()
-  (let* ((projectile-watch-max-directories 2)
+  (let* ((+project-files-mode t)
+         (projectile-watch-max-directories 2)
          (files '("a/one" "b/two" "c/three" "d/four"))
          (original (symbol-function 'projectile--directory-ancestors))
          (visited 0))
     (cl-letf (((symbol-function 'projectile--directory-ancestors)
                (lambda (file) (cl-incf visited) (funcall original file))))
-      (should (= 3 (length (+project-files--watch-directories nil "/tmp/" files))))
+      (should (= 3 (length (projectile--watch-directories "/tmp/" files))))
       (should (= 2 visited)))))
 
 (ert-deftest +project-files-test-small-watch-set-is-complete ()
-  (let ((projectile-watch-max-directories 100))
-    (should (equal (sort (+project-files--watch-directories
-                          nil "/tmp/" '("a/b/file" "a/other" "top")) #'string<)
+  (let ((+project-files-mode t)
+        (projectile-watch-max-directories 100))
+    (should (equal (sort (projectile--watch-directories
+                          "/tmp/" '("a/b/file" "a/other" "top")) #'string<)
                    '("/tmp/" "/tmp/a/" "/tmp/a/b/")))))
+
+(ert-deftest +project-files-test-watch-limit-needs-the-mode ()
+  (let ((+project-files-mode nil)
+        (projectile-watch-max-directories 2))
+    (should (= 5 (length (projectile--watch-directories
+                          "/tmp/" '("a/one" "b/two" "c/three" "d/four")))))))
 
 (ert-deftest +project-files-test-router-preserves-small-and-remote-finder ()
   (let ((+project-files-threshold 3)

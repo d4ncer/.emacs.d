@@ -15,6 +15,7 @@
 (require 'cl-lib)
 (require 'json)
 (require 'projectile)
+(require '+projectile-patch)
 (require 'seq)
 (require 'subr-x)
 
@@ -558,24 +559,10 @@ Pass prefix argument REFRESH to the chosen finder."
   (when-let* ((state (gethash root +project-files--states)))
     (+project-files--refresh state t)))
 
-(defun +project-files--watch-directories (_original project files)
-  "Count PROJECT's FILES only until the watch limit is exceeded.
-Return at most `projectile-watch-max-directories' plus one directories."
-  (let ((dirs (make-hash-table :test #'equal)))
-    (puthash (file-name-as-directory (expand-file-name project)) t dirs)
-    (catch 'limit
-      (dolist (file files)
-        (dolist (dir (projectile--directory-ancestors file))
-          (puthash (expand-file-name dir project) t dirs)
-          (when (> (hash-table-count dirs) projectile-watch-max-directories)
-            (throw 'limit nil)))))
-    (hash-table-keys dirs)))
-
 (defun +project-files-teardown ()
   "Remove integrations and stop outstanding indexing and search workers."
   (interactive)
   (setq +project-files-mode nil)
-  (advice-remove 'projectile--watch-directories #'+project-files--watch-directories)
   (advice-remove 'projectile--invalidate-project-cache #'+project-files--invalidate)
   (advice-remove 'delete-file #'+project-files--after-delete)
   (remove-hook 'after-save-hook #'+project-files--after-save)
@@ -605,8 +592,6 @@ Return at most `projectile-watch-max-directories' plus one directories."
   :global t :group '+project-files
   (if +project-files-mode
       (progn
-        (advice-add 'projectile--watch-directories :around
-                    #'+project-files--watch-directories)
         (advice-add 'projectile--invalidate-project-cache :after
                     #'+project-files--invalidate)
         (advice-add 'delete-file :after #'+project-files--after-delete)

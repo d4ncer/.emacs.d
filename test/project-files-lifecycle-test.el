@@ -16,12 +16,12 @@
           (+project-files-setup)
           (+project-files-setup)
           (should (= 1 (cl-count #'+project-files--after-save after-save-hook)))
-          (should (advice-member-p #'+project-files--watch-directories
-                                   'projectile--watch-directories)))
+          (should (advice-member-p #'+project-files--invalidate
+                                   'projectile--invalidate-project-cache)))
       (+project-files-teardown))
     (should-not (memq #'+project-files--after-save after-save-hook))
-    (should-not (advice-member-p #'+project-files--watch-directories
-                                 'projectile--watch-directories))))
+    (should-not (advice-member-p #'+project-files--invalidate
+                                 'projectile--invalidate-project-cache))))
 
 (ert-deftest +project-files-test-lifecycle-cancels-index-and-search ()
   (let* ((+project-files--states (make-hash-table :test #'equal))
