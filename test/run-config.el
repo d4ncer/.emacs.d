@@ -79,7 +79,7 @@
    "-l" "agent-shell-pstack-arena-sandbox-test"
    "-l" "agent-shell-pstack-arena-trace-test"
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"
-   "-l" "elisp-tools-test"
+   "-l" "elisp-tools-test" "-l" "browse-at-remote-patch-test"
    "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Elisp indentation"
                          "-l" (expand-file-name "lisp/+elisp-tools"

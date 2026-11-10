@@ -14,6 +14,7 @@
   (unwind-protect
       (dolist (file '("lisp/+bootstrap.el" "lisp/+elpaca-patch.el"
                       "lisp/+lisp-mode-patch.el"
+                      "lisp/+browse-at-remote-patch.el"
                       "lisp/+corelib.el"
                       "lisp/+keybindings.el" "lisp/+use-package.el"
                       "lisp/+edit-cmds.el" "lisp/+profile.el"
