@@ -808,6 +808,16 @@ switch safely:
 | Tracked files have uncommitted changes (untracked files do not count) | `~/src/big-repo has uncommitted changes to tracked files: lisp/a.el; commit or stash them first` |
 | A rebase, am, merge, cherry-pick or revert is in progress (`rebase-merge`, `rebase-apply`, `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD` or `sequencer` under `git rev-parse --git-path`) | `~/src/big-repo has a merge in progress; finish or abort it first` |
 | No repository or bundle holds the commit | `Panel <id>, role <role>: result <commit> is gone: …` |
+| An unfinished delegate panel works in the checkout with branch isolation | `Panel 1a2b3c4d5e6f has a delegate working in ~/src/big-repo; wait until it finishes` |
+| A live agent shell whose directory is the checkout or inside it, a lead or a member, is not idle (`agent-shell-status` is not `ready`) | `*Claude Code @ big-repo* is working in ~/src/big-repo; wait until it is idle` |
+
+Switching under a working agent would make its running tests mix two
+versions and put its next commit on the result. When the shells there are
+all idle, the prompt gains a line above the question naming them:
+
+```text
+*Claude Code @ big-repo* works in ~/src/big-repo and will see the result's files until you return.
+```
 
 One result is reviewed at a time per checkout. Before switching, Emacs
 records where the checkout was, its branch or, when detached, its commit,
@@ -818,7 +828,8 @@ first place, so returning always goes back to where you started.
 
 `M-x +agent-shell-pstack-walkthrough-return` switches the checkout back to
 the recorded place and forgets the record, with the same refusals for
-uncommitted tracked changes and operations in progress. Called from a
+uncommitted tracked changes, operations in progress and agents working
+in the checkout. Called from a
 buffer in a checkout under review, it returns that checkout; otherwise it
 asks which one, and says `No checkout is switched to a walkthrough result`
 when there is none. A checkout already back on its place, or gone, just

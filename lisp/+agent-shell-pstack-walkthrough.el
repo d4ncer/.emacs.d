@@ -9,8 +9,8 @@
 ;; path:line-line whose path is in the commit's tree a link.  Following
 ;; one opens the file at that line in the lead's checkout when its copy
 ;; matches the commit's, else in the role's worktree when it is at the
-;; commit.  Otherwise it offers to switch the lead's checkout to the
-;; result, recording where it was in
+;; commit.  Otherwise, unless an agent is working there, it offers to
+;; switch the lead's checkout to the result, recording where it was in
 ;; `+agent-shell-pstack-walkthrough-review-file', and
 ;; `+agent-shell-pstack-walkthrough-return' goes back.  One result is
 ;; reviewed at a time per checkout.  See docs/AGENT-SHELL-PSTACK.md.
@@ -24,6 +24,9 @@
 (require 'subr-x)
 (require '+agent-shell-arena-git)
 (require '+agent-shell-pstack-panel)
+
+(declare-function agent-shell-cwd "agent-shell-project")
+(declare-function agent-shell-status "agent-shell")
 
 (defgroup +agent-shell-pstack-walkthrough nil
   "Code links in pstack result reports."
@@ -390,6 +393,60 @@ commit or stash them first"
                     name (+agent-shell-arena-git-describe-paths
                           (nreverse paths)))))))
 
+(defun +agent-shell-pstack-walkthrough--names (buffers)
+  "Return the names of BUFFERS, joined by commas."
+  (mapconcat #'buffer-name buffers ", "))
+
+(defun +agent-shell-pstack-walkthrough--agents (directory)
+  "Signal a user error when an agent is working in DIRECTORY's checkout.
+It is while an unfinished delegate panel works there with branch
+isolation, or while a live agent shell whose directory is in the checkout
+is not ready.  Otherwise return the agent shells working there, all
+idle."
+  (let* ((checkout (+agent-shell-pstack-walkthrough--key directory))
+         (name (abbreviate-file-name directory))
+         (inside (lambda (dir)
+                   (and (stringp dir) (file-directory-p dir)
+                        (file-in-directory-p dir checkout))))
+         (panel (seq-find
+                 (lambda (panel)
+                   (and (not (eq 'finished
+                                 (+agent-shell-pstack-panel-phase panel)))
+                        (eq 'branch
+                            (or (+agent-shell-pstack-panel--isolation panel)
+                                (plist-get
+                                 (+agent-shell-pstack-panel-delegate-options
+                                  panel)
+                                 :isolation)))
+                        (funcall inside
+                                 (if-let* ((manifest
+                                            (+agent-shell-pstack-panel-arena
+                                             panel)))
+                                     (+agent-shell-arena-git-manifest-toplevel
+                                      manifest)
+                                   (+agent-shell-pstack-panel-cwd panel)))))
+                 (+agent-shell-pstack-panel-list)))
+         (shells (seq-filter
+                  (lambda (buffer)
+                    (with-current-buffer buffer
+                      (and (derived-mode-p 'agent-shell-mode)
+                           (funcall inside
+                                    (ignore-errors (agent-shell-cwd))))))
+                  (buffer-list)))
+         (busy (seq-remove (lambda (shell)
+                             (eq 'ready (agent-shell-status
+                                         :shell-buffer shell)))
+                           shells)))
+    (when panel
+      (user-error "Panel %s has a delegate working in %s; wait until it \
+finishes" (+agent-shell-pstack-panel-id panel) name))
+    (when busy
+      (user-error "%s %s working in %s; wait until %s idle"
+                  (+agent-shell-pstack-walkthrough--names busy)
+                  (if (cdr busy) "are" "is") name
+                  (if (cdr busy) "they are" "it is")))
+    shells))
+
 (defun +agent-shell-pstack-walkthrough--branch-at (directory commit panel)
   "Return a local branch at COMMIT that no worktree has checked out, or nil.
 Look in DIRECTORY's repository, preferring PANEL's delegate branch."
@@ -437,7 +494,9 @@ files the switch changed are then reverted."
   "Offer to switch RESULT's lead checkout to its commit, and call DONE there.
 Record where the checkout was before its first switch, so
 `+agent-shell-pstack-walkthrough-return' can go back.  Switch to a
-local branch at the commit when one is free, else detach."
+local branch at the commit when one is free, else detach.  Refuse
+while an agent is working in the checkout; see
+`+agent-shell-pstack-walkthrough--agents'."
   (let* ((toplevel (plist-get result :toplevel))
          (commit (plist-get result :commit))
          (name (abbreviate-file-name toplevel)))
@@ -447,7 +506,8 @@ local branch at the commit when one is free, else detach."
                        toplevel "rev-parse" "-q" "--verify" "HEAD"))
         (funcall done)
       (+agent-shell-pstack-walkthrough--check toplevel)
-      (let* ((checkout (+agent-shell-pstack-walkthrough--key toplevel))
+      (let* ((shells (+agent-shell-pstack-walkthrough--agents toplevel))
+             (checkout (+agent-shell-pstack-walkthrough--key toplevel))
              (place (+agent-shell-pstack-walkthrough--place toplevel))
              (previous (+agent-shell-pstack-walkthrough--review checkout))
              (branch (+agent-shell-pstack-walkthrough--branch-at
@@ -455,9 +515,15 @@ local branch at the commit when one is free, else detach."
              (what (+agent-shell-pstack-walkthrough-describe result))
              (origin (if previous (plist-get previous :origin) place)))
         (when (yes-or-no-p
-               (format "Switch %s from %s to %s (%s)? " name
-                       (+agent-shell-pstack-walkthrough-place-name place)
-                       what (if branch (concat "branch " branch) "detached")))
+               (concat
+                (when shells
+                  (format "%s %s in %s and will see the result's files \
+until you return.\n" (+agent-shell-pstack-walkthrough--names shells)
+(if (cdr shells) "work" "works") name))
+                (format "Switch %s from %s to %s (%s)? " name
+                        (+agent-shell-pstack-walkthrough-place-name place)
+                        what (if branch (concat "branch " branch)
+                               "detached"))))
           (+agent-shell-pstack-walkthrough--put-review
            checkout (list :checkout checkout :origin origin
                           :panel (plist-get result :panel)
@@ -528,8 +594,8 @@ Otherwise ask which reviewed checkout, or return nil when there is none."
 ;;;###autoload
 (defun +agent-shell-pstack-walkthrough-return (checkout)
   "Switch CHECKOUT back to where it was before it was switched to a result.
-Then forget its review.  Refuse while a git operation is in progress or
-tracked files have uncommitted changes.  Interactively, CHECKOUT is the
+Then forget its review.  Refuse while a git operation is in progress,
+tracked files have uncommitted changes or an agent is working there.  Interactively, CHECKOUT is the
 current buffer's checkout when it is under review, else one you choose."
   (interactive (list (+agent-shell-pstack-walkthrough--choose)))
   (if-let* ((review (and checkout
@@ -549,6 +615,7 @@ current buffer's checkout when it is under review, else one you choose."
           (funcall forget "%s is already on %s; forgot its review" name where))
          (t
           (+agent-shell-pstack-walkthrough--check checkout)
+          (+agent-shell-pstack-walkthrough--agents checkout)
           (unless (+agent-shell-pstack-walkthrough--read-in
                    checkout "rev-parse" "-q" "--verify"
                    (pcase origin

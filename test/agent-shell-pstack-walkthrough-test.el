@@ -147,6 +147,31 @@ Leave REPO on main and return the result record."
         (+agent-shell-pstack-walkthrough-test--git repo "rev-parse" "HEAD")
       branch)))
 
+(defvar-local +agent-shell-pstack-walkthrough-test--status nil
+  "A fake agent shell's status.")
+
+(defun +agent-shell-pstack-walkthrough-test--shell (name directory status)
+  "Return a fake agent shell NAME working in DIRECTORY with STATUS."
+  (with-current-buffer (generate-new-buffer name)
+    (setq major-mode 'agent-shell-mode
+          default-directory (file-name-as-directory directory)
+          +agent-shell-pstack-walkthrough-test--status status)
+    (make-directory default-directory t)
+    (current-buffer)))
+
+(defmacro +agent-shell-pstack-walkthrough-test--with-shells (&rest body)
+  "Run BODY with agent shells read from fake shell buffers."
+  (declare (indent 0))
+  `(cl-letf (((symbol-function 'agent-shell-cwd)
+              (lambda () default-directory))
+             ((symbol-function 'agent-shell-status)
+              (cl-function
+               (lambda (&key shell-buffer)
+                 (buffer-local-value
+                  '+agent-shell-pstack-walkthrough-test--status
+                  shell-buffer)))))
+     ,@body))
+
 (ert-deftest +agent-shell-pstack-walkthrough-test-contracts ()
   "Every code-writing contract asks for a walkthrough with path:line claims."
   (let ((shapes (eval (car (get '+agent-shell-pstack-panel-shapes
@@ -669,6 +694,174 @@ a result" (buffer-string))))
                              repo "worktree" "list")
                             "\n"))))
       (should-not (file-exists-p directory)))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-busy-shell ()
+  "Refuse to switch a checkout an agent shell is working in."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n")))
+      (+agent-shell-pstack-walkthrough-test--with-shells
+        (let ((shell (+agent-shell-pstack-walkthrough-test--shell
+                      "*lead*" (expand-file-name "lisp/" repo) 'busy))
+              (other (+agent-shell-pstack-walkthrough-test--shell
+                      "*member*" repo 'blocked)))
+          (cl-letf (((symbol-function 'yes-or-no-p)
+                     (lambda (prompt) (error "Asked %s" prompt))))
+            (should (equal (format "*lead*, *member* are working in %s; wait \
+until they are idle" (abbreviate-file-name repo))
+                           (cadr (should-error
+                                  (+agent-shell-pstack-walkthrough-follow
+                                   result "lisp/a.el" 1)
+                                  :type 'user-error))))
+            (kill-buffer other)
+            (should (equal (format "*lead* is working in %s; wait until it \
+is idle" (abbreviate-file-name repo))
+                           (cadr (should-error
+                                  (+agent-shell-pstack-walkthrough-follow
+                                   result "lisp/a.el" 1)
+                                  :type 'user-error)))))
+          (should (buffer-live-p shell))
+          (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                                 repo)))
+          (should-not (file-exists-p
+                       +agent-shell-pstack-walkthrough-review-file)))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-branch-panel ()
+  "Refuse to switch a checkout an unfinished branch-mode delegate works in."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let* ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                    repo "p3" "result\n"))
+           (panel (+agent-shell-pstack-panel--make
+                   :id "p9" :shape 'delegate :phase 'running :cwd repo
+                   :arena (+agent-shell-arena-git--manifest
+                           :id "p9" :toplevel repo
+                           :delegate (+agent-shell-arena-git--delegate
+                                      :isolation 'branch))))
+           prompts)
+      (puthash "p9" panel +agent-shell-pstack-panel--panels)
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (prompt) (push prompt prompts) t)))
+        (should (equal (format "Panel p9 has a delegate working in %s; wait \
+until it finishes" (abbreviate-file-name repo))
+                       (cadr (should-error
+                              (+agent-shell-pstack-walkthrough-follow
+                               result "lisp/a.el" 1)
+                              :type 'user-error))))
+        (should-not prompts)
+        (setf (+agent-shell-pstack-panel-arena panel) nil
+              (+agent-shell-pstack-panel-delegate-options panel)
+              '(:isolation branch))
+        (should-error (+agent-shell-pstack-walkthrough-follow
+                       result "lisp/a.el" 1)
+                      :type 'user-error)
+        (setf (+agent-shell-pstack-panel-delegate-options panel)
+              '(:isolation worktree))
+        (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1)
+        (should (= 1 (length prompts)))
+        (should (equal "pstack/delegate/p3"
+                       (+agent-shell-pstack-walkthrough-test--head repo)))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-idle-shells ()
+  "Name idle shells in the checkout in the prompt, and ignore others."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n"))
+          (name (abbreviate-file-name repo))
+          prompts)
+      (+agent-shell-pstack-walkthrough-test--with-shells
+        (+agent-shell-pstack-walkthrough-test--shell "*lead*" repo 'ready)
+        (+agent-shell-pstack-walkthrough-test--shell
+         "*elsewhere*" (expand-file-name "repo2/" scratch) 'busy)
+        (cl-letf (((symbol-function 'yes-or-no-p)
+                   (lambda (prompt) (push prompt prompts) t)))
+          (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1))
+        (should (equal (list (format "*lead* works in %s and will see the \
+result's files until you return.\nSwitch %s from main to panel p3's builder \
+result %s (branch pstack/delegate/p3)? " name name
+(substring (plist-get result :commit)
+           0 7)))
+                       prompts))
+        (should (equal "pstack/delegate/p3"
+                       (+agent-shell-pstack-walkthrough-test--head repo)))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-other-directory ()
+  "Ignore busy shells and branch-mode panels in other directories."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n"))
+          (other (expand-file-name "repo2/" scratch))
+          prompts)
+      (+agent-shell-pstack-walkthrough-test--with-shells
+        (+agent-shell-pstack-walkthrough-test--shell "*other*" other 'busy)
+        (puthash "p9" (+agent-shell-pstack-panel--make
+                       :id "p9" :shape 'delegate :phase 'running :cwd other
+                       :arena (+agent-shell-arena-git--manifest
+                               :id "p9" :toplevel other
+                               :delegate (+agent-shell-arena-git--delegate
+                                          :isolation 'branch)))
+                 +agent-shell-pstack-panel--panels)
+        (puthash "p8" (+agent-shell-pstack-panel--make
+                       :id "p8" :shape 'delegate :phase 'finished :cwd repo
+                       :arena (+agent-shell-arena-git--manifest
+                               :id "p8" :toplevel repo
+                               :delegate (+agent-shell-arena-git--delegate
+                                          :isolation 'branch)))
+                 +agent-shell-pstack-panel--panels)
+        (cl-letf (((symbol-function 'yes-or-no-p)
+                   (lambda (prompt) (push prompt prompts) t)))
+          (+agent-shell-pstack-walkthrough-test--follow result "lisp/a.el" 1))
+        (should (= 1 (length prompts)))
+        (should (string-prefix-p "Switch " (car prompts)))
+        (should (equal "pstack/delegate/p3"
+                       (+agent-shell-pstack-walkthrough-test--head repo)))))))
+
+(ert-deftest +agent-shell-pstack-walkthrough-test-return-agents ()
+  "Refuse to return a checkout an agent is working in."
+  (+agent-shell-pstack-walkthrough-test--with
+    (+agent-shell-pstack-walkthrough-test--commit repo "lisp/a.el" "base\n")
+    (let ((result (+agent-shell-pstack-walkthrough-test--branch-result
+                   repo "p3" "result\n"))
+          (key (+agent-shell-pstack-walkthrough--key repo))
+          (name (abbreviate-file-name repo)))
+      (+agent-shell-pstack-walkthrough-test--with-shells
+        (let ((shell (+agent-shell-pstack-walkthrough-test--shell
+                      "*lead*" repo 'ready)))
+          (cl-letf (((symbol-function 'yes-or-no-p) (lambda (_) t)))
+            (+agent-shell-pstack-walkthrough-test--follow
+             result "lisp/a.el" 1))
+          (with-current-buffer shell
+            (setq +agent-shell-pstack-walkthrough-test--status 'busy))
+          (should (equal (format "*lead* is working in %s; wait until it is \
+idle" name)
+                         (cadr (should-error
+                                (+agent-shell-pstack-walkthrough-return key)
+                                :type 'user-error))))
+          (with-current-buffer shell
+            (setq +agent-shell-pstack-walkthrough-test--status 'ready))
+          (puthash "p9" (+agent-shell-pstack-panel--make
+                         :id "p9" :shape 'delegate :phase 'preparing :cwd repo
+                         :delegate-options '(:isolation branch))
+                   +agent-shell-pstack-panel--panels)
+          (should (equal (format "Panel p9 has a delegate working in %s; wait \
+until it finishes" name)
+                         (cadr (should-error
+                                (+agent-shell-pstack-walkthrough-return key)
+                                :type 'user-error))))
+          (should (equal "pstack/delegate/p3"
+                         (+agent-shell-pstack-walkthrough-test--head repo)))
+          (should (+agent-shell-pstack-walkthrough--review key))
+          (clrhash +agent-shell-pstack-panel--panels)
+          (+agent-shell-pstack-walkthrough-return key)
+          (+agent-shell-pstack-walkthrough-test--wait
+           (lambda ()
+             (not (file-exists-p
+                   +agent-shell-pstack-walkthrough-review-file))))
+          (should (equal "main" (+agent-shell-pstack-walkthrough-test--head
+                                 repo))))))))
 
 (provide 'agent-shell-pstack-walkthrough-test)
 ;;; agent-shell-pstack-walkthrough-test.el ends here
