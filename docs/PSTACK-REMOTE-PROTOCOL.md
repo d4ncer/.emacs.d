@@ -374,7 +374,8 @@ after it. A profile names the kind as `(pod . SPEC)`, where `SPEC` is a
 plist: `:template` (required), `:preset`, `:parameters` (an alist of
 template parameter names to values), `:name-prefix`,
 `:environment` (an alist of agents to `NAME=VALUE` entries, which must
-hold no credential), and `:setup-commit` (a full commit id). A pod is
+hold no credential: a name with `SECRET`, `TOKEN`, `PASSWORD` or
+`SESSION` in it, or ending in `_KEY`, is refused), and `:setup-commit` (a full commit id). A pod is
 reached as a Coder workspace is.
 
 - **Setup pin.** A pod whose spec names `:setup-commit` runs only when

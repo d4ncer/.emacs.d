@@ -394,8 +394,20 @@ pod, as a restarted Emacs would; return the async state to tear down to."
                    (:template "t" :name-prefix "Upper")
                    (:template "t" :environment ((claude-code "no equals")))
                    (:template "t" :unknown 1)
-                   (:template "t" :setup-commit "abc")))
+                   (:template "t" :setup-commit "abc")
+                   (:template "t" :environment ((claude-code "AWS_SECRET_ACCESS_KEY=x")))
+                   (:template "t" :environment ((codex "API_TOKEN=x")))
+                   (:template "t" :environment ((codex "DB_PASSWORD=x")))
+                   (:template "t" :environment ((codex "aws_session_name=x")))
+                   (:template "t" :environment ((codex "OPENAI_API_KEY=x")))))
       (should-not (+agent-shell-arena-git-host-p (cons 'pod bad))))
+    (should (string-search "names no secret"
+                           (+agent-shell-arena-git-pod-spec-error
+                            '(:template "t" :environment
+                              ((codex "OPENAI_API_KEY=x"))))))
+    (should-not (+agent-shell-arena-git-pod-spec-error
+                 '(:template "t" :environment
+                   ((codex "KEYBOARD=us" "EXAMPLE_KEY_FILE=/etc/x")))))
     (should (string-search "(pod . SPEC)"
                            (+agent-shell-arena-git-host-description)))
     (let ((host (+agent-shell-arena-remote-parse-host (cons 'pod good) "abc-1")))

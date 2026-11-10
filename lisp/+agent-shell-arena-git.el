@@ -784,7 +784,8 @@ names one of its presets; :parameters is an alist of template parameter
 names to values, all strings; :name-prefix starts each host's name, a
 lowercase letter then up to 11 lowercase letters, digits or hyphens;
 :environment is an alist of agent identifiers to NAME=VALUE entries
-their adapters get on the host, which must hold no credential;
+their adapters get on the host, which must hold no credential, so a
+name that looks like a secret's is refused;
 :setup-commit is the full commit id the host's readiness file must name
 as its setup's."
   (let ((case-fold-search nil)
@@ -832,6 +833,17 @@ lowercase letters, digits or hyphens")
                              (plist-get spec :environment))))
       "a plist whose :environment is an alist of agents to NAME=VALUE \
 strings")
+     ((seq-some (lambda (entry)
+                  (seq-find (lambda (item)
+                              (let ((case-fold-search t))
+                                (string-match-p
+                                 "\\`[^=]*\\(?:SECRET\\|TOKEN\\|PASSWORD\\|SESSION\\)\\|\\`[^=]*_KEY="
+                                 item)))
+                            (cdr entry)))
+                (plist-get spec :environment))
+      "a plist whose :environment names no secret, such as a SECRET, \
+TOKEN, PASSWORD, SESSION or _KEY variable; give the host the credential \
+in its own provider configuration instead")
      ((and (plist-get spec :setup-commit)
            (not (and (stringp (plist-get spec :setup-commit))
                      (string-match-p
