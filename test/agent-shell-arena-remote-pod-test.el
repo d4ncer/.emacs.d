@@ -896,12 +896,17 @@ exactly one pod; the other is refused at the cap."
                             nil "\\.json\\'")))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-delete-retried ()
-  "A failed delete is retried until it succeeds, and the pod counts
-against the cap until then."
+  "A failed delete is retried until it succeeds, said for the first three
+failures only, and the pod counts against the cap until then."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-    (with-temp-file (expand-file-name ".delete-fails" root) (insert "2\n"))
-    (let* ((panel (funcall launch)))
+    (with-temp-file (expand-file-name ".delete-fails" root) (insert "4\n"))
+    (let* ((panel (funcall launch))
+           (said nil)
+           (note (lambda (format &rest args)
+                   (when (and format (string-search "deleting it failed" format))
+                     (push (apply #'format-message format args) said)))))
+      (advice-add 'message :before note '((name . pod-test-said)))
       (+pod-test--submitted panel)
       (funcall runner-writes panel)
       (+pod-test--wait-for
@@ -917,8 +922,11 @@ against the cap until then."
        (lambda () (eq 'deleted (+agent-shell-arena-remote-pod-state
                                 (+pod-test--pod panel)))))
       (should-not (file-exists-p (+pod-test--ledger panel)))
-      (should (= 3 (seq-count (lambda (line) (string-prefix-p "delete " line))
-                              (funcall log)))))))
+      (advice-remove 'message 'pod-test-said)
+      (should (= 5 (seq-count (lambda (line) (string-prefix-p "delete " line))
+                              (funcall log))))
+      (should (= 3 (length said)))
+      (should (string-search "keeps trying without saying so" (car said))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-restart-resumes-delete ()
   "A restart while a finished job's pod is being deleted resumes the

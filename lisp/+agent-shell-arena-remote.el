@@ -1683,7 +1683,7 @@ next try after a failed one.")
 A pod never known to be created is looked up first.  A failed delete
 leaves POD `deleting', still counted against the cap, and is retried
 with backoff, also after a restart; CALLBACK hears of the first failure
-and the retries go on.  A release while a retry waits replaces it.
+and the retries go on, said only for the first three.  A release while a retry waits replaces it.
 FAILURES counts the failed attempts so far."
   (let* ((failures (or failures 0))
          (name (+agent-shell-arena-remote-pod-name pod))
@@ -1698,8 +1698,14 @@ FAILURES counts the failed attempts so far."
            (+agent-shell-arena-remote--pod-write pod)
            (funcall finish nil))
          (retry (error)
-           (message "pstack pod %s: deleting it failed, so Emacs tries \
-again: %s" name error)
+           (cond
+            ((< failures 2)
+             (message "pstack pod %s: deleting it failed, so Emacs tries \
+again: %s" name error))
+            ((= failures 2)
+             (message "pstack pod %s: deleting it failed %d times, so Emacs \
+keeps trying without saying so; it stays in the pstack panels view: %s"
+                      name (1+ failures) error)))
            (funcall finish error)
            (puthash name
                     (run-at-time (+agent-shell-arena-remote--delay failures) nil
@@ -1738,8 +1744,6 @@ again: %s" name error)
 
 (defun +agent-shell-arena-remote--pod-retry (pod failures)
   "Try again to delete POD after FAILURES failed attempts."
-  (remhash (+agent-shell-arena-remote-pod-name pod)
-           +agent-shell-arena-remote--releasing)
   (+agent-shell-arena-remote--pod-release pod nil failures))
 
 (defun +agent-shell-arena-remote--pod-keep-reason (report results)
@@ -4898,13 +4902,14 @@ and cannot be refreshed on this host."
                                           +agent-shell-arena-remote--forwarders)
                                :decode)))
         (setf (alist-get agent +agent-shell-sandbox-agents)
-              (append (list :login (lambda ()
-                                     (funcall decode text
-                                              "the login the laptop forwarded"))
-                            :refresh nil
-                            :relogin (format "Log %s in again on the laptop, \
-then request the delegate again." agent))
-                      (alist-get agent +agent-shell-sandbox-agents)))))))
+              (thread-first
+                (copy-sequence (alist-get agent +agent-shell-sandbox-agents))
+                (plist-put :login (lambda ()
+                                    (funcall decode text
+                                             "the login the laptop forwarded")))
+                (plist-put :refresh nil)
+                (plist-put :relogin (format "Log %s in again on the laptop, \
+then request the delegate again." agent))))))))
 
 (defun +agent-shell-arena-remote--runner-sign-in-refusal (runner)
   "Return why RUNNER's members cannot sign in on this host, or nil.
