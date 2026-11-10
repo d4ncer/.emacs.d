@@ -59,9 +59,12 @@ case $1 in
       while [ ! -f \"$root/.create-open\" ]; do sleep 0.05; done
     fi
     [ -d \"$root/$name\" ] && { echo \"workspace $name exists\" >&2; exit 1; }
+    [ -f \"$root/.create-fails\" ] && { echo \"create refused\" >&2; exit 1; }
     mkdir -p \"$root/$name/.local/share/pstack-arena\" &&
       cp \"$root/.ready.json\" \"$root/$name/.local/share/pstack-arena/ready.json\" &&
       git clone -q \"$root/.origin\" \"$root/$name/repo\" || exit 1
+    [ -f \"$root/.create-fails-after-mkdir\" ] &&
+      { echo \"create timed out\" >&2; exit 1; }
     ;;
   delete)
     if [ -f \"$root/.delete-fails\" ]; then
@@ -74,6 +77,7 @@ case $1 in
     rm -rf \"$root/$2\"
     ;;
   list)
+    [ -f \"$root/.list-fails\" ] && { echo \"list refused\" >&2; exit 1; }
     printf '['; sep=
     for d in \"$root\"/*/; do
       [ -d \"$d\" ] || continue
@@ -86,7 +90,11 @@ case $1 in
   *) echo \"unknown command $1\" >&2; exit 2 ;;
 esac
 "
-  "The fake coder: each workspace is a folder of @ROOT@, cloning its origin.")
+  "The fake coder: each workspace is a folder of @ROOT@, cloning its origin.
+Files in @ROOT@ steer it: .create-gate holds a create until .create-open
+exists, .create-fails refuses one, .create-fails-after-mkdir fails one
+that made the workspace, .delete-fails holds how many deletes to refuse,
+and .list-fails refuses every list.")
 
 (defmacro +pod-test--with (&rest body)
   "Run BODY with a laptop clone, an origin and a fake coder for pods.
@@ -686,6 +694,60 @@ error, never deleted, since nothing shows its results reached the laptop."
                                  (mapcar (lambda (line) (car (split-string line)))
                                          (funcall log)))))
       (should-not (file-exists-p (+pod-test--ledger panel))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-failed-create-adopts-workspace ()
+  "A create that exits nonzero but left the workspace is adopted: the job
+runs there, and no second create is tried."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".create-fails-after-mkdir" root))
+    (let ((panel (funcall launch)))
+      (+pod-test--submitted panel)
+      (should (+pod-test--exists-p root panel))
+      (should (eq 'created (+agent-shell-arena-remote-pod-state
+                            (+agent-shell-arena-remote--read-json
+                             (+pod-test--ledger panel) 'pod))))
+      (should (= 1 (length (+pod-test--creates (funcall log))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-failed-create-rejects ()
+  "A create that fails and left nothing rejects the job with coder's
+reason, and the ledger is cleared without a delete."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".create-fails" root))
+    (let ((panel (funcall launch)))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-search "coder could not create it"
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (should (string-search "create refused"
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (+pod-test--wait-for
+       (lambda () (not (file-exists-p (+pod-test--ledger panel)))))
+      (should-not (+pod-test--exists-p root panel))
+      (should (= 1 (length (+pod-test--creates (funcall log)))))
+      (should-not (seq-find (lambda (line) (string-prefix-p "delete " line))
+                            (funcall log))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-failing-list-rejects ()
+  "A coder list that keeps failing rejects the job after its retries,
+without a create; once lists work again the ledger is cleared."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".list-fails" root))
+    (let ((panel (funcall launch)))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-search "coder could not say whether it exists"
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (should (string-search "list refused"
+                             (+agent-shell-pstack-panel-rejection panel)))
+      (should (<= 4 (seq-count (lambda (line) (string-prefix-p "list " line))
+                               (funcall log))))
+      (should-not (+pod-test--creates (funcall log)))
+      (delete-file (expand-file-name ".list-fails" root))
+      (+pod-test--wait-for
+       (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-dirty-member-keeps-pod ()
   "A delegate that left uncommitted work keeps its pod until the lead
