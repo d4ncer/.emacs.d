@@ -771,7 +771,8 @@ The delegate's and arena's triage lines ask the lead to check the
 walkthrough before handing the result to the user: confirm every claim
 against the code and tests, mark each it could not confirm, add any way
 the change could go wrong that the walkthrough missed, and end with a
-verdict, land or fix first and why.
+verdict, land or fix first and why. A delegate's lead then waits for
+the user's go before merging.
 
 When a delegate or arena panel finishes, Emacs writes
 `var/pstack-panels/<panel-id>/<role>.result.json` beside each report

@@ -595,8 +595,9 @@ Otherwise ask which reviewed checkout, or return nil when there is none."
 (defun +agent-shell-pstack-walkthrough-return (checkout)
   "Switch CHECKOUT back to where it was before it was switched to a result.
 Then forget its review.  Refuse while a git operation is in progress,
-tracked files have uncommitted changes or an agent is working there.  Interactively, CHECKOUT is the
-current buffer's checkout when it is under review, else one you choose."
+tracked files have uncommitted changes or an agent is working there.
+Interactively, CHECKOUT is the current buffer's checkout when it is
+under review, else one you choose."
   (interactive (list (+agent-shell-pstack-walkthrough--choose)))
   (if-let* ((review (and checkout
                          (+agent-shell-pstack-walkthrough--review checkout))))

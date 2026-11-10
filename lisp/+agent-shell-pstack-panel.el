@@ -241,7 +241,8 @@ diff against the commit it started from, and run the tests yourself.  Before \
 you hand it to the user, check every walkthrough claim against the code and \
 tests, mark each you could not confirm, add any way it could go wrong that \
 the walkthrough missed, and end with a verdict: land, or fix first and why.  \
-Then merge it, ask for changes in a new delegate panel, or take the work over."))
+Then wait for the user's go before you merge it, or ask for changes in a new \
+delegate panel, or take the work over."))
   "Panel shapes by name.
 Each value is a plist: :label names it on the request card, :summary
 describes it to the lead, :contract ends each member's prompt, and :triage
