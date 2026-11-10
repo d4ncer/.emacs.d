@@ -749,6 +749,28 @@ against the cap until then."
       (should (= 3 (seq-count (lambda (line) (string-prefix-p "delete " line))
                               (funcall log)))))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-restart-resumes-delete ()
+  "A restart while a finished job's pod is being deleted resumes the
+delete, so the pod stops counting against the cap."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".delete-fails" root) (insert "1000\n"))
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (funcall runner-writes panel)
+      (+pod-test--wait-for
+       (lambda () (eq 'deleting (+agent-shell-arena-remote-pod-state
+                                 (+pod-test--pod panel)))))
+      (setf (+agent-shell-arena-remote-delivered remote) nil)
+      (+agent-shell-arena-remote--save remote)
+      (setq async (+pod-test--restart async))
+      (delete-file (expand-file-name ".delete-fails" root))
+      (+agent-shell-arena-remote-reattach-all)
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+      (+pod-test--wait-for
+       (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-release-replaces-retry ()
   "A release while a failed delete waits to be retried replaces the retry."
   (skip-unless (executable-find "git"))

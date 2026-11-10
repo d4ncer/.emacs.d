@@ -4320,8 +4320,8 @@ Then go on with the pods in the ledger."
 
 (defun +agent-shell-arena-remote--restore-pods (&optional failed)
   "Go on with what the ledger's pods were doing when Emacs last stopped.
-A live job's pod is its job's to handle, and a kept one waits for its
-lead.  A pod whose job could not be restored, FAILED's alist of job id
+Every delete under way resumes, whatever its job.  A live job's pod is
+otherwise its job's to handle, and a kept one waits for its lead.  A pod whose job could not be restored, FAILED's alist of job id
 to error, or has no record left, is kept with the reason, since nothing
 shows its results reached the laptop.  Any other is deleted: its job
 delivered, or never ran."
@@ -4330,6 +4330,7 @@ delivered, or never ran."
            (failure (alist-get job failed nil nil #'equal))
            (state (+agent-shell-arena-remote-pod-state pod)))
       (cond
+       ((eq state 'deleting) (+agent-shell-arena-remote--pod-release pod))
        ((or (eq state 'kept)
             (gethash job +agent-shell-arena-remote--arenas)
             (gethash (+agent-shell-arena-remote-pod-name pod)
