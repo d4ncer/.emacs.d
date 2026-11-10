@@ -1269,9 +1269,9 @@ tmpfs, or not this user's alone, saying why."
                       runner)))))
       (delete-directory scratch t))))
 
-(ert-deftest +agent-shell-arena-remote-pod-test-runner-rechecks-login ()
-  "A queued job's runner checks a forwarded login again when it starts,
-and refuses one that would not outlast the job; it cannot refresh it."
+(ert-deftest +agent-shell-arena-remote-pod-test-runner-provider-environment ()
+  "A runner refuses a provider sign-in that neither the job nor
+runner-init.el gives environment, and takes one either gives."
   (let* ((scratch (file-name-as-directory
                    (file-truename (make-temp-file "arena-pod-runner-" t))))
          (folder (expand-file-name "job/" scratch))
@@ -1302,16 +1302,67 @@ and refuses one that would not outlast the job; it cannot refresh it."
           (let ((+agent-shell-arena-remote-sign-in-environment
                  '((claude-code "CLAUDE_CODE_USE_BEDROCK=1"))))
             (should-not (+agent-shell-arena-remote--runner-sign-in-refusal
-                         runner)))
-          (let ((results (car (+pod-test--wait
-                               (lambda (done)
-                                 (+agent-shell-sandbox-check-logins
-                                  '(codex) (+ (float-time) 7200) done))))))
-            (should (string-search
-                     "laptop"
-                     (+agent-shell-sandbox-login-result-error (car results))))
-            (should-not (+agent-shell-sandbox-login-result-refreshed
-                         (car results)))))
+                         runner))))
+      (delete-directory scratch t))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-runner-start-refuses-short-login ()
+  "A queued job whose forwarded login no longer outlasts its horizon when
+its runner starts fails its preparation with the refusal, and no member
+starts."
+  (let* ((scratch (file-name-as-directory
+                   (file-truename (make-temp-file "arena-pod-runner-" t))))
+         (folder (expand-file-name "jobs/abc-1/" scratch))
+         (+agent-shell-arena-remote-login-directory
+          (expand-file-name "run/" scratch))
+         (+agent-shell-arena-remote--mountinfo
+          (+pod-test--mounts scratch +agent-shell-arena-remote-login-directory
+                             "tmpfs"))
+         (+agent-shell-sandbox-agents (copy-tree +agent-shell-sandbox-agents))
+         (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+         (+agent-shell-pstack-panel-change-hook nil)
+         (+agent-shell-pstack-panel-directory (expand-file-name "reports/" folder))
+         (provisioned 0)
+         (count (lambda (&rest _) (cl-incf provisioned)))
+         (runner (+agent-shell-arena-remote--make-runner
+                  :directory folder :root scratch
+                  :job (+agent-shell-arena-remote--make-job
+                        :id "abc-1" :panel "abc" :brief "Build it." :timeout 60
+                        :shape 'delegate
+                        :delegate (+agent-shell-arena-remote--make-delegate-job
+                                   :sandbox nil
+                                   :identity (+agent-shell-arena-git--user
+                                              :name "Laptop Person"
+                                              :email "laptop@example.com"))
+                        :members (list (+agent-shell-arena-remote--make-request-member
+                                        :role "builder" :agent 'codex
+                                        :kind 'delegate))
+                        :prefix "" :base (make-string 40 ?a) :repository scratch
+                        :code (make-string 64 ?c) :deadline 2400
+                        :sign-ins (list (+agent-shell-arena-remote--make-sign-in
+                                         :agent 'codex :mode 'forward))))))
+    (advice-add '+agent-shell-pstack-panel--provision-delegate :override count
+                '((name . pod-test-provision)))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "login/" folder) t)
+          (with-temp-file (expand-file-name "login/codex.json" folder)
+            (insert (+agent-shell-sandbox--codex-auth
+                     (funcall (+pod-test--codex-login (+ (float-time) 1800))))))
+          (+agent-shell-arena-remote--runner-take-logins runner)
+          (+agent-shell-arena-remote--runner-start runner)
+          (let ((panel (+agent-shell-arena-remote--runner-panel runner)))
+            (+pod-test--wait-for
+             (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+            (should (string-search "Log codex in again on the laptop"
+                                   (+agent-shell-pstack-panel-rejection panel)))
+            (should (= 0 provisioned))
+            (should-not (seq-find (lambda (member)
+                                    (memq (+agent-shell-pstack-panel-member-state
+                                           member)
+                                          '(starting waiting running done)))
+                                  (+agent-shell-pstack-panel-members panel)))))
+      (advice-remove '+agent-shell-pstack-panel--provision-delegate
+                     'pod-test-provision)
       (delete-directory scratch t))))
 
 (provide 'agent-shell-arena-remote-pod-test)
