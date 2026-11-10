@@ -433,7 +433,7 @@ the job lists each agent that does not use the host's login in
 - `provider`: the agent signs in through environment the host
   provides, from `SPEC`'s `:environment` and the host's
   `+agent-shell-arena-remote-sign-in-environment`, such as
-  `CLAUDE_CODE_USE_BEDROCK=1`. No credential travels and no login is
+  `EXAMPLE_PROVIDER=1`. No credential travels and no login is
   read. The runner refuses the job when neither gives any entry.
 - `forward`: the laptop admits its own login through
   `+agent-shell-sandbox-check-logins` against the job's maximum runtime

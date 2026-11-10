@@ -435,7 +435,7 @@ outlives the wait, and fails only when the test had not failed already."
   (let ((good `(:template "example-template" :preset "small"
                 :parameters (("size" . "large")) :name-prefix "test-"
                 :setup-commit ,(make-string 40 ?a)
-                :environment ((claude-code "CLAUDE_CODE_USE_BEDROCK=1")))))
+                :environment ((claude-code "EXAMPLE_PROVIDER=1")))))
     (should (+agent-shell-arena-git-host-p (cons 'pod good)))
     (should (equal (list :host (cons 'pod good) :host-directory "~/src/big-repo")
                    (+agent-shell-arena-git--check-profile
@@ -495,8 +495,8 @@ forwarded login; elsewhere both use the host's own."
          (sign-ins (+agent-shell-arena-remote--sign-ins
                     job 'pod '(:template "t" :environment
                                ((claude-code
-                                 "CLAUDE_CODE_USE_BEDROCK=1"))))))
-    (should (equal '((claude-code provider ("CLAUDE_CODE_USE_BEDROCK=1")))
+                                 "EXAMPLE_PROVIDER=1"))))))
+    (should (equal '((claude-code provider ("EXAMPLE_PROVIDER=1")))
                    (mapcar (lambda (sign-in)
                              (list (+agent-shell-arena-remote-sign-in-agent
                                     sign-in)
@@ -1413,7 +1413,7 @@ runner-init.el gives environment, and takes one either gives."
                                  (+agent-shell-arena-remote--runner-sign-in-refusal
                                   runner)))
           (let ((+agent-shell-arena-remote-sign-in-environment
-                 '((claude-code "CLAUDE_CODE_USE_BEDROCK=1"))))
+                 '((claude-code "EXAMPLE_PROVIDER=1"))))
             (should-not (+agent-shell-arena-remote--runner-sign-in-refusal
                          runner))))
       (delete-directory scratch t))))
