@@ -2703,6 +2703,48 @@ deleted.  FAILURES counts lookups that could not say."
                                              error)))
                     (t (+agent-shell-arena-remote--pod-release pod))))))))))))))))
 
+(defun +agent-shell-arena-remote--ship (remote job bundle tarball logins resend
+                                               &optional missing attempts)
+  "Upload JOB with BUNDLE, TARBALL and LOGINS to REMOTE's host and send it.
+The host's stop time is extended first, and the upload is deleted once
+sent or on any failure, which rejects REMOTE.  RESEND is called with
+whether the host has the code and the ATTEMPTS so far to send JOB again:
+when the host lacks the code, and after a send lost to a transport error,
+up to three times.  MISSING, when non-nil, is called when the host lacks
+the bundle's prerequisite; otherwise that rejects REMOTE too."
+  (let ((fail (lambda (reason) (+agent-shell-arena-remote--reject remote reason)))
+        (attempts (or attempts 0)))
+    (+agent-shell-arena-remote--upload
+     remote job bundle tarball
+     (lambda (upload error)
+       (if error (funcall fail error)
+         (+agent-shell-arena-remote--extend
+          (+agent-shell-arena-remote-host remote)
+          (+ (+agent-shell-arena-remote-job-deadline job)
+             +agent-shell-arena-remote-slack)
+          (lambda (error)
+            (if error
+                (progn (+agent-shell-arena-remote--drop-upload upload)
+                       (funcall fail error))
+              (setf (+agent-shell-arena-remote-extended remote)
+                    (+ (float-time) (+agent-shell-arena-remote-job-deadline job)
+                       +agent-shell-arena-remote-slack))
+              (+agent-shell-arena-remote--send
+               remote job upload
+               (lambda (answer error)
+                 (+agent-shell-arena-remote--drop-upload upload)
+                 (pcase answer
+                   ('started (+agent-shell-arena-remote--submitted remote))
+                   ((and 'missing (guard missing)) (funcall missing))
+                   ('code (funcall resend nil attempts))
+                   ('lost
+                    (if (< attempts 3)
+                        (run-at-time (+agent-shell-arena-remote--delay attempts)
+                                     nil resend (null tarball) (1+ attempts))
+                      (funcall fail error)))
+                   (_ (funcall fail error))))))))))
+     logins)))
+
 (defun +agent-shell-arena-remote--offer (remote job ladder tried has-code
                                                 &optional attempts)
   "Send JOB with a bundle against the first of LADDER to REMOTE's host.
@@ -2735,47 +2777,16 @@ build on (%s) and could not fetch them from origin" label
                 (setf (+agent-shell-arena-remote-job-prerequisite job)
                       prerequisite
                       (+agent-shell-arena-remote-job-code job) (car code))
-                (+agent-shell-arena-remote--upload
-                 remote job bundle (unless has-code (cdr code))
-                 (lambda (upload error)
-                   (if error (funcall fail error)
-                     (+agent-shell-arena-remote--extend
-                      (+agent-shell-arena-remote-host remote)
-                      (+ (+agent-shell-arena-remote-job-deadline job)
-                         +agent-shell-arena-remote-slack)
-                      (lambda (error)
-                        (if error
-                            (progn (+agent-shell-arena-remote--drop-upload upload)
-                                   (funcall fail error))
-                          (setf (+agent-shell-arena-remote-extended remote)
-                                (+ (float-time)
-                                   (+agent-shell-arena-remote-job-deadline job)
-                                   +agent-shell-arena-remote-slack))
-                          (+agent-shell-arena-remote--send
-                           remote job upload
-                           (lambda (answer error)
-                             (+agent-shell-arena-remote--drop-upload upload)
-                             (pcase answer
-                               ('started
-                                (+agent-shell-arena-remote--submitted remote))
-                               ('missing
-                                (+agent-shell-arena-remote--offer
-                                 remote job (cdr ladder)
-                                 (cons prerequisite tried) has-code))
-                               ('code
-                                (+agent-shell-arena-remote--offer
-                                 remote job ladder tried nil))
-                               ('lost
-                                (if (< (or attempts 0) 3)
-                                    (run-at-time
-                                     (+agent-shell-arena-remote--delay
-                                      (or attempts 0))
-                                     nil
-                                     #'+agent-shell-arena-remote--offer
-                                     remote job ladder tried has-code
-                                     (1+ (or attempts 0)))
-                                  (funcall fail error)))
-                               (_ (funcall fail error)))))))))))))))))))))
+                (+agent-shell-arena-remote--ship
+                 remote job bundle (unless has-code (cdr code)) nil
+                 (lambda (has-code attempts)
+                   (+agent-shell-arena-remote--offer
+                    remote job ladder tried has-code attempts))
+                 (lambda ()
+                   (+agent-shell-arena-remote--offer
+                    remote job (cdr ladder) (cons prerequisite tried)
+                    has-code))
+                 attempts)))))))))))
 
 (defun +agent-shell-arena-remote--admit-forwarded (job callback)
   "Admit the laptop logins JOB forwards, then call CALLBACK with them.
@@ -2819,10 +2830,9 @@ and nil, or nil and why a login was refused.  Never log the files."
                                                        &optional attempts)
   "Send JOB, whose host fetches its base from origin, to REMOTE's host.
 The logins it forwards are admitted first.  HAS-CODE and ATTEMPTS are as
-`+agent-shell-arena-remote--offer' takes them.  The upload, which may
-hold a login, is deleted once sent."
-  (let ((fail (lambda (reason) (+agent-shell-arena-remote--reject remote reason)))
-        (host (+agent-shell-arena-remote-host remote)))
+`+agent-shell-arena-remote--offer' takes them."
+  (let ((fail (lambda (reason)
+                (+agent-shell-arena-remote--reject remote reason))))
     (when (eq (+agent-shell-arena-remote-phase remote) 'submitting)
       (+agent-shell-arena-remote--admit-forwarded
        job
@@ -2832,42 +2842,12 @@ hold a login, is deleted once sent."
             (lambda (code error)
               (if error (funcall fail error)
                 (setf (+agent-shell-arena-remote-job-code job) (car code))
-                (+agent-shell-arena-remote--upload
-                 remote job nil (unless has-code (cdr code))
-                 (lambda (upload error)
-                   (if error (funcall fail error)
-                     (+agent-shell-arena-remote--extend
-                      host (+ (+agent-shell-arena-remote-job-deadline job)
-                              +agent-shell-arena-remote-slack)
-                      (lambda (error)
-                        (if error
-                            (progn (+agent-shell-arena-remote--drop-upload upload)
-                                   (funcall fail error))
-                          (setf (+agent-shell-arena-remote-extended remote)
-                                (+ (float-time)
-                                   (+agent-shell-arena-remote-job-deadline job)
-                                   +agent-shell-arena-remote-slack))
-                          (+agent-shell-arena-remote--send
-                           remote job upload
-                           (lambda (answer error)
-                             (+agent-shell-arena-remote--drop-upload upload)
-                             (pcase answer
-                               ('started
-                                (+agent-shell-arena-remote--submitted remote))
-                               ('code
-                                (+agent-shell-arena-remote--offer-origin
-                                 remote job nil attempts))
-                               ('lost
-                                (if (< (or attempts 0) 3)
-                                    (run-at-time
-                                     (+agent-shell-arena-remote--delay
-                                      (or attempts 0))
-                                     nil
-                                     #'+agent-shell-arena-remote--offer-origin
-                                     remote job has-code (1+ (or attempts 0)))
-                                  (funcall fail error)))
-                               (_ (funcall fail error))))))))))
-                 logins))))))))))
+                (+agent-shell-arena-remote--ship
+                 remote job nil (unless has-code (cdr code)) logins
+                 (lambda (has-code attempts)
+                   (+agent-shell-arena-remote--offer-origin
+                    remote job has-code attempts))
+                 nil attempts))))))))))
 
 (defun +agent-shell-arena-remote--upload (remote job bundle tarball callback
                                                  &optional logins)
