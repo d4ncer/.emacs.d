@@ -444,8 +444,11 @@ the job lists each agent that does not use the host's login in
   and deletes that folder when the member settles and when the runner
   exits. A runner deletes its job's whole folder there when it starts,
   so a killed runner's logins go with the next, and so does the job's
-  clean. A token never appears in a command line, a status, a report,
-  a record, a transcript or a log.
+  clean. Emacs never writes a token into a command line, a status, a
+  report, a record, a transcript or a log. A member runs unsandboxed on
+  its pod, so it can read its own token and put it anywhere, a
+  transcript included; the token stays valid until it expires, after
+  the pod is gone.
 
 ## Record schemas
 
