@@ -436,8 +436,11 @@ the job lists each agent that does not use the host's login in
   deletes its upload once sent. The runner reads it into memory and
   deletes the file at once, checks it again when the job leaves the
   queue, cannot refresh it, writes it mode 0600 into a folder of the
-  member's own under `$XDG_RUNTIME_DIR`, a tmpfs, and deletes that
-  folder when the member settles and when the runner exits. A token
+  member's own under `$XDG_RUNTIME_DIR/pstack-arena/ID/`, a tmpfs, and
+  deletes that folder when the member settles and when the runner
+  exits. A runner deletes its job's whole folder there when it starts,
+  so a killed runner's logins go with the next, and so does the job's
+  clean. A token
   never appears in a command line, a status, a report, a record, a
   transcript or a log.
 

@@ -1024,6 +1024,64 @@ when the member settles."
             (should-not (file-exists-p home))))
       (delete-directory scratch t))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-runner-drops-leftover-logins ()
+  "A runner that starts over a login an earlier, killed runner left, and
+the clean of its job, delete the job's logins from the login directory."
+  (let* ((scratch (file-name-as-directory
+                   (file-truename (make-temp-file "arena-pod-runner-" t))))
+         (folder (expand-file-name "jobs/abc-1/" scratch))
+         (+agent-shell-arena-remote-login-directory
+          (expand-file-name "run/" scratch))
+         (auth (expand-file-name "pstack-arena/abc-1/builder/auth.json"
+                                 +agent-shell-arena-remote-login-directory))
+         (other (expand-file-name "pstack-arena/abc-2/builder/auth.json"
+                                  +agent-shell-arena-remote-login-directory))
+         (+agent-shell-pstack-panel-change-hook nil)
+         (+agent-shell-arena-remote--runner nil)
+         (leave (lambda (file)
+                  (make-directory (file-name-directory file) t)
+                  (with-temp-file file (insert "{}")))))
+    (unwind-protect
+        (progn
+          (make-directory folder t)
+          (+agent-shell-arena-remote--write-json
+           (expand-file-name "job.json" folder) 'job
+           (+agent-shell-arena-remote--make-job
+            :id "abc-1" :panel "abc" :brief "Build it." :timeout 60
+            :shape 'delegate
+            :delegate (+agent-shell-arena-remote--make-delegate-job
+                       :sandbox nil
+                       :identity (+agent-shell-arena-git--user
+                                  :name "Laptop Person"
+                                  :email "laptop@example.com"))
+            :members (list (+agent-shell-arena-remote--make-request-member
+                            :role "builder" :agent 'codex :kind 'delegate))
+            :prefix "" :base (make-string 40 ?a) :repository scratch
+            :code (make-string 64 ?c) :deadline 2400
+            :sign-ins (list (+agent-shell-arena-remote--make-sign-in
+                             :agent 'codex :mode 'forward))))
+          (+agent-shell-arena-remote--write-json
+           (expand-file-name "status.json" folder) 'status
+           (+agent-shell-arena-remote--make-status
+            :id "abc-1" :phase 'finished :heartbeat 1 :results t))
+          (funcall leave auth)
+          (funcall leave other)
+          (should (eql 0 (+agent-shell-arena-remote-runner-main folder)))
+          (should-not (file-exists-p auth))
+          (should (file-exists-p other))
+          (funcall leave auth)
+          (should (eql 0 (catch 'killed
+                           (cl-letf (((symbol-function 'kill-emacs)
+                                      (lambda (&optional code)
+                                        (throw 'killed code))))
+                             (let ((command-line-args-left (list folder)))
+                               (+agent-shell-arena-remote-runner-clean-batch))))))
+          (should-not (file-exists-p auth))
+          (should (file-exists-p other)))
+      (advice-remove 'yes-or-no-p #'+agent-shell-arena-remote--refuse)
+      (advice-remove 'y-or-n-p #'+agent-shell-arena-remote--refuse)
+      (delete-directory scratch t))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-runner-rechecks-login ()
   "A queued job's runner checks a forwarded login again when it starts,
 and refuses one that would not outlast the job; it cannot refresh it."

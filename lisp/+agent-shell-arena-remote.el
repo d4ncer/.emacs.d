@@ -4773,6 +4773,22 @@ local host's runner records the adapter's pid and start time instead."
               (eq agent (+agent-shell-arena-remote-sign-in-agent sign-in)))
             (+agent-shell-arena-remote-job-sign-ins job)))
 
+(defun +agent-shell-arena-remote--login-root ()
+  "Return the folder forwarded logins go under, or nil without one."
+  (or +agent-shell-arena-remote-login-directory (getenv "XDG_RUNTIME_DIR")))
+
+(defun +agent-shell-arena-remote--job-logins (id)
+  "Return the folder of job ID's members' logins under the login root, or nil."
+  (when-let* ((root (+agent-shell-arena-remote--login-root)))
+    (file-name-as-directory
+     (expand-file-name (format "pstack-arena/%s" id) root))))
+
+(defun +agent-shell-arena-remote--drop-job-logins (id)
+  "Delete every login of job ID's members, also one a killed runner left."
+  (when-let* ((folder (+agent-shell-arena-remote--job-logins id))
+              ((file-directory-p folder)))
+    (ignore-errors (delete-directory folder t))))
+
 (defun +agent-shell-arena-remote--runner-take-logins (runner)
   "Read the logins RUNNER's job forwarded into memory and delete their files.
 Each forwarded agent's registry entry then reads its login from memory,
@@ -4848,14 +4864,12 @@ host's own login needs nothing."
                                     runner))
                         (error "The laptop's login for %s did not reach this \
 runner" agent)))
-              (root (or +agent-shell-arena-remote-login-directory
-                        (getenv "XDG_RUNTIME_DIR")))
+              (root (+agent-shell-arena-remote--login-root))
               (home (and root (file-name-as-directory
                                (expand-file-name
-                                (format "pstack-arena/%s/%s"
-                                        (+agent-shell-arena-remote-job-id job)
-                                        role)
-                                root)))))
+                                role (+agent-shell-arena-remote--job-logins
+                                      (+agent-shell-arena-remote-job-id
+                                       job)))))))
          (unless (and root (file-directory-p root))
            (error "A forwarded login needs XDG_RUNTIME_DIR, a tmpfs folder of \
 this user's, and this runner has none"))
@@ -5398,7 +5412,7 @@ the new deadline in the status and keeps the host awake for it."
 Load runner-init.el from the host's state folder first: it configures the
 agents.  The runner never prompts, never asks the host to stay awake,
 rewrites its status as it goes, and recovers a job an earlier runner left
-unfinished."
+unfinished.  The job's logins an earlier runner left are deleted first."
   (let* ((directory (file-name-as-directory (expand-file-name directory)))
          (root (file-name-directory
                 (directory-file-name
@@ -5446,6 +5460,8 @@ unfinished."
                           (+agent-shell-arena-remote-host-profile profile)))))
            (timer nil))
       (setq +agent-shell-arena-remote--runner runner)
+      (+agent-shell-arena-remote--drop-job-logins
+       (+agent-shell-arena-remote-job-id job))
       (+agent-shell-arena-remote--runner-take-logins runner)
       (add-hook '+agent-shell-pstack-panel-change-hook
                 (lambda ()
@@ -5476,6 +5492,8 @@ unfinished."
               0)
           (when timer (cancel-timer timer))
           (+agent-shell-arena-remote--runner-drop-homes runner t)
+          (+agent-shell-arena-remote--drop-job-logins
+           (+agent-shell-arena-remote-job-id job))
           (unless (+agent-shell-arena-remote--runner-quarantine runner)
             (+agent-shell-arena-remote--release
              (+agent-shell-arena-remote--runner-lock runner))))))))
@@ -5492,7 +5510,8 @@ unfinished."
 
 (defun +agent-shell-arena-remote-runner-clean-batch ()
   "Clean the host's side of the job whose folder is the next argument.
-Remove its arena through the manifest and its base ref, then exit."
+Remove its arena through the manifest, its base ref and its members'
+logins, then exit."
   (let* ((directory (file-name-as-directory
                      (expand-file-name (pop command-line-args-left))))
          (root (file-name-directory
@@ -5519,6 +5538,8 @@ Remove its arena through the manifest and its base ref, then exit."
       (call-process "git" nil nil nil "update-ref" "-d"
                     (format "refs/pstack-arena/%s/base"
                             (+agent-shell-arena-remote-job-id job))))
+    (+agent-shell-arena-remote--drop-job-logins
+     (+agent-shell-arena-remote-job-id job))
     (when failure (message "%s" failure))
     (kill-emacs (if failure 1 0))))
 
