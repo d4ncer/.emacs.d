@@ -33,10 +33,15 @@
      (with-temp-file config
        (insert "[user]\n\tname = Test\n\temail = test@example.com\n"
                "[init]\n\tdefaultBranch = main\n"))
-     (unwind-protect (progn ,@body)
-       (+config-test-stop-async async)
-       (+agent-shell-sandbox-test-unlock +arena-git-test--scratch)
-       (delete-directory +arena-git-test--scratch t))))
+     (let ((+arena-git-test--finished nil))
+       (unwind-protect
+           (prog1 (progn ,@body) (setq +arena-git-test--finished t))
+         (+config-test-stop-async
+          async
+          (lambda ()
+            (+agent-shell-sandbox-test-unlock +arena-git-test--scratch)
+            (delete-directory +arena-git-test--scratch t))
+          (not +arena-git-test--finished))))))
 
 (defun +arena-git-test--git (directory &rest args)
   "Run git ARGS in DIRECTORY and return trimmed output, failing on error."

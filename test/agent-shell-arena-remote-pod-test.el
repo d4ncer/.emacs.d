@@ -241,10 +241,14 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
      (with-temp-file (expand-file-name "README" lead-repo) (insert "Second\n"))
      (funcall lead-git "commit" "-q" "-am" "second")
      (funcall lead-git "push" "-q" "origin" "main")
-     (unwind-protect (progn ,@body)
-       (+config-test-stop-async async)
-       (call-process "chmod" nil nil nil "-R" "u+rwX" scratch)
-       (delete-directory scratch t))))
+     (let ((+pod-test--finished nil))
+       (unwind-protect (prog1 (progn ,@body) (setq +pod-test--finished t))
+         (+config-test-stop-async
+          async
+          (lambda ()
+            (call-process "chmod" nil nil nil "-R" "u+rwX" scratch)
+            (delete-directory scratch t))
+          (not +pod-test--finished))))))
 
 (defun +pod-test--wait (start)
   "Call START with a callback and return the arguments it receives."
@@ -404,6 +408,27 @@ pod, as a restarted Emacs would; return the async state to tear down to."
                        +agent-shell-arena-remote--releasing))
     (clrhash table))
   (+config-test-async-state))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-stop-async-cleans-first ()
+  "Stopping a test's async work runs its cleanup even when a process
+outlives the wait, and fails only when the test had not failed already."
+  (let* ((async (+config-test-async-state))
+         (+config-test-stop-wait 0.1)
+         (cleaned 0)
+         (cleanup (lambda () (cl-incf cleaned)))
+         (start (lambda ()
+                  (make-process :name "pod-test-stuck" :command '("sleep" "30")
+                                :noquery t))))
+    (cl-letf (((symbol-function 'process-attributes)
+               (lambda (_) '((state . "S")))))
+      (funcall start)
+      (should (string-search "outlived their test"
+                             (cadr (should-error
+                                    (+config-test-stop-async async cleanup)))))
+      (should (= 1 cleaned))
+      (funcall start)
+      (+config-test-stop-async async cleanup t)
+      (should (= 2 cleaned)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-spec ()
   "A pod is named by a spec in profiles, and a malformed spec is refused."
@@ -644,18 +669,13 @@ upload an older Emacs left in the job's folder."
            (remote (+pod-test--remote panel))
            (directory (+agent-shell-arena-remote-directory remote)))
       (+pod-test--submitted panel)
-      (maphash (lambda (_ remote)
-                 (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
-                   (cancel-timer timer)))
-               +agent-shell-arena-remote--arenas)
+      (setq async (+pod-test--restart async))
       (setf (+agent-shell-arena-remote-phase remote) 'submitting
             (+agent-shell-arena-remote-submitted remote) nil
             (+agent-shell-arena-remote-pod-state (+agent-shell-arena-remote-pod
                                                   remote))
             'planned)
       (+agent-shell-arena-remote--save remote)
-      (clrhash +agent-shell-arena-remote--arenas)
-      (clrhash +agent-shell-pstack-panel--panels)
       (make-directory (expand-file-name "upload/login/" directory) t)
       (with-temp-file (expand-file-name "upload/login/codex.json" directory))
       (with-temp-file (expand-file-name "upload.tar" directory))

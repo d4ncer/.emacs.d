@@ -188,28 +188,42 @@ A capability that is broken rather than forbidden fails the test."
   (pcase-let ((`(,processes ,timers) (+config-test--async-new state)))
     (not (or (seq-some #'process-live-p processes) timers))))
 
-(defun +config-test-stop-async (state)
-  "Cancel each timer and kill each process started since STATE.
+(defvar +config-test-stop-wait 10
+  "Seconds `+config-test-stop-async' waits for killed processes to exit.")
+
+(defun +config-test-stop-async (state &optional cleanup failing)
+  "Cancel each timer and kill each Emacs subprocess started since STATE.
 No sentinel runs, so nothing a test started acts after it; wait up to
-ten seconds for the killed processes to exit."
+`+config-test-stop-wait' seconds for the killed processes to exit, then
+call CLEANUP, if non-nil.  Only Emacs's own subprocesses are stopped,
+not processes they detach.  One that outlives the wait is an error once
+CLEANUP has run, or, when FAILING says the test failed already, only a
+message, so the test's own failure shows."
   (pcase-let* ((`(,processes ,timers) (+config-test--async-new state))
                (pids (delq nil (mapcar #'process-id processes)))
-               (deadline (+ (float-time) 10)))
-    (mapc #'cancel-timer timers)
-    (dolist (process processes)
-      (set-process-sentinel process #'ignore)
-      (set-process-filter process #'ignore)
-      (delete-process process)
-      (when (buffer-live-p (process-buffer process))
-        (kill-buffer (process-buffer process))))
-    (cl-flet ((running ()
-                (seq-filter (lambda (pid)
-                              (when-let* ((attributes (process-attributes pid)))
-                                (not (equal "Z" (alist-get 'state attributes)))))
-                            pids)))
-      (while (and (running) (< (float-time) deadline))
-        (accept-process-output nil 0.02))
-      (when-let* ((left (running)))
+               (deadline (+ (float-time) +config-test-stop-wait))
+               (left nil))
+    (unwind-protect
+        (progn
+          (mapc #'cancel-timer timers)
+          (dolist (process processes)
+            (set-process-sentinel process #'ignore)
+            (set-process-filter process #'ignore)
+            (delete-process process)
+            (when (buffer-live-p (process-buffer process))
+              (kill-buffer (process-buffer process))))
+          (cl-flet ((running ()
+                      (seq-filter
+                       (lambda (pid)
+                         (when-let* ((attributes (process-attributes pid)))
+                           (not (equal "Z" (alist-get 'state attributes)))))
+                       pids)))
+            (while (and (running) (< (float-time) deadline))
+              (accept-process-output nil 0.02))
+            (setq left (running))))
+      (when cleanup (funcall cleanup)))
+    (when left
+      (if failing (message "Processes %S outlived their test" left)
         (error "Processes %S outlived their test" left)))))
 
 (defvar +agent-shell-sandbox-tmp-parent)
