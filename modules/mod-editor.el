@@ -96,12 +96,7 @@
   :config
   (define-advice save-place-find-file-hook (:after-while (&rest _) recenter)
     "Recenter on cursor when loading a saved place."
-    (when buffer-file-name (ignore-errors (recenter))))
-
-  (define-advice save-place-alist-to-file (:around (fn &rest args) use-prin1-not-pp)
-    "Use the faster prin1 for saving history."
-    (cl-letf (((symbol-function #'pp) #'prin1))
-      (apply fn args))))
+    (when buffer-file-name (ignore-errors (recenter)))))
 
 ;;; Window and buffer history
 
