@@ -345,6 +345,12 @@ id, :shape the report's shape, :error the member's error."
   "Return the create calls in LOG."
   (seq-filter (lambda (line) (string-prefix-p "create " line)) log))
 
+(defun +pod-test--read-tar (file)
+  "Return the names in tar FILE."
+  (with-temp-buffer
+    (call-process "tar" nil t nil "-tf" file)
+    (split-string (buffer-string) "\n" t)))
+
 ;;;; Profiles
 
 (defun +pod-test--restart (async)
@@ -563,7 +569,8 @@ in the job tar alone, and never in a record or a command line."
 
 (ert-deftest +agent-shell-arena-remote-pod-test-adopt-after-restart ()
   "A laptop that restarts after the pod was created but before it said
-so adopts the pod by name and never creates a second."
+so adopts the pod by name and never creates a second, and deletes an
+upload an older Emacs left in the job's folder."
   (skip-unless (executable-find "git"))
   (+pod-test--with
     (let* ((panel (funcall launch))
@@ -582,7 +589,12 @@ so adopts the pod by name and never creates a second."
       (+agent-shell-arena-remote--save remote)
       (clrhash +agent-shell-arena-remote--arenas)
       (clrhash +agent-shell-pstack-panel--panels)
+      (make-directory (expand-file-name "upload/login/" directory) t)
+      (with-temp-file (expand-file-name "upload/login/codex.json" directory))
+      (with-temp-file (expand-file-name "upload.tar" directory))
       (+agent-shell-arena-remote-reattach-all)
+      (should-not (file-exists-p (expand-file-name "upload/" directory)))
+      (should-not (file-exists-p (expand-file-name "upload.tar" directory)))
       (let ((restored (gethash (+agent-shell-arena-remote-id remote)
                                +agent-shell-arena-remote--arenas)))
         (should restored)
@@ -920,6 +932,43 @@ the margin is refused before the job is sent, and the pod goes."
                                     (+pod-test--pod panel))
                                    root))))
       (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-failed-send-leaves-no-login ()
+  "The upload holding a forwarded login is staged outside the job's
+folder, and a send that fails leaves no login file on the laptop."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((temporary-file-directory
+            (file-name-as-directory (expand-file-name "tmp" scratch)))
+           (sent nil)
+           (note (lambda (_remote _job upload &rest _)
+                   (push (list (file-in-directory-p
+                                upload +agent-shell-pstack-arena-directory)
+                               (+pod-test--read-tar upload))
+                         sent))))
+      (make-directory temporary-file-directory)
+      (with-temp-file (expand-file-name "local.txt" lead-repo) (insert "Local\n"))
+      (funcall lead-git "add" "-A")
+      (funcall lead-git "commit" "-q" "-m" "local only")
+      (funcall lead-git "update-ref" "refs/remotes/origin/unpushed" "HEAD")
+      (advice-add '+agent-shell-arena-remote--send :before note
+                  '((name . pod-test-send)))
+      (unwind-protect
+          (let* ((panel (funcall launch))
+                 (directory (+agent-shell-arena-remote-directory
+                             (+pod-test--remote panel))))
+            (+pod-test--wait-for
+             (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+            (should (string-match-p "could not be fetched from origin"
+                                    (+agent-shell-pstack-panel-rejection panel)))
+            (should (= 1 (length sent)))
+            (should (member "./login/codex.json" (cadr (car sent))))
+            (should-not (car (car sent)))
+            (should-not (and (file-directory-p directory)
+                             (directory-files-recursively directory "upload")))
+            (should-not (directory-files temporary-file-directory nil
+                                         "\\`pstack-arena-upload-")))
+        (advice-remove '+agent-shell-arena-remote--send 'pod-test-send)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-report-not-descending-refused ()
   "A report whose tip does not descend from the pinned base is refused:

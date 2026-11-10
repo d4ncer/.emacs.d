@@ -2714,7 +2714,9 @@ build on (%s) and could not fetch them from origin" label
                       (+ (+agent-shell-arena-remote-job-deadline job)
                          +agent-shell-arena-remote-slack)
                       (lambda (error)
-                        (if error (funcall fail error)
+                        (if error
+                            (progn (+agent-shell-arena-remote--drop-upload upload)
+                                   (funcall fail error))
                           (setf (+agent-shell-arena-remote-extended remote)
                                 (+ (float-time)
                                    (+agent-shell-arena-remote-job-deadline job)
@@ -2722,6 +2724,7 @@ build on (%s) and could not fetch them from origin" label
                           (+agent-shell-arena-remote--send
                            remote job upload
                            (lambda (answer error)
+                             (+agent-shell-arena-remote--drop-upload upload)
                              (pcase answer
                                ('started
                                 (+agent-shell-arena-remote--submitted remote))
@@ -2808,7 +2811,8 @@ hold a login, is deleted once sent."
                               +agent-shell-arena-remote-slack)
                       (lambda (error)
                         (if error
-                            (progn (delete-file upload) (funcall fail error))
+                            (progn (+agent-shell-arena-remote--drop-upload upload)
+                                   (funcall fail error))
                           (setf (+agent-shell-arena-remote-extended remote)
                                 (+ (float-time)
                                    (+agent-shell-arena-remote-job-deadline job)
@@ -2816,7 +2820,7 @@ hold a login, is deleted once sent."
                           (+agent-shell-arena-remote--send
                            remote job upload
                            (lambda (answer error)
-                             (delete-file upload)
+                             (+agent-shell-arena-remote--drop-upload upload)
                              (pcase answer
                                ('started
                                 (+agent-shell-arena-remote--submitted remote))
@@ -2839,44 +2843,67 @@ hold a login, is deleted once sent."
                                                  &optional logins)
   "Pack JOB, BUNDLE and, when non-nil, the code TARBALL for REMOTE's host.
 A job whose host fetches its base from origin has no BUNDLE.  LOGINS
-lists (AGENT . TEXT), each forwarded as login/AGENT.json; the staging
-folder and the upload are then readable by this user alone.  A cancel
-asked for already goes in as the marker.  Call CALLBACK with the
-upload's file and nil, or nil and a message."
-  (condition-case err
-      (let* ((directory (+agent-shell-arena-remote-directory remote))
-             (staging (expand-file-name "upload/" directory))
-             (upload (expand-file-name "upload.tar" directory))
-             (write (lambda (name text)
-                      (let ((coding-system-for-write 'utf-8-unix))
-                        (write-region text nil (expand-file-name name staging)
-                                      nil 'silent)))))
-        (when (file-directory-p staging) (delete-directory staging t))
-        (with-file-modes #o700 (make-directory staging t))
-        (+agent-shell-arena-remote--write-json
-         (+agent-shell-arena-remote--job-file remote) 'job job)
-        (copy-file (+agent-shell-arena-remote--job-file remote)
-                   (expand-file-name "job.json" staging))
-        (when bundle
-          (copy-file bundle (expand-file-name "base.bundle" staging))
-          (funcall write "prerequisite"
-                   (or (+agent-shell-arena-remote-job-prerequisite job) "")))
-        (funcall write "code-hash" (+agent-shell-arena-remote-job-code job))
-        (when tarball (copy-file tarball (expand-file-name "code.tar" staging)))
-        (when logins
-          (with-file-modes #o700
-            (make-directory (expand-file-name "login/" staging)))
-          (with-file-modes #o600
-            (pcase-dolist (`(,agent . ,text) logins)
-              (funcall write (format "login/%s.json" agent) text))))
-        (unless (eq (+agent-shell-arena-remote-cancel-state remote) 'none)
-          (funcall write "cancel" "The arena was cancelled before it started.\n"))
-        (+agent-shell-arena-remote--local
-         staging (list "/bin/sh" "-c" "umask 077 && exec tar -cf \"$0\" ." upload)
-         (lambda (_ error)
-           (delete-directory staging t)
-           (funcall callback (unless error upload) error))))
-    (error (run-at-time 0 nil callback nil (error-message-string err)))))
+lists (AGENT . TEXT), each forwarded as login/AGENT.json.  The upload is
+staged in a temporary folder of its own outside the job's, readable by
+this user alone, and deleted on any failure.  A cancel asked for
+already goes in as the marker.  Call CALLBACK with the upload's file,
+which `+agent-shell-arena-remote--drop-upload' deletes, and nil, or nil
+and a message."
+  (let ((folder nil))
+    (condition-case err
+        (let* ((staging (expand-file-name
+                         "upload/"
+                         (setq folder (with-file-modes #o700
+                                        (make-temp-file "pstack-arena-upload-"
+                                                        t)))))
+               (upload (expand-file-name "upload.tar" folder))
+               (write (lambda (name text)
+                        (let ((coding-system-for-write 'utf-8-unix))
+                          (write-region text nil (expand-file-name name staging)
+                                        nil 'silent)))))
+          (with-file-modes #o700 (make-directory staging t))
+          (+agent-shell-arena-remote--write-json
+           (+agent-shell-arena-remote--job-file remote) 'job job)
+          (copy-file (+agent-shell-arena-remote--job-file remote)
+                     (expand-file-name "job.json" staging))
+          (when bundle
+            (copy-file bundle (expand-file-name "base.bundle" staging))
+            (funcall write "prerequisite"
+                     (or (+agent-shell-arena-remote-job-prerequisite job) "")))
+          (funcall write "code-hash" (+agent-shell-arena-remote-job-code job))
+          (when tarball
+            (copy-file tarball (expand-file-name "code.tar" staging)))
+          (when logins
+            (with-file-modes #o700
+              (make-directory (expand-file-name "login/" staging)))
+            (with-file-modes #o600
+              (pcase-dolist (`(,agent . ,text) logins)
+                (funcall write (format "login/%s.json" agent) text))))
+          (unless (eq (+agent-shell-arena-remote-cancel-state remote) 'none)
+            (funcall write "cancel"
+                     "The arena was cancelled before it started.\n"))
+          (+agent-shell-arena-remote--local
+           staging
+           (list "/bin/sh" "-c" "umask 077 && exec tar -cf \"$0\" ." upload)
+           (lambda (_ error)
+             (delete-directory staging t)
+             (when error (+agent-shell-arena-remote--drop-upload upload))
+             (funcall callback (unless error upload) error))))
+      (error
+       (when folder (ignore-errors (delete-directory folder t)))
+       (run-at-time 0 nil callback nil (error-message-string err))))))
+
+(defun +agent-shell-arena-remote--drop-upload (upload)
+  "Delete UPLOAD, from `+agent-shell-arena-remote--upload', and its folder."
+  (ignore-errors (delete-directory (file-name-directory upload) t)))
+
+(defun +agent-shell-arena-remote--drop-stale-upload (directory)
+  "Delete an upload an older Emacs staged in the job folder DIRECTORY.
+It may hold a forwarded login."
+  (let ((staging (expand-file-name "upload/" directory))
+        (upload (expand-file-name "upload.tar" directory)))
+    (when (file-directory-p staging) (delete-directory staging t))
+    (when (file-exists-p upload) (delete-file upload))))
 
 (defun +agent-shell-arena-remote--send (remote job upload callback)
   "Send UPLOAD, JOB's files, to REMOTE's host and start its runner.
@@ -4223,6 +4250,7 @@ Return the record, or nil when there is nothing left to do."
          (id (+agent-shell-arena-remote-id remote)))
     (setf (+agent-shell-arena-remote-directory remote)
           (file-name-as-directory directory))
+    (+agent-shell-arena-remote--drop-stale-upload directory)
     (unless (or (gethash id +agent-shell-arena-remote--arenas)
                 (and (eq (+agent-shell-arena-remote-phase remote) 'finished)
                      (+agent-shell-arena-remote-delivered remote)))

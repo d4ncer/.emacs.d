@@ -432,8 +432,10 @@ the job lists each agent that does not use the host's login in
 - `forward`: the laptop admits its own login through
   `+agent-shell-sandbox-check-logins` against the job's maximum runtime
   plus `+agent-shell-sandbox-login-margin`, then sends it, without a
-  refresh token, as `login/AGENT.json`, mode 0600, in the job tar, and
-  deletes its upload once sent. The runner reads it into memory and
+  refresh token, as `login/AGENT.json`, mode 0600, in the job tar. The
+  tar is staged in a private temporary folder outside the job's, which
+  is deleted once sent and on every failure; a restored job deletes any
+  upload an older Emacs left in its folder. The runner reads it into memory and
   deletes the file at once, checks it again when the job leaves the
   queue, cannot refresh it, writes it mode 0600 into a folder of the
   member's own under `$XDG_RUNTIME_DIR/pstack-arena/ID/`, a tmpfs, and
