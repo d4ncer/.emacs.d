@@ -58,12 +58,11 @@
 
     :config
     (+local-leader-set-key 'emacs-lisp-mode-map
-      "ee" '(+elisp-eval-dwim :wk "dwim"))
+      "ee" '(+elisp-eval-dwim :wk "dwim")))
 
-    ;; Improve plist indentation
-    :autoload +elisp--calculate-lisp-indent-a
-    :init
-    (advice-add #'calculate-lisp-indent :override #'+elisp--calculate-lisp-indent-a))
+  ;; Improve plist indentation
+  (use-package +lisp-mode-patch
+    :after-call lisp-data-mode)
 
   :custom
   (define-advice eval-region (:around (fn &rest args) clear-visual-state)

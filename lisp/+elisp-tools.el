@@ -25,7 +25,7 @@
 ;; 2 when there are, and 1 when the edit or compilation fails.
 ;;
 ;; Indentation matches the live configuration: the `calculate-lisp-indent'
-;; override from `+elisp', every package build on `load-path', and the
+;; patch from `+lisp-mode-patch', every package build on `load-path', and the
 ;; indent declarations of every macro this repository defines.
 
 ;;; Code:
@@ -34,8 +34,6 @@
 (require 'seq)
 (require 'subr-x)
 (require 'bytecomp)
-
-(declare-function +elisp--calculate-lisp-indent-a "+elisp" (&optional parse-start))
 
 (defconst +elisp-tools-root
   (file-name-directory
@@ -111,9 +109,7 @@ so each package's own declarations apply too."
           (with-demoted-errors "Autoloads: %S" (load file nil t)))))
     (dolist (directory '("test" "lisp/compat" "lisp/project-files" "lisp"))
       (add-to-list 'load-path (expand-file-name directory +elisp-tools-root)))
-    (require '+elisp)
-    (advice-add #'calculate-lisp-indent :override
-                #'+elisp--calculate-lisp-indent-a)
+    (require '+lisp-mode-patch)
     (let ((all (mapcar #'+elisp-tools--forms
                        (delete-dups (append (mapcar #'expand-file-name files)
                                             (+elisp-tools-files)))))

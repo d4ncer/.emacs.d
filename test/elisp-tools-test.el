@@ -192,5 +192,21 @@ takes the form and the blank line after it."
     (should (seq-every-p (lambda (file) (string-suffix-p ".el" file))
                          (+elisp-tools-files)))))
 
+(ert-deftest +elisp-tools-test-lisp-mode-patch-indents-data ()
+  "The `calculate-lisp-indent' patch indents quoted lists as data."
+  (require '+lisp-mode-patch)
+  (pcase-dolist (`(,text . ,expected)
+                 '(("'(foo 1\n2)" . "'(foo 1\n  2)")
+                   ("'(:a 1\n:b 2)" . "'(:a 1\n  :b 2)")
+                   ("`(foo ,bar\nbaz)" . "`(foo ,bar\n  baz)")
+                   ("(list :a 1\n:b 2)" . "(list :a 1\n      :b 2)")
+                   ("(foo\n bar)" . "(foo\n bar)")))
+    (with-temp-buffer
+      (emacs-lisp-mode)
+      (insert text)
+      (let ((inhibit-message t))
+        (indent-region (point-min) (point-max)))
+      (should (equal expected (buffer-string))))))
+
 (provide 'elisp-tools-test)
 ;;; elisp-tools-test.el ends here
