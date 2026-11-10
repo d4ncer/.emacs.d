@@ -949,7 +949,8 @@ the margin is refused before the job is sent, and the pod goes."
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-send-leaves-no-login ()
   "The upload holding a forwarded login is staged outside the job's
-folder, and a send that fails leaves no login file on the laptop."
+folder, and a send that fails leaves no login file on the laptop, nor
+in the pod's job folder when the pod answers."
   (skip-unless (executable-find "git"))
   (+pod-test--with
     (let* ((temporary-file-directory
@@ -959,7 +960,17 @@ folder, and a send that fails leaves no login file on the laptop."
                    (push (list (file-in-directory-p
                                 upload +agent-shell-pstack-arena-directory)
                                (+pod-test--read-tar upload))
-                         sent))))
+                         sent)))
+           (left 'unchecked)
+           (check (lambda (remote &rest _)
+                    (setq left (directory-files-recursively
+                                (expand-file-name
+                                 (format "%s/state/jobs/"
+                                         (+agent-shell-arena-remote-host-name
+                                          (+agent-shell-arena-remote-host
+                                           remote)))
+                                 root)
+                                "codex\\.json")))))
       (make-directory temporary-file-directory)
       (with-temp-file (expand-file-name "local.txt" lead-repo) (insert "Local\n"))
       (funcall lead-git "add" "-A")
@@ -967,6 +978,8 @@ folder, and a send that fails leaves no login file on the laptop."
       (funcall lead-git "update-ref" "refs/remotes/origin/unpushed" "HEAD")
       (advice-add '+agent-shell-arena-remote--send :before note
                   '((name . pod-test-send)))
+      (advice-add '+agent-shell-arena-remote--reject :before check
+                  '((name . pod-test-reject)))
       (unwind-protect
           (let* ((panel (funcall launch))
                  (directory (+agent-shell-arena-remote-directory
@@ -978,11 +991,13 @@ folder, and a send that fails leaves no login file on the laptop."
             (should (= 1 (length sent)))
             (should (member "./login/codex.json" (cadr (car sent))))
             (should-not (car (car sent)))
+            (should-not left)
             (should-not (and (file-directory-p directory)
                              (directory-files-recursively directory "upload")))
             (should-not (directory-files temporary-file-directory nil
                                          "\\`pstack-arena-upload-")))
-        (advice-remove '+agent-shell-arena-remote--send 'pod-test-send)))))
+        (advice-remove '+agent-shell-arena-remote--send 'pod-test-send)
+        (advice-remove '+agent-shell-arena-remote--reject 'pod-test-reject)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-report-not-descending-refused ()
   "A report whose tip does not descend from the pinned base is refused:

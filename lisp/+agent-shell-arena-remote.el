@@ -1366,7 +1366,8 @@ case $launcher in
 --property=MemoryMax=50% --property=OOMPolicy=continue \
 --working-directory \"$PWD\" --setenv=PATH=\"$PATH\" \
 --setenv=PSTACK_ARENA_LAUNCHER=systemd \"$@\" >\"$job/launch.log\" 2>&1 ||
-      { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/launch.log\")\"; exit 0; } ;;
+      { rm -rf \"$job/login\"
+        echo \"pstack-arena-submit failed $(tail -n 1 \"$job/launch.log\")\"; exit 0; } ;;
   *) PSTACK_ARENA_LAUNCHER=nohup nohup \"$@\" >\"$job/runner.log\" 2>&1 </dev/null & ;;
 esac
 touch \"$job/started\"
@@ -1384,38 +1385,39 @@ the runner, which goes on to report that candidate as failed.")
 "
    +agent-shell-arena-remote--repo
    "job=jobs/$id
+answer() { rm -rf \"$job/login\"; echo \"pstack-arena-submit $*\"; exit 0; }
 mkdir -p \"$job\" code
 if [ -f \"$job/started\" ]; then cat >/dev/null; echo \"pstack-arena-submit started\"; exit 0; fi
-tar -xf - -C \"$job\" || { echo \"pstack-arena-submit failed the upload did not unpack\"; exit 0; }
+tar -xf - -C \"$job\" || answer \"failed the upload did not unpack\"
 hash=$(cat \"$job/code-hash\")
 if [ ! -d \"code/$hash\" ]; then
-  [ -f \"$job/code.tar\" ] || { echo \"pstack-arena-submit code\"; exit 0; }
+  [ -f \"$job/code.tar\" ] || answer code
   tmp=$(mktemp -d \"code/.$hash.XXXXXX\") && tar -xf \"$job/code.tar\" -C \"$tmp\" &&
     { mv \"$tmp\" \"code/$hash\" 2>/dev/null || rm -rf \"$tmp\"; }
-  [ -d \"code/$hash\" ] || { echo \"pstack-arena-submit failed the runner code did not unpack\"; exit 0; }
+  [ -d \"code/$hash\" ] || answer \"failed the runner code did not unpack\"
 fi
 rm -f \"$job/code.tar\"
 g() { git -C \"$repo\" -c core.hooksPath=/dev/null \"$@\"; }
 if [ \"$source\" = origin ]; then
-  case $base in ''|*[!0-9a-f]*) echo \"pstack-arena-submit failed the base is not a commit id\"; exit 0;; esac
+  case $base in ''|*[!0-9a-f]*) answer \"failed the base is not a commit id\";; esac
   g fetch -q --no-tags --no-write-fetch-head origin \"$base\" 2>\"$job/fetch.log\" ||
-    { echo \"pstack-arena-submit failed the base $base could not be fetched from origin: $(tail -n 1 \"$job/fetch.log\")\"; exit 0; }
+    answer \"failed the base $base could not be fetched from origin: $(tail -n 1 \"$job/fetch.log\")\"
   g -c advice.detachedHead=false checkout -q --detach \"$base\" 2>\"$job/checkout.log\" ||
-    { echo \"pstack-arena-submit failed the checkout could not move to the base $base: $(tail -n 1 \"$job/checkout.log\")\"; exit 0; }
+    answer \"failed the checkout could not move to the base $base: $(tail -n 1 \"$job/checkout.log\")\"
   g update-ref \"refs/pstack-arena/$id/base\" \"$base\" ||
-    { echo \"pstack-arena-submit failed the base ref could not be written\"; exit 0; }
+    answer \"failed the base ref could not be written\"
 else
   prereq=$(cat \"$job/prerequisite\" 2>/dev/null)
   bundle=$PWD/$job/base.bundle
   if ! g bundle verify -q \"$bundle\" >/dev/null 2>&1; then
     [ -n \"$prereq\" ] && g fetch -q origin \"$prereq\" >/dev/null 2>&1
     if ! g bundle verify -q \"$bundle\" >/dev/null 2>\"$job/verify.log\"; then
-      echo \"pstack-arena-submit missing $prereq\"; exit 0
+      answer \"missing $prereq\"
     fi
   fi
   g fetch -q --no-tags --no-write-fetch-head \"$bundle\" \
 \"+refs/pstack-arena/$id/base:refs/pstack-arena/$id/base\" 2>\"$job/fetch.log\" ||
-    { echo \"pstack-arena-submit failed $(tail -n 1 \"$job/fetch.log\")\"; exit 0; }
+    answer \"failed $(tail -n 1 \"$job/fetch.log\")\"
 fi
 "
    +agent-shell-arena-remote--launch)
@@ -1423,7 +1425,8 @@ fi
 base, and start the runner with Emacs $3 by launcher $4.  With $5
 origin, the checkout fetches commit $6 from its origin and checks it out
 instead of taking the base from a bundle.  A job already started answers
-as started, so a resent submission is harmless.")
+as started, so a resent submission is harmless.  Every other answer but
+started deletes the login the upload forwarded.")
 
 (defconst +agent-shell-arena-remote--resume-script
   (concat
