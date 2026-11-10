@@ -2113,24 +2113,37 @@ A kind whose hosts are made per job gives the job a pod of its own; see
              (+agent-shell-arena-remote--move remote 'submitting)
              (+agent-shell-arena-remote--submit remote job))))))))))
 
+(defun +agent-shell-arena-remote--pod-cap-refusal (name)
+  "Return why a pod NAME would exceed `+agent-shell-arena-remote-pod-cap', or nil."
+  (let ((others (seq-filter
+                 (lambda (pod)
+                   (and (+agent-shell-arena-remote--pod-alive-p pod)
+                        (not (equal name (+agent-shell-arena-remote-pod-name
+                                          pod)))))
+                 (+agent-shell-arena-remote--pods))))
+    (when-let* (((>= (length others) +agent-shell-arena-remote-pod-cap))
+                (other (car others)))
+      (format "pod %s, for pstack job %s, is %s, and Emacs runs at most %d \
+pod at a time; discard it with M-x +agent-shell-pstack-pod-discard, or let \
+its job end"
+              (+agent-shell-arena-remote-pod-name other)
+              (+agent-shell-arena-remote-pod-job other)
+              (+agent-shell-arena-remote-pod-state other)
+              +agent-shell-arena-remote-pod-cap))))
+
 (defun +agent-shell-arena-remote--pod-launch (remote job spec manifest)
   "Give REMOTE's JOB, over MANIFEST, a pod of its own from SPEC, then submit.
 An arena, a sandboxed delegate, an agent whose login cannot be
 forwarded, a base no origin ref on the laptop holds, and a pod beyond
 `+agent-shell-arena-remote-pod-cap' are refused.  The pod's name, job
-and attempt reach the record before the pod is created.  The host
+and attempt reach the record before the pod is created, in the same
+step as the last check of the cap.  The host
 fetches the base from origin, and the ref that held it is kept as
 provenance."
   (let* ((host (+agent-shell-arena-remote-host remote))
          (name (+agent-shell-arena-remote-host-name host))
          (base (+agent-shell-arena-remote-job-base job))
          (delegate (+agent-shell-arena-remote-job-delegate job))
-         (others (seq-filter
-                  (lambda (pod)
-                    (and (+agent-shell-arena-remote--pod-alive-p pod)
-                         (not (equal name (+agent-shell-arena-remote-pod-name
-                                           pod)))))
-                  (+agent-shell-arena-remote--pods)))
          (unforwarded
           (seq-find (lambda (sign-in)
                       (and (eq 'forward (+agent-shell-arena-remote-sign-in-mode
@@ -2154,15 +2167,8 @@ the delegate here with :delegate (:host local)"))
 which Emacs cannot forward for it"
                               (+agent-shell-arena-remote-sign-in-agent
                                unforwarded))))
-     ((>= (length others) +agent-shell-arena-remote-pod-cap)
-      (let ((other (car others)))
-        (funcall reject (format "pod %s, for pstack job %s, is %s, and Emacs \
-runs at most %d pod at a time; discard it with M-x \
-+agent-shell-pstack-pod-discard, or let its job end"
-                                (+agent-shell-arena-remote-pod-name other)
-                                (+agent-shell-arena-remote-pod-job other)
-                                (+agent-shell-arena-remote-pod-state other)
-                                +agent-shell-arena-remote-pod-cap))))
+     ((+agent-shell-arena-remote--pod-cap-refusal name)
+      (funcall reject (+agent-shell-arena-remote--pod-cap-refusal name)))
      (t
       (+agent-shell-arena-remote--git
        manifest (list "for-each-ref" "--contains" base "--format=%(refname)"
@@ -2175,6 +2181,8 @@ runs at most %d pod at a time; discard it with M-x \
            (funcall reject (format "a pod fetches its base from origin, and \
 no ref this laptop has seen on origin holds %s; commit and push the work \
 first" base)))
+          ((+agent-shell-arena-remote--pod-cap-refusal name)
+           (funcall reject (+agent-shell-arena-remote--pod-cap-refusal name)))
           (t
            (setf (+agent-shell-arena-remote-job-base-source job) 'origin
                  (+agent-shell-arena-remote-job-base-ref job)

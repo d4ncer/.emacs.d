@@ -93,7 +93,7 @@ esac
 BODY sees `async', the processes and timers before it, `scratch',
 `root' (the workspaces' folder), `lead-repo',
 `lead-git', `spec', `launch', which starts a delegate whose member is
-Codex and returns its panel, `job-folder', `runner-writes', which writes
+Codex and returns its panel, given an optional panel id, `job-folder', `runner-writes', which writes
 what a runner leaves on finishing, and `log', the coder calls so far."
   (declare (indent 0))
   `(let* ((async (+config-test-async-state))
@@ -159,13 +159,14 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
                        (split-string (+pod-test--read file) "\n" t)
                      nil))))
           (launch
-           (lambda ()
-             (let* ((base (car (+pod-test--wait
+           (lambda (&optional id)
+             (let* ((id (or id "pod-panel"))
+                    (base (car (+pod-test--wait
                                 (lambda (done)
                                   (+agent-shell-arena-git-capture-base
                                    lead-repo done t)))))
                     (panel (+agent-shell-pstack-panel--make
-                            :id "pod-panel" :shape 'delegate :brief "Build it."
+                            :id id :shape 'delegate :brief "Build it."
                             :timeout 60 :phase 'preparing :cwd lead-repo
                             :delegate-options (list :host (cons 'pod spec)
                                                     :isolation 'worktree
@@ -176,7 +177,7 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
                             :members (list (+agent-shell-pstack-panel--make-member
                                             :role "builder" :agent 'codex
                                             :kind 'delegate :state 'pending)))))
-               (puthash "pod-panel" panel +agent-shell-pstack-panel--panels)
+               (puthash id panel +agent-shell-pstack-panel--panels)
                (+agent-shell-pstack-panel--fix-deadline panel 60)
                (+agent-shell-arena-remote-launch
                 panel base (list :host (cons 'pod spec)
@@ -648,6 +649,48 @@ discards it, and it counts against the cap meanwhile."
       (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
       (+pod-test--wait-for
        (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-cap-holds-across-launches ()
+  "Two launches whose origin checks answer only after both began admit
+exactly one pod; the other is refused at the cap."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((held nil)
+           (hold (lambda (run manifest args &rest rest)
+                   (if (equal (car args) "for-each-ref")
+                       (push (lambda () (apply run manifest args rest)) held)
+                     (apply run manifest args rest))))
+           (panels nil))
+      (advice-add '+agent-shell-arena-remote--git :around hold
+                  '((name . pod-test-hold)))
+      (unwind-protect
+          (progn
+            (push (funcall launch "pod-panel") panels)
+            (push (funcall launch "pod-panel-2") panels)
+            (+pod-test--wait-for (lambda () (= 2 (length held)))))
+        (advice-remove '+agent-shell-arena-remote--git 'pod-test-hold))
+      (mapc #'funcall (reverse held))
+      (+pod-test--wait-for
+       (lambda ()
+         (and (seq-find (lambda (panel)
+                          (eq 'finished (+agent-shell-pstack-panel-phase panel)))
+                        panels)
+              (seq-find (lambda (panel)
+                          (eq 'remote (+agent-shell-arena-remote-phase
+                                       (+pod-test--remote panel))))
+                        panels))))
+      (should (= 1 (seq-count
+                    (lambda (panel)
+                      (string-search "at most 1 pod"
+                                     (or (+agent-shell-pstack-panel-rejection
+                                          panel)
+                                         "")))
+                    panels)))
+      (should (= 1 (length (+pod-test--creates (funcall log)))))
+      (should (= 1 (length (directory-files
+                            (expand-file-name "pods/"
+                                              +agent-shell-pstack-arena-directory)
+                            nil "\\.json\\'")))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-delete-retried ()
   "A failed delete is retried until it succeeds, and the pod counts
