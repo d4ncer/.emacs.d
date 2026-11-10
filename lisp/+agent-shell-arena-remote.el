@@ -1734,7 +1734,7 @@ again: %s" name error)
 
 (defun +agent-shell-arena-remote--pod-keep-reason (report results)
   "Return why the pod that ran REPORT stays for the lead, or nil.
-It stays while its delegate timed out, left uncommitted work or
+It stays while its delegate failed, timed out, left uncommitted work or
 processes not shown to have stopped, or its report was refused; RESULTS
 are the landed results by role."
   (let* ((member (seq-find (lambda (member)
@@ -1756,6 +1756,10 @@ are the landed results by role."
               (+agent-shell-arena-remote-report-quarantine report)))
      ((and member (eq 'timeout (+agent-shell-arena-remote-member-state member)))
       "its delegate timed out")
+     ((and member (eq 'error (+agent-shell-arena-remote-member-state member)))
+      (if-let* ((error (+agent-shell-arena-remote-member-error member)))
+          (format "its delegate failed: %s" error)
+        "its delegate failed"))
      ((> dirty 0)
       (format "its worktree there has %d uncommitted path%s" dirty
               (if (= dirty 1) "" "s"))))))

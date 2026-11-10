@@ -408,11 +408,13 @@ hold no credential). A pod is reached as a Coder workspace is.
 - **Delete.** The laptop deletes a pod only once it has checked the
   report, landed the bundle in refs it names and saved the transcript;
   a job the laptop rejects deletes its pod at once. A pod whose member
-  timed out, left uncommitted paths, was quarantined, or whose report
-  was refused is `kept` until the lead discards it with
-  `+agent-shell-pstack-pod-discard` or cleans the job. A failed delete
-  stays `deleting`, counts against the cap, and is retried, also after
-  a restart.
+  ended in error, timed out, left uncommitted paths, was quarantined,
+  or whose report was refused is `kept` until the lead discards it with
+  `+agent-shell-pstack-pod-discard` or cleans the job. A report whose
+  shape, base or member roles are not the job's is refused. A pod whose
+  job cannot be restored after a restart, or has no record left, is
+  `kept` with the reason. A failed delete stays `deleting`, counts
+  against the cap, and is retried, also after a restart.
 - **Results.** Results are `results.bundle` and `report.json` as for
   any delegate. The laptop names every ref itself, takes only a
   well-formed commit id from the report, refuses a tip that does not
