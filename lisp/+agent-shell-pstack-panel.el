@@ -154,15 +154,22 @@ then a read-only judge scores them against your rubric"
      :contract "Implement the task in the current directory, a snapshot of \
 the lead's working tree in its own git worktree.  Work only there: a sandbox \
 refuses writes anywhere else.  Leave your changes in the tree, uncommitted; \
-Emacs captures them when your turn ends.  Do not run git commands that \
-write, such as git add, commit, stash or checkout: the worktree's index \
-lives outside the sandbox, so they fail.  End your turn with a rationale as \
-your final message: what you built, the alternatives you considered, and \
-what you rejected and why.  End it with a `## Walkthrough` section that \
-explains what changed and why, in the order to read it.  Give each claim a \
-path:line, the path from the repository root and the line in the tree you \
-leave, marked (recorded) when the brief or user asked for it, or (inferred) \
-otherwise.  Nobody will answer questions during the turn."
+Emacs captures them when your turn ends.  Do not run git commands that write, \
+such as git add, commit, stash or checkout: the worktree's index lives \
+outside the sandbox, so they fail.  End your turn with a rationale as your \
+final message: what you built, the alternatives you considered, and what you \
+rejected and why.  End it with a `## Walkthrough` section a reviewer can \
+decide on, in three parts.  Does what was asked: a table with one row per \
+requirement in the brief, in its words, saying what now happens and its \
+evidence (a named test, a command and its output, or none); then what you \
+added, dropped or changed from the brief, and why.  Soundness: a table of the \
+ways the change could go wrong, what happens in each, and whether a test \
+covers it; then what you did not verify.  Fit: the existing code it reuses; \
+the state, files, keys or hooks it adds; the conventions it follows or bends; \
+and what the next maintainer inherits.  Give each claim a path:line, the path \
+from the repository root and the line in the tree you leave, marked \
+(recorded) when the brief or user asked for it, or (inferred) otherwise.  \
+Nobody will answer questions during the turn."
      :judge "Read every candidate's checkout, not only its rationale.  Score \
 each candidate on each rubric criterion from 1 to 5 with a one-line reason.  \
 Then recommend one candidate as the base, with reasons, and name parts of \
@@ -170,11 +177,14 @@ the others worth grafting onto it.  End your turn with the scores and the \
 recommendation as your final message.  Nobody will answer questions during \
 the turn."
      :triage "Pick, graft and verify as the arena skill's lead.  Read every \
-candidate's diff yourself and score it against your rubric, then compare \
-your scores with the judge's.  Pick one candidate as the base and apply its \
-diff with its command above.  Graft the best parts of the others by hand, \
-never by checking their files out over your tree.  Then verify the result \
-as the arena skill says.")
+candidate's diff yourself and score it against your rubric, then compare your \
+scores with the judge's.  Pick one candidate as the base and apply its diff \
+with its command above.  Graft the best parts of the others by hand, never by \
+checking their files out over your tree.  Then verify the result as the arena \
+skill says.  Before you hand it to the user, check every claim in the base's \
+walkthrough against the code and tests, mark each you could not confirm, add \
+any way it could go wrong that the walkthrough missed, and end with a \
+verdict: land, or fix first and why.")
     (delegate
      :label "implement, test and commit"
      :summary "one agent you choose implements the task, tests it and \
@@ -183,39 +193,55 @@ commits on a branch of its own, in a shell the user can watch"
 full-access mode, so nobody is asked for permission; a permission request \
 ends your turn.  Implement the task, run the repository's tests, and commit \
 your work with git on the branch you are on, in small commits with clear \
-messages.  Do not switch branches, rewrite history or push.  Do not end \
-your turn while a command you started is still running.  End your turn \
-with a report as your final message: what you built, how you tested it, and \
-what a reviewer should know.  End it with a `## Walkthrough` section that \
-explains what changed and why, in the order to read it.  Give each claim a \
-path:line, the path from the repository root and the line in your last \
-commit, marked (recorded) when the brief or user asked for it, or \
-(inferred) otherwise.  Nobody answers questions during the turn."
+messages.  Do not switch branches, rewrite history or push.  Do not end your \
+turn while a command you started is still running.  End your turn with a \
+report as your final message: what you built, how you tested it, and what a \
+reviewer should know.  End it with a `## Walkthrough` section a reviewer can \
+decide on, in three parts.  Does what was asked: a table with one row per \
+requirement in the brief, in its words, saying what now happens and its \
+evidence (a named test, a command and its output, or none); then what you \
+added, dropped or changed from the brief, and why.  Soundness: a table of the \
+ways the change could go wrong, what happens in each, and whether a test \
+covers it; then what you did not verify.  Fit: the existing code it reuses; \
+the state, files, keys or hooks it adds; the conventions it follows or bends; \
+and what the next maintainer inherits.  Give each claim a path:line, the path \
+from the repository root and the line in your last commit, marked (recorded) \
+when the brief or user asked for it, or (inferred) otherwise.  Nobody answers \
+questions during the turn."
      :sandbox-contract "You work alone in a sandbox that confines writes to \
 your workspace, in your agent's full-access mode, so nobody is asked for \
 permission; a permission request ends your turn.  Git cannot write its \
 metadata there, so do not commit, stash, switch branches or write refs.  \
-Implement and verify the task.  Leave your changes uncommitted.  Do not \
-end your turn while a command you started is still running.  End your \
-final message with a report: what you built, how you tested it, and what a \
-reviewer should know.  End the report with a `## Walkthrough` section that \
-explains what changed and why, in the order to read it.  Give each claim a \
-path:line, the path from the repository root and the line in the tree you \
-leave, marked (recorded) when the brief or user asked for it, or (inferred) \
-otherwise.  Then end the message with exactly one block of this form, \
-using this repository's commit style.  Give the subject and body for the \
-single commit Emacs will make.  Do not include attribution trailers or any \
-text after the block.
+Implement and verify the task.  Leave your changes uncommitted.  Do not end \
+your turn while a command you started is still running.  End your final \
+message with a report: what you built, how you tested it, and what a reviewer \
+should know.  End the report with a `## Walkthrough` section a reviewer can \
+decide on, in three parts.  Does what was asked: a table with one row per \
+requirement in the brief, in its words, saying what now happens and its \
+evidence (a named test, a command and its output, or none); then what you \
+added, dropped or changed from the brief, and why.  Soundness: a table of the \
+ways the change could go wrong, what happens in each, and whether a test \
+covers it; then what you did not verify.  Fit: the existing code it reuses; \
+the state, files, keys or hooks it adds; the conventions it follows or bends; \
+and what the next maintainer inherits.  Give each claim a path:line, the path \
+from the repository root and the line in the tree you leave, marked \
+(recorded) when the brief or user asked for it, or (inferred) otherwise.  \
+Then end the message with exactly one block of this form, using this \
+repository's commit style.  Give the subject and body for the single commit \
+Emacs will make.  Do not include attribution trailers or any text after the \
+block.
 
 ```pstack-commit
 {\"version\":1,\"subject\":\"Summary line\",\"body\":\"What changed and why.\"}
 ```
 
 Nobody answers questions during the turn."
-     :triage "Review the branch before you merge it: read its commits and \
-its diff against the commit it started from, and run the tests yourself.  \
-Then merge it, ask for changes in a new delegate panel, or take the work \
-over."))
+     :triage "Review the branch before you merge it: read its commits and its \
+diff against the commit it started from, and run the tests yourself.  Before \
+you hand it to the user, check every walkthrough claim against the code and \
+tests, mark each you could not confirm, add any way it could go wrong that \
+the walkthrough missed, and end with a verdict: land, or fix first and why.  \
+Then merge it, ask for changes in a new delegate panel, or take the work over."))
   "Panel shapes by name.
 Each value is a plist: :label names it on the request card, :summary
 describes it to the lead, :contract ends each member's prompt, and :triage

@@ -173,7 +173,7 @@ Leave REPO on main and return the result record."
      ,@body))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-contracts ()
-  "Every code-writing contract asks for a walkthrough with path:line claims."
+  "Every code-writing contract asks for a walkthrough a reviewer can decide on."
   (let ((shapes (eval (car (get '+agent-shell-pstack-panel-shapes
                                 'standard-value))
                       t)))
@@ -181,13 +181,41 @@ Leave REPO on main and return the result record."
                             (plist-get (alist-get 'delegate shapes) :contract)
                             (plist-get (alist-get 'delegate shapes)
                                        :sandbox-contract)))
-      (should (string-search "## Walkthrough" contract))
-      (should (string-search "path:line" contract))
+      (let ((parts (mapcar (lambda (part) (string-search part contract))
+                           '("## Walkthrough" "Does what was asked: a table"
+                             "one row per requirement in the brief"
+                             "(a named test, a command and its output, or none)"
+                             "added, dropped or changed from the brief"
+                             "Soundness: a table" "whether a test covers it"
+                             "what you did not verify" "Fit:" "reuses"
+                             "the state, files, keys or hooks it adds"
+                             "the conventions it follows or bends"
+                             "what the next maintainer inherits"
+                             "path:line"))))
+        (should (seq-every-p #'natnump parts))
+        (should (equal parts (sort (copy-sequence parts) #'<))))
+      (should-not (string-search "explains what changed" contract))
       (should (string-search "(recorded)" contract))
       (should (string-search "(inferred)" contract)))
+    (should (string-search "the line in your last commit"
+                           (plist-get (alist-get 'delegate shapes) :contract)))
+    (dolist (contract (list (plist-get (alist-get 'arena shapes) :contract)
+                            (plist-get (alist-get 'delegate shapes)
+                                       :sandbox-contract)))
+      (should (string-search "the line in the tree you leave" contract)))
     (let ((sandboxed (plist-get (alist-get 'delegate shapes) :sandbox-contract)))
       (should (< (string-search "## Walkthrough" sandboxed)
-                 (string-search "```pstack-commit" sandboxed))))))
+                 (string-search "```pstack-commit" sandboxed))))
+    (dolist (triage (list (plist-get (alist-get 'arena shapes) :triage)
+                          (plist-get (alist-get 'delegate shapes) :triage)))
+      (should (string-search "Before you hand it to the user, check every"
+                             triage))
+      (should (string-search "walkthrough" triage))
+      (should (string-search "against the code and tests" triage))
+      (should (string-search "mark each you could not confirm" triage))
+      (should (string-search "the walkthrough missed" triage))
+      (should (string-search "end with a verdict: land, or fix first and why"
+                             triage)))))
 
 (ert-deftest +agent-shell-pstack-walkthrough-test-arena-records ()
   "Write a result record for each arena candidate with a commit, and no other."

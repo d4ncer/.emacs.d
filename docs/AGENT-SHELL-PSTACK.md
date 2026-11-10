@@ -750,11 +750,28 @@ stays.
 
 Every code-writing contract, the delegate's, the sandboxed delegate's and
 the arena candidate's, asks the member to end its report with a
-`## Walkthrough` section: what changed and why, in the order to read it,
-each claim with a `path:line` (or `path:line-line`) whose path is from the
-repository root and whose line is in the result commit, marked
+`## Walkthrough` section that lets a reviewer decide whether the change
+does what was asked, is sound and fits the architecture. It has three
+parts:
+
+| Part | What it holds |
+| --- | --- |
+| Does what was asked | A table with one row per requirement in the brief, in the brief's words: what now happens and its evidence (a named test, a command and its output, or none). Then what was added, dropped or changed from the brief, and why. |
+| Soundness | A table of the ways the change could go wrong, what happens in each, and whether a test covers it. Then what was not verified. |
+| Fit | The existing code it reuses; the state, files, keys or hooks it adds; the conventions it follows or bends; and what the next maintainer inherits. |
+
+Each claim cites a `path:line` (or `path:line-line`) whose path is from
+the repository root and whose line is in the result commit, or in the
+tree left behind for a sandboxed delegate or arena candidate, marked
 `(recorded)` when the brief or user asked for it and `(inferred)`
-otherwise. A sandboxed delegate puts it before its `pstack-commit` block.
+otherwise. A sandboxed delegate puts the walkthrough before its
+`pstack-commit` block.
+
+The delegate's and arena's triage lines ask the lead to check the
+walkthrough before handing the result to the user: confirm every claim
+against the code and tests, mark each it could not confirm, add any way
+the change could go wrong that the walkthrough missed, and end with a
+verdict, land or fix first and why.
 
 When a delegate or arena panel finishes, Emacs writes
 `var/pstack-panels/<panel-id>/<role>.result.json` beside each report
