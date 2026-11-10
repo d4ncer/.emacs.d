@@ -580,7 +580,13 @@ in the job tar alone, and never in a record or a command line."
                              (+agent-shell-arena-remote-directory remote))
                             (expand-file-name ".log" root)
                             (expand-file-name ".systemd" root)))
-          (should-not (string-search "fixture-id" (+pod-test--read file))))
+          (dolist (secret (list "fixture-id"
+                                (+agent-shell-sandbox--login-access
+                                 (funcall (plist-get
+                                           (alist-get 'codex
+                                                      +agent-shell-sandbox-agents)
+                                           :login)))))
+            (should-not (string-search secret (+pod-test--read file)))))
         (should-not (file-exists-p (expand-file-name
                                     "upload.tar"
                                     (+agent-shell-arena-remote-directory
@@ -1450,6 +1456,81 @@ starts."
                                   (+agent-shell-pstack-panel-members panel)))))
       (advice-remove '+agent-shell-pstack-panel--provision-delegate
                      'pod-test-provision)
+      (delete-directory scratch t))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-sign-in-write-failure-hides-token ()
+  "A forwarded login that cannot be written fails its member with the
+file's error, and the token reaches neither the runner's log nor any
+file of its job."
+  (let* ((scratch (file-name-as-directory
+                   (file-truename (make-temp-file "arena-pod-runner-" t))))
+         (folder (expand-file-name "jobs/abc-1/" scratch))
+         (+agent-shell-arena-remote-login-directory
+          (expand-file-name "run/" scratch))
+         (+agent-shell-arena-remote--mountinfo
+          (+pod-test--mounts scratch +agent-shell-arena-remote-login-directory
+                             "tmpfs"))
+         (+agent-shell-sandbox-agents (copy-tree +agent-shell-sandbox-agents))
+         (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+         (+agent-shell-pstack-panel-change-hook nil)
+         (+agent-shell-pstack-panel-directory (expand-file-name "reports/" folder))
+         (login (funcall (+pod-test--codex-login (+ (float-time) 86400))))
+         (secrets (list (+agent-shell-sandbox--login-access login) "fixture-id"))
+         (logged nil)
+         (note (lambda (format &rest args)
+                 (when format (push (apply #'format-message format args) logged))))
+         (write (symbol-function 'write-region))
+         (runner (+agent-shell-arena-remote--make-runner
+                  :directory folder :root scratch
+                  :job (+agent-shell-arena-remote--make-job
+                        :id "abc-1" :panel "abc" :brief "Build it." :timeout 60
+                        :shape 'delegate
+                        :delegate (+agent-shell-arena-remote--make-delegate-job
+                                   :sandbox nil
+                                   :identity (+agent-shell-arena-git--user
+                                              :name "Laptop Person"
+                                              :email "laptop@example.com"))
+                        :members (list (+agent-shell-arena-remote--make-request-member
+                                        :role "builder" :agent 'codex
+                                        :kind 'delegate))
+                        :prefix "" :base (make-string 40 ?a) :repository scratch
+                        :code (make-string 64 ?c) :deadline 2400
+                        :sign-ins (list (+agent-shell-arena-remote--make-sign-in
+                                         :agent 'codex :mode 'forward))))))
+    (unwind-protect
+        (progn
+          (make-directory (expand-file-name "login/" folder) t)
+          (with-temp-file (expand-file-name "login/codex.json" folder)
+            (insert (+agent-shell-sandbox--codex-auth login)))
+          (+agent-shell-arena-remote--runner-take-logins runner)
+          (let* ((panel (+agent-shell-arena-remote--runner-panel-for runner))
+                 (member (car (+agent-shell-pstack-panel-members panel))))
+            (advice-add 'message :before note '((name . pod-test-log)))
+            (unwind-protect
+                (cl-letf (((symbol-function
+                            '+agent-shell-pstack-panel--delegate-directory)
+                           (lambda (_) scratch))
+                          ((symbol-function 'write-region)
+                           (lambda (start end file &rest rest)
+                             (if (equal (file-name-nondirectory file) "auth.json")
+                                 (signal 'file-error
+                                         (list "Opening output file"
+                                               "Permission denied" file))
+                               (apply write start end file rest)))))
+                  (ignore-errors
+                    (+agent-shell-pstack-panel--start-member panel member)))
+              (advice-remove 'message 'pod-test-log))
+            (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+            (should (string-search "Permission denied"
+                                   (+agent-shell-pstack-panel-member-error
+                                    member)))
+            (dolist (secret secrets)
+              (should-not (string-search
+                           secret (+agent-shell-pstack-panel-member-error member)))
+              (should-not (seq-find (lambda (line) (string-search secret line))
+                                    logged))
+              (dolist (file (directory-files-recursively folder ""))
+                (should-not (string-search secret (+pod-test--read file)))))))
       (delete-directory scratch t))))
 
 (provide 'agent-shell-arena-remote-pod-test)
