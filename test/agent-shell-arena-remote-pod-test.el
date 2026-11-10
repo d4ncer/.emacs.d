@@ -74,6 +74,7 @@ case $1 in
         echo \"delete refused\" >&2; exit 1
       fi
     fi
+    [ -x \"$root/.on-delete\" ] && \"$root/.on-delete\"
     rm -rf \"$root/$2\"
     ;;
   list)
@@ -94,7 +95,8 @@ esac
 Files in @ROOT@ steer it: .create-gate holds a create until .create-open
 exists, .create-fails refuses one, .create-fails-after-mkdir fails one
 that made the workspace, .delete-fails holds how many deletes to refuse,
-and .list-fails refuses every list.")
+.on-delete runs before a delete succeeds, and .list-fails refuses every
+list.")
 
 (defmacro +pod-test--with (&rest body)
   "Run BODY with a laptop clone, an origin and a fake coder for pods.
@@ -257,7 +259,8 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
 The pod's checkout under ROOT gets the delegate's branch.  OPTIONS:
 :tip `orphan' makes its tip not descend from the base, :dirty a count of
 uncommitted paths, :state the member's state, :boot the status's boot
-id, :shape the report's shape, :error the member's error."
+id, :shape the report's shape, :error the member's error, :transcript
+the text of one transcript page."
   (let* ((remote (+agent-shell-pstack-panel-remote panel))
          (pod (+agent-shell-arena-remote-host-name
                (+agent-shell-arena-remote-host remote)))
@@ -305,6 +308,22 @@ id, :shape the report's shape, :error the member's error."
                  :finalization 'none)))
     (with-temp-file (expand-file-name "results.files" folder)
       (insert "report.json\nresults.bundle\n"))
+    (when-let* ((text (plist-get options :transcript)))
+      (let ((recorder (+agent-shell-arena-remote--recorder-open
+                       (expand-file-name "transcript/" folder))))
+        (+agent-shell-arena-remote--record recorder "assistant" text)
+        (with-temp-file (expand-file-name "results.files" folder)
+          (insert "report.json\nresults.bundle\ntranscript/epoch\n"
+                  (mapconcat
+                   (lambda (segment)
+                     (concat (file-relative-name
+                              (+agent-shell-arena-remote--segment-file
+                               (expand-file-name "transcript/" folder) segment)
+                              folder)
+                             "\n"))
+                   (+agent-shell-arena-remote--segments
+                    (expand-file-name "transcript/" folder))
+                   "")))))
     (+agent-shell-arena-remote--write-json
      (expand-file-name "status.json" folder) 'status
      (+agent-shell-arena-remote--make-status
@@ -577,31 +596,37 @@ in the job tar alone, and never in a record or a command line."
                         "rev-parse" "HEAD"))))
       (+pod-test--polls remote 2)
       (should (+pod-test--exists-p root panel))
-      (advice-add '+agent-shell-arena-remote--pod-release :before
-                  (lambda (&rest _)
-                    (unless released
-                      (setq released
-                            (list (ignore-errors
-                                    (funcall lead-git "rev-parse"
-                                             "refs/heads/pstack/delegate/pod-panel"))
-                                  (file-exists-p
-                                   (expand-file-name
-                                    "results/report.json"
-                                    (+agent-shell-arena-remote-directory
-                                     remote)))
-                                  (+agent-shell-pstack-panel-followup panel)))))
-                  '((name . pod-test)))
-      (unwind-protect
-          (let ((tip (funcall runner-writes panel)))
-            (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
-            (should (equal tip (car released)))
-            (should (nth 1 released))
-            (should (string-search "Emacs deletes the pod" (nth 2 released)))
-            (should-not (file-exists-p (+pod-test--ledger panel)))
-            (should (eq 'deleted (+agent-shell-arena-remote-pod-state
-                                  (+pod-test--pod panel))))
-            (should (= 1 (length (+pod-test--creates (funcall log))))))
-        (advice-remove '+agent-shell-arena-remote--pod-release 'pod-test)))))
+      (with-temp-file (expand-file-name ".on-delete" root)
+        (insert "#!/bin/sh\n{\n"
+                (format "[ -f %s ] && echo report\n"
+                        (shell-quote-argument
+                         (expand-file-name
+                          "results/report.json"
+                          (+agent-shell-arena-remote-directory remote))))
+                (format "git -C %s rev-parse %s\n"
+                        (shell-quote-argument lead-repo)
+                        "refs/heads/pstack/delegate/pod-panel")
+                (format "grep -c 'Built it on the pod' %s\n"
+                        (shell-quote-argument
+                         (+agent-shell-arena-remote--cache-file remote)))
+                "} >" (shell-quote-argument
+                       (expand-file-name ".deleted" root))
+                " 2>&1\n"))
+      (set-file-modes (expand-file-name ".on-delete" root) #o755)
+      (let ((tip (funcall runner-writes panel
+                          :transcript "Built it on the pod.")))
+        (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+        (+pod-test--wait-for
+         (lambda () (not (file-exists-p (+pod-test--ledger panel)))))
+        (should (equal (list "report" tip "1")
+                       (split-string (+pod-test--read
+                                      (expand-file-name ".deleted" root))
+                                     "\n" t)))
+        (should (string-search "Emacs deletes the pod"
+                               (+agent-shell-pstack-panel-followup panel)))
+        (should (eq 'deleted (+agent-shell-arena-remote-pod-state
+                              (+pod-test--pod panel))))
+        (should (= 1 (length (+pod-test--creates (funcall log)))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-adopt-after-restart ()
   "A laptop that restarts after the pod was created but before it said
