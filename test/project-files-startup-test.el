@@ -10,7 +10,7 @@
        (user-emacs-directory (make-temp-file "project-files-startup-" t)))
   (add-to-list 'load-path (expand-file-name "lisp/" root))
   (add-to-list 'load-path (expand-file-name "lisp/project-files/" root))
-  (dolist (package '("projectile" "compat"))
+  (dolist (package '("el-patch" "projectile" "compat"))
     (add-to-list 'load-path
                  (expand-file-name (concat "elpaca/builds/" package) root)))
   (require 'use-package)
@@ -24,8 +24,7 @@
           (when (featurep feature) (error "Eagerly loaded %s" feature)))
         (unless (commandp '+project-find-file)
           (error "Finder command is unavailable"))
-        (unless (advice-member-p #'+project-files--watch-directories
-                                 'projectile--watch-directories)
+        (unless (el-patch-get 'projectile--watch-directories 'defun)
           (error "Bounded watch counting is inactive"))
         (message "Startup setup and deferred completion packages: PASS"))
     (when (fboundp 'projectile-mode) (projectile-mode -1))
