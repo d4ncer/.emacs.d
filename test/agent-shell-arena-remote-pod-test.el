@@ -351,6 +351,20 @@ id, :shape the report's shape, :error the member's error."
     (call-process "tar" nil t nil "-tf" file)
     (split-string (buffer-string) "\n" t)))
 
+(defun +pod-test--mounts (scratch directory type)
+  "Write in SCRATCH a mountinfo file mounting DIRECTORY as TYPE; return it.
+DIRECTORY is made, mode 0700."
+  (let ((file (expand-file-name "mountinfo" scratch)))
+    (with-file-modes #o700 (make-directory directory t))
+    (with-temp-file file
+      (insert "1 0 8:1 / / rw - ext4 /dev/sda1 rw\n"
+              (format "36 1 0:32 / %s rw,nosuid shared:1 - %s %s rw\n"
+                      (string-replace " " "\\040"
+                                      (directory-file-name
+                                       (file-truename directory)))
+                      type type)))
+    file))
+
 ;;;; Profiles
 
 (defun +pod-test--restart (async)
@@ -1027,6 +1041,9 @@ when the member settles."
          (folder (expand-file-name "job/" scratch))
          (+agent-shell-arena-remote-login-directory
           (expand-file-name "run/" scratch))
+         (+agent-shell-arena-remote--mountinfo
+          (+pod-test--mounts scratch +agent-shell-arena-remote-login-directory
+                             "tmpfs"))
          (+agent-shell-sandbox-agents (copy-tree +agent-shell-sandbox-agents))
          (text (+agent-shell-sandbox--codex-auth
                 (funcall (+pod-test--codex-login (+ (float-time) 86400)))))
@@ -1043,7 +1060,6 @@ when the member settles."
     (unwind-protect
         (progn
           (make-directory (expand-file-name "login/" folder) t)
-          (make-directory +agent-shell-arena-remote-login-directory)
           (with-temp-file (expand-file-name "login/codex.json" folder)
             (insert text))
           (+agent-shell-arena-remote--runner-take-logins runner)
@@ -1131,12 +1147,62 @@ the clean of its job, delete the job's logins from the login directory."
       (advice-remove 'y-or-n-p #'+agent-shell-arena-remote--refuse)
       (delete-directory scratch t))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-login-root-refused ()
+  "A runner refuses a forwarded login when the login directory is not a
+tmpfs, or not this user's alone, saying why."
+  (let* ((scratch (file-name-as-directory
+                   (file-truename (make-temp-file "arena-pod-runner-" t))))
+         (+agent-shell-arena-remote-login-directory
+          (expand-file-name "run/" scratch))
+         (runner (+agent-shell-arena-remote--make-runner
+                  :directory (expand-file-name "job/" scratch)
+                  :forwarded '((codex . "{}"))
+                  :job (+agent-shell-arena-remote--make-job
+                        :id "abc-1"
+                        :sign-ins (list (+agent-shell-arena-remote--make-sign-in
+                                         :agent 'codex :mode 'forward))))))
+    (unwind-protect
+        (let ((+agent-shell-arena-remote--mountinfo
+               (+pod-test--mounts scratch
+                                  +agent-shell-arena-remote-login-directory
+                                  "ext4")))
+          (should (string-search
+                   "is on ext4, not a tmpfs"
+                   (+agent-shell-arena-remote--runner-sign-in-refusal runner)))
+          (let ((+agent-shell-arena-remote--mountinfo
+                 (expand-file-name "absent" scratch)))
+            (should (string-search
+                     "cannot tell which file system"
+                     (+agent-shell-arena-remote--runner-sign-in-refusal
+                      runner))))
+          (setq +agent-shell-arena-remote--mountinfo
+                (+pod-test--mounts scratch
+                                   +agent-shell-arena-remote-login-directory
+                                   "tmpfs"))
+          (should-not (+agent-shell-arena-remote--runner-sign-in-refusal runner))
+          (set-file-modes +agent-shell-arena-remote-login-directory #o755)
+          (should (string-search
+                   "has mode 755"
+                   (+agent-shell-arena-remote--runner-sign-in-refusal runner)))
+          (let ((+agent-shell-arena-remote-login-directory
+                 (expand-file-name "missing/" scratch)))
+            (should (string-search
+                     "is not a folder"
+                     (+agent-shell-arena-remote--runner-sign-in-refusal
+                      runner)))))
+      (delete-directory scratch t))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-runner-rechecks-login ()
   "A queued job's runner checks a forwarded login again when it starts,
 and refuses one that would not outlast the job; it cannot refresh it."
   (let* ((scratch (file-name-as-directory
                    (file-truename (make-temp-file "arena-pod-runner-" t))))
          (folder (expand-file-name "job/" scratch))
+         (+agent-shell-arena-remote-login-directory
+          (expand-file-name "run/" scratch))
+         (+agent-shell-arena-remote--mountinfo
+          (+pod-test--mounts scratch +agent-shell-arena-remote-login-directory
+                             "tmpfs"))
          (+agent-shell-sandbox-agents (copy-tree +agent-shell-sandbox-agents))
          (runner (+agent-shell-arena-remote--make-runner
                   :directory folder

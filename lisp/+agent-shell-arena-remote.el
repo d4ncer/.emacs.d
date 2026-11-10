@@ -167,7 +167,10 @@ must hold no credential.  See `+agent-shell-sandbox-sign-in'."
 
 (defvar +agent-shell-arena-remote-login-directory nil
   "Folder a runner writes forwarded logins under, or nil for $XDG_RUNTIME_DIR.
-It must be a tmpfs only this user can read.")
+A runner refuses one that is not a tmpfs this user owns, mode 0700.")
+
+(defvar +agent-shell-arena-remote--mountinfo "/proc/self/mountinfo"
+  "The file listing this process's mounts, in Linux's mountinfo format.")
 
 ;;;; Records on the wire
 
@@ -4805,6 +4808,54 @@ local host's runner records the adapter's pid and start time instead."
   "Return the folder forwarded logins go under, or nil without one."
   (or +agent-shell-arena-remote-login-directory (getenv "XDG_RUNTIME_DIR")))
 
+(defun +agent-shell-arena-remote--file-system (directory)
+  "Return the type of the file system DIRECTORY is on, or nil when unknown.
+The mount that holds it is the last listed at its longest mount point."
+  (when (file-readable-p +agent-shell-arena-remote--mountinfo)
+    (let ((target (file-name-as-directory (file-truename directory)))
+          (best "")
+          (type nil))
+      (with-temp-buffer
+        (insert-file-contents +agent-shell-arena-remote--mountinfo)
+        (dolist (line (split-string (buffer-string) "\n" t))
+          (let* ((fields (split-string line " "))
+                 (point (and (nth 4 fields)
+                             (file-name-as-directory
+                              (replace-regexp-in-string
+                               "\\\\\\([0-7]\\{3\\}\\)"
+                               (lambda (escape)
+                                 (string (string-to-number
+                                          (substring escape 1) 8)))
+                               (nth 4 fields) t t))))
+                 (rest (cdr (member "-" fields))))
+            (when (and point rest (string-prefix-p point target)
+                       (>= (length point) (length best)))
+              (setq best point type (car rest))))))
+      type)))
+
+(defun +agent-shell-arena-remote--login-root-refusal ()
+  "Return why the login root cannot hold forwarded logins, or nil.
+It must be a tmpfs folder this user owns, mode 0700."
+  (let* ((root (+agent-shell-arena-remote--login-root))
+         (attributes (and root (file-attributes root 'integer)))
+         (type (and (eq t (file-attribute-type attributes))
+                    (+agent-shell-arena-remote--file-system root)))
+         (needs "A forwarded login needs a tmpfs folder this user owns, \
+mode 0700, such as XDG_RUNTIME_DIR"))
+    (cond
+     ((null root) (format "%s, and this runner has none" needs))
+     ((not (eq t (file-attribute-type attributes)))
+      (format "%s; %s is not a folder" needs root))
+     ((not (equal type "tmpfs"))
+      (if type (format "%s; %s is on %s, not a tmpfs" needs root type)
+        (format "%s; Emacs cannot tell which file system %s is on" needs
+                root)))
+     ((not (eql (file-attribute-user-id attributes) (user-uid)))
+      (format "%s; %s is another user's" needs root))
+     ((not (= #o700 (logand #o777 (file-modes root))))
+      (format "%s; %s has mode %o" needs root
+              (logand #o777 (file-modes root)))))))
+
 (defun +agent-shell-arena-remote--job-logins (id)
   "Return the folder of job ID's members' logins under the login root, or nil."
   (when-let* ((root (+agent-shell-arena-remote--login-root)))
@@ -4851,7 +4902,8 @@ then request the delegate again." agent))
 (defun +agent-shell-arena-remote--runner-sign-in-refusal (runner)
   "Return why RUNNER's members cannot sign in on this host, or nil.
 A provider sign-in needs environment from its job or runner-init.el,
-and a forwarded one the login its job brought."
+and a forwarded one the login its job brought and a login root that
+`+agent-shell-arena-remote--login-root-refusal' accepts."
   (let ((job (+agent-shell-arena-remote--runner-job runner)))
     (seq-some
      (lambda (sign-in)
@@ -4865,8 +4917,9 @@ and a forwarded one the login its job brought."
 neither the pod's :environment nor runner-init.el gives it any environment"
                       agent)))
            ('forward
-            (unless (alist-get agent (+agent-shell-arena-remote--runner-forwarded
-                                      runner))
+            (if (alist-get agent (+agent-shell-arena-remote--runner-forwarded
+                                  runner))
+                (+agent-shell-arena-remote--login-root-refusal)
               (format "the laptop's login for %s did not reach this runner"
                       agent))))))
      (+agent-shell-arena-remote-job-sign-ins job))))
@@ -4875,7 +4928,8 @@ neither the pod's :environment nor runner-init.el gives it any environment"
   "Return the environment MEMBER of RUNNER's job signs in with.
 A provider sign-in gets its job's and runner-init.el's entries.  A
 forwarded login is written, mode 0600, into a folder of MEMBER's own
-under the login directory, a tmpfs, which the environment names.  The
+under the login directory, which must be a tmpfs of this user's alone,
+and the environment names it.  The
 host's own login needs nothing."
   (let* ((job (+agent-shell-arena-remote--runner-job runner))
          (agent (+agent-shell-pstack-panel-member-agent member))
@@ -4892,15 +4946,14 @@ host's own login needs nothing."
                                     runner))
                         (error "The laptop's login for %s did not reach this \
 runner" agent)))
-              (root (+agent-shell-arena-remote--login-root))
-              (home (and root (file-name-as-directory
-                               (expand-file-name
-                                role (+agent-shell-arena-remote--job-logins
-                                      (+agent-shell-arena-remote-job-id
-                                       job)))))))
-         (unless (and root (file-directory-p root))
-           (error "A forwarded login needs XDG_RUNTIME_DIR, a tmpfs folder of \
-this user's, and this runner has none"))
+              (home (and (+agent-shell-arena-remote--login-root)
+                         (file-name-as-directory
+                          (expand-file-name
+                           role (+agent-shell-arena-remote--job-logins
+                                 (+agent-shell-arena-remote-job-id
+                                  job)))))))
+         (when-let* ((refusal (+agent-shell-arena-remote--login-root-refusal)))
+           (error "%s" refusal))
          (when (file-exists-p home) (delete-directory home t))
          (with-file-modes #o700 (make-directory home t))
          (push (cons role home) (+agent-shell-arena-remote--runner-homes runner))
