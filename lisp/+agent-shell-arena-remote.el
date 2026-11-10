@@ -234,9 +234,10 @@ the lead may still export what its member left, for REASON, `deleting'
 until a delete succeeds, `deleted', or `lost' once it was found gone.
 BOOT is the boot id its runner last reported.  TEMPLATE, PRESET and
 PARAMETERS, NAME=VALUE strings, create it, and STOP-AFTER is how many
-seconds it lives unless extended."
+seconds it lives unless extended.  SETUP-COMMIT, when non-nil, is the
+setup commit its readiness file must name."
   name job (attempt 1) kind (state 'planned) reason boot template preset
-  parameters (stop-after 0))
+  parameters (stop-after 0) setup-commit)
 
 (cl-defstruct (+agent-shell-arena-remote-delegate-job
                (:constructor +agent-shell-arena-remote--make-delegate-job)
@@ -398,9 +399,10 @@ EMACS is the Emacs a runner runs on.  ADAPTERS-BIN is the folder holding
 the ACP adapters' launchers, and the other slots the tools the Linux
 sandbox and the adapters need, each a `+agent-shell-arena-remote-tool'.
 CAPABILITIES says what setup proved, a
-`+agent-shell-arena-remote-capabilities'."
+`+agent-shell-arena-remote-capabilities'.  SETUP-COMMIT is the commit of
+the setup that wrote it, when setup says."
   written-at emacs adapters-bin claude-agent-acp codex-acp node bwrap unshare
-  slirp4netns capabilities)
+  slirp4netns capabilities setup-commit)
 
 (cl-defstruct (+agent-shell-arena-remote-host
                (:constructor +agent-shell-arena-remote--make-host)
@@ -555,7 +557,8 @@ The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
            (node "node" (opt (record tool))) (bwrap "bwrap" (opt (record tool)))
            (unshare "unshare" (opt (record tool)))
            (slirp4netns "slirp4netns" (opt (record tool)))
-           (capabilities "capabilities" (opt (record capabilities))))
+           (capabilities "capabilities" (opt (record capabilities)))
+           (setup-commit "setup_commit" (opt sha)))
     (capabilities +agent-shell-arena-remote-capabilities
                   +agent-shell-arena-remote--make-capabilities
                   ,@(mapcar (pcase-lambda (`(,slot ,key . ,_))
@@ -585,7 +588,8 @@ The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
          (reason "reason" (opt text)) (boot "boot" (opt text))
          (template "template" text) (preset "preset" (opt text))
          (parameters "parameters" (strings))
-         (stop-after "stop_after" natnum)))
+         (stop-after "stop_after" natnum)
+         (setup-commit "setup_commit" (opt sha))))
   "Each record kind: its struct, constructor and fields.
 A field is (SLOT KEY TYPE).  TYPE is `text', any string; `id', a name
 safe in a path and a ref; `sha', a full commit id; `agent', an agent
@@ -2207,6 +2211,7 @@ first" base)))
                   :parameters (mapcar (pcase-lambda (`(,parameter . ,value))
                                         (concat parameter "=" value))
                                       (plist-get spec :parameters))
+                  :setup-commit (plist-get spec :setup-commit)
                   :stop-after (+ (+agent-shell-arena-remote--max-runtime job)
                                  +agent-shell-arena-remote-wake-timeout
                                  +agent-shell-arena-remote-slack)))
@@ -2389,6 +2394,21 @@ their records are unavailable, and the job runs regardless."
   "Return capability NAME's key in ready.json."
   (nth 1 (assq name +agent-shell-arena-remote-capability-registry)))
 
+(defun +agent-shell-arena-remote--setup-refusal (probe remote)
+  "Return why PROBE's readiness is not of REMOTE's pinned setup, or nil.
+Only a pod whose spec named :setup-commit is pinned."
+  (when-let* ((pin (and (+agent-shell-arena-remote-pod remote)
+                        (+agent-shell-arena-remote-pod-setup-commit
+                         (+agent-shell-arena-remote-pod remote)))))
+    (let ((commit (+agent-shell-arena-remote-ready-setup-commit
+                   (plist-get probe :ready))))
+      (unless (equal commit pin)
+        (format "its setup %s, but the pod's spec pins setup commit %s; \
+update the template's setup or the spec's :setup-commit"
+                (if commit (format "is at commit %s" commit)
+                  "names no commit")
+                pin)))))
+
 (defun +agent-shell-arena-remote--capability-error (probe host job)
   "Return why PROBE's readiness file cannot run JOB on HOST, or nil.
 Name each capability JOB needs that the file does not prove and what
@@ -2501,7 +2521,8 @@ or booted less than `+agent-shell-arena-remote-wake-timeout' seconds ago,
 is checked every `+agent-shell-arena-remote-wake-interval' seconds until
 it runs, answers and has a readiness file written since it booted.
 Otherwise, or once that timeout has passed, REMOTE is rejected with what
-was last wrong.  A cancel stops the wait."
+was last wrong.  A pod whose setup is not the one its spec pins is
+rejected at once.  A cancel stops the wait."
   (let* ((host (+agent-shell-arena-remote-host remote))
          (wake (+agent-shell-arena-remote--host-option host :wake))
          (deadline (+ (float-time) +agent-shell-arena-remote-wake-timeout))
@@ -2555,8 +2576,11 @@ was last wrong.  A cancel stops the wait."
                     (boot (plist-get probe :boot)))
                 (cond
                  ((not problem)
-                  (if-let* ((refusal (+agent-shell-arena-remote--capability-error
-                                      probe host job)))
+                  (if-let* ((refusal
+                             (or (+agent-shell-arena-remote--setup-refusal
+                                  probe remote)
+                                 (+agent-shell-arena-remote--capability-error
+                                  probe host job))))
                       (+agent-shell-arena-remote--reject remote refusal)
                     (when-let* ((note (+agent-shell-arena-remote--capability-notes
                                        probe host job)))

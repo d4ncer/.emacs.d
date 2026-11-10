@@ -784,7 +784,9 @@ names one of its presets; :parameters is an alist of template parameter
 names to values, all strings; :name-prefix starts each host's name, a
 lowercase letter then up to 11 lowercase letters, digits or hyphens;
 :environment is an alist of agent identifiers to NAME=VALUE entries
-their adapters get on the host, which must hold no credential."
+their adapters get on the host, which must hold no credential;
+:setup-commit is the full commit id the host's readiness file must name
+as its setup's."
   (let ((case-fold-search nil)
         (text-p (lambda (value) (and (stringp value)
                                      (not (string-empty-p value))
@@ -794,10 +796,10 @@ their adapters get on the host, which must hold no credential."
       "a plist")
      ((seq-find (lambda (key)
                   (not (memq key '(:template :preset :parameters :name-prefix
-                                   :environment))))
+                                   :environment :setup-commit))))
                 (cl-loop for (key) on spec by #'cddr collect key))
-      "a plist of :template, :preset, :parameters, :name-prefix and \
-:environment")
+      "a plist of :template, :preset, :parameters, :name-prefix, \
+:environment and :setup-commit")
      ((not (funcall text-p (plist-get spec :template)))
       "a plist whose :template names a template")
      ((and (plist-get spec :preset) (not (funcall text-p (plist-get spec :preset))))
@@ -829,7 +831,13 @@ lowercase letters, digits or hyphens")
                                      (cdr entry))))
                              (plist-get spec :environment))))
       "a plist whose :environment is an alist of agents to NAME=VALUE \
-strings"))))
+strings")
+     ((and (plist-get spec :setup-commit)
+           (not (and (stringp (plist-get spec :setup-commit))
+                     (string-match-p
+                      "\\`\\(?:[0-9a-f]\\{40\\}\\|[0-9a-f]\\{64\\}\\)\\'"
+                      (plist-get spec :setup-commit)))))
+      "a plist whose :setup-commit is a full commit id"))))
 
 (defun +agent-shell-arena-git--check-profile (toplevel profile)
   "Return PROFILE, the arena profile for TOPLEVEL, with :env as a list.

@@ -372,10 +372,15 @@ table to match.
 A pod is a Coder workspace the laptop creates for one job and deletes
 after it. A profile names the kind as `(pod . SPEC)`, where `SPEC` is a
 plist: `:template` (required), `:preset`, `:parameters` (an alist of
-template parameter names to values), `:name-prefix`, and
+template parameter names to values), `:name-prefix`,
 `:environment` (an alist of agents to `NAME=VALUE` entries, which must
-hold no credential). A pod is reached as a Coder workspace is.
+hold no credential), and `:setup-commit` (a full commit id). A pod is
+reached as a Coder workspace is.
 
+- **Setup pin.** A pod whose spec names `:setup-commit` runs only when
+  its readiness file's `setup_commit` is that commit; one naming
+  another commit, or none, is refused at once and its pod deleted.
+  Shared hosts, and pods whose spec names none, are not checked.
 - **Shape.** A pod runs one delegate, unsandboxed. The laptop refuses
   an arena and a sandboxed delegate on a pod.
 - **Base.** The base must be a commit that a ref under
@@ -727,6 +732,7 @@ A file of its own: `"version"` from 1 to 1, and no `"kind"`.
 | `unshare` | [`tool`](#tool) | optional, absent or null |
 | `slirp4netns` | [`tool`](#tool) | optional, absent or null |
 | `capabilities` | [`capabilities`](#capabilities) | optional, absent or null |
+| `setup_commit` | sha | optional, absent or null |
 
 <!-- END GENERATED record ready -->
 
@@ -804,5 +810,6 @@ A file of its own: `"version"` from 1 to 1 and `"kind": "pod"`.
 | `preset` | string | optional, absent or null |
 | `parameters` | list of strings | absent is empty |
 | `stop_after` | whole number | required |
+| `setup_commit` | sha | optional, absent or null |
 
 <!-- END GENERATED record pod -->

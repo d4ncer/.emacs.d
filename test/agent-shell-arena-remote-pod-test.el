@@ -380,8 +380,9 @@ pod, as a restarted Emacs would; return the async state to tear down to."
 
 (ert-deftest +agent-shell-arena-remote-pod-test-spec ()
   "A pod is named by a spec in profiles, and a malformed spec is refused."
-  (let ((good '(:template "example-template" :preset "small"
+  (let ((good `(:template "example-template" :preset "small"
                 :parameters (("size" . "large")) :name-prefix "test-"
+                :setup-commit ,(make-string 40 ?a)
                 :environment ((claude-code "CLAUDE_CODE_USE_BEDROCK=1")))))
     (should (+agent-shell-arena-git-host-p (cons 'pod good)))
     (should (equal (list :host (cons 'pod good) :host-directory "~/src/big-repo")
@@ -392,7 +393,8 @@ pod, as a restarted Emacs would; return the async state to tear down to."
                    (:template "t" :parameters (("a=b" . "c")))
                    (:template "t" :name-prefix "Upper")
                    (:template "t" :environment ((claude-code "no equals")))
-                   (:template "t" :unknown 1)))
+                   (:template "t" :unknown 1)
+                   (:template "t" :setup-commit "abc")))
       (should-not (+agent-shell-arena-git-host-p (cons 'pod bad))))
     (should (string-search "(pod . SPEC)"
                            (+agent-shell-arena-git-host-description)))
@@ -946,6 +948,54 @@ the margin is refused before the job is sent, and the pod goes."
                                     (+pod-test--pod panel))
                                    root))))
       (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-setup-pin ()
+  "A pod whose spec pins a setup commit runs only when its readiness file
+names that commit; one whose setup names another is refused at once and
+goes.  A host without a pinned pod is not checked."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((pin (make-string 40 ?a))
+           (other (make-string 40 ?b))
+           (ready (lambda (commit)
+                    (let ((file (expand-file-name ".ready.json" root)))
+                      (with-temp-file file
+                        (insert (json-serialize
+                                 (cons
+                                  (cons 'setup_commit commit)
+                                  (assq-delete-all
+                                   'setup_commit
+                                   (json-parse-string
+                                    (+pod-test--read file)
+                                    :object-type 'alist))))))))))
+      (should-not (+agent-shell-arena-remote--setup-refusal
+                   (list :ready (+agent-shell-arena-remote--make-ready))
+                   (+agent-shell-arena-remote--make)))
+      (should (string-search
+               "names no commit"
+               (+agent-shell-arena-remote--setup-refusal
+                (list :ready (+agent-shell-arena-remote--make-ready))
+                (+agent-shell-arena-remote--make
+                 :pod (+agent-shell-arena-remote--make-pod
+                       :setup-commit pin)))))
+      (setq spec (append spec (list :setup-commit pin)))
+      (funcall ready other)
+      (let ((panel (funcall launch "pod-panel")))
+        (+pod-test--wait-for
+         (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+        (should (string-search
+                 (format "its setup is at commit %s, but the pod's spec pins \
+setup commit %s" other pin)
+                 (+agent-shell-pstack-panel-rejection panel)))
+        (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+        (+pod-test--wait-for
+         (lambda () (not (file-exists-p (+pod-test--ledger panel))))))
+      (funcall ready pin)
+      (let ((panel (funcall launch "pod-panel-2")))
+        (+pod-test--submitted panel)
+        (should (equal pin (+agent-shell-arena-remote-pod-setup-commit
+                            (+agent-shell-arena-remote--read-json
+                             (+pod-test--ledger panel) 'pod))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-send-leaves-no-login ()
   "The upload holding a forwarded login is staged outside the job's
