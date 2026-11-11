@@ -356,6 +356,27 @@ check that passed, 0 when it failed, or nil when setup never checked."
   "Sparse-checkout patterns, and whether they are in cone mode."
   cone patterns)
 
+(cl-defstruct (+agent-shell-arena-remote-steps
+               (:constructor +agent-shell-arena-remote--make-steps)
+               (:copier nil))
+  "When each step of a job came on the laptop, in seconds since the epoch.
+REGISTERED is when its panel was registered, CHECKED when its base was
+found on origin, CREATE-CALLED and CREATE-RETURNED bracket its pod's
+create, READY is when its host was first seen ready, ADMITTED when the
+logins it forwards were admitted, SENT when the host took its upload,
+FETCHED when its results were here, and DELETED when its pod was gone."
+  registered checked create-called create-returned ready admitted sent
+  fetched deleted)
+
+(cl-defstruct (+agent-shell-arena-remote-host-steps
+               (:constructor +agent-shell-arena-remote--make-host-steps)
+               (:copier nil))
+  "When each step of a job came on its host, by the host's clock.
+BASE-FETCHED and BASE-CHECKED-OUT are when its submission fetched the
+base and checked it out, STARTED when its runner started, LAUNCHED when
+its first member started and ENDED when every member had settled."
+  base-fetched base-checked-out started launched ended)
+
 (cl-defstruct (+agent-shell-arena-remote-status
                (:constructor +agent-shell-arena-remote--make-status)
                (:copier nil))
@@ -365,9 +386,10 @@ phase.  RESULTS says the results are written.  HEARTBEAT is when the
 runner last wrote it, and DEADLINE when it gives up.  LOGINS says how
 each agent's host login stood before any member started.  SHAPE is
 the job's, and a delegate's TRANSCRIPT says what of its transcript the
-host keeps.  BOOT is the host's boot id when the runner started."
+host keeps.  BOOT is the host's boot id when the runner started.  STEPS
+is a `+agent-shell-arena-remote-host-steps'."
   id phase pid heartbeat deadline arena members results error logins
-  shape transcript boot)
+  shape transcript boot steps)
 
 (cl-defstruct (+agent-shell-arena-remote-member
                (:constructor +agent-shell-arena-remote--make-member)
@@ -434,13 +456,16 @@ SHAPE is the job's.  CURSOR is where a delegate's transcript continues,
 a `+agent-shell-arena-remote-cursor', advanced once the page before it
 is in the laptop's cache.  POD is the `+agent-shell-arena-remote-pod'
 created for this job, or nil on a host that outlives it; CREATING says
-its create runs now.
+its create runs now.  STEPS is a `+agent-shell-arena-remote-steps', and
+HOST-STEPS the `+agent-shell-arena-remote-host-steps' its host last
+reported.
 
-The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
+The slots from DIRECTORY to LOGINS, POLLED, CREATING and HOST-STEPS are
+not saved."
   id panel session host phase (cancel-state 'none) submitted fetched delivered
   deadline extended heartbeat seen (restarts 0) arena emacs error
   directory timer (failures 0) runner-phase ready logins (shape 'arena) cursor
-  polled pod creating)
+  polled pod creating steps host-steps)
 
 (defconst +agent-shell-arena-remote--agent-regexp
   "\\`[a-z0-9][a-z0-9-]*\\'"
@@ -497,7 +522,25 @@ The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
             (logins "logins" (list login))
             (shape "shape" (opt (enum arena delegate)))
             (transcript "transcript" (opt (record transcript)))
-            (boot "boot" (opt text)))
+            (boot "boot" (opt text))
+            (steps "steps" (opt (record host-steps))))
+    (steps +agent-shell-arena-remote-steps +agent-shell-arena-remote--make-steps
+           (registered "registered" (opt number))
+           (checked "base_checked" (opt number))
+           (create-called "create_called" (opt number))
+           (create-returned "create_returned" (opt number))
+           (ready "ready_seen" (opt number))
+           (admitted "logins_admitted" (opt number))
+           (sent "upload_sent" (opt number))
+           (fetched "results_fetched" (opt number))
+           (deleted "pod_deleted" (opt number)))
+    (host-steps +agent-shell-arena-remote-host-steps
+                +agent-shell-arena-remote--make-host-steps
+                (base-fetched "base_fetched" (opt number))
+                (base-checked-out "base_checked_out" (opt number))
+                (started "started" (opt number))
+                (launched "member_launched" (opt number))
+                (ended "member_ended" (opt number)))
     (transcript +agent-shell-arena-remote-transcript
                 +agent-shell-arena-remote--make-transcript
                 (epoch "epoch" id) (first "first" natnum)
@@ -587,7 +630,8 @@ The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
             (error "error" (opt text))
             (shape "shape" (opt (enum arena delegate)))
             (cursor "cursor" (opt (record cursor)))
-            (pod "pod" (opt (record pod))))
+            (pod "pod" (opt (record pod)))
+            (steps "steps" (opt (record steps))))
     (pod +agent-shell-arena-remote-pod +agent-shell-arena-remote--make-pod
          (name "name" id) (job "job" id) (attempt "attempt" natnum)
          (kind "kind" host-kind)
@@ -1409,12 +1453,16 @@ if [ ! -d \"code/$hash\" ]; then
 fi
 rm -f \"$job/code.tar\"
 g() { git -C \"$repo\" -c core.hooksPath=/dev/null \"$@\"; }
+step() { t=$(date +%s.%N); case $t in *N) t=${t%.N};; esac
+  printf '%s %s\\n' \"$1\" \"$t\" >>\"$job/steps\"; }
 if [ \"$source\" = origin ]; then
   case $base in ''|*[!0-9a-f]*) answer \"failed the base is not a commit id\";; esac
   g fetch -q --no-tags --no-write-fetch-head origin \"$base\" 2>\"$job/fetch.log\" ||
     answer \"failed the base $base could not be fetched from origin: $(tail -n 1 \"$job/fetch.log\")\"
+  step base_fetched
   g -c advice.detachedHead=false checkout -q --detach \"$base\" 2>\"$job/checkout.log\" ||
     answer \"failed the checkout could not move to the base $base: $(tail -n 1 \"$job/checkout.log\")\"
+  step base_checked_out
   g update-ref \"refs/pstack-arena/$id/base\" \"$base\" ||
     answer \"failed the base ref could not be written\"
 else
@@ -1429,6 +1477,7 @@ else
   g fetch -q --no-tags --no-write-fetch-head \"$bundle\" \
 \"+refs/pstack-arena/$id/base:refs/pstack-arena/$id/base\" 2>\"$job/fetch.log\" ||
     answer \"failed $(tail -n 1 \"$job/fetch.log\")\"
+  step base_fetched
 fi
 "
    +agent-shell-arena-remote--launch)
@@ -1437,7 +1486,8 @@ base, and start the runner with Emacs $3 by launcher $4.  With $5
 origin, the checkout fetches commit $6 from its origin and checks it out
 instead of taking the base from a bundle.  A job already started answers
 as started, so a resent submission is harmless.  Every other answer but
-started deletes the login the upload forwarded.")
+started deletes the login the upload forwarded.  Each step the base
+takes is stamped in the job's steps file.")
 
 (defconst +agent-shell-arena-remote--resume-script
   (concat
@@ -1546,6 +1596,57 @@ unreachable until the lead re-attaches it.")
     (when (and directory (file-directory-p directory))
       (+agent-shell-arena-remote--write-json
        (+agent-shell-arena-remote--record-file directory) 'record remote))))
+
+(defun +agent-shell-arena-remote--step (remote slot)
+  "Note that REMOTE's job reached step SLOT of its steps now, and save it.
+SLOT names a slot of `+agent-shell-arena-remote-steps'."
+  (let ((steps (or (+agent-shell-arena-remote-steps remote)
+                   (setf (+agent-shell-arena-remote-steps remote)
+                         (+agent-shell-arena-remote--make-steps)))))
+    (setf (cl-struct-slot-value '+agent-shell-arena-remote-steps slot steps)
+          (float-time)))
+  (+agent-shell-arena-remote--save remote))
+
+(defconst +agent-shell-arena-remote--step-names
+  '((+agent-shell-arena-remote-steps
+     "On the laptop"
+     (registered . "panel registered") (checked . "base checked")
+     (create-called . "create called") (create-returned . "create returned")
+     (ready . "ready seen") (admitted . "logins admitted")
+     (sent . "upload sent") (fetched . "results fetched")
+     (deleted . "pod deleted"))
+    (+agent-shell-arena-remote-host-steps
+     "On the host"
+     (base-fetched . "base fetched") (base-checked-out . "base checked out")
+     (started . "runner started") (launched . "member launched")
+     (ended . "member ended")))
+  "Each steps record type, the label of its clock and its slots' names.")
+
+(defun +agent-shell-arena-remote-steps-text (remote)
+  "Return lines giving the seconds between the steps REMOTE's job took.
+The laptop's steps and the host's are timed apart, each by its own
+clock, in the order they came.  Return nil when none was noted."
+  (mapconcat
+   (pcase-lambda (`(,type ,label . ,names))
+     (when-let* ((steps (if (eq type '+agent-shell-arena-remote-steps)
+                            (+agent-shell-arena-remote-steps remote)
+                          (+agent-shell-arena-remote-host-steps remote)))
+                 (times (sort (seq-keep
+                               (pcase-lambda (`(,slot . ,name))
+                                 (when-let* ((time (cl-struct-slot-value
+                                                    type slot steps)))
+                                   (cons time name)))
+                               names)
+                              #'car-less-than-car)))
+       (let ((previous (caar times)))
+         (concat label ": " (cdar times)
+                 (mapconcat (pcase-lambda (`(,time . ,name))
+                              (prog1 (format ", %s %.1f s later" name
+                                             (- time previous))
+                                (setq previous time)))
+                            (cdr times) "")
+                 ".\n"))))
+   +agent-shell-arena-remote--step-names ""))
 
 (defun +agent-shell-arena-remote--move (remote phase)
   "Move REMOTE to PHASE, save it, and show it in its panel.
@@ -2109,6 +2210,8 @@ A kind whose hosts are made per job gives the job a pod of its own; see
                             (+agent-shell-pstack-panel-lead panel))
                   :shape (+agent-shell-pstack-panel-shape panel)
                   :host host :phase 'preparing
+                  :steps (+agent-shell-arena-remote--make-steps
+                          :registered (+agent-shell-pstack-panel-created panel))
                   :directory (+agent-shell-arena-git-manifest-directory
                               manifest))))
     (setf (+agent-shell-pstack-panel-arena panel) manifest)
@@ -2255,6 +2358,7 @@ first" base)))
             (+agent-shell-arena-remote--job-file remote) 'job job)
            (+agent-shell-arena-remote--pod-write
             (+agent-shell-arena-remote-pod remote))
+           (+agent-shell-arena-remote--step remote 'checked)
            (+agent-shell-arena-remote--move remote 'submitting)
            (+agent-shell-arena-remote--submit remote job)))))))))
 
@@ -2654,6 +2758,7 @@ bundle against one."
            (+agent-shell-arena-remote--await
             remote job
             (lambda (probe)
+              (+agent-shell-arena-remote--step remote 'ready)
               (setf (+agent-shell-arena-remote-emacs remote)
                     (+agent-shell-arena-remote-tool-path
                      (+agent-shell-arena-remote-ready-emacs
@@ -2725,10 +2830,12 @@ deleted.  FAILURES counts lookups that could not say."
            (funcall reject (+agent-shell-arena-remote--cancel-reason remote)))
           (t
            (setf (+agent-shell-arena-remote-creating remote) t)
+           (+agent-shell-arena-remote--step remote 'create-called)
            (+agent-shell-arena-remote--pod-call
             pod :create (+agent-shell-arena-remote--pod-spec pod)
             (+agent-shell-arena-remote-pod-stop-after pod)
             (lambda (error)
+              (+agent-shell-arena-remote--step remote 'create-returned)
               (if (not error)
                   (progn (setf (+agent-shell-arena-remote-creating remote) nil)
                          (funcall exists "created"))
@@ -2878,6 +2985,7 @@ The logins it forwards are admitted first.  HAS-CODE and ATTEMPTS are as
        job
        (lambda (logins error)
          (if error (funcall fail error)
+           (+agent-shell-arena-remote--step remote 'admitted)
            (+agent-shell-arena-remote-code
             (lambda (code error)
               (if error (funcall fail error)
@@ -2988,6 +3096,7 @@ or nil; and a message."
 
 (defun +agent-shell-arena-remote--submitted (remote)
   "Note that REMOTE's host took its job, and start polling."
+  (+agent-shell-arena-remote--step remote 'sent)
   (setf (+agent-shell-arena-remote-submitted remote) t
         (+agent-shell-arena-remote-seen remote) (float-time))
   (+agent-shell-arena-remote--move remote 'remote)
@@ -3242,7 +3351,9 @@ the runner reports."
   (setf (+agent-shell-arena-remote-runner-phase remote)
         (+agent-shell-arena-remote-status-phase status)
         (+agent-shell-arena-remote-logins remote)
-        (+agent-shell-arena-remote-status-logins status))
+        (+agent-shell-arena-remote-status-logins status)
+        (+agent-shell-arena-remote-host-steps remote)
+        (+agent-shell-arena-remote-status-steps status))
   (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
     (dolist (state (+agent-shell-arena-remote-status-members status))
       (when-let* ((member (+agent-shell-pstack-panel--member
@@ -3367,6 +3478,7 @@ refused."
          (results (expand-file-name "results/" directory))
          (fail (lambda (error)
                  (+agent-shell-arena-remote--trouble remote error))))
+    (+agent-shell-arena-remote--step remote 'fetched)
     (when (file-directory-p results) (delete-directory results t))
     (make-directory results t)
     (+agent-shell-arena-remote--local
@@ -3600,7 +3712,8 @@ as %s, not the reported %s" landed tip))
   "Give REMOTE's panel REPORT's members and RESULTS, then finish it.
 The follow-up is composed as a local arena's is.  With the report
 checked, the results landed and the transcript saved, REMOTE's pod is
-deleted, unless `+agent-shell-arena-remote--pod-keep-reason' keeps it."
+deleted, unless `+agent-shell-arena-remote--pod-keep-reason' keeps it,
+and the record notes when it is gone."
   (when-let* ((panel (+agent-shell-arena-remote--panel remote)))
     (when-let* ((pod (+agent-shell-arena-remote-pod remote))
                 ((eq (+agent-shell-arena-remote-pod-state pod) 'created))
@@ -3639,7 +3752,10 @@ deleted, unless `+agent-shell-arena-remote--pod-keep-reason' keeps it."
     (+agent-shell-arena-remote--sync)
     (when-let* ((pod (+agent-shell-arena-remote-pod remote))
                 ((eq (+agent-shell-arena-remote-pod-state pod) 'created)))
-      (+agent-shell-arena-remote--pod-release pod))))
+      (+agent-shell-arena-remote--pod-release
+       pod (lambda (error)
+             (unless error
+               (+agent-shell-arena-remote--step remote 'deleted)))))))
 
 ;;;; Delegate transcripts
 
@@ -4625,10 +4741,11 @@ its delegate's writers could not be shown to have stopped, which keeps
 the repository's lock held.  BOOT is the host's boot id.  FORWARDED
 maps an agent to the login file its job forwarded, held only in memory,
 and HOMES a member's role to the folder that login was written to for
-it, deleted once it settles."
+it, deleted once it settles.  STEPS is the job's
+`+agent-shell-arena-remote-host-steps'."
   job directory root panel (phase 'queued) lock previous done
   cancelled expired (written "") (beat 0) error ready transcript quarantine
-  boot forwarded homes)
+  boot forwarded homes steps)
 
 (defvar +agent-shell-arena-remote--runner nil
   "The runner this batch Emacs runs, or nil.")
@@ -4662,9 +4779,47 @@ it, deleted once it settles."
             (+agent-shell-arena-remote--members
              (+agent-shell-arena-remote--runner-job runner)))))
 
+(defun +agent-shell-arena-remote--host-steps (directory)
+  "Return the steps of the job in DIRECTORY, with its runner started now.
+The submission stamps the base's steps in DIRECTORY's steps file, each a
+line of a step's name and its time."
+  (let ((steps (+agent-shell-arena-remote--make-host-steps
+                :started (float-time)))
+        (file (expand-file-name "steps" directory)))
+    (when (file-readable-p file)
+      (dolist (line (split-string (with-temp-buffer
+                                    (insert-file-contents file)
+                                    (buffer-string))
+                                  "\n" t))
+        (pcase (split-string line)
+          (`(,(and name (or "base_fetched" "base_checked_out")) ,time)
+           (when (string-match-p "\\`[0-9]+\\(?:\\.[0-9]+\\)?\\'" time)
+             (setf (cl-struct-slot-value
+                    '+agent-shell-arena-remote-host-steps
+                    (intern (string-replace "_" "-" name)) steps)
+                   (string-to-number time)))))))
+    steps))
+
+(defun +agent-shell-arena-remote--runner-note-steps (runner)
+  "Note in RUNNER's steps when its first member started and its last settled."
+  (when-let* ((steps (+agent-shell-arena-remote--runner-steps runner))
+              (panel (+agent-shell-arena-remote--runner-panel runner))
+              (members (+agent-shell-pstack-panel-members panel)))
+    (when (and (null (+agent-shell-arena-remote-host-steps-launched steps))
+               (seq-some (lambda (member)
+                           (memq (+agent-shell-pstack-panel-member-state member)
+                                 '(starting waiting running)))
+                         members))
+      (setf (+agent-shell-arena-remote-host-steps-launched steps) (float-time)))
+    (when (and (+agent-shell-arena-remote-host-steps-launched steps)
+               (null (+agent-shell-arena-remote-host-steps-ended steps))
+               (seq-every-p #'+agent-shell-pstack-panel--settled-p members))
+      (setf (+agent-shell-arena-remote-host-steps-ended steps) (float-time)))))
+
 (defun +agent-shell-arena-remote--runner-status (runner &optional results)
   "Write RUNNER's status if it changed or a heartbeat is due.
 RESULTS says the results are written, which finishes the status."
+  (+agent-shell-arena-remote--runner-note-steps runner)
   (let* ((panel (+agent-shell-arena-remote--runner-panel runner))
          (manifest (and panel (+agent-shell-pstack-panel-arena panel)))
          (job (+agent-shell-arena-remote--runner-job runner))
@@ -4701,7 +4856,8 @@ RESULTS says the results are written, which finishes the status."
                   :results (and results t)
                   :error (+agent-shell-arena-remote--runner-error runner)
                   :logins (and panel (+agent-shell-pstack-panel-logins panel))
-                  :boot (+agent-shell-arena-remote--runner-boot runner)))
+                  :boot (+agent-shell-arena-remote--runner-boot runner)
+                  :steps (+agent-shell-arena-remote--runner-steps runner)))
          (text (+agent-shell-arena-remote-to-json 'status status))
          (now (float-time)))
     (when (or results
@@ -5608,6 +5764,7 @@ unfinished.  The job's logins an earlier runner left are deleted first."
            (runner (+agent-shell-arena-remote--make-runner
                     :job job :directory directory :root root :ready ready
                     :boot (+agent-shell-arena-remote--boot-id)
+                    :steps (+agent-shell-arena-remote--host-steps directory)
                     :lock (+agent-shell-arena-remote--lock-file
                            root (+agent-shell-arena-remote--repository job))
                     :previous (and previous

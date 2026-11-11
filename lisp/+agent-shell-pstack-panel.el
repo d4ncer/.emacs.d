@@ -1337,6 +1337,7 @@ git rebase --onto HEAD %s %s.\n"
      (format "Ran on: %s, %s.\n" host
              (if (+agent-shell-pstack-panel--sandboxed-p panel) "sandboxed"
                "full access"))
+     (+agent-shell-arena-remote-steps-text remote)
      (cond
       ((null outcome)
        "Branch: none came back; the host reported no delegate branch.\n")
@@ -1369,8 +1370,9 @@ uncommitted in %s on %s.\n"
                   (+agent-shell-arena-remote--host-label
                    (+agent-shell-arena-remote-host remote))))))
      (when (and dirty (> dirty 0))
-       (format "The host worktree has %d uncommitted path%s: %s.  They stay on \
+       (format "The host %s has %d uncommitted path%s: %s.  They stay on \
 the host, apart from the branch; cleaning the workspace up loses them.\n"
+               (if (+agent-shell-arena-remote-pod remote) "checkout" "worktree")
                dirty (if (= dirty 1) "" "s")
                (concat (string-join
                         (+agent-shell-arena-remote-outcome-dirty-paths outcome)
@@ -3528,6 +3530,8 @@ exited mid-run."
                   "+agent-shell-arena-remote")
 
 (declare-function +agent-shell-arena-remote-pod-note "+agent-shell-arena-remote")
+
+(declare-function +agent-shell-arena-remote-steps-text "+agent-shell-arena-remote")
 
 (defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
   "Name of the panels buffer.")

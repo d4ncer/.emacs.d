@@ -446,6 +446,7 @@ which then settles as done."
                  (expand-file-name "job.json" folder) 'job))
            (runner (+agent-shell-arena-remote--make-runner
                     :job job :directory folder :root state
+                    :steps (+agent-shell-arena-remote--host-steps folder)
                     :ready (+agent-shell-arena-remote--read-json
                             (expand-file-name
                              ".local/share/pstack-arena/ready.json" home)
@@ -991,6 +992,53 @@ uncommitted, which keep the pod."
       (should (equal (+pod-test--git repo "rev-parse" "HEAD")
                      (funcall lead-git "rev-parse"
                               "refs/heads/pstack/delegate/pod-panel"))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-follow-up-times-steps ()
+  "A pod job's record and status note when each of its steps came, and its
+follow-up gives the seconds between them, the laptop's and the pod's
+apart; the record notes the pod's deletion after."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (+pod-test--run-runner
+       panel (funcall job-folder panel) root
+       (lambda (directory)
+         (with-temp-file (expand-file-name "builder.txt" directory)
+           (insert "built\n"))
+         (+pod-test--git directory "add" "builder.txt")
+         (+pod-test--git directory "commit" "-q" "-m" "Add builder.txt")))
+      (+pod-test--wait-for
+       (lambda () (+agent-shell-pstack-panel-followup panel)))
+      (let ((followup (+agent-shell-pstack-panel-followup panel)))
+        (should (string-match-p
+                 (concat "On the laptop: panel registered, base checked [0-9.]+ s \
+later, create called [0-9.]+ s later, create returned [0-9.]+ s later, ready \
+seen [0-9.]+ s later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s \
+later, results fetched [0-9.]+ s later\\.\n")
+                 followup))
+        (should (string-match-p
+                 (concat "On the host: base fetched, base checked out [0-9.]+ s \
+later, runner started [0-9.]+ s later, member launched [0-9.]+ s later, \
+member ended [0-9.]+ s later\\.\n")
+                 followup)))
+      (let ((status (+agent-shell-arena-remote--read-json
+                     (expand-file-name "status.json"
+                                       (+agent-shell-arena-remote-directory
+                                        remote))
+                     'status)))
+        (should (+agent-shell-arena-remote-host-steps-ended
+                 (+agent-shell-arena-remote-status-steps status))))
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
+      (+pod-test--wait-for
+       (lambda ()
+         (let ((file (+agent-shell-arena-remote--record-file
+                      (+agent-shell-arena-remote-directory remote))))
+           (and (file-exists-p file)
+                (+agent-shell-arena-remote-steps-deleted
+                 (+agent-shell-arena-remote-steps
+                  (+agent-shell-arena-remote--read-json file 'record))))))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-member-keeps-pod ()
   "A delegate that ended in error keeps its pod, with the error, so the

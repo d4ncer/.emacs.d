@@ -436,6 +436,13 @@ reached as a Coder workspace is.
   job cannot be restored after a restart, or has no record left, is
   `kept` with the reason. A failed delete stays `deleting`, counts
   against the cap, and is retried, also after a restart.
+- **Steps.** The record's `steps` holds when each step of the job
+  came on the laptop, and the status's `steps` when each came on the
+  pod, by its own clock: the submission stamps the base's fetch and
+  checkout in the job folder's `steps` file, one `NAME TIME` line each,
+  and the runner adds its start and its member's launch and end. The
+  follow-up gives the seconds between consecutive steps, each clock
+  apart; the pod's deletion comes after it, in the record alone.
 - **Results.** Results are `results.bundle` and `report.json` as for
   any delegate. The laptop names every ref itself, takes only a
   well-formed commit id from the report, refuses a tip that does not
@@ -602,6 +609,7 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "status"`.
 | `shape` | one of `"arena"`, `"delegate"` | optional, absent or null |
 | `transcript` | [`transcript`](#transcript) | optional, absent or null |
 | `boot` | string | optional, absent or null |
+| `steps` | [`host-steps`](#host-steps) | optional, absent or null |
 
 <!-- END GENERATED record status -->
 
@@ -616,6 +624,19 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "status"`.
 | `seq` | whole number | required |
 
 <!-- END GENERATED record transcript -->
+
+<!-- BEGIN GENERATED record host-steps -->
+#### `host-steps`
+
+| Key | Type | Presence |
+|---|---|---|
+| `base_fetched` | number | optional, absent or null |
+| `base_checked_out` | number | optional, absent or null |
+| `started` | number | optional, absent or null |
+| `member_launched` | number | optional, absent or null |
+| `member_ended` | number | optional, absent or null |
+
+<!-- END GENERATED record host-steps -->
 
 <!-- BEGIN GENERATED record cursor -->
 #### `cursor`
@@ -806,8 +827,26 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "record"`.
 | `shape` | one of `"arena"`, `"delegate"` | optional, absent or null |
 | `cursor` | [`cursor`](#cursor) | optional, absent or null |
 | `pod` | [`pod`](#pod) | optional, absent or null |
+| `steps` | [`steps`](#steps) | optional, absent or null |
 
 <!-- END GENERATED record record -->
+
+<!-- BEGIN GENERATED record steps -->
+#### `steps`
+
+| Key | Type | Presence |
+|---|---|---|
+| `registered` | number | optional, absent or null |
+| `base_checked` | number | optional, absent or null |
+| `create_called` | number | optional, absent or null |
+| `create_returned` | number | optional, absent or null |
+| `ready_seen` | number | optional, absent or null |
+| `logins_admitted` | number | optional, absent or null |
+| `upload_sent` | number | optional, absent or null |
+| `results_fetched` | number | optional, absent or null |
+| `pod_deleted` | number | optional, absent or null |
+
+<!-- END GENERATED record steps -->
 
 <!-- BEGIN GENERATED record pod -->
 #### `pod`
