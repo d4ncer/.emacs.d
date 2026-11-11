@@ -1625,7 +1625,7 @@ SLOT names a slot of `+agent-shell-arena-remote-steps'."
 (defun +agent-shell-arena-remote-steps-text (remote)
   "Return lines giving the seconds between the steps REMOTE's job took.
 The laptop's steps and the host's are timed apart, each by its own
-clock, in the order they came.  Return nil when none was noted."
+clock, in the order they came; the text is empty when none was noted."
   (mapconcat
    (pcase-lambda (`(,type ,label . ,names))
      (when-let* ((steps (if (eq type '+agent-shell-arena-remote-steps)

@@ -3533,6 +3533,8 @@ exited mid-run."
 
 (declare-function +agent-shell-arena-remote-steps-text "+agent-shell-arena-remote")
 
+(declare-function +agent-shell-arena-remote-pod "+agent-shell-arena-remote")
+
 (defconst +agent-shell-pstack-panels--buffer "*pstack panels*"
   "Name of the panels buffer.")
 
