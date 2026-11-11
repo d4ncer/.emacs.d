@@ -1070,5 +1070,38 @@ sleep 62 & wait"
           (delete-process adapter))
         (delete-file pids)))))
 
+(ert-deftest +agent-shell-drive-test-refused-cancellation ()
+  "Carry refusal titles only through their own turn."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let (events)
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+        (dolist (title '("Edit file" "Escalated command"))
+          (with-current-buffer shell
+            (let ((request (+agent-shell-drive-test--permission
+                            "execute" '("allow_once" "reject_once"))))
+              (setf (map-elt (map-elt (cdr request) :tool-call) :title) title)
+              (+agent-shell-drive--respond (cdr request))
+              (should (equal "reject_once" (caar request))))))
+        (emit shell '((:event . turn-complete)
+                      (:data . ((:stop-reason . "cancelled")))))
+        (should (equal '("Edit file" "Escalated command")
+                       (plist-get (car events) :refused)))
+        (should (equal '(:kind refused :message "Edit file; Escalated command"
+                         :source permission-refusal)
+                       (+agent-shell-drive-failure (car events))))
+        (emit shell '((:event . turn-complete)
+                      (:data . ((:stop-reason . "cancelled")))))
+        (should-not (+agent-shell-drive-failure (car events)))
+        (with-current-buffer shell
+          (setq +agent-shell-drive--refused '("Old action")))
+        (emit shell '((:event . input-submitted)))
+        (emit shell '((:event . turn-complete)
+                      (:data . ((:stop-reason . "cancelled")))))
+        (should-not (plist-get (car events) :refused))
+        (should-not (+agent-shell-drive-failure
+                     '(:kind turn-complete :stop-reason "end_turn"
+                       :refused ("Edit file"))))))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here

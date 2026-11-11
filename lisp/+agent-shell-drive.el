@@ -148,6 +148,8 @@ command it ran, newest first.")
               (mapcar (lambda (config) (map-elt config :identifier))
                       (+agent-shell-drive--configs))))
 
+(defvar-local +agent-shell-drive--refused nil "Titles of permissions rejected during this turn.")
+
 (defun +agent-shell-drive--answer (permission allow)
   "Approve PERMISSION once when ALLOW, otherwise reject it.
 Return nil, leaving the dialog to the user, only when no option fits."
@@ -161,9 +163,11 @@ Return nil, leaving the dialog to the user, only when no option fits."
                                '("allow_once" "reject_once" "reject_always")
                              '("reject_once" "reject_always")))))
     (when choice
-      (when-let* (((string-prefix-p "reject" (map-elt choice :kind)))
-                  (plan (map-elt (map-elt tool-call :raw-input) 'plan)))
-        (setq +agent-shell-drive--plan plan))
+      (when (string-prefix-p "reject" (map-elt choice :kind))
+        (push (or (map-elt tool-call :title) "a tool")
+              +agent-shell-drive--refused)
+        (when-let* ((plan (map-elt (map-elt tool-call :raw-input) 'plan)))
+          (setq +agent-shell-drive--plan plan)))
       (funcall (map-elt permission :respond) (map-elt choice :option-id))
       t)))
 
@@ -934,6 +938,8 @@ a string or an argv vector, and may send it only in a later update."
                  :title (map-nested-elt data '(:tool-call :title))))))
       (_
        (when (eq kind 'input-submitted)
+         (with-current-buffer shell
+           (setq +agent-shell-drive--refused nil))
          (plist-put state :turn nil)
          (plist-put state :final nil)
          (plist-put state :provider-errors nil)
@@ -955,6 +961,9 @@ a string or an argv vector, and may send it only in a later update."
                             (if (string-blank-p final)
                                 (+agent-shell-drive--text (plist-get state :turn))
                               final))
+                    :refused (with-current-buffer shell
+                               (prog1 (reverse +agent-shell-drive--refused)
+                                 (setq +agent-shell-drive--refused nil)))
                     :provider-errors (plist-get state :provider-errors)
                     :commands (seq-uniq (reverse
                                          (mapcar #'cdr (plist-get state
@@ -1102,7 +1111,8 @@ The watcher's key is (`progress' OWNER . ID), apart from OWNER's others."
 ;;;; Provider failures
 
 (defconst +agent-shell-drive-failure-kinds
-  '((rate_limited "was rate limited" t)
+  '((refused "ended after Emacs refused an action" nil)
+    (rate_limited "was rate limited" t)
     (quota_exhausted "ran out of quota" nil)
     (overloaded "was overloaded" t)
     (transport_lost "lost its connection" t)
@@ -1170,6 +1180,7 @@ object's single key names it, and HTTP status 429 or 401 inside it means
 EVENT is a parsed `turn-complete' or `error' event.  The result is
 \(:kind KIND :message TEXT :source SOURCE), from the first of:
 
+- `permission-refusal': a cancelled turn after Emacs rejected a permission.
 - `error-data': the JSON-RPC error's data names an errorKind or a
   codexErrorInfo.
 - `codex-error': the turn saw a `_meta.codex.error' whose message is
@@ -1183,6 +1194,12 @@ EVENT is a parsed `turn-complete' or `error' event.  The result is
          (code (or (map-elt data 'errorKind) (map-elt data 'codexErrorInfo)))
          (text (string-trim (or (plist-get event :text) ""))))
     (cond
+     ((and (eq (plist-get event :kind) 'turn-complete)
+           (equal (plist-get event :stop-reason) "cancelled")
+           (plist-get event :refused))
+      (list :kind 'refused
+            :message (string-join (plist-get event :refused) "; ")
+            :source 'permission-refusal))
      (code
       (list :kind (+agent-shell-drive-failure-kind code)
             :message (or (map-elt data 'message) (plist-get event :message)

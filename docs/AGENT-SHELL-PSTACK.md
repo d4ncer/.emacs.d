@@ -191,13 +191,15 @@ again outside the reload command drops finished panels from another schema,
 with a message, rather than letting a changed struct break them. It keeps
 unfinished ones and names them; run the reload command to carry them over.
 
-### Provider failures
+### Turn failures
 
 ACP has no stop reason for a turn the provider failed, so an adapter may end
 it with `end_turn` and the provider's error as its text. Every member, in
 every shape and on a host too, classifies each finished or failed turn with
 `+agent-shell-drive-failure`, from the first of:
 
+- a cancelled turn after Emacs rejected a permission, classified as `refused`
+  with the refused action titles;
 - a JSON-RPC error on the prompt whose data names an `errorKind` (Claude
   Code) or a `codexErrorInfo` (Codex);
 - a turn that saw Codex's `_meta.codex.error` warning and ends with exactly
@@ -216,9 +218,15 @@ A `rate_limited`, `overloaded`, `transport_lost` or `internal_error` failure
 is retried once: after `+agent-shell-pstack-panel-retry-delay` seconds, 60
 by default, Emacs asks the same shell to continue where it left off. No retry
 starts past the phase's timeout or an arena's deadline. Any other kind, a
-second failure, or a retry that does not fit settles the member as `error`.
+second provider failure, or a retry that does not fit settles the member as `error`.
 It keeps its text, report, commits and transcript, and the follow-up says
 what failed, such as `Codex was overloaded: Selected model is at capacity.`
+A `refused` turn gets one immediate continuation in the same shell. Emacs
+names the refused actions and asks the member to finish without file edits,
+escalated commands, or networked commands. This recovery does not consume
+the provider retry. A second refused turn settles as `error`, saying Emacs
+already asked once. Cancellation without a refusal remains an error.
+
 A host's status and report carry each member's `failure_kind`.
 
 ### Reloading live

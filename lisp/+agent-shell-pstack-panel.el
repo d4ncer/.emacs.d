@@ -418,7 +418,8 @@ when collecting failed; what it left is in its panel's manifest.
 
 FAILURE is the last provider failure from `+agent-shell-drive-failure'
 that ended one of its turns.  RETRY is the timer of its pending retry,
-then t once it was asked to continue.
+then t once it was asked to continue.  REFUSED records the separate
+once-only recovery after a permission refusal.
 
 A delegate's BACKGROUND is a plist: :commands, the shell commands its
 tool calls ran since the brief, oldest first, and :asked, t once it was
@@ -428,7 +429,7 @@ asked to wait for the commands it left running; see
   sandbox capture result
   (egress-file nil :documentation "Where its egress record is saved.")
   (egress-record nil :documentation "Its final `+agent-shell-egress-record'.")
-  failure retry background)
+  failure retry refused background)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -2392,6 +2393,7 @@ would not come before PANEL's current phase expires and its deadline."
 
 (defun +agent-shell-pstack-panel--fail (panel member failure text)
   "Handle provider FAILURE ending running MEMBER of PANEL's turn with TEXT.
+A refusal is recovered immediately once, separately from provider retries.
 A transient kind is retried once: after `+agent-shell-pstack-panel-retry-delay'
 the same shell is asked to continue.  Otherwise, or when no retry fits
 before PANEL's phase or deadline ends, MEMBER settles as `error' with
@@ -2404,17 +2406,34 @@ TEXT, saying what failed."
                      (+agent-shell-pstack-panel--retry-time panel)))
          (id (+agent-shell-pstack-panel-id panel))
          (role (+agent-shell-pstack-panel-member-role member)))
-    (if start
-        (setf (+agent-shell-pstack-panel-member-retry member)
-              (run-at-time (- start (float-time)) nil
-                           #'+agent-shell-pstack-panel--retry id role))
-      (+agent-shell-pstack-panel--settle
-       panel member 'error text
-       (concat (+agent-shell-pstack-panel--failure-text member failure)
-               (cond (retried "  Emacs had already asked it once to \
+    (cond
+     ((eq kind 'refused)
+      (if (+agent-shell-pstack-panel-member-refused member)
+          (+agent-shell-pstack-panel--settle
+           panel member 'error text
+           (concat (+agent-shell-pstack-panel--failure-text member failure)
+                   "  Emacs had already asked it once to continue without the refused actions."))
+        (setf (+agent-shell-pstack-panel-member-refused member) t)
+        (unless (+agent-shell-drive-send
+                 (+agent-shell-pstack-panel-member-shell member)
+                 (format "Emacs refused these actions: %s\n\
+This panel grants no file edits, escalated or networked commands. \
+Continue without these actions and finish the task your brief gave you."
+                         (plist-get failure :message)))
+          (+agent-shell-pstack-panel--settle
+           panel member 'error text
+           "Emacs could not send its refusal recovery because the shell was not ready."))))
+     (start
+      (setf (+agent-shell-pstack-panel-member-retry member)
+            (run-at-time (- start (float-time)) nil
+                         #'+agent-shell-pstack-panel--retry id role)))
+     (t (+agent-shell-pstack-panel--settle
+         panel member 'error text
+         (concat (+agent-shell-pstack-panel--failure-text member failure)
+                 (cond (retried "  Emacs had already asked it once to \
 continue, and it failed again.")
-                     (transient "  Emacs did not retry, since the panel \
-would end before a retry could start.")))))))
+                       (transient "  Emacs did not retry, since the panel \
+would end before a retry could start."))))))))
 
 (defun +agent-shell-pstack-panel--retry (id role)
   "Ask member ROLE of panel ID, which a provider failure stopped, to continue."

@@ -3119,5 +3119,40 @@ reflect, arena and delegate panels" (+agent-shell-pstack-panel--reminder))))
           (should (string-match-p (format "^Request %s panels" series)
                                   (+agent-shell-pstack-panel--reminder))))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-refusal-recovery ()
+  "Recover once immediately without consuming the provider retry."
+  (dolist (ending '(refused cancelled provider))
+    (+agent-shell-pstack-panel-test--with
+      (lead-event :kind 'turn-complete :session "s1"
+                  :text (+agent-shell-pstack-panel-test--message
+                         +agent-shell-pstack-panel-test--one))
+      (member-event "a" :kind 'init-finished)
+      (let* ((member (car (+agent-shell-pstack-panel-members
+                           (car (+agent-shell-pstack-panel-list)))))
+             (shell (+agent-shell-pstack-panel-member-shell member)))
+        (unless (eq ending 'cancelled)
+          (member-event "a" :kind 'turn-complete :stop-reason "cancelled"
+                        :refused '("Edit file" "Escalated command"))
+          (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+          (should-not (+agent-shell-pstack-panel-member-retry member))
+          (should (= 2 (seq-count (lambda (entry) (eq shell (car entry))) sent)))
+          (dolist (text '("Edit file" "Escalated command" "no file edits"
+                          "escalated or networked commands" "finish the task"))
+            (should (string-search text (cdr (assq shell sent))))))
+        (pcase ending
+          ('provider
+           (member-event "a" :kind 'turn-complete :text "Busy"
+                         :provider-errors +agent-shell-pstack-panel-test--overloaded)
+           (should (timerp (+agent-shell-pstack-panel-member-retry member)))
+           (should (eq 'running (+agent-shell-pstack-panel-member-state member))))
+          (_
+           (member-event "a" :kind 'turn-complete :stop-reason "cancelled"
+                         :refused (and (eq ending 'refused) '("Edit again")))
+           (should (eq 'error (+agent-shell-pstack-panel-member-state member)))
+           (should (string-search
+                    (if (eq ending 'refused) "already asked it once to continue"
+                      "The turn ended with stop reason cancelled.")
+                    (+agent-shell-pstack-panel-member-error member)))))))))
+
 (provide 'agent-shell-pstack-panel-test)
 ;;; agent-shell-pstack-panel-test.el ends here
