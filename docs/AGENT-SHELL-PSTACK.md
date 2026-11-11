@@ -707,9 +707,15 @@ its simple commands, as a background piece or a link of a chain is; and
 that process's descendants. A process that merely contains a tool call's
 command, such as a shell piping a hook's input, never counts. MCP servers,
 hooks, execution hosts and anything else not traceable to a tool call
-never count either, though Emacs still stops them with the delegate. A second turn that ends with
-commands still running settles as usual, and the follow-up names them. A
-remote delegate's runner does the same on its host.
+never count either, though Emacs still stops them with the delegate.
+
+On a second turn end with commands still running, Emacs polls every three
+seconds until all have exited, within the existing timeout and deadline.
+It then sends one message naming those commands and asking the delegate
+to read their output and report. The next turn settles as usual. If that
+turn leaves commands running, the follow-up names them. Settlement and
+panel completion cancel the polling timer. A remote delegate's runner
+does the same on its host.
 
 Once the delegate's turn ends, times out or is cancelled, Emacs stops its
 adapter's processes and process groups, never a whole directory's, then

@@ -1002,24 +1002,36 @@ are still running:\n  emacs -Q --batch -l test/run-config.el (pid 200)\n"
                                          sent))))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-commands-still-running ()
-  "Settle a delegate whose commands outlast the one request, naming them."
+  "Poll after the second turn, resume once, and settle the report."
   (+agent-shell-pstack-delegate-test--with
     (+agent-shell-pstack-delegate-test--started
       (member-event "builder" :kind 'init-finished)
-      (setq commands '((300 . "make\ntest")
-                       (400 . "bash -c read -r x | example-cli agent-hook")))
+      (setq commands '((300 . "make test")))
       (member-event "builder" :kind 'turn-complete :text "Still testing."
                     :commands '("make test"))
       (member-event "builder" :kind 'turn-complete :text "Still testing.")
-      (let ((text (followup)))
-        (should (string-search "builder (codex): done.\nCommands it started \
-were still running when its turn ended, after Emacs had asked it once to \
-wait for them; Emacs stopped them with the delegate:\n  make test (pid 300)\n"
-                               text))
-        (should-not (string-search "agent-hook" text)))
-      (should (= 2 (length (seq-filter (lambda (entry) (eq shell (car entry)))
-                                       sent))))
-      (should (equal (list shell) stopped)))))
+      (let* ((member (car (+agent-shell-pstack-panel-members panel)))
+             (id (+agent-shell-pstack-panel-id panel))
+             (timer (plist-get (+agent-shell-pstack-panel-member-background member)
+                               :timer)))
+        (should (timerp timer))
+        (should (memq timer timer-list))
+        (should (eq 'running (+agent-shell-pstack-panel-member-state member)))
+        (should-not stopped)
+        (+agent-shell-pstack-panel--poll-commands id "builder")
+        (should (= 2 (seq-count (lambda (entry) (eq shell (car entry))) sent)))
+        (setq commands nil)
+        (timer-event-handler timer)
+        (should (string-search "commands you started have exited:"
+                               (cdr (assq shell sent))))
+        (should (string-search "make test (pid 300)" (cdr (assq shell sent))))
+        (should (string-search "Read their output" (cdr (assq shell sent))))
+        (should-not (memq timer timer-list))
+        (+agent-shell-pstack-panel--poll-commands id "builder")
+        (should (= 3 (seq-count (lambda (entry) (eq shell (car entry))) sent)))
+        (member-event "builder" :kind 'turn-complete :text "Tests passed.")
+        (should (string-search "Report:\nTests passed." (followup)))
+        (should (eq 'done (+agent-shell-pstack-panel-member-state member)))))))
 
 (ert-deftest +agent-shell-pstack-delegate-test-waits-for-interrupted-turn ()
   "Prepare only once the lead's interrupted turn has ended."
@@ -1035,6 +1047,57 @@ wait for them; Emacs stopped them with the delegate:\n  make test (pid 300)\n"
       (should-not started)
       (lead-event :kind 'turn-complete :session "s1" :text text)
       (wait-for (lambda () started)))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-command-watch-deadline ()
+  "The deadline stops and captures a delegate waiting on commands."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (setq commands '((300 . "make test")))
+      (member-event "builder" :kind 'turn-complete :commands '("make test"))
+      (member-event "builder" :kind 'turn-complete)
+      (let* ((member (car (+agent-shell-pstack-panel-members panel)))
+             (timer (plist-get (+agent-shell-pstack-panel-member-background member)
+                               :timer)))
+        (+agent-shell-pstack-panel--expire
+         (+agent-shell-pstack-panel-id panel)
+         (+agent-shell-pstack-panel-phase panel) (1- (float-time)))
+        (should (eq 'timeout (+agent-shell-pstack-panel-member-state member)))
+        (should-not (memq timer timer-list))
+        (should (string-search "timeout" (followup)))
+        (should (equal (list shell) stopped))))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-command-watch-final-turn ()
+  "Commands left after the exit notification settle with the existing note."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (setq commands '((300 . "make test")))
+      (member-event "builder" :kind 'turn-complete :commands '("make test"))
+      (member-event "builder" :kind 'turn-complete)
+      (setq commands nil)
+      (+agent-shell-pstack-panel--poll-commands
+       (+agent-shell-pstack-panel-id panel) "builder")
+      (setq commands '((301 . "make test")))
+      (member-event "builder" :kind 'turn-complete :text "Report")
+      (should (string-search "Emacs stopped them with the delegate:"
+                             (followup)))
+      (should (equal (list shell) stopped)))))
+
+(ert-deftest +agent-shell-pstack-delegate-test-command-watch-panel-end ()
+  "Ending the panel cancels its command watch."
+  (+agent-shell-pstack-delegate-test--with
+    (+agent-shell-pstack-delegate-test--started
+      (member-event "builder" :kind 'init-finished)
+      (setq commands '((300 . "make test")))
+      (member-event "builder" :kind 'turn-complete :commands '("make test"))
+      (member-event "builder" :kind 'turn-complete)
+      (let* ((member (car (+agent-shell-pstack-panel-members panel)))
+             (timer (plist-get (+agent-shell-pstack-panel-member-background member)
+                               :timer)))
+        (+agent-shell-pstack-panel-cancel panel "Cancelled")
+        (should-not (memq timer timer-list))
+        (should (string-search "Cancelled" (followup)))))))
 
 (provide 'agent-shell-pstack-delegate-test)
 ;;; agent-shell-pstack-delegate-test.el ends here

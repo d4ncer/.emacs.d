@@ -340,27 +340,25 @@ its tool calls left running.  Every pid is killed afterwards."
                           infra))))
 
 (ert-deftest +agent-shell-pstack-delegate-acp-test-tool-call-commands ()
-  "Ask once to wait for running tool call commands, naming only those."
+  "Wait for tool call commands to exit, then request the report over ACP."
   (skip-unless (+agent-shell-pstack-delegate-acp-test--available-p))
   (+agent-shell-pstack-delegate-acp-test--tool-calls "RUN-GATE"
-    (let ((asked (+agent-shell-pstack-panel-member-text member))
-          (note (substring followup
-                           (string-search "Commands it started" followup))))
+    (let ((reported (+agent-shell-pstack-panel-member-text member)))
       (should (= 2 (length gates)))
-      (should (string-prefix-p "WAITED\nYour turn ended while commands you \
-started are still running:\n" asked))
-      (dolist (text (list asked note))
-        (dolist (gate gates)
-          (should (string-search (format "(pid %d)" gate) text)))
-        (dolist (child '("sleep 117" "sleep 118"))
-          (should (string-match-p (concat "^  " child " (pid [0-9]+)$") text)))
-        (dolist (pid infra)
-          (should-not (string-search (format "(pid %d)" pid) text)))
-        (dolist (name '("example-mcp-server" "mcp serve" "agent-hook"
-                        "exec-host" "sleep 120" "git status"))
-          (should-not (string-search name text))))
-      (should (string-search "after Emacs had asked it once to wait for them; \
-Emacs stopped them with the delegate:\n" note))
+      (should (string-prefix-p
+               "REPORTED\nThe commands you started have exited:\n" reported))
+      (dolist (gate gates)
+        (should (string-search (format "(pid %d)" gate) reported)))
+      (dolist (child '("sleep 3" "sleep 4"))
+        (should (string-match-p (concat "^  " child " (pid [0-9]+)$")
+                                reported)))
+      (dolist (pid infra)
+        (should-not (string-search (format "(pid %d)" pid) reported)))
+      (dolist (name '("example-mcp-server" "mcp serve" "agent-hook"
+                      "exec-host" "sleep 120" "git status"))
+        (should-not (string-search name reported)))
+      (should (string-search "Read their output" reported))
+      (should-not (string-search "Emacs stopped them with the delegate" followup))
       (should-not (seq-some #'+agent-shell-pstack-delegate-acp-test--alive-p
                             (append infra gates))))))
 

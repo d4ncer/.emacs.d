@@ -284,7 +284,7 @@ value its panel had.  See docs/AGENT-SHELL-PSTACK-ARENA.md."
 (defconst +agent-shell-pstack-panel--rubric-range '(3 . 6)
   "Fewest and most criteria an arena rubric may list.")
 
-(defconst +agent-shell-pstack-panel--schema 14
+(defconst +agent-shell-pstack-panel--schema 15
   "Layout of the panel and member structs.
 Slots are only appended.  Bump this whenever either struct gains one.")
 
@@ -423,13 +423,15 @@ once-only recovery after a permission refusal.
 
 A delegate's BACKGROUND is a plist: :commands, the shell commands its
 tool calls ran since the brief, oldest first, and :asked, t once it was
-asked to wait for the commands it left running; see
+asked to wait for the commands it left running.  :timer polls after a
+second turn end, :waiting lists those processes, and :resumed records
+the request for a report after they exited; see
 `+agent-shell-pstack-panel--await-commands'."
   role agent focus shell (state 'starting) text error report (kind 'member)
   sandbox capture result
   (egress-file nil :documentation "Where its egress record is saved.")
   (egress-record nil :documentation "Its final `+agent-shell-egress-record'.")
-  failure retry refused background)
+  failure retry background refused)
 
 (defvar +agent-shell-pstack-panel--panels (make-hash-table :test #'equal)
   "Map panel id to panel, including rejected requests.")
@@ -858,7 +860,9 @@ follow-up arrives.  Delegate agents: %s.  A delegate \
 request has no judge, and its \"timeout\", %d seconds by default, \
 bounds the whole run.  Its brief tells it not to end its turn while a \
 command it started is still running; if it does, Emacs asks it once to \
-wait for them.  Emacs sends you one prompt with its report, its \
+wait for them.  If it ends again while they run, Emacs watches until \
+they exit, within the deadline, then asks once for its report.  Emacs sends \
+you one prompt with its report, its \
 branch, its commits and how to review and merge them."
           (+agent-shell-pstack-panel--names
            (+agent-shell-pstack-panel--candidate-agents))
@@ -1716,6 +1720,8 @@ passes PANEL's own limit, when it has one."
 While its login admission runs, that is cancelled and the follow-up waits
 for it to end; see `+agent-shell-pstack-panel--launch'."
   (unless (eq (+agent-shell-pstack-panel-phase panel) 'finished)
+    (mapc #'+agent-shell-pstack-panel--cancel-command-watch
+          (+agent-shell-pstack-panel-members panel))
     (+agent-shell-pstack-panel--disarm panel)
     (setf (+agent-shell-pstack-panel-phase panel) 'finished)
     (if-let* ((cancel (+agent-shell-pstack-panel-login-check panel)))
@@ -1952,6 +1958,7 @@ Members without a result commit get none; see
                                                 &optional error stop-reason)
   "Settle MEMBER of PANEL as STATE with TEXT and ERROR, once.
 STOP-REASON comes with a turn that completed successfully."
+  (+agent-shell-pstack-panel--cancel-command-watch member)
   (unless (+agent-shell-pstack-panel--settled-p member)
     (when (timerp (+agent-shell-pstack-panel-member-retry member))
       (cancel-timer (+agent-shell-pstack-panel-member-retry member))
@@ -2257,15 +2264,12 @@ as your brief asked."
                        (car command)))
              commands "\n"))
 
-(defun +agent-shell-pstack-panel--await-commands (member event)
-  "Handle delegate MEMBER's successful turn end EVENT; return non-nil to wait.
-Commands still running are the live processes running a shell command
-its tool calls ran since the brief, and their descendants; what else its
-adapter started, such as MCP servers and hooks, does not count.  The
-first time any are, MEMBER's shell is asked once to wait for them and
-end its turn again, and this returns t.  When some still run after that,
-return a note naming them for the follow-up, since Emacs stops them with
-the delegate.  Otherwise return nil."
+(defun +agent-shell-pstack-panel--await-commands (panel member event)
+  "Handle delegate MEMBER's turn end EVENT in PANEL; return t to wait.
+Track commands from its tool calls and their descendants. Ask once to
+wait. On a second turn end with commands running, poll every three
+seconds until they exit, within PANEL's existing deadline. Then ask for
+the report once. A later turn settles, naming any commands still running."
   (when (eq (+agent-shell-pstack-panel-member-kind member) 'delegate)
     (let* ((background (+agent-shell-pstack-panel-member-background member))
            (ran (seq-uniq (append (plist-get background :commands)
@@ -2275,6 +2279,7 @@ the delegate.  Otherwise return nil."
       (setq background (plist-put background :commands ran))
       (setf (+agent-shell-pstack-panel-member-background member) background)
       (cond
+       ((plist-get background :timer) t)
        ((null commands) nil)
        ((and (not (plist-get background :asked))
              (+agent-shell-drive-send
@@ -2283,6 +2288,16 @@ the delegate.  Otherwise return nil."
                       (+agent-shell-pstack-panel--commands-text commands))))
         (setf (+agent-shell-pstack-panel-member-background member)
               (plist-put background :asked t))
+        t)
+       ((and (plist-get background :asked)
+             (not (plist-get background :resumed)))
+        (setq background (plist-put background :waiting commands))
+        (setf (+agent-shell-pstack-panel-member-background member)
+              (plist-put background :timer
+                         (run-at-time 3 3
+                                      #'+agent-shell-pstack-panel--poll-commands
+                                      (+agent-shell-pstack-panel-id panel)
+                                      (+agent-shell-pstack-panel-member-role member))))
         t)
        (t
         (format "Commands it started were still running when its turn ended%s; \
@@ -2331,7 +2346,7 @@ A runner's panel shows its observer the event first."
               (format "The turn ended with stop reason %s." reason)))
             (t
              (let ((waiting (+agent-shell-pstack-panel--await-commands
-                             member event)))
+                             panel member event)))
                (unless (eq waiting t)
                  (+agent-shell-pstack-panel--settle
                   panel member 'done text waiting
@@ -3939,6 +3954,41 @@ explains the request protocol; see `+agent-shell-pstack-panel-shapes'."
         (kill-local-variable '+agent-shell-pstack-panel--mode-line)))
     (force-mode-line-update t)
     (+agent-shell-drive-unwatch 'pstack-lead)))
+
+(defun +agent-shell-pstack-panel--cancel-command-watch (member)
+  "Cancel MEMBER's command polling timer."
+  (let* ((background (+agent-shell-pstack-panel-member-background member))
+         (timer (plist-get background :timer)))
+    (when (timerp timer) (cancel-timer timer))
+    (setf (+agent-shell-pstack-panel-member-background member)
+          (plist-put background :timer nil))))
+
+(defun +agent-shell-pstack-panel--poll-commands (id role)
+  "Resume member ROLE of panel ID once its commands have exited."
+  (when-let* ((panel (+agent-shell-pstack-panel--find id))
+              (member (+agent-shell-pstack-panel--member panel role)))
+    (let ((background (+agent-shell-pstack-panel-member-background member)))
+      (cond
+       ((or (+agent-shell-pstack-panel--settled-p member)
+            (eq (+agent-shell-pstack-panel-phase panel) 'finished))
+        (+agent-shell-pstack-panel--cancel-command-watch member))
+       ((and (plist-get background :timer)
+             (not (+agent-shell-drive-commands
+                   (+agent-shell-pstack-panel-member-shell member)
+                   (plist-get background :commands))))
+        (+agent-shell-pstack-panel--cancel-command-watch member)
+        (setf (+agent-shell-pstack-panel-member-background member)
+              (plist-put (+agent-shell-pstack-panel-member-background member)
+                         :resumed t))
+        (unless (+agent-shell-drive-send
+                 (+agent-shell-pstack-panel-member-shell member)
+                 (format "The commands you started have exited:\n%s\n\
+Read their output and end your turn with your report, as your brief asked."
+                         (+agent-shell-pstack-panel--commands-text
+                          (plist-get background :waiting))))
+          (+agent-shell-pstack-panel--settle
+           panel member 'error nil
+           "Emacs could not ask for the report because the shell was not ready.")))))))
 
 (provide '+agent-shell-pstack-panel)
 ;;; +agent-shell-pstack-panel.el ends here

@@ -472,7 +472,7 @@ absent is empty.
 | sha | A full commit id: 40 or 64 lowercase hex digits. |
 | agent | An agent identifier matching `` \`[a-z0-9][a-z0-9-]*\' ``. |
 | host kind | A kind registered in `+agent-shell-arena-remote-host-kinds`, by default one of `coder`, `ssh`, `local` and `pod`. |
-| failure kind | A provider failure kind, one of `rate_limited`, `quota_exhausted`, `overloaded`, `transport_lost`, `auth_required`, `context_exhausted`, `budget_exhausted`, `policy_denied`, `internal_error`, `provider_error`; a reader takes an unknown one as `provider_error`. |
+| failure kind | A provider failure kind, one of `refused`, `rate_limited`, `quota_exhausted`, `overloaded`, `transport_lost`, `auth_required`, `context_exhausted`, `budget_exhausted`, `policy_denied`, `internal_error`, `provider_error`; a reader takes an unknown one as `provider_error`. |
 | whole number | A JSON integer of 0 or more. |
 | number | Any JSON number. |
 | boolean | `true` or `false`. |

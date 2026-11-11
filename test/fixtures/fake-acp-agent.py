@@ -147,7 +147,7 @@ def tool_calls(session_id, text, state):
     gates = []
     if "RUN-GATE" in text:
         inner = Path(marker[1] + ".inner")
-        background = ("sh -c 'sleep 117 & sleep 118' run-gate & echo $! > "
+        background = ("sh -c 'sleep 3 & sleep 4' run-gate & echo $! > "
                       + str(inner))
         argv = ["/bin/sh", "-c", background]
         tool_call(session_id, "exec-1", {"command": argv, "cwd": cwd},
@@ -156,7 +156,7 @@ def tool_calls(session_id, text, state):
         tool_call(session_id, "exec-1", {"command": argv, "cwd": cwd},
                   "completed")
         gates.append(int(inner.read_text()))
-        tool = "sleep 119"
+        tool = "sleep 5"
         tool_call(session_id, "bash-2", {"command": tool,
                                          "run_in_background": True},
                   "pending")
@@ -223,6 +223,8 @@ def handle_pstack_prompt(message, text, state):
         return f"TRIAGED {text.count(chr(10) + '## ')}"
     if text.startswith("Your turn ended while commands you started"):
         return "WAITED\n" + text
+    if text.startswith("The commands you started have exited:"):
+        return "REPORTED\n" + text
     delegate = re.search(r"You are the (\S+) delegate of a pstack panel", text)
     if delegate:
         tool_calls(session_id, text, state)
