@@ -223,22 +223,24 @@ started from."
                (:constructor +agent-shell-arena-git--delegate)
                (:copier nil))
   "A pstack delegate's part of its manifest.
-ISOLATION is `worktree' or `branch'.  In branch isolation, ORIGIN is
-\(branch . FULL-REF) or (detached . OID), where the lead's checkout was
-before the delegate's branch took it over.  COMMITS lists (OID . SUBJECT)
-from the base to the branch tip, oldest first.  RESTORE is nil until
-Emacs tries to return the checkout, then `restored', `dirty', `changed',
-`missing' or `unneeded'; a worktree never needs it.  NOTE says what Emacs
-found, for the user.  SANDBOX says the delegate ran confined, so Emacs
-makes its one commit.  FINALIZATION is nil until that is tried, then a
-plist whose :state is `prepared' or `committed', with the commit's fixed
-:parent, :tree, :message, :name, :email, :author-date, :committer-date
-and, once made, :oid; or `empty' or `blocked', with a :reason.  DIRTY
-lists the worktree's uncommitted paths when it was last collected.
-HEAD is the lead's HEAD when the base is a snapshot of its uncommitted
-work on top of it, and nil when the base is HEAD itself.  LINKS lists the
-profile's :delegate :link paths Emacs symlinks into the worktree; see
-`+agent-shell-arena-git-link-delegate'."
+ISOLATION is `worktree', `branch' or `checkout', a host's own checkout
+on the delegate's branch, which it leaves there.  In branch isolation,
+ORIGIN is \(branch . FULL-REF) or (detached . OID), where the lead's
+checkout was before the delegate's branch took it over.  COMMITS lists
+\(OID . SUBJECT) from the base to the branch tip, oldest first.  RESTORE
+is nil until Emacs tries to return the checkout, then `restored',
+`dirty', `changed', `missing' or `unneeded'; a worktree or a host's
+checkout never needs it.  NOTE says what Emacs found, for the user.
+SANDBOX says the delegate ran confined, so Emacs makes its one commit.
+FINALIZATION is nil until that is tried, then a plist whose :state is
+`prepared' or `committed', with the commit's fixed :parent, :tree,
+:message, :name, :email, :author-date, :committer-date and, once made,
+:oid; or `empty' or `blocked', with a :reason.  DIRTY lists the
+worktree's or host checkout's uncommitted paths when it was last
+collected.  HEAD is the lead's HEAD when the base is a snapshot of its
+uncommitted work on top of it, and nil when the base is HEAD itself.
+LINKS lists the profile's :delegate :link paths Emacs symlinks into the
+worktree; see `+agent-shell-arena-git-link-delegate'."
   isolation origin commits restore note sandbox finalization dirty head
   links)
 
@@ -1973,13 +1975,14 @@ a delegate's branch this way."
 
 (defun +agent-shell-arena-git-finish-delegate (manifest hold callback)
   "Record what MANIFEST's stopped delegate left in its delegate record.
-List its commits since the base.  In a worktree, note uncommitted
-changes; in branch isolation, return the lead's checkout with
-`+agent-shell-arena-git-restore' unless HOLD, a note saying why it must
-stay.  Once the checkout is back, forget the record on disk, as
+List its commits since the base.  In a worktree or a host's checkout,
+note uncommitted changes; in branch isolation, return the lead's checkout
+with `+agent-shell-arena-git-restore' unless HOLD, a note saying why it
+must stay.  Once the checkout is back, forget the record on disk, as
 `+agent-shell-arena-git-clean' would.  Call CALLBACK with the record and
 nil, or nil and a message."
   (let* ((delegate (+agent-shell-arena-git-manifest-delegate manifest))
+         (isolation (+agent-shell-arena-git-delegate-isolation delegate))
          (fail (lambda (message) (funcall callback nil message)))
          (log
           (lambda (&rest _)
@@ -2000,19 +2003,23 @@ nil, or nil and a message."
                    (+agent-shell-arena-git-write-manifest manifest)
                    (funcall callback delegate nil))))))))
     (cond
-     ((eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
-      (let ((role (car (+agent-shell-arena-git-manifest-roles manifest))))
+     ((memq isolation '(worktree checkout))
+      (let ((role (and (eq isolation 'worktree)
+                       (car (+agent-shell-arena-git-manifest-roles manifest)))))
         (+agent-shell-arena-git-changes
-         (+agent-shell-arena-git-role-git-dir role)
-         (+agent-shell-arena-git-role-worktree role)
-         (append (+agent-shell-arena-git-role-shared role)
-                 (+agent-shell-arena-git-role-generated role))
+         (if role (+agent-shell-arena-git-role-git-dir role)
+           (+agent-shell-arena-git-manifest-git-dir manifest))
+         (if role (+agent-shell-arena-git-role-worktree role)
+           (+agent-shell-arena-git-manifest-toplevel manifest))
+         (and role (append (+agent-shell-arena-git-role-shared role)
+                           (+agent-shell-arena-git-role-generated role)))
          (lambda (paths error)
            (if error (funcall fail error)
              (setf (+agent-shell-arena-git-delegate-dirty delegate) paths
                    (+agent-shell-arena-git-delegate-note delegate)
                    (when paths
-                     (format "The worktree has uncommitted changes: %s."
+                     (format "The %s has uncommitted changes: %s."
+                             (if role "worktree" "checkout")
                              (+agent-shell-arena-git-describe-paths paths))))
              (funcall log))))))
      (hold
@@ -2046,7 +2053,8 @@ folders a candidate's tools made do not stop the cleanup."
                       (memq (+agent-shell-arena-git-delegate-restore delegate)
                             '(restored unneeded)))))
     (if (or (null delegate)
-            (eq (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
+            (memq (+agent-shell-arena-git-delegate-isolation delegate)
+                  '(worktree checkout))
             (funcall returned-p delegate))
         (+agent-shell-arena-git--remove manifest callback)
       (+agent-shell-arena-git-restore

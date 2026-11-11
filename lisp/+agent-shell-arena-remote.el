@@ -244,8 +244,9 @@ setup commit its readiness file must name."
                (:copier nil))
   "How a delegate job runs: SANDBOX says whether it is confined, and
 IDENTITY is the laptop user's `+agent-shell-arena-git-user', who authors
-and commits its work."
-  sandbox identity)
+and commits its work.  CHECKOUT says it works in the host's checkout
+itself, on its branch, rather than in a worktree of its own."
+  sandbox identity checkout)
 
 (cl-defstruct (+agent-shell-arena-remote-cursor
                (:constructor +agent-shell-arena-remote--make-cursor)
@@ -273,11 +274,11 @@ FIRST and LAST segments the host keeps, and the newest record's SEQ."
   "What a delegate left on its host, as its report gives it.
 BRANCH is its full ref and TIP the commit it points at.  COMMITS lists
 `+agent-shell-arena-remote-commit's from the base, oldest first.
-WORKSPACE is its worktree on the host.  DIRTY-PATHS names at most ten
-of its DIRTY-COUNT uncommitted paths.  FINALIZATION is `none', `empty',
-`committed' or `blocked', saying what came of a sandboxed delegate's
-one commit, with MESSAGE-ERROR or RETAINED-REASON saying why it was
-blocked."
+WORKSPACE is its worktree on the host, or the checkout it worked in.
+DIRTY-PATHS names at most ten of its DIRTY-COUNT uncommitted paths.
+FINALIZATION is `none', `empty', `committed' or `blocked', saying what
+came of a sandboxed delegate's one commit, with MESSAGE-ERROR or
+RETAINED-REASON saying why it was blocked."
   branch tip commits workspace sandbox dirty-paths (dirty-count 0)
   (finalization 'none) message-error retained-reason)
 
@@ -471,7 +472,8 @@ The slots from DIRECTORY to LOGINS, POLLED and CREATING are not saved."
     (delegate-job +agent-shell-arena-remote-delegate-job
                   +agent-shell-arena-remote--make-delegate-job
                   (sandbox "sandbox" boolean)
-                  (identity "identity" (record identity)))
+                  (identity "identity" (record identity))
+                  (checkout "checkout" boolean))
     (identity +agent-shell-arena-git-user +agent-shell-arena-git--user
               (name "name" text) (email "email" text))
     (sparse +agent-shell-arena-remote-sparse
@@ -1775,7 +1777,7 @@ are the landed results by role."
           (format "its delegate failed: %s" error)
         "its delegate failed"))
      ((> dirty 0)
-      (format "its worktree there has %d uncommitted path%s" dirty
+      (format "its checkout there has %d uncommitted path%s" dirty
               (if (= dirty 1) "" "s"))))))
 
 (defun +agent-shell-arena-remote--failed-report (remote reason)
@@ -2158,7 +2160,7 @@ forwarded, a base no origin ref on the laptop holds, and a pod beyond
 and attempt reach the record before the pod is created, in the same
 step as the last check of the cap.  The host
 fetches the base from origin, and the ref that held it is kept as
-provenance."
+provenance.  The delegate works in the pod's checkout itself."
   (let* ((host (+agent-shell-arena-remote-host remote))
          (name (+agent-shell-arena-remote-host-name host))
          (base (+agent-shell-arena-remote-job-base job))
@@ -2204,6 +2206,7 @@ first" base)))
            (funcall reject (+agent-shell-arena-remote--pod-cap-refusal name)))
           (t
            (setf (+agent-shell-arena-remote-job-base-source job) 'origin
+                 (+agent-shell-arena-remote-delegate-job-checkout delegate) t
                  (+agent-shell-arena-remote-job-base-ref job)
                  (car (split-string refs "\n" t))
                  (+agent-shell-arena-remote-pod remote)
@@ -4303,7 +4306,10 @@ Return the record, or nil when there is nothing left to do."
   "Return the delegate policy JOB's runner panel works under, or nil.
 Its routing keys are cleared, so the panel can never submit itself."
   (when-let* ((delegate (+agent-shell-arena-remote-job-delegate job)))
-    (list :host nil :isolation 'worktree
+    (list :host nil
+          :isolation (if (+agent-shell-arena-remote-delegate-job-checkout
+                          delegate)
+                         'checkout 'worktree)
           :sandbox (+agent-shell-arena-remote-delegate-job-sandbox delegate))))
 
 (defun +agent-shell-arena-remote--rebuild (remote job manifest)
@@ -4998,7 +5004,9 @@ runner" agent)))
 Its deadline is fixed now.  The panel checks every agent's host login
 before any member starts, as a local arena's does.  A login the job
 forwarded is checked again first, through
-`+agent-shell-sandbox-check-logins', to outlast the panel's horizon."
+`+agent-shell-sandbox-check-logins', to outlast the panel's horizon.
+A delegate whose job says so works in the host's checkout; see
+`+agent-shell-arena-remote--runner-take-checkout'."
   (let* ((job (+agent-shell-arena-remote--runner-job runner))
          (panel (+agent-shell-arena-remote--runner-panel-for runner))
          (previous (+agent-shell-arena-remote--runner-previous runner))
@@ -5023,7 +5031,12 @@ forwarded is checked again first, through
                                  (+agent-shell-arena-remote--delegate-refusal
                                   runner)))
                       (user-error "%s" refusal))
-                    (+agent-shell-pstack-panel--provision-delegate panel base))
+                    (if (+agent-shell-arena-remote-delegate-job-checkout
+                         (+agent-shell-arena-remote-job-delegate job))
+                        (+agent-shell-arena-remote--runner-take-checkout
+                         panel base)
+                      (+agent-shell-pstack-panel--provision-delegate
+                       panel base)))
                 (+agent-shell-pstack-panel--provision panel base))))))
     (setf (+agent-shell-arena-remote--runner-phase runner) 'preparing)
     (+agent-shell-pstack-panel--fix-deadline
@@ -5054,6 +5067,22 @@ forwarded is checked again first, through
       (error (+agent-shell-pstack-panel--fail-preparation
               panel (error-message-string err))))
     (+agent-shell-arena-remote--runner-status runner)))
+
+(defun +agent-shell-arena-remote--runner-take-checkout (panel base)
+  "Put the host's checkout at BASE on runner PANEL's delegate branch, then
+start the delegate.  Unlike a worktree, nothing is provisioned: the
+checkout is the host's own, which its job's submission just moved to the
+base, and the delegate leaves it on its branch."
+  (let ((manifest (+agent-shell-arena-git-create
+                   base (+agent-shell-pstack-panel-id panel)
+                   (+agent-shell-arena-git--delegate :isolation 'checkout))))
+    (setf (+agent-shell-pstack-panel-arena panel) manifest)
+    (+agent-shell-arena-git-take
+     manifest
+     (lambda (_branch error)
+       (+agent-shell-pstack-panel--preparing
+        panel error
+        (lambda () (+agent-shell-pstack-panel--start-delegate panel)))))))
 
 (defun +agent-shell-arena-remote--delegate-refusal (runner)
   "Return why RUNNER's host cannot run its delegate, or nil.
@@ -5318,7 +5347,12 @@ is nil."
                         (+agent-shell-arena-remote--make-commit
                          :oid oid :subject subject))
                       (+agent-shell-arena-git-delegate-commits delegate))
-     :workspace (or (and role (+agent-shell-arena-git-role-worktree role)) "")
+     :workspace (cond
+                 ((eq 'checkout (+agent-shell-arena-git-delegate-isolation
+                                 delegate))
+                  (+agent-shell-arena-git-manifest-toplevel manifest))
+                 (role (+agent-shell-arena-git-role-worktree role))
+                 (t ""))
      :sandbox (+agent-shell-arena-git-delegate-sandbox delegate)
      :dirty-paths (seq-take dirty 10) :dirty-count (length dirty)
      :finalization (if (memq state '(empty committed blocked)) state 'none)

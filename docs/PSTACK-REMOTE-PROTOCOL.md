@@ -388,6 +388,15 @@ reached as a Coder workspace is.
   `refs/remotes/origin/` on the laptop holds; otherwise the job is
   refused before a pod is created. The job's `base_source` is `origin`
   and `base_ref` names that ref, as provenance only.
+- **Checkout.** The delegate works in the pod's own checkout at the
+  profile's `:host-directory`, which the submission has just moved to
+  the base, on a new branch `pstack/delegate/PANEL` made there from the
+  base, with no worktree; the job's `delegate` says so with `checkout`.
+  The runner cuts the results bundle from that branch, lists the
+  checkout's uncommitted paths in the report, runs the member in its
+  systemd scope and cleans the job as for a worktree, but leaves the
+  checkout on the branch. Shared hosts and delegates on the laptop keep
+  a worktree of their own.
 - **Name.** A pod's name is derived from the job's id and an attempt
   number, 1 in this revision. No member runs twice under one attempt.
 - **Ledger.** Before it creates a pod the laptop writes the pod's name,
@@ -543,6 +552,7 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "job"`.
 |---|---|---|
 | `sandbox` | boolean | absent is false |
 | `identity` | [`identity`](#identity) | required |
+| `checkout` | boolean | absent is false |
 
 <!-- END GENERATED record delegate-job -->
 

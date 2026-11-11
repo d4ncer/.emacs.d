@@ -410,6 +410,71 @@ pod, as a restarted Emacs would; return the async state to tear down to."
     (clrhash table))
   (+config-test-async-state))
 
+(defun +pod-test--run-runner (panel folder root work)
+  "Run PANEL's job in its pod's job FOLDER under ROOT in this Emacs, to its
+end, and return the runner.  The laptop stops polling until then.  WORK
+is called in the delegate's directory in place of starting its agent,
+which then settles as done."
+  (let* ((remote (+pod-test--remote panel))
+         (home (expand-file-name (+agent-shell-arena-remote-host-name
+                                  (+agent-shell-arena-remote-host remote))
+                                 root))
+         (state (expand-file-name "state/" home))
+         (paused nil)
+         (pause (lambda (polled &rest _)
+                  (when (eq polled remote)
+                    (when-let* ((timer (+agent-shell-arena-remote-timer remote)))
+                      (cancel-timer timer))
+                    (setf (+agent-shell-arena-remote-timer remote) nil)
+                    (setq paused t)))))
+    (advice-add '+agent-shell-arena-remote--polled :after pause
+                '((name . pod-test-pause)))
+    (unwind-protect (+pod-test--wait-for (lambda () paused))
+      (advice-remove '+agent-shell-arena-remote--polled 'pod-test-pause))
+    (let* ((process-environment (cons (concat "HOME=" home)
+                                      process-environment))
+           (+agent-shell-pstack-arena-directory
+            (expand-file-name "arenas/" state))
+           (+agent-shell-pstack-panel-directory
+            (expand-file-name "reports/" folder))
+           (+agent-shell-pstack-panel--panels (make-hash-table :test #'equal))
+           (+agent-shell-arena-remote--arenas (make-hash-table :test #'equal))
+           (+agent-shell-pstack-panel-change-hook nil)
+           (job (+agent-shell-arena-remote--read-json
+                 (expand-file-name "job.json" folder) 'job))
+           (runner (+agent-shell-arena-remote--make-runner
+                    :job job :directory folder :root state
+                    :ready (+agent-shell-arena-remote--read-json
+                            (expand-file-name
+                             ".local/share/pstack-arena/ready.json" home)
+                            'ready)
+                    :lock (+agent-shell-arena-remote--lock-file
+                           state (+agent-shell-arena-remote--repository job))))
+           (+agent-shell-arena-remote--runner runner))
+      (setf (+agent-shell-arena-remote-job-sign-ins job) nil)
+      (cl-letf (((symbol-function '+agent-shell-pstack-panel--start-member)
+                 (lambda (panel member)
+                   (setf (+agent-shell-pstack-panel-member-state member)
+                         'running)
+                   (funcall work (+agent-shell-pstack-panel--delegate-directory
+                                  panel))
+                   (run-at-time 0 nil #'+agent-shell-pstack-panel--settle
+                                panel member 'done "Built it.")))
+                ((symbol-function '+agent-shell-drive-lease) #'ignore)
+                ((symbol-function '+agent-shell-drive-stop-unconfined)
+                 (lambda (_shell _reason callback)
+                   (run-at-time 0 nil callback nil))))
+        (add-hook '+agent-shell-pstack-panel-change-hook
+                  (lambda () (+agent-shell-arena-remote--runner-status runner)))
+        (should (+agent-shell-arena-remote-acquire
+                 (+agent-shell-arena-remote--runner-lock runner)
+                 (+agent-shell-arena-remote-job-id job)))
+        (+agent-shell-arena-remote--runner-start runner)
+        (+pod-test--wait-for
+         (lambda () (+agent-shell-arena-remote--runner-done runner))))
+      (+agent-shell-arena-remote--schedule remote 0)
+      runner)))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-stop-async-cleans-first ()
   "Stopping a test's async work runs its cleanup even when a process
 outlives the wait, and fails only when the test had not failed already."
@@ -836,6 +901,65 @@ discards it, and it counts against the cap meanwhile."
       (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel))))
       (+pod-test--wait-for
        (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-delegate-works-in-checkout ()
+  "A pod's delegate works in the pod's checkout on its new branch, with no
+worktree; its runner still returns the branch and the paths it left
+uncommitted, which keep the pod."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((panel (funcall launch))
+           (folder nil) (repo nil) (worked nil))
+      (+pod-test--submitted panel)
+      (setq folder (funcall job-folder panel)
+            repo (expand-file-name
+                  (concat (+agent-shell-arena-remote-pod-name
+                           (+pod-test--pod panel))
+                          "/repo/")
+                  root))
+      (should (+agent-shell-arena-remote-delegate-job-checkout
+               (+agent-shell-arena-remote-job-delegate
+                (+agent-shell-arena-remote--read-json
+                 (expand-file-name "job.json" folder) 'job))))
+      (+pod-test--run-runner
+       panel folder root
+       (lambda (directory)
+         (setq worked directory)
+         (with-temp-file (expand-file-name "builder.txt" directory)
+           (insert "built\n"))
+         (+pod-test--git directory "add" "builder.txt")
+         (+pod-test--git directory "commit" "-q" "-m" "Add builder.txt")
+         (with-temp-file (expand-file-name "left.txt" directory)
+           (insert "left\n"))))
+      (should (equal repo (file-name-as-directory worked)))
+      (should (equal "refs/heads/pstack/delegate/pod-panel"
+                     (+pod-test--git repo "symbolic-ref" "HEAD")))
+      (should (= 1 (length (seq-filter
+                            (lambda (line) (string-prefix-p "worktree " line))
+                            (split-string (+pod-test--git
+                                           repo "worktree" "list" "--porcelain")
+                                          "\n" t)))))
+      (let* ((report (+agent-shell-arena-remote--read-json
+                      (expand-file-name "report.json" folder) 'report))
+             (outcome (+agent-shell-arena-remote-report-delegate report)))
+        (should (equal "refs/heads/pstack/delegate/pod-panel"
+                       (+agent-shell-arena-remote-outcome-branch outcome)))
+        (should (equal (+pod-test--git repo "rev-parse" "HEAD")
+                       (+agent-shell-arena-remote-outcome-tip outcome)))
+        (should (equal '("left.txt")
+                       (+agent-shell-arena-remote-outcome-dirty-paths outcome)))
+        (should (equal repo (file-name-as-directory
+                             (+agent-shell-arena-remote-outcome-workspace
+                              outcome)))))
+      (+pod-test--wait-for
+       (lambda () (eq 'kept (+agent-shell-arena-remote-pod-state
+                             (+pod-test--pod panel)))))
+      (should (string-search "its checkout there has 1 uncommitted path"
+                             (+agent-shell-arena-remote-pod-reason
+                              (+pod-test--pod panel))))
+      (should (equal (+pod-test--git repo "rev-parse" "HEAD")
+                     (funcall lead-git "rev-parse"
+                              "refs/heads/pstack/delegate/pod-panel"))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-member-keeps-pod ()
   "A delegate that ended in error keeps its pod, with the error, so the
