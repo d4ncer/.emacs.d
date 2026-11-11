@@ -130,5 +130,45 @@
       (load "+clt-edited" nil t)
       (should (= (funcall '+clt-edited) 2)))))
 
+(defvar elpaca-directory)
+
+(defvar elpaca-builds-directory)
+
+(defvar elpaca-sources-directory)
+
+(ert-deftest +compile-local-test-elpaca-real-directory ()
+  "Resolve shared Elpaca directories before deriving build paths."
+  (let* ((root (make-temp-file "elpaca-link-" t))
+         (user-emacs-directory (expand-file-name "config/" root))
+         (real (file-name-as-directory
+                (file-truename (expand-file-name "shared/" root))))
+         (elpaca-directory nil)
+         (elpaca-builds-directory nil)
+         (elpaca-sources-directory nil))
+    (unwind-protect
+        (progn
+          (make-directory user-emacs-directory)
+          (make-directory real)
+          (make-symbolic-link real (expand-file-name "elpaca" user-emacs-directory))
+          (with-temp-buffer
+            (insert-file-contents (expand-file-name "elpaca-bootstrap.el"
+                                                    +config-test-root))
+            (let (form)
+              (while (setq form (condition-case nil (read (current-buffer))
+                                  (end-of-file nil)))
+                (when (and (eq (car-safe form) 'defvar)
+                           (memq (cadr form) '(elpaca-directory
+                                               elpaca-builds-directory
+                                               elpaca-sources-directory)))
+                  (set (cadr form) (eval (caddr form) t))))))
+          (should (equal elpaca-directory real))
+          (should (equal elpaca-builds-directory (concat real "builds/")))
+          (should (equal elpaca-sources-directory (concat real "sources/")))
+          (make-directory (expand-file-name "builds/pkg" real) t)
+          (should (file-in-directory-p
+                   (expand-file-name "elpaca/builds/pkg" user-emacs-directory)
+                   elpaca-builds-directory)))
+      (delete-directory root t))))
+
 (provide 'config-compile-local-test)
 ;;; config-compile-local-test.el ends here
