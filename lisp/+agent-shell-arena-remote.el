@@ -1683,8 +1683,8 @@ next try after a failed one.")
 A pod never known to be created is looked up first.  A failed delete
 leaves POD `deleting', still counted against the cap, and is retried
 with backoff, also after a restart; CALLBACK hears of the first failure
-and the retries go on, said only for the first three.  A release while a retry waits replaces it.
-FAILURES counts the failed attempts so far."
+and the retries go on, said only for the first three.  A release while
+a retry waits replaces it.  FAILURES counts the failed attempts so far."
   (let* ((failures (or failures 0))
          (name (+agent-shell-arena-remote-pod-name pod))
          (pending (gethash name +agent-shell-arena-remote--releasing))
@@ -2132,7 +2132,8 @@ A kind whose hosts are made per job gives the job a pod of its own; see
              (+agent-shell-arena-remote--submit remote job))))))))))
 
 (defun +agent-shell-arena-remote--pod-cap-refusal (name)
-  "Return why a pod NAME would exceed `+agent-shell-arena-remote-pod-cap', or nil."
+  "Return why a pod NAME would exceed the pod cap, or nil.
+The cap is `+agent-shell-arena-remote-pod-cap'."
   (let ((others (seq-filter
                  (lambda (pod)
                    (and (+agent-shell-arena-remote--pod-alive-p pod)
@@ -4367,8 +4368,9 @@ Then go on with the pods in the ledger."
 (defun +agent-shell-arena-remote--restore-pods (&optional failed)
   "Go on with what the ledger's pods were doing when Emacs last stopped.
 Every delete under way resumes, whatever its job.  A live job's pod is
-otherwise its job's to handle, and a kept one waits for its lead.  A pod whose job could not be restored, FAILED's alist of job id
-to error, or has no record left, is kept with the reason, since nothing
+otherwise its job's to handle, and a kept one waits for its lead.  A pod
+whose job could not be restored, FAILED's alist of job id to error, or
+has no record left, is kept with the reason, since nothing
 shows its results reached the laptop.  Any other is deleted: its job
 delivered, or never ran."
   (dolist (pod (+agent-shell-arena-remote--pods))

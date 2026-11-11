@@ -103,8 +103,9 @@ list.")
 BODY sees `async', the processes and timers before it, `scratch',
 `root' (the workspaces' folder), `lead-repo',
 `lead-git', `spec', `launch', which starts a delegate whose member is
-Codex and returns its panel, given an optional panel id, `job-folder', `runner-writes', which writes
-what a runner leaves on finishing, and `log', the coder calls so far."
+Codex and returns its panel, given an optional panel id, `job-folder',
+`runner-writes', which writes what a runner leaves on finishing, and
+`log', the coder calls so far."
   (declare (indent 0))
   `(let* ((async (+config-test-async-state))
           (scratch (file-name-as-directory
