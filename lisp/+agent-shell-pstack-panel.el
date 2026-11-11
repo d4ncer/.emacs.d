@@ -2294,10 +2294,10 @@ the report once. A later turn settles, naming any commands still running."
         (setq background (plist-put background :waiting commands))
         (setf (+agent-shell-pstack-panel-member-background member)
               (plist-put background :timer
-                         (run-at-time 3 3
-                                      #'+agent-shell-pstack-panel--poll-commands
-                                      (+agent-shell-pstack-panel-id panel)
-                                      (+agent-shell-pstack-panel-member-role member))))
+                         (run-at-time
+                          3 3 #'+agent-shell-pstack-panel--poll-commands
+                          (+agent-shell-pstack-panel-id panel)
+                          (+agent-shell-pstack-panel-member-role member))))
         t)
        (t
         (format "Commands it started were still running when its turn ended%s; \
@@ -2427,17 +2427,23 @@ TEXT, saying what failed."
           (+agent-shell-pstack-panel--settle
            panel member 'error text
            (concat (+agent-shell-pstack-panel--failure-text member failure)
-                   "  Emacs had already asked it once to continue without the refused actions."))
+                   "  Emacs had already asked it once to continue without \
+the refused actions."))
         (setf (+agent-shell-pstack-panel-member-refused member) t)
-        (unless (+agent-shell-drive-send
-                 (+agent-shell-pstack-panel-member-shell member)
-                 (format "Emacs refused these actions: %s\n\
-This panel grants no file edits, escalated or networked commands. \
-Continue without these actions and finish the task your brief gave you."
-                         (plist-get failure :message)))
-          (+agent-shell-pstack-panel--settle
-           panel member 'error text
-           "Emacs could not send its refusal recovery because the shell was not ready."))))
+        (let ((shell (+agent-shell-pstack-panel-member-shell member)))
+          (unless (+agent-shell-drive-send
+                   shell
+                   (format "Emacs refused these actions: %s\n%s  Continue \
+without them and finish the task your brief gave you."
+                           (plist-get failure :message)
+                           (if (eq (+agent-shell-drive-policy shell) 'read-only)
+                               "This panel is read-only: it grants no file \
+edits, escalated or networked commands."
+                             "Your sandbox does not grant them.")))
+            (+agent-shell-pstack-panel--settle
+             panel member 'error text
+             "Emacs could not send its refusal recovery, since the shell \
+was not ready.")))))
      (start
       (setf (+agent-shell-pstack-panel-member-retry member)
             (run-at-time (- start (float-time)) nil
@@ -3988,7 +3994,8 @@ Read their output and end your turn with your report, as your brief asked."
                           (plist-get background :waiting))))
           (+agent-shell-pstack-panel--settle
            panel member 'error nil
-           "Emacs could not ask for the report because the shell was not ready.")))))))
+           "Emacs could not ask for the report, since the shell was not \
+ready.")))))))
 
 (provide '+agent-shell-pstack-panel)
 ;;; +agent-shell-pstack-panel.el ends here

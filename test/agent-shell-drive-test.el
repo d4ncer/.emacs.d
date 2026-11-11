@@ -1103,5 +1103,22 @@ sleep 62 & wait"
                      '(:kind turn-complete :stop-reason "end_turn"
                        :refused ("Edit file"))))))))
 
+(ert-deftest +agent-shell-drive-test-rejected-plan-not-refused ()
+  "Keep a rejected plan as the turn's plan, not as a refusal."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let (events)
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+        (with-current-buffer shell
+          (+agent-shell-drive--respond
+           (cdr (+agent-shell-drive-test--permission
+                 "switch_mode" '("allow_once" "reject_once")
+                 '((plan . "1. Write it."))))))
+        (emit shell '((:event . turn-complete)
+                      (:data . ((:stop-reason . "cancelled")))))
+        (should (equal "1. Write it." (plist-get (car events) :plan)))
+        (should-not (plist-get (car events) :refused))
+        (should-not (+agent-shell-drive-failure (car events)))))))
+
 (provide 'agent-shell-drive-test)
 ;;; agent-shell-drive-test.el ends here

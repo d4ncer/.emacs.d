@@ -148,11 +148,14 @@ command it ran, newest first.")
               (mapcar (lambda (config) (map-elt config :identifier))
                       (+agent-shell-drive--configs))))
 
-(defvar-local +agent-shell-drive--refused nil "Titles of permissions rejected during this turn.")
+(defvar-local +agent-shell-drive--refused nil
+  "Titles of the permissions other than plans rejected this turn.")
 
 (defun +agent-shell-drive--answer (permission allow)
   "Approve PERMISSION once when ALLOW, otherwise reject it.
-Return nil, leaving the dialog to the user, only when no option fits."
+A rejected plan is kept as the turn's plan; any other rejection is kept
+in `+agent-shell-drive--refused'.  Return nil, leaving the dialog to the
+user, only when no option fits."
   (let* ((tool-call (map-elt permission :tool-call))
          (options (map-elt permission :options))
          (choice (seq-some (lambda (kind)
@@ -164,10 +167,10 @@ Return nil, leaving the dialog to the user, only when no option fits."
                              '("reject_once" "reject_always")))))
     (when choice
       (when (string-prefix-p "reject" (map-elt choice :kind))
-        (push (or (map-elt tool-call :title) "a tool")
-              +agent-shell-drive--refused)
-        (when-let* ((plan (map-elt (map-elt tool-call :raw-input) 'plan)))
-          (setq +agent-shell-drive--plan plan)))
+        (if-let* ((plan (map-elt (map-elt tool-call :raw-input) 'plan)))
+            (setq +agent-shell-drive--plan plan)
+          (push (or (map-elt tool-call :title) "a tool")
+                +agent-shell-drive--refused)))
       (funcall (map-elt permission :respond) (map-elt choice :option-id))
       t)))
 

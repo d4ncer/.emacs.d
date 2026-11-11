@@ -3130,6 +3130,8 @@ reflect, arena and delegate panels" (+agent-shell-pstack-panel--reminder))))
       (let* ((member (car (+agent-shell-pstack-panel-members
                            (car (+agent-shell-pstack-panel-list)))))
              (shell (+agent-shell-pstack-panel-member-shell member)))
+        (with-current-buffer shell
+          (setq-local +agent-shell-drive--policy 'read-only))
         (unless (eq ending 'cancelled)
           (member-event "a" :kind 'turn-complete :stop-reason "cancelled"
                         :refused '("Edit file" "Escalated command"))
