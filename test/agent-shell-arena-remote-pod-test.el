@@ -61,7 +61,8 @@ case $1 in
     [ -d \"$root/$name\" ] && { echo \"workspace $name exists\" >&2; exit 1; }
     [ -f \"$root/.create-fails\" ] && { echo \"create refused\" >&2; exit 1; }
     mkdir -p \"$root/$name/.local/share/pstack-arena\" &&
-      cp \"$root/.ready.json\" \"$root/$name/.local/share/pstack-arena/ready.json\" &&
+      { [ -f \"$root/.ready-late\" ] ||
+          cp \"$root/.ready.json\" \"$root/$name/.local/share/pstack-arena/ready.json\"; } &&
       git clone -q \"$root/.origin\" \"$root/$name/repo\" || exit 1
     [ -f \"$root/.create-fails-after-mkdir\" ] &&
       { echo \"create timed out\" >&2; exit 1; }
@@ -93,7 +94,8 @@ esac
 "
   "The fake coder: each workspace is a folder of @ROOT@, cloning its origin.
 Files in @ROOT@ steer it: .create-gate holds a create until .create-open
-exists, .create-fails refuses one, .create-fails-after-mkdir fails one
+exists, .ready-late leaves the new workspace without its readiness
+file, .create-fails refuses one, .create-fails-after-mkdir fails one
 that made the workspace, .delete-fails holds how many deletes to refuse,
 .on-delete runs before a delete succeeds, and .list-fails refuses every
 list.")
@@ -865,6 +867,35 @@ without a create; once lists work again the ledger is cleared."
       (delete-file (expand-file-name ".list-fails" root))
       (+pod-test--wait-for
        (lambda () (not (file-exists-p (+pod-test--ledger panel))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-new-pod-probed-often ()
+  "A new pod whose setup has not yet written its readiness file is probed
+every `+agent-shell-arena-remote-pod-ready-interval' seconds, not every
+wake interval, and the job is submitted soon after the file appears."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".ready-late" root))
+    (let* ((+agent-shell-arena-remote-wake-interval 60)
+           (+agent-shell-arena-remote-pod-ready-interval 0.1)
+           (probes 0)
+           (count (lambda (&rest _) (cl-incf probes))))
+      (advice-add '+agent-shell-arena-remote--probe :before count
+                  '((name . pod-test-probes)))
+      (unwind-protect
+          (let ((panel (funcall launch)))
+            (+pod-test--wait-for (lambda () (>= probes 3)) 10)
+            (should (eq 'submitting (+agent-shell-arena-remote-phase
+                                     (+pod-test--remote panel))))
+            (copy-file (expand-file-name ".ready.json" root)
+                       (expand-file-name
+                        (concat (+agent-shell-arena-remote-pod-name
+                                 (+pod-test--pod panel))
+                                "/.local/share/pstack-arena/ready.json")
+                        root))
+            (let ((seen (float-time)))
+              (+pod-test--submitted panel)
+              (should (< (- (float-time) seen) 30))))
+        (advice-remove '+agent-shell-arena-remote--probe 'pod-test-probes)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-dirty-member-keeps-pod ()
   "A delegate that left uncommitted work keeps its pod until the lead

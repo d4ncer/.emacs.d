@@ -414,6 +414,9 @@ reached as a Coder workspace is.
   that fails is looked up again before the job is refused. Each pod is
   created with a stop time past the job's maximum runtime, the wake
   timeout and the slack.
+- **Ready.** Until the pod's setup writes its readiness file, the
+  laptop probes it every `+agent-shell-arena-remote-pod-ready-interval`
+  seconds, 5 by default, for at most the wake timeout.
 - **Cancel.** A cancel during a create waits for the create to finish,
   then deletes the pod.
 - **Boot.** Every status names the host's boot id when the runner

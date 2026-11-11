@@ -71,6 +71,11 @@ its setup writing a readiness file since it booted."
 (defvar +agent-shell-arena-remote-wake-interval 10
   "Seconds between checks while a host gets ready.")
 
+(defcustom +agent-shell-arena-remote-pod-ready-interval 5
+  "Seconds between checks while a pod made for a job gets ready.
+They go on until `+agent-shell-arena-remote-wake-timeout' has passed."
+  :type 'number)
+
 (defcustom +agent-shell-arena-remote-restarts 2
   "Times the laptop restarts a host's runner that stopped unfinished."
   :type 'natnum)
@@ -2552,12 +2557,17 @@ or booted less than `+agent-shell-arena-remote-wake-timeout' seconds ago,
 is checked every `+agent-shell-arena-remote-wake-interval' seconds until
 it runs, answers and has a readiness file written since it booted.
 Otherwise, or once that timeout has passed, REMOTE is rejected with what
-was last wrong.  A pod whose setup is not the one its spec pins is
-rejected at once.  A cancel stops the wait."
+was last wrong.  A pod, made for its job, is waited for so too, but
+checked every `+agent-shell-arena-remote-pod-ready-interval' seconds.  A
+pod whose setup is not the one its spec pins is rejected at once.  A
+cancel stops the wait."
   (let* ((host (+agent-shell-arena-remote-host remote))
          (wake (+agent-shell-arena-remote--host-option host :wake))
          (deadline (+ (float-time) +agent-shell-arena-remote-wake-timeout))
-         (woke nil))
+         (pod (+agent-shell-arena-remote-pod remote))
+         (interval (if pod +agent-shell-arena-remote-pod-ready-interval
+                     +agent-shell-arena-remote-wake-interval))
+         (woke (and pod "it was made for this job")))
     (cl-labels
         ((reject (reason)
            (+agent-shell-arena-remote--reject
@@ -2568,8 +2578,7 @@ rejected at once.  A cancel stops the wait."
          (retry (reason)
            (if (> (float-time) deadline) (reject reason)
              (setf (+agent-shell-arena-remote-timer remote)
-                   (run-at-time +agent-shell-arena-remote-wake-interval nil
-                                #'check))))
+                   (run-at-time interval nil #'check))))
          (wait (reason)
            (unless woke (setq woke (format "it was %s" reason)))
            (retry (format "it is %s" reason)))
