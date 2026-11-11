@@ -2152,6 +2152,31 @@ its job end"
               (+agent-shell-arena-remote-pod-state other)
               +agent-shell-arena-remote-pod-cap))))
 
+(defun +agent-shell-arena-remote--origin-ref (manifest base callback)
+  "Call CALLBACK with a ref under refs/remotes/origin/ that holds BASE, or
+nil, and nil; or nil and a message.  MANIFEST names the laptop's
+repository.  Origin's default branch is asked first; only when it does
+not hold BASE are all of origin's refs scanned, which is slow in a large
+repository."
+  (+agent-shell-arena-remote--git
+   manifest (list "merge-base" "--is-ancestor" base "refs/remotes/origin/HEAD")
+   (lambda (_ error)
+     (if error
+         (+agent-shell-arena-remote--git
+          manifest (list "for-each-ref" "--contains" base "--format=%(refname)"
+                         "refs/remotes/origin/")
+          (lambda (refs error)
+            (funcall callback (and refs (car (split-string refs "\n" t)))
+                     error)))
+       (+agent-shell-arena-remote--git
+        manifest '("rev-parse" "--symbolic-full-name" "refs/remotes/origin/HEAD")
+        (lambda (ref _)
+          (funcall callback
+                   (if (and ref (string-prefix-p "refs/remotes/origin/" ref))
+                       ref
+                     "refs/remotes/origin/HEAD")
+                   nil)))))))
+
 (defun +agent-shell-arena-remote--pod-launch (remote job spec manifest)
   "Give REMOTE's JOB, over MANIFEST, a pod of its own from SPEC, then submit.
 An arena, a sandboxed delegate, an agent whose login cannot be
@@ -2191,14 +2216,13 @@ which Emacs cannot forward for it"
      ((+agent-shell-arena-remote--pod-cap-refusal name)
       (funcall reject (+agent-shell-arena-remote--pod-cap-refusal name)))
      (t
-      (+agent-shell-arena-remote--git
-       manifest (list "for-each-ref" "--contains" base "--format=%(refname)"
-                      "refs/remotes/origin/")
-       (lambda (refs error)
+      (+agent-shell-arena-remote--origin-ref
+       manifest base
+       (lambda (ref error)
          (cond
           (error (funcall reject error))
           ((not (eq (+agent-shell-arena-remote-phase remote) 'preparing)))
-          ((string-empty-p refs)
+          ((null ref)
            (funcall reject (format "a pod fetches its base from origin, and \
 no ref this laptop has seen on origin holds %s; commit and push the work \
 first" base)))
@@ -2207,8 +2231,7 @@ first" base)))
           (t
            (setf (+agent-shell-arena-remote-job-base-source job) 'origin
                  (+agent-shell-arena-remote-delegate-job-checkout delegate) t
-                 (+agent-shell-arena-remote-job-base-ref job)
-                 (car (split-string refs "\n" t))
+                 (+agent-shell-arena-remote-job-base-ref job) ref
                  (+agent-shell-arena-remote-pod remote)
                  (+agent-shell-arena-remote--make-pod
                   :name name :job (+agent-shell-arena-remote-id remote)

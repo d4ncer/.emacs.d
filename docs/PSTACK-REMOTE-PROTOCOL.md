@@ -386,8 +386,11 @@ reached as a Coder workspace is.
   an arena and a sandboxed delegate on a pod.
 - **Base.** The base must be a commit that a ref under
   `refs/remotes/origin/` on the laptop holds; otherwise the job is
-  refused before a pod is created. The job's `base_source` is `origin`
-  and `base_ref` names that ref, as provenance only.
+  refused before a pod is created. The laptop asks
+  `refs/remotes/origin/HEAD` first, by `git merge-base --is-ancestor`,
+  and scans every ref there only when that does not hold the base. The
+  job's `base_source` is `origin` and `base_ref` names the ref, as
+  provenance only.
 - **Checkout.** The delegate works in the pod's own checkout at the
   profile's `:host-directory`, which the submission has just moved to
   the base, on a new branch `pstack/delegate/PANEL` made there from the

@@ -1185,6 +1185,52 @@ and the pod goes; a base no origin ref holds is refused before any pod."
        (lambda () (not (+pod-test--exists-p root panel))))
       (should-not (file-exists-p (+pod-test--ledger panel))))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-origin-head-checked-first ()
+  "A base origin's default branch holds is admitted without scanning
+origin's refs; one only another origin ref holds is found by the scan."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((calls nil)
+           (note (lambda (_manifest args &rest _) (push (car args) calls))))
+      (advice-add '+agent-shell-arena-remote--git :before note
+                  '((name . pod-test-git)))
+      (unwind-protect
+          (progn
+            (funcall lead-git "remote" "set-head" "origin" "main")
+            (let ((panel (funcall launch)))
+              (+pod-test--submitted panel)
+              (should (member "merge-base" calls))
+              (should-not (member "for-each-ref" calls))
+              (should (equal "refs/remotes/origin/main"
+                             (+agent-shell-arena-remote-job-base-ref
+                              (+agent-shell-arena-remote--read-json
+                               (+agent-shell-arena-remote--job-file
+                                (+pod-test--remote panel))
+                               'job))))
+              (funcall runner-writes panel)
+              (+pod-test--wait-for
+               (lambda () (not (+pod-test--exists-p root panel)))))
+            (setq calls nil)
+            (funcall lead-git "checkout" "-q" "-b" "side")
+            (with-temp-file (expand-file-name "side.txt" lead-repo)
+              (insert "Side\n"))
+            (funcall lead-git "add" "-A")
+            (funcall lead-git "commit" "-q" "-m" "side")
+            (funcall lead-git "push" "-q" "origin" "side")
+            (clrhash +agent-shell-arena-remote--arenas)
+            (clrhash +agent-shell-pstack-panel--panels)
+            (let ((panel (funcall launch "side-panel")))
+              (+pod-test--submitted panel)
+              (should (member "merge-base" calls))
+              (should (member "for-each-ref" calls))
+              (should (equal "refs/remotes/origin/side"
+                             (+agent-shell-arena-remote-job-base-ref
+                              (+agent-shell-arena-remote--read-json
+                               (+agent-shell-arena-remote--job-file
+                                (+pod-test--remote panel))
+                               'job))))))
+        (advice-remove '+agent-shell-arena-remote--git 'pod-test-git)))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-short-login-refused ()
   "A forwarded login that does not outlast the job's maximum runtime and
 the margin is refused before the job is sent, and the pod goes."
