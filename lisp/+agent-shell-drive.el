@@ -16,9 +16,14 @@
 ;; the turn's execute tool calls ran, oldest first, for
 ;; `+agent-shell-drive-commands'.  `+agent-shell-drive-failure' classifies
 ;; a finished or failed turn.  `agent-message-chunk' only feeds the turn text, and
-;; `input-submitted' starts a new turn.  A tool call ends the final part; the
-;; first `tool-call-update' after agent text reports that part as :text and
-;; the call's :title.
+;; `input-submitted' starts a new turn.  Agent output while no prompt awaits
+;; its response, such as Claude Code's turn after a background task ends,
+;; starts an unprompted turn.  It ends at the adapter's cost-bearing usage
+;; update, after `+agent-shell-drive-unprompted-quiet' seconds without
+;; output and with no tool call running, or at the next prompt; its
+;; `turn-complete' has :unprompted t and no :stop-reason.  A tool call ends
+;; the final part; the first `tool-call-update' after agent text reports that
+;; part as :text and the call's :title.
 ;;
 ;; A shell started with a policy runs in a mode the policy names and answers
 ;; permission requests itself.  A `read-only' shell runs in its agent's mode
@@ -91,6 +96,12 @@
   '((claude-code . "plan") (codex . "read-only"))
   "Session mode that keeps each agent read-only, by config identifier."
   :type '(alist :key-type symbol :value-type string))
+
+(defcustom +agent-shell-drive-unprompted-quiet 10
+  "Seconds of quiet that end a turn no prompt started.
+Claude Code's adapter ends one sooner, with the usage update carrying its
+result's cost; see `+agent-shell-drive--note-notification'."
+  :type 'number)
 
 (defconst +agent-shell-drive--read-kinds '("read" "search" "fetch" "think")
   "Tool call kinds a read-only shell approves.")
@@ -915,6 +926,35 @@ a string or an argv vector, and may send it only in a later update."
       (setf (alist-get id commands nil nil #'equal) command)
       (plist-put state :commands commands))))
 
+(defun +agent-shell-drive--turn-complete (shell state stop-reason)
+  "Return the `turn-complete' event of SHELL's turn in STATE.
+STOP-REASON is nil for a turn no prompt started."
+  (append
+   (list :kind 'turn-complete :shell shell
+         :session (ignore-errors (agent-shell-session-id :shell-buffer shell))
+         :stop-reason stop-reason
+         :turn-text (+agent-shell-drive--text (plist-get state :turn))
+         :text (let ((final (+agent-shell-drive--text
+                             (plist-get state :final))))
+                 (if (string-blank-p final)
+                     (+agent-shell-drive--text (plist-get state :turn))
+                   final))
+         :refused (with-current-buffer shell
+                    (prog1 (reverse +agent-shell-drive--refused)
+                      (setq +agent-shell-drive--refused nil)))
+         :provider-errors (plist-get state :provider-errors)
+         :commands (seq-uniq (reverse (mapcar #'cdr (plist-get state
+                                                               :commands)))))
+   (when-let* ((plan (buffer-local-value '+agent-shell-drive--plan shell)))
+     (with-current-buffer shell
+       (setq +agent-shell-drive--plan nil))
+     (list :plan plan))))
+
+(defun +agent-shell-drive--reset (state)
+  "Start a new turn in STATE."
+  (dolist (key '(:turn :final :provider-errors :commands :calls))
+    (plist-put state key nil)))
+
 (defun +agent-shell-drive--parse (shell state event)
   "Update SHELL's turn STATE from upstream EVENT; return a plist or nil."
   (let ((kind (map-elt event :event))
@@ -939,14 +979,14 @@ a string or an argv vector, and may send it only in a later update."
                             (agent-shell-session-id :shell-buffer shell))
                  :text part
                  :title (map-nested-elt data '(:tool-call :title))))))
+      ('turn-complete
+       (+agent-shell-drive--turn-complete shell state
+                                          (map-elt data :stop-reason)))
       (_
        (when (eq kind 'input-submitted)
          (with-current-buffer shell
            (setq +agent-shell-drive--refused nil))
-         (plist-put state :turn nil)
-         (plist-put state :final nil)
-         (plist-put state :provider-errors nil)
-         (plist-put state :commands nil))
+         (+agent-shell-drive--reset state))
        (unless (and (eq kind 'init-finished)
                     (+agent-shell-drive--refusal shell))
          (append
@@ -954,28 +994,6 @@ a string or an argv vector, and may send it only in a later update."
                 :session (ignore-errors
                            (agent-shell-session-id :shell-buffer shell)))
           (pcase kind
-            ('turn-complete
-             (append
-              (list :stop-reason (map-elt data :stop-reason)
-                    :turn-text (+agent-shell-drive--text
-                                (plist-get state :turn))
-                    :text (let ((final (+agent-shell-drive--text
-                                        (plist-get state :final))))
-                            (if (string-blank-p final)
-                                (+agent-shell-drive--text (plist-get state :turn))
-                              final))
-                    :refused (with-current-buffer shell
-                               (prog1 (reverse +agent-shell-drive--refused)
-                                 (setq +agent-shell-drive--refused nil)))
-                    :provider-errors (plist-get state :provider-errors)
-                    :commands (seq-uniq (reverse
-                                         (mapcar #'cdr (plist-get state
-                                                                  :commands)))))
-              (when-let* ((plan (buffer-local-value
-                                 '+agent-shell-drive--plan shell)))
-                (with-current-buffer shell
-                  (setq +agent-shell-drive--plan nil))
-                (list :plan plan))))
             ('clean-up
              (when-let* ((reason (buffer-local-value
                                   '+agent-shell-drive--reason shell)))
@@ -984,6 +1002,74 @@ a string or an argv vector, and may send it only in a later update."
                           :data +agent-shell-drive--error-data
                           :provider-errors
                           (plist-get state :provider-errors))))))))))
+
+(defun +agent-shell-drive--prompted-p (shell)
+  "Return whether SHELL awaits the response to a prompt or a load.
+Agent output then belongs to that request's turn.  A shell without
+agent-shell state cannot tell, so counts as prompted."
+  (or (not (local-variable-p 'agent-shell--state shell))
+      (seq-some (lambda (request)
+                  (member (map-elt request :method)
+                          '("session/prompt" "session/load")))
+                (map-elt (buffer-local-value 'agent-shell--state shell)
+                         :active-requests))))
+
+(defun +agent-shell-drive--quiet (shell state)
+  "Restart the timer that ends SHELL's unprompted turn in STATE once quiet."
+  (when-let* ((timer (plist-get state :unprompted)))
+    (cancel-timer timer))
+  (plist-put state :unprompted
+             (run-at-time +agent-shell-drive-unprompted-quiet nil
+                          #'+agent-shell-drive--quiet-end shell)))
+
+(defun +agent-shell-drive--quiet-end (shell)
+  "End SHELL's quiet unprompted turn, unless one of its tool calls runs."
+  (when-let* ((state (gethash shell +agent-shell-drive--shells))
+              ((plist-get state :unprompted)))
+    (if (rassoc t (plist-get state :calls))
+        (+agent-shell-drive--quiet shell state)
+      (+agent-shell-drive--end-unprompted shell state))))
+
+(defun +agent-shell-drive--end-unprompted (shell state &optional later)
+  "End SHELL's unprompted turn in STATE, telling watchers if it had text.
+They get `turn-complete' with :unprompted t and no :stop-reason; with
+LATER, from a timer once the caller returns."
+  (when-let* ((timer (plist-get state :unprompted)))
+    (cancel-timer timer)
+    (plist-put state :unprompted nil)
+    (unless (string-blank-p (+agent-shell-drive--text (plist-get state :turn)))
+      (let ((event (append (+agent-shell-drive--turn-complete shell state nil)
+                           (list :unprompted t))))
+        (if later
+            (run-at-time 0 nil
+                         (lambda ()
+                           (when (gethash shell +agent-shell-drive--shells)
+                             (+agent-shell-drive--deliver shell event))))
+          (+agent-shell-drive--deliver shell event))))))
+
+(defun +agent-shell-drive--track-unprompted (shell state event)
+  "Open, extend or end SHELL's unprompted turn in STATE as EVENT arrives.
+Agent output while no prompt or load awaits its response opens one, a
+fresh turn.  Submitting a prompt ends it."
+  (pcase (map-elt event :event)
+    ((and (or 'agent-message-chunk 'tool-call-update) kind)
+     (cond ((plist-get state :unprompted)
+            (+agent-shell-drive--quiet shell state))
+           ((not (+agent-shell-drive--prompted-p shell))
+            (+agent-shell-drive--reset state)
+            (+agent-shell-drive--quiet shell state)))
+     (when-let* (((eq kind 'tool-call-update))
+                 ((plist-get state :unprompted))
+                 (data (map-elt event :data)))
+       (setf (alist-get (map-elt data :tool-call-id)
+                        (plist-get state :calls) nil nil #'equal)
+             (and (member (map-nested-elt data '(:tool-call :status))
+                          '("pending" "in_progress"))
+                  t))))
+    ('input-submitted (+agent-shell-drive--end-unprompted shell state t))
+    ('clean-up
+     (when-let* ((timer (plist-get state :unprompted)))
+       (cancel-timer timer)))))
 
 (defun +agent-shell-drive--progress-event (shell event)
   "Return the `progress' event upstream EVENT from SHELL makes, or nil.
@@ -1002,6 +1088,8 @@ before them, which the parsed events leave out."
 
 (defun +agent-shell-drive--dispatch (shell event)
   "Deliver upstream EVENT from SHELL to its watchers."
+  (when-let* ((state (gethash shell +agent-shell-drive--shells)))
+    (+agent-shell-drive--track-unprompted shell state event))
   (when-let* ((progress (and (gethash shell +agent-shell-drive--shells)
                              (+agent-shell-drive--progress-event shell event))))
     (dolist (watcher (+agent-shell-drive--watching shell))
@@ -1042,10 +1130,12 @@ JSON-RPC error's data while a watched shell handles it, so that shell's
         (funcall handler acp-error raw-message)))))
 
 (defun +agent-shell-drive--note-notification (&rest args)
-  "Record a watched shell's provider error from ARGS, a notification's.
+  "Record a watched shell's provider error or unprompted turn from ARGS.
 ARGS are those of `agent-shell--on-notification'.  A `session_info_update'
 carrying `_meta.codex.error' joins the turn's :provider-errors, and the
-shell's watchers get it as a `provider-warning' event."
+shell's watchers get it as a `provider-warning' event.  Any session update
+extends an unprompted turn, and a `usage_update' with a cost, which
+Claude Code's adapter sends at each result, ends it."
   (let* ((shell (map-elt (plist-get args :state) :buffer))
          (state (and shell (gethash shell +agent-shell-drive--shells)))
          (update (map-nested-elt (plist-get args :acp-notification)
@@ -1062,7 +1152,12 @@ shell's watchers get it as a `provider-warning' event."
                               (agent-shell-session-id :shell-buffer shell))
                    :message (map-elt error 'message)
                    :info (map-elt error 'codexErrorInfo)
-                   :will-retry (and (map-elt error 'willRetry) t))))))
+                   :will-retry (and (map-elt error 'willRetry) t))))
+    (when (and state update (plist-get state :unprompted))
+      (if (and (equal (map-elt update 'sessionUpdate) "usage_update")
+               (map-elt update 'cost))
+          (+agent-shell-drive--end-unprompted shell state)
+        (+agent-shell-drive--quiet shell state)))))
 
 (defun +agent-shell-drive--advise ()
   "Advise the agent-shell functions whose events watchers need.

@@ -23,6 +23,24 @@ def chunk(session_id, text):
     }})
 
 
+def unprompted(session_id, text, quiet=False):
+    """Run a turn no prompt started, as Claude Code does after a background
+    task, a peer's message or a cut-off response: its text, then, unless
+    QUIET, the usage update with a cost that ends each of its results."""
+    chunk(session_id, text)
+    if not quiet:
+        emit({"method": "session/update", "params": {
+            "sessionId": session_id,
+            "update": {"sessionUpdate": "usage_update", "used": 1000,
+                       "size": 200000,
+                       "cost": {"amount": 0.01, "currency": "USD"}},
+        }})
+
+
+def panel_block(request, lead="Requesting a panel."):
+    return lead + "\n\n```pstack-panel\n" + json.dumps(request) + "\n```\n"
+
+
 PLAN = "# Plan\nRead the drive library, then report on its watchers."
 
 
@@ -220,7 +238,31 @@ def handle_pstack_prompt(message, text, state):
     session_id = message["params"]["sessionId"]
     # A follow-up can quote member briefs, so recognise it first.
     if "has finished:" in text and "pstack panel" in text:
-        return f"TRIAGED {text.count(chr(10) + '## ')}"
+        reply = f"TRIAGED {text.count(chr(10) + '## ')}"
+        later = state.pop("later", None)
+        if later is None:
+            return reply
+        chunk(session_id, reply)
+        emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
+        unprompted(session_id, later)
+        return False
+    later = re.search(r"PSTACK-LATER(-QUIET|-ERROR|-FOLLOWUP)? ", text)
+    if later:
+        request, _ = json.JSONDecoder().raw_decode(
+            text[text.index("{", later.end()):])
+        block = panel_block(request, "Background work finished.")
+        if later[1] == "-FOLLOWUP":
+            state["later"] = block
+            return "STORED"
+        if later[1] == "-ERROR":
+            chunk(session_id, "Partial before the cut.")
+            emit({"id": message["id"],
+                  "error": {"code": -32603, "message": "Internal error"}})
+        else:
+            chunk(session_id, "STARTED")
+            emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
+        unprompted(session_id, block, quiet=later[1] == "-QUIET")
+        return False
     if text.startswith("Your turn ended while commands you started"):
         return "WAITED\n" + text
     if text.startswith("The commands you started have exited:"):
@@ -330,8 +372,15 @@ def handle_pstack_prompt(message, text, state):
     if position >= 0:
         request, _ = json.JSONDecoder().raw_decode(
             text[position + len("PSTACK-LEAD "):])
-        block = ("Requesting a panel.\n\n```pstack-panel\n"
-                 + json.dumps(request) + "\n```\n")
+        block = panel_block(request)
+        again = re.search(r"AND-LATER (SAME|OTHER)", text)
+        if again:
+            chunk(session_id, block)
+            emit({"id": message["id"], "result": {"stopReason": "end_turn"}})
+            if again[1] == "OTHER":
+                request = dict(request, brief=request["brief"] + " again")
+            unprompted(session_id, panel_block(request, "Background work finished."))
+            return False
         if "SPLIT-PANEL" in text:
             split = block.index("panel\n")
             chunk(session_id, block[:split])

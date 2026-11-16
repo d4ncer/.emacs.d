@@ -355,6 +355,45 @@ BODY sees `emit', a function of SHELL and an upstream event alist, and
         (should (equal "Answer\n```pstack-panel\n{}\n```"
                        (plist-get event :turn-text)))))))
 
+(ert-deftest +agent-shell-drive-test-unprompted-turn ()
+  "End a turn no prompt started once quiet, never while its tool call runs."
+  (+agent-shell-drive-test--with-upstream
+    (+agent-shell-drive-test--with-shells (shell)
+      (let ((+agent-shell-drive-unprompted-quiet 60) events)
+        (with-current-buffer shell
+          (setq-local agent-shell--state
+                      (list (cons :active-requests
+                                  (list '((:method . "session/prompt")))))))
+        (+agent-shell-drive-watch shell 'a 1 (lambda (e) (push e events)))
+        (emit shell '((:event . agent-message-chunk)
+                      (:data (:text-chunk . "prompted"))))
+        (should-not (plist-get (gethash shell +agent-shell-drive--shells)
+                               :unprompted))
+        (with-current-buffer shell
+          (setf (map-elt agent-shell--state :active-requests) nil))
+        (emit shell '((:event . agent-message-chunk)
+                      (:data (:text-chunk . "later"))))
+        (emit shell '((:event . tool-call-update)
+                      (:data (:tool-call-id . "t1")
+                             (:tool-call (:status . "in_progress")))))
+        (setq events nil)
+        (+agent-shell-drive--quiet-end shell)
+        (should-not events)
+        (emit shell '((:event . tool-call-update)
+                      (:data (:tool-call-id . "t1")
+                             (:tool-call (:status . "completed")))))
+        (emit shell '((:event . agent-message-chunk)
+                      (:data (:text-chunk . " done"))))
+        (+agent-shell-drive--quiet-end shell)
+        (should (equal '(turn-complete t "later done" " done")
+                       (list (plist-get (car events) :kind)
+                             (plist-get (car events) :unprompted)
+                             (plist-get (car events) :turn-text)
+                             (plist-get (car events) :text))))
+        (setq events nil)
+        (+agent-shell-drive--quiet-end shell)
+        (should-not events)))))
+
 (ert-deftest +agent-shell-drive-test-provider-errors ()
   "Carry a watched shell's JSON-RPC error data and Codex error records."
   (+agent-shell-drive-test--with-upstream

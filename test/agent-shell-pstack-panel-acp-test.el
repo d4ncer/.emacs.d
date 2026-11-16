@@ -408,5 +408,84 @@ and it failed again."
                               (+agent-shell-pstack-panel-acp-test--report
                                member))))))
 
+(ert-deftest +agent-shell-pstack-panel-acp-test-unprompted-turns ()
+  "Start a panel once from a block that ends a turn no prompt started.
+Such a turn follows a background task's end, a peer's message or a
+cut-off response.  It ends at the adapter's result usage, or once quiet."
+  (dolist (style '("PSTACK-LATER " "PSTACK-LATER-QUIET " "PSTACK-LATER-ERROR "))
+    (+agent-shell-pstack-panel-acp-test--with-lead
+      (let* ((+agent-shell-drive-unprompted-quiet 0.5)
+             (panel (+agent-shell-pstack-panel-acp-test--request
+                     lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"
+                     nil style)))
+        (+agent-shell-pstack-panel-acp-test--lead-saw lead "TRIAGED 1")
+        (+agent-shell-pstack-panel-acp-test--members-gone panel)
+        (accept-process-output nil 1)
+        (should (= 1 (length (+agent-shell-pstack-panel-list))))
+        (should (= 1 (seq-count
+                      (lambda (e) (and (eq 'turn-complete (plist-get e :kind))
+                                       (plist-get e :block)))
+                      (ring-elements
+                       (gethash lead +agent-shell-pstack-panel--logs)))))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-unprompted-after-followup ()
+  "Start a second panel from a block ending a turn after a follow-up."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (should (+agent-shell-drive-send
+             lead "PSTACK-LATER-FOLLOWUP {\"version\":1,\"shape\":\"how\",\"brief\":\"second\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"))
+    (+agent-shell-pstack-panel-acp-test--lead-saw lead "STORED")
+    (+agent-shell-pstack-panel-acp-test--wait-for
+     (lambda () (eq (agent-shell-status :shell-buffer lead) 'ready)))
+    (let ((first (+agent-shell-pstack-panel-acp-test--request
+                  lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"first\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}")))
+      (+agent-shell-pstack-panel-acp-test--wait-for
+       (lambda () (= 2 (seq-count #'+agent-shell-pstack-panel-delivered
+                                  (+agent-shell-pstack-panel-list)))))
+      (let ((second (cadr (+agent-shell-pstack-panel-list))))
+        (should (string-match-p "second"
+                                (+agent-shell-pstack-panel-brief second)))
+        (+agent-shell-pstack-panel-acp-test--members-gone first)
+        (+agent-shell-pstack-panel-acp-test--members-gone second)))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-unprompted-during-panel ()
+  "Keep a block that arrives while the lead's last panel still runs.
+A new block starts its own panel; the same block again starts none."
+  (dolist (again '(OTHER SAME))
+    (+agent-shell-pstack-panel-acp-test--with-lead
+      (+agent-shell-pstack-panel-acp-test--request
+       lead "{\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"
+       nil (format "AND-LATER %s " again))
+      (let ((panels (if (eq again 'OTHER) 2 1)))
+        (+agent-shell-pstack-panel-acp-test--wait-for
+         (lambda () (= panels (seq-count #'+agent-shell-pstack-panel-delivered
+                                         (+agent-shell-pstack-panel-list)))))
+        (accept-process-output nil 1)
+        (should (= panels (length (+agent-shell-pstack-panel-list))))
+        (should (= (if (eq again 'SAME) 1 0)
+                   (seq-count
+                    (lambda (e) (eq 'duplicate (plist-get e :outcome)))
+                    (ring-elements
+                     (gethash lead +agent-shell-pstack-panel--logs)))))
+        (mapc #'+agent-shell-pstack-panel-acp-test--members-gone
+              (+agent-shell-pstack-panel-list))))))
+
+(ert-deftest +agent-shell-pstack-panel-acp-test-unprompted-then-input ()
+  "Start a panel from an unprompted turn that the next prompt ends."
+  (+agent-shell-pstack-panel-acp-test--with-lead
+    (let ((+agent-shell-drive-unprompted-quiet 60))
+      (should (+agent-shell-drive-send
+               lead "PSTACK-LATER-QUIET {\"version\":1,\"shape\":\"how\",\"brief\":\"b\",\"members\":[{\"role\":\"a\",\"agent\":\"fixture-codex\"}]}"))
+      (+agent-shell-pstack-panel-acp-test--lead-saw lead "Background work finished.")
+      (+agent-shell-pstack-panel-acp-test--wait-for
+       (lambda () (eq (agent-shell-status :shell-buffer lead) 'ready)))
+      (should-not (+agent-shell-pstack-panel-list))
+      (should (+agent-shell-drive-send lead "Next prompt"))
+      (+agent-shell-pstack-panel-acp-test--wait-for
+       (lambda () (seq-some #'+agent-shell-pstack-panel-delivered
+                            (+agent-shell-pstack-panel-list))))
+      (should (= 1 (length (+agent-shell-pstack-panel-list))))
+      (+agent-shell-pstack-panel-acp-test--members-gone
+       (car (+agent-shell-pstack-panel-list))))))
+
 (provide 'agent-shell-pstack-panel-acp-test)
 ;;; agent-shell-pstack-panel-acp-test.el ends here

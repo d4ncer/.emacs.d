@@ -2365,7 +2365,9 @@ A runner's panel shows its observer the event first."
        (+agent-shell-pstack-panel--send-brief panel member))
       ('prompt-ready (+agent-shell-pstack-panel--send-brief panel member))
       ('turn-complete
-       (when (+agent-shell-pstack-panel--turn-open-p member)
+       ;; A member's report ends the turn its brief started.
+       (when (and (not (plist-get event :unprompted))
+                  (+agent-shell-pstack-panel--turn-open-p member))
          (let* ((text (+agent-shell-pstack-panel--report-text event))
                 (reason (plist-get event :stop-reason))
                 (failure (+agent-shell-pstack-panel--failure member event)))

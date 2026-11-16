@@ -120,7 +120,11 @@ its final message with a fenced block, then ends its turn:
 
 Emacs reads the first complete block in the lead's message, as it reaches a
 live `turn-complete` or the tool call that ends the message, so a restored
-session never starts a panel. A lead that calls a tool after its block has
+session never starts a panel. A turn the agent starts without a prompt, such
+as Claude Code's after a background task ends or another session messages it,
+counts too: Emacs ends it at the adapter's usage update for its result, after
+`+agent-shell-drive-unprompted-quiet` seconds of quiet with no tool call
+running, or at the next prompt. A lead that calls a tool after its block has
 broken the protocol: Emacs starts the panel anyway and interrupts the lead's
 turn, so the lead waits for the reports instead of working around them. The
 follow-up opens by naming the interrupted call, which may not have finished. The
