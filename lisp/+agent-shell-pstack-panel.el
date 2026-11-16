@@ -1032,17 +1032,23 @@ Task:\n%s\n"
                 role (+agent-shell-pstack-panel-brief panel))
         focus "\n" (+agent-shell-pstack-panel--shape panel :contract)))
       ('delegate
-       (let ((manifest (+agent-shell-pstack-panel-arena panel)))
+       (let ((manifest (+agent-shell-pstack-panel-arena panel))
+             (isolation (+agent-shell-pstack-panel--isolation panel)))
          (concat
           (format "You are the %s delegate of a pstack panel that Emacs runs \
-for another agent.  You work on branch %s, %s.\n\nTask:\n%s\n"
+for another agent.  You work on branch %s, %s.%s\n\nTask:\n%s\n"
                   role (+agent-shell-arena-git-delegate-branch manifest)
-                  (pcase (+agent-shell-pstack-panel--isolation panel)
+                  (pcase isolation
                     ('branch "in the other agent's own checkout, which nobody \
 else touches until you finish")
                     ('checkout "in the repository's checkout on a host made \
 for this task alone")
                     (_ "in a git worktree of your own"))
+                  (if (eq 'checkout isolation)
+                      (format "  It starts from commit %s, the other agent's \
+HEAD; uncommitted changes in the other agent's checkout are not included."
+                              (+agent-shell-arena-git-manifest-base manifest))
+                    "")
                   (+agent-shell-pstack-panel-brief panel))
           focus "\n" (+agent-shell-pstack-panel--shape
                       panel (if (+agent-shell-pstack-panel--sandboxed-p panel)
@@ -1337,6 +1343,9 @@ git rebase --onto HEAD %s %s.\n"
      (format "Ran on: %s, %s.\n" host
              (if (+agent-shell-pstack-panel--sandboxed-p panel) "sandboxed"
                "full access"))
+     (when (+agent-shell-arena-remote-pod remote)
+       (format "Started from: %s, your HEAD; uncommitted changes in your \
+checkout were not included.\n" base))
      (+agent-shell-arena-remote-steps-text remote)
      (cond
       ((null outcome)

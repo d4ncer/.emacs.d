@@ -749,7 +749,9 @@ A branch-mode follow-up says instead whether Emacs switched the checkout
 back. A sandboxed delegate's says whether Emacs made its commit, and if
 not, why. A remote delegate's names where it ran, its workspace on the
 host and the uncommitted paths left there, apart from the branch, and
-says when the branch could not be brought back here. A timeout or a cancellation keeps every commit the delegate made. A
+says when the branch could not be brought back here. A pod delegate's
+`Started from:` line names your `HEAD`, which it started from, and says
+your uncommitted changes were not included. A timeout or a cancellation keeps every commit the delegate made. A
 worktree's uncommitted changes are named, since cleaning the workspace up
 loses them.
 

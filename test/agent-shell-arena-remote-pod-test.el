@@ -1003,8 +1003,9 @@ uncommitted, which keep the pod."
 
 (ert-deftest +agent-shell-arena-remote-pod-test-follow-up-times-steps ()
   "A pod job's record and status note when each of its steps came, and its
-follow-up gives the seconds between them, the laptop's and the pod's
-apart; the record notes the pod's deletion after."
+follow-up names the commit it started from and gives the seconds between
+them, the laptop's and the pod's apart; the record notes the pod's
+deletion after."
   (skip-unless (executable-find "git"))
   (+pod-test--with
     (let* ((panel (funcall launch))
@@ -1020,6 +1021,10 @@ apart; the record notes the pod's deletion after."
       (+pod-test--wait-for
        (lambda () (+agent-shell-pstack-panel-followup panel)))
       (let ((followup (+agent-shell-pstack-panel-followup panel)))
+        (should (string-search
+                 (format "Started from: %s, your HEAD; uncommitted changes in \
+your checkout were not included.\n" (funcall lead-git "rev-parse" "HEAD"))
+                 followup))
         (should (string-match-p
                  (concat "On the laptop: panel registered, base chosen \
 [0-9.]+ s later, base kept [0-9.]+ s later, base checked [0-9.]+ s later, \
@@ -1049,6 +1054,30 @@ member ended [0-9.]+ s later\\.\n")
                 (+agent-shell-arena-remote-steps-deleted
                  (+agent-shell-arena-remote-steps
                   (+agent-shell-arena-remote--read-json file 'record))))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-brief-names-base ()
+  "A pod delegate's brief names the commit it starts from and says the
+lead's uncommitted changes are not in it; a worktree delegate's does not."
+  (let* ((base "0123456789abcdef0123456789abcdef01234567")
+         (delegate (+agent-shell-arena-git--delegate :isolation 'checkout))
+         (member (+agent-shell-pstack-panel--make-member
+                  :role "builder" :agent 'codex :kind 'delegate))
+         (panel (+agent-shell-pstack-panel--make
+                 :id "pod-panel" :shape 'delegate :brief "Build it."
+                 :arena (+agent-shell-arena-git--manifest
+                         :id "pod-panel-0123abcd" :base base
+                         :delegate delegate)
+                 :members (list member)
+                 :delegate-options '(:host nil :isolation checkout
+                                     :sandbox nil))))
+    (should (string-search
+             (concat "It starts from commit " base ", the other agent's HEAD; \
+uncommitted changes in the other agent's checkout are not included.")
+             (+agent-shell-pstack-panel--brief panel member)))
+    (setf (+agent-shell-arena-git-delegate-isolation delegate) 'worktree)
+    (should-not (string-search "uncommitted changes in the other agent's"
+                               (+agent-shell-pstack-panel--brief panel
+                                                                 member)))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-prepare-skips-snapshot ()
   "A pod delegate starts from the lead's HEAD with no snapshot of its tree,
