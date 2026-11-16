@@ -52,6 +52,12 @@
      (princ (format "Denylisted text in tracked files:\n  %s\n"
                     (string-join locations "\n  ")))
      (error "Public repository denylist failed")))
+  (load (expand-file-name "test/config-elpaca-links" +config-check-root) nil t)
+  (if-let* ((bad (+config-elpaca-bad-links +config-check-root)))
+      (progn (princ (format "Package build links that break:\n  %s\n"
+                            (string-join bad "\n  ")))
+             (error "Package build links failed"))
+    (princ "Package build links: PASS\n"))
   (+config-check-process "Stale local bytecode recompiled"
                          "-l" "config-test-support"
                          "-f" "+config-test-recompile-stale")
@@ -82,6 +88,9 @@
    "-l" "config-compile-local-test" "-l" "flymake-posframe-test"
    "-l" "elisp-tools-test" "-l" "browse-at-remote-patch-test"
    "-f" "ert-run-tests-batch-and-exit")
+  (+config-check-process "Package builds from shared checkouts"
+                         "-l" "config-elpaca-guard-test"
+                         "-f" "ert-run-tests-batch-and-exit")
   (+config-check-process "Elisp indentation"
                          "-l" (expand-file-name "lisp/+elisp-tools"
                                                 +config-check-root)

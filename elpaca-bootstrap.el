@@ -17,6 +17,8 @@
        (default-directory repo))
   (add-to-list 'load-path (if (file-exists-p build) build repo))
   (unless (file-exists-p repo)
+    (when-let* ((reason (+bootstrap-shared-packages)))
+      (error "Elpaca installs nothing here: %s" reason))
     (make-directory repo t)
     (condition-case-unless-debug err
         (if-let* ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))

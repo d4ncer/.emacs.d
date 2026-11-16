@@ -37,7 +37,23 @@
         use-package-hook-name-suffix nil)
   (+use-package-setup))
 
+(defun +bootstrap-shared-packages (&optional root)
+  "Return why the checkout at ROOT shares packages it does not own, or nil.
+It does as a linked git worktree, whose .git is a file, or when its
+elpaca directory is a symlink.  ROOT defaults to `+config-root',
+or `user-emacs-directory' before setup."
+  (let* ((root (file-name-as-directory
+                (or root +config-root user-emacs-directory)))
+         (elpaca (expand-file-name "elpaca" root)))
+    (cond ((file-regular-p (expand-file-name ".git" root))
+           (format "%s is a linked git worktree" (abbreviate-file-name root)))
+          ((file-symlink-p elpaca)
+           (format "%s links to %s" (abbreviate-file-name elpaca)
+                   (abbreviate-file-name (file-truename elpaca)))))))
+
 (with-eval-after-load 'elpaca-menu-melpa (require '+elpaca-patch))
+
+(with-eval-after-load 'elpaca (require '+elpaca-guard))
 
 (provide '+bootstrap)
 ;;; +bootstrap.el ends here

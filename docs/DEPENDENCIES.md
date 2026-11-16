@@ -38,6 +38,14 @@ image type was compiled in. Optional feature checks remain in the configuration.
 
 ## Package updates
 
+Build, update and delete packages only from the checkout that owns
+`elpaca/`. In a linked git worktree, or a checkout whose `elpaca` is a
+symlink, Elpaca loads existing builds and fails every order that would
+clone, build, rebuild or update, saying why; deleting refuses. A build there
+would record that checkout's paths, which break once it goes. The gate's
+package build links stage fails on each link under `elpaca/builds/` that does
+not resolve or points outside the `elpaca/sources/` Elpaca builds from.
+
 1. Check the package source directories for local changes. Preserve or resolve
    those changes explicitly before merging upstream.
 2. Update through Elpaca, for example `M-x elpaca-update-all`.
