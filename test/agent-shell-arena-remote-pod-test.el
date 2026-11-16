@@ -1020,9 +1020,10 @@ later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s later, results \
 fetched [0-9.]+ s later\\.\n")
                  followup))
         (should (string-match-p
-                 (concat "On the host: base fetched, base checked out [0-9.]+ s \
-later, runner started [0-9.]+ s later, member launched [0-9.]+ s later, \
-member ended [0-9.]+ s later\\.\n")
+                 (concat "On the host: base step started, base fetched [0-9.]+ s \
+later, base checked out [0-9.]+ s later, base step ended [0-9.]+ s later, \
+runner started [0-9.]+ s later, member launched [0-9.]+ s later, member \
+ended [0-9.]+ s later\\.\n")
                  followup)))
       (let ((status (+agent-shell-arena-remote--read-json
                      (expand-file-name "status.json"
@@ -1311,6 +1312,114 @@ and the pod goes; a base no origin ref holds is refused before any pod."
       (+pod-test--wait-for
        (lambda () (not (+pod-test--exists-p root panel))))
       (should-not (file-exists-p (+pod-test--ledger panel))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-base-step-before-ready ()
+  "A new pod fetches and checks out its base while its setup has not yet
+written its readiness file, and the submission then only starts the
+runner, with the step's start and end among the host's steps."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".ready-late" root))
+    (let* ((+agent-shell-arena-remote-pod-ready-interval 0.1)
+           (panel (funcall launch))
+           (base (funcall lead-git "rev-parse" "HEAD"))
+           (answer (lambda ()
+                     (expand-file-name "base-step/answer"
+                                       (funcall job-folder panel)))))
+      (+pod-test--wait-for (lambda () (file-exists-p (funcall answer))))
+      (should (equal "done\n" (+pod-test--read (funcall answer))))
+      (should (eq 'submitting (+agent-shell-arena-remote-phase
+                               (+pod-test--remote panel))))
+      (let ((pod (expand-file-name (+agent-shell-arena-remote-pod-name
+                                    (+pod-test--pod panel))
+                                   root)))
+        (should (equal base (+pod-test--git (expand-file-name "repo" pod)
+                                            "rev-parse" "HEAD")))
+        (copy-file (expand-file-name ".ready.json" root)
+                   (expand-file-name ".local/share/pstack-arena/ready.json"
+                                     pod)))
+      (+pod-test--submitted panel)
+      (let* ((folder (funcall job-folder panel))
+             (steps (+agent-shell-arena-remote--host-steps folder)))
+        (should-not (file-exists-p (expand-file-name "fetch.log" folder)))
+        (should (= 1 (cl-count-if
+                      (lambda (line) (string-prefix-p "base_fetched " line))
+                      (split-string (+pod-test--read
+                                     (expand-file-name "steps" folder))
+                                    "\n" t))))
+        (should (<= (+agent-shell-arena-remote-host-steps-base-started steps)
+                    (+agent-shell-arena-remote-host-steps-base-fetched steps)
+                    (+agent-shell-arena-remote-host-steps-base-checked-out
+                     steps)
+                    (+agent-shell-arena-remote-host-steps-base-ended steps)
+                    (+agent-shell-arena-remote-host-steps-started steps)))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-submit-waits-for-base-step ()
+  "A submission that comes while the pod's base step still fetches waits
+for it, then starts the runner without fetching again."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let ((path (substring (getenv "PATH") (length (concat bin path-separator))))
+          (wrapper (expand-file-name "git" bin)))
+      (with-temp-file wrapper
+        (insert "#!/bin/sh\n"
+                "case \" $* \" in *\" fetch \"*\" origin \"*)\n"
+                "  if [ -f " (shell-quote-argument root) "/.fetch-gate ]; then\n"
+                "    touch " (shell-quote-argument root) "/.fetch-waiting\n"
+                "    while [ ! -f " (shell-quote-argument root)
+                "/.fetch-open ]; do sleep 0.05; done\n"
+                "  fi;;\nesac\n"
+                "PATH=" (shell-quote-argument path) " exec git \"$@\"\n"))
+      (set-file-modes wrapper #o755)
+      (with-temp-file (expand-file-name ".fetch-gate" root))
+      (let ((panel (funcall launch)))
+        (+pod-test--wait-for
+         (lambda () (file-exists-p (expand-file-name ".fetch-waiting" root))))
+        (+pod-test--wait-for
+         (lambda () (+agent-shell-arena-remote-steps-admitted
+                     (+agent-shell-arena-remote-steps
+                      (+pod-test--remote panel)))))
+        (accept-process-output nil 0.5)
+        (should (eq 'submitting (+agent-shell-arena-remote-phase
+                                 (+pod-test--remote panel))))
+        (with-temp-file (expand-file-name ".fetch-open" root))
+        (+pod-test--submitted panel)
+        (let ((folder (funcall job-folder panel)))
+          (should (equal "done\n" (+pod-test--read
+                                   (expand-file-name "base-step/answer"
+                                                     folder))))
+          (should-not (file-exists-p (expand-file-name "fetch.log"
+                                                       folder))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-failed-base-step-fails-job ()
+  "A base step whose fetch fails fails the job with its reason once the
+pod is ready, and the pod goes."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".ready-late" root))
+    (with-temp-file (expand-file-name "local.txt" lead-repo) (insert "Local\n"))
+    (funcall lead-git "add" "-A")
+    (funcall lead-git "commit" "-q" "-m" "local only")
+    (funcall lead-git "update-ref" "refs/remotes/origin/unpushed" "HEAD")
+    (let* ((+agent-shell-arena-remote-pod-ready-interval 0.1)
+           (panel (funcall launch))
+           (answer (lambda ()
+                     (expand-file-name "base-step/answer"
+                                       (funcall job-folder panel)))))
+      (+pod-test--wait-for (lambda () (file-exists-p (funcall answer))))
+      (should (string-match-p "\\`failed the base [0-9a-f]+ could not be \
+fetched from origin" (+pod-test--read (funcall answer))))
+      (copy-file (expand-file-name ".ready.json" root)
+                 (expand-file-name
+                  (concat (+agent-shell-arena-remote-pod-name
+                           (+pod-test--pod panel))
+                          "/.local/share/pstack-arena/ready.json")
+                  root))
+      (+pod-test--wait-for
+       (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
+      (should (string-match-p "could not be fetched from origin"
+                              (+agent-shell-pstack-panel-rejection panel)))
+      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-origin-head-checked-first ()
   "A base origin's default branch holds is admitted without scanning

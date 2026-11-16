@@ -373,10 +373,13 @@ FETCHED when its results were here, and DELETED when its pod was gone."
                (:constructor +agent-shell-arena-remote--make-host-steps)
                (:copier nil))
   "When each step of a job came on its host, by the host's clock.
-BASE-FETCHED and BASE-CHECKED-OUT are when its submission fetched the
-base and checked it out, STARTED when its runner started, LAUNCHED when
-its first member started and ENDED when every member had settled."
-  base-fetched base-checked-out started launched ended)
+BASE-STARTED and BASE-ENDED bracket a pod's base step, run while its
+setup finishes; BASE-FETCHED and BASE-CHECKED-OUT are when that step or
+the submission fetched the base and checked it out, STARTED when its
+runner started, LAUNCHED when its first member started and ENDED when
+every member had settled."
+  base-started base-fetched base-checked-out base-ended started launched
+  ended)
 
 (cl-defstruct (+agent-shell-arena-remote-status
                (:constructor +agent-shell-arena-remote--make-status)
@@ -539,8 +542,10 @@ not saved."
            (deleted "pod_deleted" (opt number)))
     (host-steps +agent-shell-arena-remote-host-steps
                 +agent-shell-arena-remote--make-host-steps
+                (base-started "base_started" (opt number))
                 (base-fetched "base_fetched" (opt number))
                 (base-checked-out "base_checked_out" (opt number))
+                (base-ended "base_ended" (opt number))
                 (started "started" (opt number))
                 (launched "member_launched" (opt number))
                 (ended "member_ended" (opt number)))
@@ -1437,6 +1442,29 @@ half the host's memory.  The kernel reclaims page cache at that limit
 and kills the largest process past it, a candidate's build rather than
 the runner, which goes on to report that candidate as failed.")
 
+(defconst +agent-shell-arena-remote--origin-base
+  "g() { git -C \"$repo\" -c core.hooksPath=/dev/null \"$@\"; }
+step() { t=$(date +%s.%N); case $t in *N) t=${t%.N};; esac
+  printf '%s %s\\n' \"$1\" \"$t\" >>\"$job/steps\"; }
+origin_base() {
+  g fetch -q --no-tags --no-write-fetch-head origin \"$base\" 2>\"$1/fetch.log\" ||
+    { r=\"failed the base $base could not be fetched from origin: \
+$(tail -n 1 \"$1/fetch.log\")\"; return; }
+  step base_fetched
+  g -c advice.detachedHead=false checkout -q --detach \"$base\" 2>\"$1/checkout.log\" ||
+    { r=\"failed the checkout could not move to the base $base: \
+$(tail -n 1 \"$1/checkout.log\")\"; return; }
+  step base_checked_out
+  g update-ref \"refs/pstack-arena/$id/base\" \"$base\" ||
+    { r=\"failed the base ref could not be written\"; return; }
+  r=done
+}
+"
+  "Script lines defining g, git in $repo; step, stamping a step in $job's
+steps file; and origin_base, which fetches commit $base from origin into
+$repo, checks it out detached and writes job $id's base ref, logging in
+folder $1, and sets r to done or a failed answer.")
+
 (defconst +agent-shell-arena-remote--submit-script
   (concat
    "id=$1; emacs=$3; launcher=$4; source=${5:-bundle}; base=${6:-}; shift
@@ -1455,19 +1483,24 @@ if [ ! -d \"code/$hash\" ]; then
   [ -d \"code/$hash\" ] || answer \"failed the runner code did not unpack\"
 fi
 rm -f \"$job/code.tar\"
-g() { git -C \"$repo\" -c core.hooksPath=/dev/null \"$@\"; }
-step() { t=$(date +%s.%N); case $t in *N) t=${t%.N};; esac
-  printf '%s %s\\n' \"$1\" \"$t\" >>\"$job/steps\"; }
-if [ \"$source\" = origin ]; then
+"
+   +agent-shell-arena-remote--origin-base
+   "if [ \"$source\" = origin ]; then
   case $base in ''|*[!0-9a-f]*) answer \"failed the base is not a commit id\";; esac
-  g fetch -q --no-tags --no-write-fetch-head origin \"$base\" 2>\"$job/fetch.log\" ||
-    answer \"failed the base $base could not be fetched from origin: $(tail -n 1 \"$job/fetch.log\")\"
-  step base_fetched
-  g -c advice.detachedHead=false checkout -q --detach \"$base\" 2>\"$job/checkout.log\" ||
-    answer \"failed the checkout could not move to the base $base: $(tail -n 1 \"$job/checkout.log\")\"
-  step base_checked_out
-  g update-ref \"refs/pstack-arena/$id/base\" \"$base\" ||
-    answer \"failed the base ref could not be written\"
+  dir=$job/base-step; r=
+  if [ -d \"$dir\" ]; then
+    n=0
+    while [ ! -f \"$dir/answer\" ] && [ $n -lt 6000 ]; do
+      pid=$(cat \"$dir/pid\" 2>/dev/null) || pid=
+      [ -n \"$pid\" ] && ! kill -0 \"$pid\" 2>/dev/null && [ ! -f \"$dir/answer\" ] && break
+      sleep 0.1; n=$((n + 1))
+    done
+    r=$(cat \"$dir/answer\" 2>/dev/null) ||
+      r=\"failed the base's fetch and checkout stopped before they finished\"
+    [ \"$r\" = done ] && [ \"$(g rev-parse -q --verify HEAD)\" != \"$base\" ] && r=
+  fi
+  [ -n \"$r\" ] || origin_base \"$job\"
+  [ \"$r\" = done ] || answer \"$r\"
 else
   prereq=$(cat \"$job/prerequisite\" 2>/dev/null)
   bundle=$PWD/$job/base.bundle
@@ -1487,10 +1520,37 @@ fi
   "Unpack the upload on standard input as job $1 for checkout $2, fetch its
 base, and start the runner with Emacs $3 by launcher $4.  With $5
 origin, the checkout fetches commit $6 from its origin and checks it out
-instead of taking the base from a bundle.  A job already started answers
+instead of taking the base from a bundle, unless the base step of
+`+agent-shell-arena-remote--base-script' did so: then its answer is
+waited for, for at most 600 seconds, and a failure fails the job.  A job already started answers
 as started, so a resent submission is harmless.  Every other answer but
 started deletes the login the upload forwarded.  Each step the base
 takes is stamped in the job's steps file.")
+
+(defconst +agent-shell-arena-remote--base-script
+  (concat
+   +agent-shell-arena-remote--repo
+   "id=$2; base=$3; job=jobs/$id; dir=$job/base-step
+case $base in ''|*[!0-9a-f]*)
+  echo \"pstack-arena-base failed the base is not a commit id\"; exit 0;; esac
+"
+   +agent-shell-arena-remote--origin-base
+   "mkdir -p \"$job\" && mkdir \"$dir\" 2>/dev/null ||
+  { echo \"pstack-arena-base running\"; exit 0; }
+(
+  trap '' HUP
+  step base_started
+  origin_base \"$dir\"
+  step base_ended
+  printf '%s\\n' \"$r\" >\"$dir/answer.tmp\" && mv \"$dir/answer.tmp\" \"$dir/answer\"
+) </dev/null >/dev/null 2>&1 &
+echo $! >\"$dir/pid\"
+echo \"pstack-arena-base started\"
+")
+  "Start, once, a step in the background that fetches job $2's base, commit
+$3, from origin into checkout $1 and checks it out, as a submission
+would.  It writes done or a failed answer to the job's base-step/answer
+and stamps its start and end in the job's steps file.")
 
 (defconst +agent-shell-arena-remote--resume-script
   (concat
@@ -1621,7 +1681,9 @@ SLOT names a slot of `+agent-shell-arena-remote-steps'."
      (deleted . "pod deleted"))
     (+agent-shell-arena-remote-host-steps
      "On the host"
-     (base-fetched . "base fetched") (base-checked-out . "base checked out")
+     (base-started . "base step started") (base-fetched . "base fetched")
+     (base-checked-out . "base checked out")
+     (base-ended . "base step ended")
      (started . "runner started") (launched . "member launched")
      (ended . "member ended")))
   "Each steps record type, the label of its clock and its slots' names.")
@@ -2660,6 +2722,26 @@ NEXT continuations retain whether this submission already started it."
               (if error (report 'error error) (report 'check))))))
       (status))))
 
+(defun +agent-shell-arena-remote--base-start (remote job)
+  "Start fetching JOB's base from origin and checking it out on REMOTE's
+host, in the background, while the host's setup finishes.  The
+submission waits for that step's answer; one that never started leaves
+the submission to do the work itself."
+  (+agent-shell-arena-remote--call
+   (+agent-shell-arena-remote-host remote)
+   +agent-shell-arena-remote--base-script
+   (list (+agent-shell-arena-remote-job-repository job)
+         (+agent-shell-arena-remote-id remote)
+         (+agent-shell-arena-remote-job-base job))
+   :callback
+   (lambda (output error)
+     (let ((answer (+agent-shell-arena-remote--answer
+                    output "pstack-arena-base ")))
+       (unless (member answer '("started" "running"))
+         (message "pstack arena %s: the base step did not start: %s"
+                  (+agent-shell-arena-remote-id remote)
+                  (or error answer output)))))))
+
 (defun +agent-shell-arena-remote--await (remote job callback)
   "Call CALLBACK with a probe of REMOTE's host once it can run JOB.
 A stopped Coder workspace is started first.  A host that was not running,
@@ -2668,16 +2750,18 @@ is checked every `+agent-shell-arena-remote-wake-interval' seconds until
 it runs, answers and has a readiness file written since it booted.
 Otherwise, or once that timeout has passed, REMOTE is rejected with what
 was last wrong.  A pod, made for its job, is waited for so too, but
-checked every `+agent-shell-arena-remote-pod-ready-interval' seconds.  A
-pod whose setup is not the one its spec pins is rejected at once.  A
-cancel stops the wait."
+checked every `+agent-shell-arena-remote-pod-ready-interval' seconds, and
+the first probe that finds its checkout starts its base step; see
+`+agent-shell-arena-remote--base-start'.  A pod whose setup is not the
+one its spec pins is rejected at once.  A cancel stops the wait."
   (let* ((host (+agent-shell-arena-remote-host remote))
          (wake (+agent-shell-arena-remote--host-option host :wake))
          (deadline (+ (float-time) +agent-shell-arena-remote-wake-timeout))
          (pod (+agent-shell-arena-remote-pod remote))
          (interval (if pod +agent-shell-arena-remote-pod-ready-interval
                      +agent-shell-arena-remote-wake-interval))
-         (woke (and pod "it was made for this job")))
+         (woke (and pod "it was made for this job"))
+         (based nil))
     (cl-labels
         ((reject (reason)
            (+agent-shell-arena-remote--reject
@@ -2718,6 +2802,13 @@ cancel stops the wait."
            (+agent-shell-arena-remote--probe
             remote job
             (lambda (probe error)
+              (when (and pod (not based) (not error)
+                         (eq (+agent-shell-arena-remote-job-base-source job)
+                             'origin)
+                         (not (string-empty-p
+                               (or (plist-get probe :toplevel) ""))))
+                (setq based t)
+                (+agent-shell-arena-remote--base-start remote job))
               (let ((problem (or error
                                  (+agent-shell-arena-remote--ready-error
                                   probe
@@ -4787,8 +4878,8 @@ it, deleted once it settles.  STEPS is the job's
 
 (defun +agent-shell-arena-remote--host-steps (directory)
   "Return the steps of the job in DIRECTORY, with its runner started now.
-The submission stamps the base's steps in DIRECTORY's steps file, each a
-line of a step's name and its time."
+The base step and the submission stamp the base's steps in DIRECTORY's
+steps file, each a line of a step's name and its time."
   (let ((steps (+agent-shell-arena-remote--make-host-steps
                 :started (float-time)))
         (file (expand-file-name "steps" directory)))
@@ -4798,7 +4889,9 @@ line of a step's name and its time."
                                     (buffer-string))
                                   "\n" t))
         (pcase (split-string line)
-          (`(,(and name (or "base_fetched" "base_checked_out")) ,time)
+          (`(,(and name (or "base_started" "base_fetched" "base_checked_out"
+                            "base_ended"))
+             ,time)
            (when (string-match-p "\\`[0-9]+\\(?:\\.[0-9]+\\)?\\'" time)
              (setf (cl-struct-slot-value
                     '+agent-shell-arena-remote-host-steps

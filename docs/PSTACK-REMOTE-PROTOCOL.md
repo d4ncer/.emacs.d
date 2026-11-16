@@ -116,7 +116,8 @@ the job's id, `REPO` the profile's `:host-directory`.
    the tar holds no `base.bundle` or `prerequisite`: the host must
    fetch exactly that commit from `REPO`'s `origin`, check it out
    detached in `REPO`, and write `refs/pstack-arena/ID/base`, and must
-   answer `failed` naming the commit when the fetch fails. The tar may
+   answer `failed` naming the commit when the fetch fails; a pod's base
+   step may have done this already, see [Pods](#pods). The tar may
    hold `login/AGENT.json`, a forwarded login; see [Pods](#pods). The runner is
    `EMACS -Q --batch -L code/HASH -l code/HASH/+agent-shell-arena-remote.el
    -f +agent-shell-arena-remote-runner-batch jobs/ID`, started by
@@ -418,7 +419,22 @@ reached as a Coder workspace is.
   timeout and the slack.
 - **Ready.** Until the pod's setup writes its readiness file, the
   laptop probes it every `+agent-shell-arena-remote-pod-ready-interval`
-  seconds, 5 by default, for at most the wake timeout.
+  seconds, 5 by default, for at most the wake timeout. The setup pin
+  and the readiness checks are as for any host.
+- **Base step.** The first probe that finds a git checkout at `REPO`,
+  ready or not, makes the laptop call the base script with `REPO`, `ID`
+  and the base. Once per job, it starts in the background, with hangups
+  ignored, the fetch of exactly that commit from `REPO`'s `origin`, its
+  detached checkout in `REPO` and `refs/pstack-arena/ID/base`, and
+  answers `pstack-arena-base started`, or `running` when the step had
+  already started. The step logs in `jobs/ID/base-step/`, writes its
+  process id to `pid` there, and finally `answer`: `done` or
+  `failed REASON`. The submission then fetches nothing. It waits up to
+  600 s for `answer`, and fails sooner if the step's process has died
+  without one. It answers `failed REASON` with the step's reason. When
+  the step reported `done` but `REPO`'s `HEAD` is no longer the base,
+  and when no step started, the submission does the fetch and checkout
+  itself.
 - **Cancel.** A cancel during a create waits for the create to finish,
   then deletes the pod.
 - **Boot.** Every status names the host's boot id when the runner
@@ -440,9 +456,10 @@ reached as a Coder workspace is.
   against the cap, and is retried, also after a restart.
 - **Steps.** The record's `steps` holds when each step of the job
   came on the laptop, and the status's `steps` when each came on the
-  pod, by its own clock: the submission stamps the base's fetch and
-  checkout in the job folder's `steps` file, one `NAME TIME` line each,
-  and the runner adds its start and its member's launch and end. The
+  pod, by its own clock: the base step stamps its start and end, and
+  it or the submission the base's fetch and checkout, in the job
+  folder's `steps` file, one `NAME TIME` line each; the runner adds its
+  start and its member's launch and end. The
   follow-up gives the seconds between consecutive steps, each clock
   apart; the pod's deletion comes after it, in the record alone.
 - **Results.** Results are `results.bundle` and `report.json` as for
@@ -632,8 +649,10 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "status"`.
 
 | Key | Type | Presence |
 |---|---|---|
+| `base_started` | number | optional, absent or null |
 | `base_fetched` | number | optional, absent or null |
 | `base_checked_out` | number | optional, absent or null |
+| `base_ended` | number | optional, absent or null |
 | `started` | number | optional, absent or null |
 | `member_launched` | number | optional, absent or null |
 | `member_ended` | number | optional, absent or null |
