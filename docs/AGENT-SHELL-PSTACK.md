@@ -174,7 +174,10 @@ the reason. When every member has settled, Emacs prompts the lead with each
 member's agent, state, report path and report text, then the shape's triage
 line. The lead still triages and judges. A delegate's or arena candidate's
 report also gets `<role>.result.json`, naming its result commit; see
-[Walkthroughs and code links](#walkthroughs-and-code-links).
+[Walkthroughs and code links](#walkthroughs-and-code-links). A sandboxed
+member that settles as an error or a timeout keeps its agent's session
+logs, the `.jsonl` files in its sandbox's config folder, in
+`<role>.sessions/` before that folder is deleted.
 
 Delivery uses `+agent-shell-drive-send`, which never interrupts a busy lead or
 an unsent draft. Emacs retries on the lead's next `turn-complete` or

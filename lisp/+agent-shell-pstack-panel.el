@@ -1978,26 +1978,45 @@ STOP-REASON comes with a turn that completed successfully."
            (run-at-time 0 nil #'+agent-shell-pstack-panel--halt-delegate
                         panel member))
           ((+agent-shell-pstack-panel-member-sandbox member)
-           (run-at-time 0 nil #'+agent-shell-pstack-panel--stop member
+           (run-at-time 0 nil #'+agent-shell-pstack-panel--stop panel member
                         #'ignore))
           ((when-let* ((shell (+agent-shell-pstack-panel-member-shell member)))
              (run-at-time 0 nil #'+agent-shell-drive-kill shell))))
     (+agent-shell-pstack-panel--advance panel)))
 
-(defun +agent-shell-pstack-panel--stop (member callback)
-  "Stop settled sandboxed MEMBER and every process it started.
+(defun +agent-shell-pstack-panel--stop (panel member callback)
+  "Stop settled sandboxed MEMBER of PANEL and every process it started.
 Then close its egress session, if any, and call CALLBACK while its
 sandbox's private folders are deleted, a failure to delete them reported
 with `message'."
-  (+agent-shell-pstack-panel--stop-noting member #'ignore callback))
+  (+agent-shell-pstack-panel--stop-noting panel member #'ignore callback))
 
-(defun +agent-shell-pstack-panel--stop-noting (member note callback)
-  "Stop sandboxed MEMBER as `+agent-shell-pstack-panel--stop' does.
+(defun +agent-shell-pstack-panel--keep-sessions (panel member)
+  "Copy sandboxed MEMBER of PANEL's agent session logs beside its report.
+Only a member that settled as `error' or `timeout' keeps them, in the
+folder ROLE.sessions, since its sandbox's config folder goes next."
+  (when-let* (((memq (+agent-shell-pstack-panel-member-state member)
+                     '(error timeout)))
+              (sandbox (+agent-shell-pstack-panel-member-sandbox member))
+              (config (+agent-shell-sandbox-config sandbox))
+              ((file-directory-p config))
+              (logs (directory-files-recursively config "\\.jsonl\\'")))
+    (let ((folder (+agent-shell-pstack-panel--report-file
+                   panel member ".sessions/")))
+      (with-demoted-errors "pstack panel: keeping session logs failed: %S"
+        (make-directory folder t)
+        (dolist (log logs)
+          (copy-file log (expand-file-name (file-name-nondirectory log) folder)
+                     t))))))
+
+(defun +agent-shell-pstack-panel--stop-noting (panel member note callback)
+  "Stop sandboxed MEMBER of PANEL as `+agent-shell-pstack-panel--stop' does.
 NOTE is called with the pids that outlived the stop before CALLBACK."
   (if-let* ((sandbox (+agent-shell-pstack-panel-member-sandbox member)))
       (let* ((shell (+agent-shell-pstack-panel-member-shell member))
              (role (+agent-shell-pstack-panel-member-role member))
              (discard (lambda ()
+                        (+agent-shell-pstack-panel--keep-sessions panel member)
                         (+agent-shell-sandbox-discard
                          sandbox
                          (lambda (error)
@@ -2045,7 +2064,7 @@ and hold every capture back."
                 (+agent-shell-pstack-panels--refresh))))
     (condition-case err
         (+agent-shell-pstack-panel--stop
-         member
+         panel member
          (lambda ()
            (if-let* ((manifest (+agent-shell-pstack-panel-arena panel))
                      ((+agent-shell-pstack-panel-member-sandbox member))
@@ -2141,10 +2160,10 @@ a process lease the stop ends the lease's scope; see
               (+agent-shell-drive-stop-lease
                lease shell (lambda (survivors)
                              (+agent-shell-pstack-panel--stop
-                              member (lambda () (funcall done survivors)))))
+                              panel member (lambda () (funcall done survivors)))))
             (let ((survivors nil))
               (+agent-shell-pstack-panel--stop-noting
-               member (lambda (pids) (setq survivors pids))
+               panel member (lambda (pids) (setq survivors pids))
                (lambda () (funcall done survivors))))))
          (lease (+agent-shell-drive-stop-lease lease shell done))
          (t (+agent-shell-drive-stop-unconfined shell nil done)))

@@ -2106,6 +2106,47 @@ folder that cannot go is reported without stalling the stop."
       (should (= 1 (length stopped)))
       (should-not (file-exists-p (+agent-shell-sandbox-config stuck))))))
 
+(ert-deftest +agent-shell-pstack-panel-test-keeps-failed-sessions ()
+  "Keep a failed sandboxed member's session logs, not a finished one's."
+  (+agent-shell-pstack-panel-test--with
+    (lead-event :kind 'turn-complete :session "s1"
+                :text (+agent-shell-pstack-panel-test--message
+                       (+agent-shell-pstack-panel-test--arena)))
+    (+agent-shell-pstack-panel-test--drain)
+    (let* ((panel (car (+agent-shell-pstack-panel-list)))
+           (opus (car (+agent-shell-pstack-panel-test--candidates panel)))
+           (codex (cadr (+agent-shell-pstack-panel-test--candidates panel))))
+      (dolist (member (list opus codex))
+        (let ((folder (expand-file-name
+                       "sessions/2026/11/16"
+                       (+agent-shell-sandbox-config
+                        (+agent-shell-pstack-panel-member-sandbox member)))))
+          (make-directory folder t)
+          (write-region "{\"type\":\"turn_aborted\"}\n" nil
+                        (expand-file-name "rollout-1.jsonl" folder)
+                        nil 'silent)))
+      (member-event "opus" :kind 'init-finished)
+      (member-event "opus" :kind 'turn-complete :text "Rationale")
+      (kill-buffer (+agent-shell-pstack-panel-member-shell codex))
+      (member-event "codex" :kind 'clean-up :reason "Adapter crashed")
+      (+agent-shell-sandbox-test-wait
+       (lambda ()
+         (seq-every-p (lambda (member)
+                        (not (memq (+agent-shell-pstack-panel-member-capture
+                                    member)
+                                   '(nil stopping))))
+                      (list opus codex))))
+      (should (equal "{\"type\":\"turn_aborted\"}\n"
+                     (with-temp-buffer
+                       (insert-file-contents
+                        (expand-file-name
+                         "rollout-1.jsonl"
+                         (+agent-shell-pstack-panel--report-file
+                          panel codex ".sessions/")))
+                       (buffer-string))))
+      (should-not (file-exists-p (+agent-shell-pstack-panel--report-file
+                                  panel opus ".sessions/"))))))
+
 (defmacro +agent-shell-pstack-panel-test--with-arena (&rest body)
   "Run BODY with an arena whose candidates opus and codex are running.
 BODY sees `panel', the functions of `+agent-shell-pstack-panel-test--with'
