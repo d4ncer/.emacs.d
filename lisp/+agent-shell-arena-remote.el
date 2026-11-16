@@ -1494,14 +1494,16 @@ rm -f \"$job/code.tar\"
   case $base in ''|*[!0-9a-f]*) answer \"failed the base is not a commit id\";; esac
   dir=$job/base-step; r=
   if [ -d \"$dir\" ]; then
-    n=0
+    n=0; dead=
     while [ ! -f \"$dir/answer\" ] && [ $n -lt 6000 ]; do
       pid=$(cat \"$dir/pid\" 2>/dev/null) || pid=
-      [ -n \"$pid\" ] && ! kill -0 \"$pid\" 2>/dev/null && [ ! -f \"$dir/answer\" ] && break
+      if [ -n \"$pid\" ]; then
+        kill -0 \"$pid\" 2>/dev/null || { dead=1; break; }
+      elif [ $n -ge 50 ]; then dead=1; break; fi
       sleep 0.1; n=$((n + 1))
     done
-    r=$(cat \"$dir/answer\" 2>/dev/null) ||
-      r=\"failed the base's fetch and checkout stopped before they finished\"
+    r=$(cat \"$dir/answer\" 2>/dev/null) || [ -n \"$dead\" ] ||
+      r=\"failed the base's fetch and checkout did not finish in 600 seconds\"
     [ \"$r\" = done ] && [ \"$(g rev-parse -q --verify HEAD)\" != \"$base\" ] && r=
   fi
   [ -n \"$r\" ] || origin_base \"$job\"
@@ -1527,35 +1529,56 @@ base, and start the runner with Emacs $3 by launcher $4.  With $5
 origin, the checkout fetches commit $6 from its origin and checks it out
 instead of taking the base from a bundle, unless the base step of
 `+agent-shell-arena-remote--base-script' did so: then its answer is
-waited for, for at most 600 seconds, and a failure fails the job.  A job
+waited for, for at most 600 seconds, and a failed answer fails the job.
+A step that ended without answering, or never wrote its process id,
+counts as one that never ran.  A job
 already started answers as started, so a resent submission is harmless.
 Every other answer but started deletes the login the upload forwarded.
 Each step the base takes is stamped in the job's steps file.")
 
+(defconst +agent-shell-arena-remote--base-step
+  (concat
+   "repo=$1; id=$2; base=$3; job=jobs/$id; dir=$job/base-step
+echo $$ >\"$dir/pid\"
+"
+   +agent-shell-arena-remote--origin-base
+   "step base_started
+origin_base \"$dir\"
+step base_ended
+printf '%s\\n' \"$r\" >\"$dir/answer.tmp\" &&
+  mv \"$dir/answer.tmp\" \"$dir/answer\"
+")
+  "The base step, run in the host's state folder: fetch job $2's base,
+commit $3, from origin into checkout $1, check it out, and write done or
+a failed answer to the job's base-step/answer, after its process id to
+base-step/pid.")
+
 (defconst +agent-shell-arena-remote--base-script
   (concat
    +agent-shell-arena-remote--repo
-   "id=$2; base=$3; job=jobs/$id; dir=$job/base-step
+   "id=$2; base=$3; launcher=${4:-nohup}; job=jobs/$id; dir=$job/base-step
 case $base in ''|*[!0-9a-f]*)
   echo \"pstack-arena-base failed the base is not a commit id\"; exit 0;; esac
-"
-   +agent-shell-arena-remote--origin-base
-   "mkdir -p \"$job\" && mkdir \"$dir\" 2>/dev/null ||
+mkdir -p \"$job\" && mkdir \"$dir\" 2>/dev/null ||
   { echo \"pstack-arena-base running\"; exit 0; }
-(
-  trap '' HUP
-  step base_started
-  origin_base \"$dir\"
-  step base_ended
-  printf '%s\\n' \"$r\" >\"$dir/answer.tmp\" && mv \"$dir/answer.tmp\" \"$dir/answer\"
-) </dev/null >/dev/null 2>&1 &
-echo $! >\"$dir/pid\"
+cat >\"$dir/step.sh\" <<'PSTACK_BASE_STEP'
+"
+   +agent-shell-arena-remote--base-step
+   "PSTACK_BASE_STEP
+set -- sh \"$PWD/$dir/step.sh\" \"$repo\" \"$id\" \"$base\"
+if [ \"$launcher\" != systemd ] ||
+  ! systemd-run --user --quiet --collect \
+--unit \"pstack-arena-$id-base-$(date +%s)\" --working-directory \"$PWD\" \
+--setenv=PATH=\"$PATH\" \"$@\" >\"$dir/launch.log\" 2>&1; then
+  ( trap '' HUP; exec \"$@\" ) </dev/null >/dev/null 2>&1 &
+  echo $! >\"$dir/pid\"
+fi
 echo \"pstack-arena-base started\"
 ")
-  "Start, once, a step in the background that fetches job $2's base, commit
-$3, from origin into checkout $1 and checks it out, as a submission
-would.  It writes done or a failed answer to the job's base-step/answer
-and stamps its start and end in the job's steps file.")
+  "Start, once, the step `+agent-shell-arena-remote--base-step' for job $2,
+base $3 and checkout $1, so it outlives the call: as a systemd user unit
+when launcher $4 is systemd and the host's user manager starts one, else
+in a background subshell that ignores hangups.")
 
 (defconst +agent-shell-arena-remote--resume-script
   (concat
@@ -2730,14 +2753,16 @@ NEXT continuations retain whether this submission already started it."
 (defun +agent-shell-arena-remote--base-start (remote job)
   "Start fetching JOB's base from origin and checking it out on REMOTE's
 host, in the background, while the host's setup finishes.  The
-submission waits for that step's answer; one that never started leaves
-the submission to do the work itself."
+submission waits for that step's answer; one that never started, or
+ended without answering, leaves the submission to do the work itself."
   (+agent-shell-arena-remote--call
    (+agent-shell-arena-remote-host remote)
    +agent-shell-arena-remote--base-script
    (list (+agent-shell-arena-remote-job-repository job)
          (+agent-shell-arena-remote-id remote)
-         (+agent-shell-arena-remote-job-base job))
+         (+agent-shell-arena-remote-job-base job)
+         (+agent-shell-arena-remote--launcher
+          (+agent-shell-arena-remote-host remote)))
    :callback
    (lambda (output error)
      (let ((answer (+agent-shell-arena-remote--answer

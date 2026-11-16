@@ -221,9 +221,17 @@ exit 255; }; mkdir -p \"$HOME/state\" && cd \"$HOME/state\" && exec \"$@\""
                                          (directory-file-name root))
                                +pod-test--coder)))
      (with-temp-file (expand-file-name "systemd-run" bin)
-       (insert "#!/bin/sh\necho \"$*\" >>" (shell-quote-argument
-                                            (expand-file-name ".systemd" root))
-               "\n"))
+       (insert "#!/bin/sh\nroot=" (shell-quote-argument
+                                   (directory-file-name root))
+               "\ncase \" $* \" in *\" --unit pstack-arena-\"*-base-*)
+  [ -f \"$root/.systemd-fail\" ] && exit 1
+  echo \"$*\" >>\"$root/.systemd-base\"
+  while [ $# -gt 0 ]; do case $1 in
+    --unit|--working-directory) shift 2;; --*) shift;; *) break;; esac; done
+  \"$@\" </dev/null >/dev/null 2>&1 &
+  exit 0;;
+esac
+echo \"$*\" >>\"$root/.systemd\"\n"))
      (set-file-modes +agent-shell-arena-remote-coder #o755)
      (set-file-modes (expand-file-name "systemd-run" bin) #o755)
      (with-temp-file +agent-shell-arena-remote-boot-id-file (insert "0aaa-1111\n"))
@@ -1459,6 +1467,73 @@ fetched from origin" (+pod-test--read (funcall answer))))
                               (+agent-shell-pstack-panel-rejection panel)))
       (+pod-test--wait-for
        (lambda () (not (+pod-test--exists-p root panel)))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-killed-base-step-redone ()
+  "A base step, started as a user unit, that is killed before it answers
+counts as one that never ran: the submission fetches and checks out the
+base itself and the job runs."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((path (substring (getenv "PATH")
+                            (length (concat bin path-separator))))
+           (wrapper (expand-file-name "git" bin))
+           (gate (expand-file-name ".fetch-gate" root))
+           (waiting (expand-file-name ".fetch-waiting" root))
+           (pid (lambda (file)
+                  (and (file-exists-p file)
+                       (let ((n (string-to-number (+pod-test--read file))))
+                         (and (> n 0) n))))))
+      (with-temp-file wrapper
+        (insert "#!/bin/sh\n"
+                "case \" $* \" in *\" fetch \"*\" origin \"*)\n"
+                "  if [ -f " (shell-quote-argument gate) " ]; then\n"
+                "    echo $$ >" (shell-quote-argument waiting) "\n"
+                "    while :; do sleep 0.05; done\n"
+                "  fi;;\nesac\n"
+                "PATH=" (shell-quote-argument path) " exec git \"$@\"\n"))
+      (set-file-modes wrapper #o755)
+      (with-temp-file gate)
+      (let* ((panel (funcall launch))
+             (base (funcall lead-git "rev-parse" "HEAD"))
+             (step (lambda (name)
+                     (expand-file-name (concat "base-step/" name)
+                                       (funcall job-folder panel)))))
+        (+pod-test--wait-for (lambda () (funcall pid waiting)))
+        (+pod-test--wait-for (lambda () (funcall pid (funcall step "pid"))))
+        (should (string-search "--user" (+pod-test--read
+                                         (expand-file-name ".systemd-base"
+                                                           root))))
+        (delete-file gate)
+        (signal-process (funcall pid (funcall step "pid")) 'SIGKILL)
+        (signal-process (funcall pid waiting) 'SIGKILL)
+        (+pod-test--submitted panel)
+        (let ((folder (funcall job-folder panel))
+              (pod (expand-file-name (+agent-shell-arena-remote-pod-name
+                                      (+pod-test--pod panel))
+                                     root)))
+          (should-not (file-exists-p (funcall step "answer")))
+          (should (file-exists-p (expand-file-name "fetch.log" folder)))
+          (should (file-exists-p (expand-file-name "started" folder)))
+          (should (equal base (+pod-test--git (expand-file-name "repo" pod)
+                                              "rev-parse" "HEAD"))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-base-step-without-systemd ()
+  "A pod whose user manager starts no unit runs its base step in a
+background subshell, and the submission takes its answer."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name ".systemd-fail" root))
+    (let* ((panel (funcall launch))
+           (folder (lambda () (funcall job-folder panel))))
+      (+pod-test--submitted panel)
+      (should (equal "done\n" (+pod-test--read
+                               (expand-file-name "base-step/answer"
+                                                 (funcall folder)))))
+      (should (file-exists-p (expand-file-name "base-step/launch.log"
+                                               (funcall folder))))
+      (should-not (file-exists-p (expand-file-name "fetch.log"
+                                                   (funcall folder))))
+      (should-not (file-exists-p (expand-file-name ".systemd-base" root))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-origin-head-checked-first ()
   "A base origin's default branch holds is admitted without scanning

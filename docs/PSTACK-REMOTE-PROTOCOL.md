@@ -422,19 +422,22 @@ reached as a Coder workspace is.
   seconds, 5 by default, for at most the wake timeout. The setup pin
   and the readiness checks are as for any host.
 - **Base step.** The first probe that finds a git checkout at `REPO`,
-  ready or not, makes the laptop call the base script with `REPO`, `ID`
-  and the base. Once per job, it starts in the background, with hangups
-  ignored, the fetch of exactly that commit from `REPO`'s `origin`, its
-  detached checkout in `REPO` and `refs/pstack-arena/ID/base`, and
-  answers `pstack-arena-base started`, or `running` when the step had
-  already started. The step logs in `jobs/ID/base-step/`, writes its
-  process id to `pid` there, and finally `answer`: `done` or
-  `failed REASON`. The submission then fetches nothing. It waits up to
-  600 s for `answer`, and fails sooner if the step's process has died
-  without one. It answers `failed REASON` with the step's reason. When
-  the step reported `done` but `REPO`'s `HEAD` is no longer the base,
-  and when no step started, the submission does the fetch and checkout
-  itself.
+  ready or not, makes the laptop call the base script with `REPO`, `ID`,
+  the base and the launcher. Once per job, it writes the step to
+  `jobs/ID/base-step/step.sh` and starts it as a `systemd-run --user`
+  unit when the launcher is `systemd` and the user manager starts one,
+  else in a background subshell with hangups ignored. The step fetches
+  exactly that commit from `REPO`'s `origin`, checks it out detached in
+  `REPO` and writes `refs/pstack-arena/ID/base`; the script answers
+  `pstack-arena-base started`, or `running` when the step had already
+  started. The step logs in `jobs/ID/base-step/`, writes its process id
+  to `pid` there, and finally `answer`: `done` or `failed REASON`. The
+  submission then fetches nothing. It waits up to 600 s for `answer`
+  and answers `failed REASON` with the step's reason, or a timeout's.
+  When the step reported `done` but `REPO`'s `HEAD` is no longer the
+  base, when its process died without an answer or wrote no `pid`
+  within 5 s, and when no step started, the submission does the fetch
+  and checkout itself.
 - **Cancel.** A cancel during a create waits for the create to finish,
   then deletes the pod.
 - **Boot.** Every status names the host's boot id when the runner
