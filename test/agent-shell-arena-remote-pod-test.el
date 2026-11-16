@@ -1089,6 +1089,42 @@ and its record times the base's choice, keeping and check."
                     (+agent-shell-arena-remote-steps-kept steps)
                     (+agent-shell-arena-remote-steps-checked steps)))))))
 
+(ert-deftest +agent-shell-arena-remote-pod-test-fast-polls-after-member-ends ()
+  "Once a status says the member ended, the laptop polls every
+`+agent-shell-arena-remote-ended-interval' seconds until the results are
+fetched, also after a poll that failed."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (let* ((+agent-shell-arena-remote-poll-interval 600)
+           (+agent-shell-arena-remote-max-interval 600)
+           (+agent-shell-arena-remote-ended-interval 0.1)
+           (panel (funcall launch))
+           (remote (+pod-test--remote panel)))
+      (+pod-test--submitted panel)
+      (+agent-shell-arena-remote--write-json
+       (expand-file-name "status.json" (funcall job-folder panel)) 'status
+       (+agent-shell-arena-remote--make-status
+        :id (+agent-shell-arena-remote-id remote) :phase 'delegating
+        :heartbeat (float-time) :results nil :shape 'delegate
+        :boot "0aaa-1111"
+        :members (list (+agent-shell-arena-remote--make-member
+                        :role "builder" :agent 'codex :kind 'delegate
+                        :state 'done))
+        :steps (+agent-shell-arena-remote--make-host-steps
+                :started (float-time) :ended (float-time))))
+      (+agent-shell-arena-remote--schedule remote 0)
+      (+pod-test--polls remote 4)
+      (should (+agent-shell-arena-remote--ended-p remote))
+      (setf (+agent-shell-arena-remote-failures remote) 8)
+      (+agent-shell-arena-remote--trouble-later remote "no answer")
+      (should (< (- (float-time (timer--time (+agent-shell-arena-remote-timer
+                                              remote)))
+                    (float-time))
+                 1))
+      (funcall runner-writes panel)
+      (+pod-test--wait-for
+       (lambda () (+agent-shell-pstack-panel-followup panel)) 20))))
+
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-member-keeps-pod ()
   "A delegate that ended in error keeps its pod, with the error, so the
 lead can look at what it left."

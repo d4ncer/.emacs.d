@@ -50,6 +50,11 @@
   "Seconds between status polls of an arena running on a host."
   :type 'number)
 
+(defcustom +agent-shell-arena-remote-ended-interval 3
+  "Seconds between polls once a status says every member has settled.
+They poll so until the results are fetched, also after a failed poll."
+  :type 'number)
+
 (defcustom +agent-shell-arena-remote-max-interval 600
   "Longest wait, in seconds, between polls that keep failing."
   :type 'number)
@@ -3369,12 +3374,21 @@ restarts the runner to capture what it left"
                remote (+agent-shell-arena-remote--interval remote more))))))))
     (+agent-shell-pstack-panels--refresh)))
 
+(defun +agent-shell-arena-remote--ended-p (remote)
+  "Return whether REMOTE's last status said every member had settled."
+  (when-let* ((steps (+agent-shell-arena-remote-host-steps remote)))
+    (and (+agent-shell-arena-remote-host-steps-ended steps) t)))
+
 (defun +agent-shell-arena-remote--interval (remote more)
   "Return the seconds until REMOTE's next poll.
 MORE says its transcript has another page waiting, fetched as soon as
 the host's queue allows; a shown transcript polls every
-`+agent-shell-arena-remote-transcript-interval' seconds."
+`+agent-shell-arena-remote-transcript-interval' seconds, and one whose
+members have all settled every `+agent-shell-arena-remote-ended-interval'."
   (cond (more 0)
+        ((+agent-shell-arena-remote--ended-p remote)
+         (min +agent-shell-arena-remote-ended-interval
+              +agent-shell-arena-remote-poll-interval))
         ((+agent-shell-arena-remote--transcript-visible-p remote)
          (min +agent-shell-arena-remote-transcript-interval
               +agent-shell-arena-remote-poll-interval))
@@ -3405,7 +3419,8 @@ as lost.  Once its host has been silent too long, tell the lead."
 
 (defun +agent-shell-arena-remote--trouble-later (remote error)
   "Note that a call about REMOTE failed with ERROR, then poll again later.
-Once its host has been silent too long, tell the lead."
+Once its host has been silent too long, tell the lead.  A job whose
+members have all settled is polled again soon, without backing off."
   (cl-incf (+agent-shell-arena-remote-failures remote))
   (setf (+agent-shell-arena-remote-error remote) error)
   (cond
@@ -3417,8 +3432,10 @@ Once its host has been silent too long, tell the lead."
     (when (eq (+agent-shell-arena-remote-phase remote) 'fetching)
       (+agent-shell-arena-remote--move remote 'remote))
     (+agent-shell-arena-remote--schedule
-     remote (+agent-shell-arena-remote--delay
-             (+agent-shell-arena-remote-failures remote)))))
+     remote (if (+agent-shell-arena-remote--ended-p remote)
+                +agent-shell-arena-remote-ended-interval
+              (+agent-shell-arena-remote--delay
+               (+agent-shell-arena-remote-failures remote))))))
   (+agent-shell-pstack-panels--refresh))
 
 (defun +agent-shell-arena-remote--keep-awake (remote status)

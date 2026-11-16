@@ -462,6 +462,10 @@ reached as a Coder workspace is.
   start and its member's launch and end. The
   follow-up gives the seconds between consecutive steps, each clock
   apart; the pod's deletion comes after it, in the record alone.
+- **Ended.** Once a status's `steps` give `member_ended`, the laptop
+  polls every `+agent-shell-arena-remote-ended-interval` seconds, 3 by
+  default, until the results are fetched, also after a failed poll, in
+  place of the normal interval and backoff.
 - **Results.** Results are `results.bundle` and `report.json` as for
   any delegate. The laptop names every ref itself, takes only a
   well-formed commit id from the report, refuses a tip that does not
