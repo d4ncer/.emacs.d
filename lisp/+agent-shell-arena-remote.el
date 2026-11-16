@@ -1527,10 +1527,10 @@ base, and start the runner with Emacs $3 by launcher $4.  With $5
 origin, the checkout fetches commit $6 from its origin and checks it out
 instead of taking the base from a bundle, unless the base step of
 `+agent-shell-arena-remote--base-script' did so: then its answer is
-waited for, for at most 600 seconds, and a failure fails the job.  A job already started answers
-as started, so a resent submission is harmless.  Every other answer but
-started deletes the login the upload forwarded.  Each step the base
-takes is stamped in the job's steps file.")
+waited for, for at most 600 seconds, and a failure fails the job.  A job
+already started answers as started, so a resent submission is harmless.
+Every other answer but started deletes the login the upload forwarded.
+Each step the base takes is stamped in the job's steps file.")
 
 (defconst +agent-shell-arena-remote--base-script
   (concat

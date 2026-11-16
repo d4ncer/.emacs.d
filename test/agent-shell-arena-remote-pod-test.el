@@ -1013,17 +1013,17 @@ apart; the record notes the pod's deletion after."
        (lambda () (+agent-shell-pstack-panel-followup panel)))
       (let ((followup (+agent-shell-pstack-panel-followup panel)))
         (should (string-match-p
-                 (concat "On the laptop: panel registered, base chosen [0-9.]+ s \
-later, base kept [0-9.]+ s later, base checked [0-9.]+ s later, create \
-called [0-9.]+ s later, create returned [0-9.]+ s later, ready seen [0-9.]+ s \
-later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s later, results \
-fetched [0-9.]+ s later\\.\n")
+                 (concat "On the laptop: panel registered, base chosen \
+[0-9.]+ s later, base kept [0-9.]+ s later, base checked [0-9.]+ s later, \
+create called [0-9.]+ s later, create returned [0-9.]+ s later, ready seen \
+[0-9.]+ s later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s \
+later, results fetched [0-9.]+ s later\\.\n")
                  followup))
         (should (string-match-p
-                 (concat "On the host: base step started, base fetched [0-9.]+ s \
-later, base checked out [0-9.]+ s later, base step ended [0-9.]+ s later, \
-runner started [0-9.]+ s later, member launched [0-9.]+ s later, member \
-ended [0-9.]+ s later\\.\n")
+                 (concat "On the host: base step started, base fetched \
+[0-9.]+ s later, base checked out [0-9.]+ s later, base step ended [0-9.]+ s \
+later, runner started [0-9.]+ s later, member launched [0-9.]+ s later, \
+member ended [0-9.]+ s later\\.\n")
                  followup)))
       (let ((status (+agent-shell-arena-remote--read-json
                      (expand-file-name "status.json"
@@ -1395,12 +1395,14 @@ runner, with the step's start and end among the host's steps."
 for it, then starts the runner without fetching again."
   (skip-unless (executable-find "git"))
   (+pod-test--with
-    (let ((path (substring (getenv "PATH") (length (concat bin path-separator))))
+    (let ((path (substring (getenv "PATH")
+                           (length (concat bin path-separator))))
           (wrapper (expand-file-name "git" bin)))
       (with-temp-file wrapper
         (insert "#!/bin/sh\n"
                 "case \" $* \" in *\" fetch \"*\" origin \"*)\n"
-                "  if [ -f " (shell-quote-argument root) "/.fetch-gate ]; then\n"
+                "  if [ -f " (shell-quote-argument root)
+                "/.fetch-gate ]; then\n"
                 "    touch " (shell-quote-argument root) "/.fetch-waiting\n"
                 "    while [ ! -f " (shell-quote-argument root)
                 "/.fetch-open ]; do sleep 0.05; done\n"
@@ -1455,7 +1457,8 @@ fetched from origin" (+pod-test--read (funcall answer))))
        (lambda () (eq 'finished (+agent-shell-pstack-panel-phase panel))))
       (should (string-match-p "could not be fetched from origin"
                               (+agent-shell-pstack-panel-rejection panel)))
-      (+pod-test--wait-for (lambda () (not (+pod-test--exists-p root panel)))))))
+      (+pod-test--wait-for
+       (lambda () (not (+pod-test--exists-p root panel)))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-origin-head-checked-first ()
   "A base origin's default branch holds is admitted without scanning
