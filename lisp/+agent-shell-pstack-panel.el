@@ -3264,6 +3264,7 @@ Its policy comes from the repository's profile, once; see
 own or, with :delegate (:isolation branch), the lead's checkout, which
 must be clean.  A worktree, here or on a host, starts from the snapshot
 of the lead's working tree an arena takes, or HEAD when that is clean.
+A pod starts from HEAD without a snapshot, as its base must be on origin.
 A delegate needs the laptop user's git identity first.  The panel's
 timeout starts now and covers this preparation too."
   (setf (+agent-shell-pstack-panel-phase panel) 'preparing)
@@ -3280,8 +3281,14 @@ timeout starts now and covers this preparation too."
                (options (+agent-shell-arena-git-delegate-options profile))
                (route
                 (lambda (identity)
-                  (if (eq (plist-get options :isolation) 'branch)
-                      (+agent-shell-pstack-panel--take-checkout panel base)
+                  (cond
+                   ((eq (plist-get options :isolation) 'branch)
+                    (+agent-shell-pstack-panel--take-checkout panel base))
+                   ((+agent-shell-arena-git-per-job-host-p
+                     (plist-get options :host))
+                    (require '+agent-shell-arena-remote)
+                    (+agent-shell-arena-remote-launch panel base profile))
+                   (t
                     (+agent-shell-arena-git-capture-base
                      (+agent-shell-pstack-panel-cwd panel)
                      (lambda (snapshot error)
@@ -3297,7 +3304,7 @@ timeout starts now and covers this preparation too."
                              panel snapshot)))))
                      t identity
                      (format "Snapshot uncommitted work for pstack delegate %s"
-                             (+agent-shell-pstack-panel-id panel)))))))
+                             (+agent-shell-pstack-panel-id panel))))))))
           (setf (+agent-shell-pstack-panel-delegate-options panel) options)
           (when (and (plist-get options :sandbox)
                      (not (plist-get options :host))

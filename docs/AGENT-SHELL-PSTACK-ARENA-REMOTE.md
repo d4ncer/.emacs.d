@@ -591,7 +591,9 @@ other shape: the same submit, poll, fetch and clean calls, code by hash,
 laptop locates the lead's repository, reads the laptop user's identity,
 and snapshots the lead's tree as an arena does, so the base is `HEAD`
 when the tree is clean and otherwise a snapshot commit on top of it,
-which travels in the base bundle like an arena's. The job's deadline is
+which travels in the base bundle like an arena's. A pod's delegate
+skips the snapshot and starts from `HEAD`, which must already be on
+origin; see the protocol's Pods section. The job's deadline is
 the delegate's timeout, counted from when its runner holds the repository
 lock, as an arena's budget is.
 

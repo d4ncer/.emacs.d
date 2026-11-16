@@ -360,13 +360,14 @@ check that passed, 0 when it failed, or nil when setup never checked."
                (:constructor +agent-shell-arena-remote--make-steps)
                (:copier nil))
   "When each step of a job came on the laptop, in seconds since the epoch.
-REGISTERED is when its panel was registered, CHECKED when its base was
+REGISTERED is when its panel was registered, BASED when its base was
+chosen, KEPT when the laptop kept it under a ref, CHECKED when it was
 found on origin, CREATE-CALLED and CREATE-RETURNED bracket its pod's
 create, READY is when its host was first seen ready, ADMITTED when the
 logins it forwards were admitted, SENT when the host took its upload,
 FETCHED when its results were here, and DELETED when its pod was gone."
-  registered checked create-called create-returned ready admitted sent
-  fetched deleted)
+  registered based kept checked create-called create-returned ready admitted
+  sent fetched deleted)
 
 (cl-defstruct (+agent-shell-arena-remote-host-steps
                (:constructor +agent-shell-arena-remote--make-host-steps)
@@ -526,6 +527,8 @@ not saved."
             (steps "steps" (opt (record host-steps))))
     (steps +agent-shell-arena-remote-steps +agent-shell-arena-remote--make-steps
            (registered "registered" (opt number))
+           (based "base_chosen" (opt number))
+           (kept "base_kept" (opt number))
            (checked "base_checked" (opt number))
            (create-called "create_called" (opt number))
            (create-returned "create_returned" (opt number))
@@ -1610,7 +1613,8 @@ SLOT names a slot of `+agent-shell-arena-remote-steps'."
 (defconst +agent-shell-arena-remote--step-names
   '((+agent-shell-arena-remote-steps
      "On the laptop"
-     (registered . "panel registered") (checked . "base checked")
+     (registered . "panel registered") (based . "base chosen")
+     (kept . "base kept") (checked . "base checked")
      (create-called . "create called") (create-returned . "create returned")
      (ready . "ready seen") (admitted . "logins admitted")
      (sent . "upload sent") (fetched . "results fetched")
@@ -2211,7 +2215,8 @@ A kind whose hosts are made per job gives the job a pod of its own; see
                   :shape (+agent-shell-pstack-panel-shape panel)
                   :host host :phase 'preparing
                   :steps (+agent-shell-arena-remote--make-steps
-                          :registered (+agent-shell-pstack-panel-created panel))
+                          :registered (+agent-shell-pstack-panel-created panel)
+                          :based (float-time))
                   :directory (+agent-shell-arena-git-manifest-directory
                               manifest))))
     (setf (+agent-shell-pstack-panel-arena panel) manifest)
@@ -2234,6 +2239,7 @@ A kind whose hosts are made per job gives the job a pod of its own; see
            (+agent-shell-arena-git-record
             manifest "base" (+agent-shell-arena-git-manifest-base manifest)
             "base")
+           (+agent-shell-arena-remote--step remote 'kept)
            (cond
             (spec (+agent-shell-arena-remote--pod-launch remote job spec
                                                          manifest))

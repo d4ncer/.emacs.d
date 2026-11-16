@@ -779,6 +779,13 @@ function, not %S" matcher))))
           (t (string-match-p "\\`[[:alnum:]][[:alnum:]._@-]*\\'"
                              (cdr value)))))))
 
+(defun +agent-shell-arena-git-per-job-host-p (value)
+  "Return whether VALUE, a profile's :host, names a kind made per job."
+  (and (consp value)
+       (plist-get (alist-get (car value) +agent-shell-arena-remote-host-kinds)
+                  :create)
+       t))
+
 (defun +agent-shell-arena-git-pod-spec-error (spec)
   "Return why SPEC cannot describe the hosts of a per-job kind, or nil.
 SPEC is a plist: :template, the Coder template, is required; :preset

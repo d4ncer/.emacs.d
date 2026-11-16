@@ -1013,10 +1013,11 @@ apart; the record notes the pod's deletion after."
        (lambda () (+agent-shell-pstack-panel-followup panel)))
       (let ((followup (+agent-shell-pstack-panel-followup panel)))
         (should (string-match-p
-                 (concat "On the laptop: panel registered, base checked [0-9.]+ s \
-later, create called [0-9.]+ s later, create returned [0-9.]+ s later, ready \
-seen [0-9.]+ s later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s \
-later, results fetched [0-9.]+ s later\\.\n")
+                 (concat "On the laptop: panel registered, base chosen [0-9.]+ s \
+later, base kept [0-9.]+ s later, base checked [0-9.]+ s later, create \
+called [0-9.]+ s later, create returned [0-9.]+ s later, ready seen [0-9.]+ s \
+later, logins admitted [0-9.]+ s later, upload sent [0-9.]+ s later, results \
+fetched [0-9.]+ s later\\.\n")
                  followup))
         (should (string-match-p
                  (concat "On the host: base fetched, base checked out [0-9.]+ s \
@@ -1039,6 +1040,53 @@ member ended [0-9.]+ s later\\.\n")
                 (+agent-shell-arena-remote-steps-deleted
                  (+agent-shell-arena-remote-steps
                   (+agent-shell-arena-remote--read-json file 'record))))))))))
+
+(ert-deftest +agent-shell-arena-remote-pod-test-prepare-skips-snapshot ()
+  "A pod delegate starts from the lead's HEAD with no snapshot of its tree,
+and its record times the base's choice, keeping and check."
+  (skip-unless (executable-find "git"))
+  (+pod-test--with
+    (with-temp-file (expand-file-name "untracked.txt" lead-repo)
+      (insert "left here\n"))
+    (setq +agent-shell-pstack-arena-profiles
+          `((,lead-repo :host (pod . ,spec) :host-directory "~/repo")))
+    (let* ((commands nil)
+           (note (lambda (command &rest _) (push command commands)))
+           (snapshots 0)
+           (count (lambda (&rest _) (cl-incf snapshots)))
+           (panel (+agent-shell-pstack-panel--make
+                   :id "pod-panel" :shape 'delegate :brief "Build it."
+                   :timeout 60 :phase 'pending :cwd lead-repo
+                   :members (list (+agent-shell-pstack-panel--make-member
+                                   :role "builder" :agent 'codex
+                                   :kind 'delegate :state 'pending)))))
+      (puthash "pod-panel" panel +agent-shell-pstack-panel--panels)
+      (advice-add '+agent-shell-arena-git--run :before note
+                  '((name . pod-test-commands)))
+      (advice-add '+agent-shell-arena-git--snapshot :before count
+                  '((name . pod-test-snapshots)))
+      (unwind-protect
+          (progn (+agent-shell-pstack-panel--prepare-delegate panel)
+                 (+pod-test--wait-for
+                  (lambda () (+agent-shell-pstack-panel-remote panel)))
+                 (+pod-test--submitted panel))
+        (advice-remove '+agent-shell-arena-git--run 'pod-test-commands)
+        (advice-remove '+agent-shell-arena-git--snapshot 'pod-test-snapshots))
+      (should (= 0 snapshots))
+      (should-not (seq-find (lambda (command)
+                              (seq-some (lambda (word)
+                                          (member word '("add" "write-tree"
+                                                         "commit-tree")))
+                                        command))
+                            commands))
+      (should (equal (funcall lead-git "rev-parse" "HEAD")
+                     (+agent-shell-arena-git-manifest-base
+                      (+agent-shell-pstack-panel-arena panel))))
+      (let ((steps (+agent-shell-arena-remote-steps (+pod-test--remote panel))))
+        (should (<= (+agent-shell-arena-remote-steps-registered steps)
+                    (+agent-shell-arena-remote-steps-based steps)
+                    (+agent-shell-arena-remote-steps-kept steps)
+                    (+agent-shell-arena-remote-steps-checked steps)))))))
 
 (ert-deftest +agent-shell-arena-remote-pod-test-failed-member-keeps-pod ()
   "A delegate that ended in error keeps its pod, with the error, so the

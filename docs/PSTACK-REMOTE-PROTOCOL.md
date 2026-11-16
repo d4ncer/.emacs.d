@@ -384,7 +384,9 @@ reached as a Coder workspace is.
   Shared hosts, and pods whose spec names none, are not checked.
 - **Shape.** A pod runs one delegate, unsandboxed. The laptop refuses
   an arena and a sandboxed delegate on a pod.
-- **Base.** The base must be a commit that a ref under
+- **Base.** The base is the lead's `HEAD`; the laptop takes no
+  snapshot of its working tree, so uncommitted work stays on the
+  laptop. It must be a commit that a ref under
   `refs/remotes/origin/` on the laptop holds; otherwise the job is
   refused before a pod is created. The laptop asks
   `refs/remotes/origin/HEAD` first, by `git merge-base --is-ancestor`,
@@ -837,6 +839,8 @@ A file of its own: `"version"` from 1 to 3 and `"kind": "record"`.
 | Key | Type | Presence |
 |---|---|---|
 | `registered` | number | optional, absent or null |
+| `base_chosen` | number | optional, absent or null |
+| `base_kept` | number | optional, absent or null |
 | `base_checked` | number | optional, absent or null |
 | `create_called` | number | optional, absent or null |
 | `create_returned` | number | optional, absent or null |
