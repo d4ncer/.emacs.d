@@ -21,8 +21,9 @@
 ;; the line the form starts on, NAME@120.
 ;;
 ;; An edit reindents only the form it writes, byte-compiles the file and
-;; prints the warnings about that form.  It exits 0 when there are none,
-;; 2 when there are, and 1 when the edit or compilation fails.
+;; prints the warnings about that form, counting each of its lines wider
+;; than 80 columns as one.  It exits 0 when there are none, 2 when there
+;; are, and 1 when the edit or compilation fails.
 ;;
 ;; Indentation matches the live configuration: the `calculate-lisp-indent'
 ;; patch from `+lisp-mode-patch', every package build on `load-path', and the
@@ -402,10 +403,21 @@ and names a symbol that the edited TEXT mentions."
             (t (push entry others))))
     (cons (nreverse edited) (nreverse others))))
 
+(defun +elisp-tools--long-lines (text first)
+  "Return (LINE . WIDTH) for each line of TEXT wider than 80 columns.
+TEXT's first line is line FIRST of its file."
+  (let ((line first) long)
+    (dolist (row (split-string text "\n"))
+      (when (> (string-width row) 80)
+        (push (cons line (string-width row)) long))
+      (setq line (1+ line)))
+    (nreverse long)))
+
 (defun +elisp-tools--report-edit (file range before)
   "Print the edited RANGE of FILE, compile it, and exit with its status.
 Only new warnings about the edited form count, against BEFORE, the
-compilation log before the edit; the other new ones are tallied."
+compilation log before the edit; the other new ones are tallied.  Lines
+of the edited form wider than 80 columns count as warnings too."
   (princ (format "%s:%d-%d: edited\n" file (car range) (cdr range)))
   (pcase-let* ((`(,status . ,log) (+elisp-tools-compile file))
                (text (with-temp-buffer
@@ -417,8 +429,13 @@ compilation log before the edit; the other new ones are tallied."
                                                             (car range) -1))
                                                         (point)))))
                (`(,edited . ,others)
-                (+elisp-tools--warnings log range text before)))
+                (+elisp-tools--warnings log range text before))
+               (long (+elisp-tools--long-lines
+                      (string-remove-suffix "\n" text) (car range))))
     (dolist (entry edited) (princ (concat entry "\n")))
+    (dolist (entry long)
+      (princ (format "%s:%d: %d columns, wider than 80\n"
+                     file (car entry) (cdr entry))))
     (when others
       (princ (format "%d new warnings elsewhere in the file\n"
                      (length others))))
@@ -426,7 +443,11 @@ compilation log before the edit; the other new ones are tallied."
                    (cond ((eq status 'error) "error")
                          (edited "new warnings in the edited form")
                          (t "ok"))))
-    (kill-emacs (cond ((eq status 'error) 1) (edited 2) (t 0)))))
+    (princ (format "Line width: %s\n"
+                   (if long (format "%d line%s wider than 80 columns"
+                                    (length long) (if (cdr long) "s" ""))
+                     "ok")))
+    (kill-emacs (cond ((eq status 'error) 1) ((or edited long) 2) (t 0)))))
 
 (defun +elisp-tools--edit-command (file edit)
   "Compile FILE, call EDIT for the edited line range, then report on it."

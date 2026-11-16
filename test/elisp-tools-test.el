@@ -150,6 +150,14 @@ takes the form and the blank line after it."
                      "f.el: Warning: the function ‘+theirs’ is not known")
                    (+elisp-tools--warnings after '(4 . 6) "(+mine)" before)))))
 
+(ert-deftest +elisp-tools-test-long-lines ()
+  "Report lines wider than 80 columns by their line in the file."
+  (should (equal (list (cons 11 81))
+                 (+elisp-tools--long-lines
+                  (concat (make-string 80 ?a) "\n" (make-string 81 ?b) "\n")
+                  10)))
+  (should-not (+elisp-tools--long-lines (make-string 40 ?é) 1)))
+
 (ert-deftest +elisp-tools-test-command-line ()
   "The batch command edits from standard input and exits by status."
   (+elisp-tools-test--with-file +elisp-tools-test--text
@@ -184,6 +192,14 @@ takes the form and the blank line after it."
         (should (string-search "Byte compilation: ok" output)))
       (should (eql 2 (car (funcall run "(defun +scratch-w () (+scratch-gone))"
                                    "insert" file "--end" "-"))))
+      (pcase-let ((`(,status . ,output)
+                   (funcall run (format "(defun +scratch-wide ()\n  %S)"
+                                        (make-string 80 ?w))
+                            "insert" file "--end" "-")))
+        (should (eql 2 status))
+        (should (string-search "85 columns, wider than 80" output))
+        (should (string-search "Line width: 1 line wider than 80 columns"
+                               output)))
       (should (eql 1 (car (funcall run nil "show" file "+scratch-two")))))))
 
 (ert-deftest +elisp-tools-test-files-ignore-git-messages ()
