@@ -159,20 +159,24 @@ times, read by a 10 ms timer and event subscriptions."
 
 (ert-deftest +agent-shell-perf-acp-test-relabel-defers-section-ranges ()
   "A rendered section range defers its relabel; a bare call does not."
-  (with-temp-buffer
-    (setq-local agent-shell-chat--labeled t)
-    (let (calls)
-      (unwind-protect
-          (cl-flet ((schedule (&rest args) (push args calls)))
-            (+agent-shell-perf--throttle-relabel
-             #'schedule '((:body (:start . 1) (:end . 2))))
-            (should-not calls)
-            (should (timerp agent-shell-chat--relabel-timer))
-            (+agent-shell-perf--throttle-relabel #'schedule)
-            (should (equal calls '(nil)))
-            (should-not agent-shell-chat--relabel-timer))
-        (when (timerp agent-shell-chat--relabel-timer)
-          (cancel-timer agent-shell-chat--relabel-timer))))))
+  (let ((perf-mode +agent-shell-perf-mode))
+    (unwind-protect
+        (with-temp-buffer
+          (setq-local agent-shell-chat--labeled t)
+          (+agent-shell-perf-mode 1)
+          (agent-shell-chat--schedule-relabel
+           '((:body (:start . 1) (:end . 2))))
+          (let ((deferred agent-shell-chat--relabel-timer))
+            (should (> (- (float-time (timer--time deferred)) (float-time))
+                       0.4))
+            (agent-shell-chat--schedule-relabel)
+            (should-not (memq deferred timer-list))
+            (should (< (- (float-time (timer--time
+                                       agent-shell-chat--relabel-timer))
+                          (float-time))
+                       0.1))
+            (cancel-timer agent-shell-chat--relabel-timer)))
+      (+agent-shell-perf-mode (if perf-mode 1 -1)))))
 
 (defun +agent-shell-perf-acp-test--transcript-body (file)
   "Return FILE's text after its header, with timestamps blanked."
@@ -219,6 +223,31 @@ times, read by a 10 ms timer and event subscriptions."
                    (buffer-string)))
           (should (string-search "BENCH-END-second" (buffer-string)))
           (should-not (string-search "BENCH-END-first" (buffer-string))))))))
+
+(ert-deftest +agent-shell-perf-acp-test-relabel-patch-switch ()
+  "Turning the mode off restores upstream's relabel; on, the el-patch."
+  (let ((perf-mode +agent-shell-perf-mode))
+    (unwind-protect
+        (with-temp-buffer
+          (setq-local agent-shell-chat--labeled t)
+          (cl-flet ((delay (event)
+                      (setq agent-shell-chat--relabel-timer nil)
+                      (agent-shell-chat--schedule-relabel
+                       (list (cons :event event)))
+                      (let ((timer agent-shell-chat--relabel-timer))
+                        (cancel-timer timer)
+                        (- (float-time (timer--time timer)) (float-time)))))
+            (+agent-shell-perf-mode -1)
+            (should (< (delay 'agent-message-chunk) 0.1))
+            (should (< (delay 'turn-complete) 0.1))
+            (+agent-shell-perf-mode 1)
+            (should (> (delay 'agent-message-chunk) 0.4))
+            (should (< (delay 'turn-complete) 0.1))
+            (+agent-shell-perf-mode -1)
+            (should (< (delay 'agent-message-chunk) 0.1))
+            (should (el-patch-validate 'agent-shell-chat--schedule-relabel
+                                       'defun t))))
+      (+agent-shell-perf-mode (if perf-mode 1 -1)))))
 
 (provide 'agent-shell-perf-acp-test)
 ;;; agent-shell-perf-acp-test.el ends here

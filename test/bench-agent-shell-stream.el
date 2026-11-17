@@ -42,7 +42,8 @@
 (defconst +bench-toggles '(chat transcript drive render perf)
   "Production features a run can disable through BENCH_OFF.
 A `perf-NAME' toggle also removes the `+agent-shell-perf--advice' entry
-NAME, leaving the other workarounds on.")
+or unpatches the `+agent-shell-perf--patches' entry NAME, leaving the
+other workarounds on.")
 
 (defun +bench--env (name default)
   "Return environment variable NAME as a number, or DEFAULT."
@@ -96,8 +97,10 @@ NAME, leaving the other workarounds on.")
   (mapcar #'intern (split-string (or (getenv "BENCH_OFF") "") "," t)))
 (dolist (toggle +bench-off)
   (unless (or (memq toggle +bench-toggles)
-              (assq (intern (string-remove-prefix "perf-" (symbol-name toggle)))
-                    +agent-shell-perf--advice))
+              (let ((name (intern (string-remove-prefix
+                                   "perf-" (symbol-name toggle)))))
+                (or (assq name +agent-shell-perf--advice)
+                    (assq name +agent-shell-perf--patches))))
     (error "Unknown toggle %s" toggle)))
 
 (defvar +bench-notifications 0)
@@ -138,7 +141,10 @@ NAME, leaving the other workarounds on.")
   (+agent-shell-perf-mode 1)
   (pcase-dolist (`(,name ,upstream ,advice) +agent-shell-perf--advice)
     (when (memq (intern (format "perf-%s" name)) +bench-off)
-      (advice-remove upstream advice))))
+      (advice-remove upstream advice)))
+  (pcase-dolist (`(,name . ,_) +agent-shell-perf--patches)
+    (when (memq (intern (format "perf-%s" name)) +bench-off)
+      (+agent-shell-perf--patch name nil))))
 
 ;;;; Instrumentation
 

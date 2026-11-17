@@ -47,7 +47,8 @@ C relabels 566 times per `mixed` turn where A relabels 66 times. Upstream
 996c2af added `agent-shell-chat--schedule-relabel` to
 `agent-shell-section-functions`, which runs after every
 `agent-shell--update-fragment` with a range alist. That alist has no
-`:event`, so `+agent-shell-perf--throttle-relabel` treats the call like
+`:event`, so the relabel workaround (then advice, now an el-patch of
+`agent-shell-chat--schedule-relabel`) treats the call like
 `shell-maker-finish-output-hook` and relabels on the next tick. The fix
 treats only a call with no arguments as a boundary, so a section range
 defers like a streaming event (`relabel-fix.patch`, two lines plus the

@@ -5,8 +5,11 @@
 ;;; Commentary:
 ;; Local workarounds for upstream agent-shell work that scales with every
 ;; streamed event.  `+agent-shell-perf-mode' installs each entry of
-;; `+agent-shell-perf--advice'.  Every entry names the upstream function it
-;; works around; delete an entry once upstream changes that function.
+;; `+agent-shell-perf--advice' and applies each el-patch in
+;; `+agent-shell-perf--patches'; turning it off restores upstream, which
+;; the benchmark and the ACP tests compare against.  Every entry names the
+;; upstream function it works around; delete an entry once upstream
+;; changes that function.
 ;; Measurements are in docs/perf/agent-shell-streaming-after.md and
 ;; docs/perf/agent-shell-upstream-78a2c94.md.
 
@@ -14,6 +17,7 @@
 
 (require 'agent-shell)
 (require 'agent-shell-chat-mode)
+(require 'el-patch)
 
 (defgroup +agent-shell-perf nil
   "Streaming workarounds for agent-shell."
@@ -32,30 +36,47 @@
     permission-request permission-response)
   "Events that keep upstream's immediate chat relabel.")
 
-(defun +agent-shell-perf--throttle-relabel (schedule &rest args)
-  "Call SCHEDULE with ARGS at turn boundaries; defer other relabels.
-Works around `agent-shell-chat--schedule-relabel', which relabels the
-whole buffer on the next tick after every event and every rendered
-section, so the cost grows with buffer size times chunk rate.  An event
-in `+agent-shell-perf-relabel-boundary-events', or a call with no
-arguments such as `shell-maker-finish-output-hook', replaces any pending
-relabel with upstream's immediate one.  Any other event, or a section
-range from `agent-shell-section-functions', schedules one relabel
-`+agent-shell-perf-relabel-delay' seconds later unless one is pending.
-Delete once upstream stops rescanning the buffer per streamed event."
-  (let ((event (and (consp (car args)) (alist-get :event (car args)))))
-    (cond
-     ((or (null args)
-          (memq event +agent-shell-perf-relabel-boundary-events))
+(defun +agent-shell-perf--relabel-boundary-p (args)
+  "Return whether relabel ARGS mark a turn boundary, or are empty.
+`shell-maker-finish-output-hook' calls with none."
+  (or (null args)
+      (memq (and (consp (car args)) (alist-get :event (car args)))
+            +agent-shell-perf-relabel-boundary-events)))
+
+(el-patch-defun agent-shell-chat--schedule-relabel
+  (&rest (el-patch-swap _ args))
+  (el-patch-concat
+    "Schedule a coalesced, deferred relabel of the current buffer.
+
+Deferred so the triggering change's own text properties (e.g. the prompt
+face shell-maker applies after inserting) are in place; coalesced so a
+burst yields a single relabel.  Runs from the event subscription (which
+covers submissions, streaming, turn completion and `session-restored'),
+`shell-maker-finish-output-hook' (`clear') and
+`agent-shell-section-functions' (fragments rendered with no event)."
+    (el-patch-add
+      "\n\nPatched by `+agent-shell-perf-mode': an event in
+`+agent-shell-perf-relabel-boundary-events', or a call with no arguments,
+replaces any pending relabel with an immediate one; any other event or
+section waits `+agent-shell-perf-relabel-delay' seconds.  Upstream
+relabels the whole buffer on the next tick after every event and every
+rendered section, so its cost grows with buffer size times chunk rate.
+Remove once upstream stops rescanning the buffer per streamed event."))
+  (el-patch-add
+    (when (+agent-shell-perf--relabel-boundary-p args)
       (when (timerp agent-shell-chat--relabel-timer)
-        (cancel-timer agent-shell-chat--relabel-timer)
-        (setq agent-shell-chat--relabel-timer nil))
-      (apply schedule args))
-     ((and agent-shell-chat--labeled (not agent-shell-chat--relabel-timer))
-      (setq agent-shell-chat--relabel-timer
-            (run-at-time +agent-shell-perf-relabel-delay nil
-                         #'agent-shell-chat--relabel-buffer
-                         (current-buffer)))))))
+        (cancel-timer agent-shell-chat--relabel-timer))
+      (setq agent-shell-chat--relabel-timer nil)))
+  (when (and agent-shell-chat--labeled
+             (not agent-shell-chat--relabel-timer))
+    (setq agent-shell-chat--relabel-timer
+          (run-at-time (el-patch-swap
+                         0
+                         (if (+agent-shell-perf--relabel-boundary-p args)
+                             0
+                           +agent-shell-perf-relabel-delay))
+                       nil #'agent-shell-chat--relabel-buffer
+                       (current-buffer)))))
 
 (defvar-local +agent-shell-perf--transcript-pending nil
   "Unwritten transcript appends, an alist of file to texts, newest first.")
@@ -125,29 +146,50 @@ ARGS are EMIT's arguments, from `agent-shell--emit-event'."
   (apply function args))
 
 (defconst +agent-shell-perf--advice
-  '((relabel agent-shell-chat--schedule-relabel
-     +agent-shell-perf--throttle-relabel)
-    (transcript agent-shell--append-transcript
-                +agent-shell-perf--buffer-transcript)
+  '((transcript agent-shell--append-transcript
+     +agent-shell-perf--buffer-transcript)
     (transcript-turn agent-shell--emit-event
                      +agent-shell-perf--flush-at-turn-end)
     (transcript-open agent-shell-open-transcript
                      +agent-shell-perf--flush-before))
   "Workaround name, upstream function and its `:around' advice.")
 
+(defconst +agent-shell-perf--patches
+  '((relabel . agent-shell-chat--schedule-relabel))
+  "Workaround name and the upstream function its el-patch replaces.")
+
+(defun +agent-shell-perf--patch (name on)
+  "Apply workaround NAME's el-patch when ON, else restore upstream's code.
+Either way the function is byte-compiled, so both run as compiled code."
+  (let* ((function (alist-get name +agent-shell-perf--patches))
+         (patch (or (el-patch-get function 'defun)
+                    (error "No el-patch for %s" function))))
+    (if on
+        (eval `(el-patch-defun ,@(cdr patch)) t)
+      (el-patch-unpatch function 'defun nil))
+    (byte-compile function)))
+
 ;;;###autoload
 (define-minor-mode +agent-shell-perf-mode
-  "Install the agent-shell streaming workarounds in `+agent-shell-perf--advice'."
+  "Install the agent-shell streaming workarounds.
+They are the advice in `+agent-shell-perf--advice' and the el-patches
+in `+agent-shell-perf--patches'; turning the mode off restores upstream."
   :global t
   :group '+agent-shell-perf
   (pcase-dolist (`(,_ ,upstream ,advice) +agent-shell-perf--advice)
     (if +agent-shell-perf-mode
         (advice-add upstream :around advice)
       (advice-remove upstream advice)))
+  (pcase-dolist (`(,name . ,_) +agent-shell-perf--patches)
+    (+agent-shell-perf--patch name +agent-shell-perf-mode))
   (if +agent-shell-perf-mode
       (add-hook 'kill-emacs-hook #'+agent-shell-perf--flush-all-transcripts)
     (remove-hook 'kill-emacs-hook #'+agent-shell-perf--flush-all-transcripts)
     (+agent-shell-perf--flush-all-transcripts)))
+
+(unless +agent-shell-perf-mode
+  (pcase-dolist (`(,name . ,_) +agent-shell-perf--patches)
+    (+agent-shell-perf--patch name nil)))
 
 (provide '+agent-shell-perf)
 ;;; +agent-shell-perf.el ends here

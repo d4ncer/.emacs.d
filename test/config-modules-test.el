@@ -103,6 +103,8 @@
   (with-temp-buffer (lisp-data-mode))
   (require 'browse-at-remote)
   (require '+project-files)
+  (require '+agent-shell-perf)
+  (should (el-patch-get 'agent-shell-chat--schedule-relabel 'defun))
   (should (featurep '+elpaca-patch))
   (should (featurep '+lisp-mode-patch))
   (should (featurep '+browse-at-remote-patch))
